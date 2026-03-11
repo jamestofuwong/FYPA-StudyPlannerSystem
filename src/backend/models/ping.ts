@@ -3,4 +3,3 @@ export type PingResponse = {
   message: "pong";
   timestamp: string;
 };
-`
