@@ -1,0 +1,66 @@
+{
+  "name": "fypa-study-planner-system",
+  "private": true,
+  "version": "0.1.0",
+  "main": "dist/electron/main.js",
+  "scripts": {
+    "dev": "cross-env NODE_ENV=development NEXT_TELEMETRY_DISABLED=1 concurrently -k -n NEXT,ELECTRON_BUILD,ELECTRON -c cyan,yellow,magenta \"next dev -p 3000\" \"tsup src/electron/main.ts src/electron/preload.ts --format cjs --platform node --out-dir dist/electron --sourcemap --external electron --watch\" \"wait-on dist/electron/main.js http://127.0.0.1:3000 && cross-env NEXT_DEV_SERVER_URL=http://127.0.0.1:3000 electron .\"",
+    "build:next": "cross-env NEXT_TELEMETRY_DISABLED=1 next build",
+    "build:electron": "tsup src/electron/main.ts src/electron/preload.ts --format cjs --platform node --out-dir dist/electron --sourcemap --external electron",
+    "build": "npm run build:next && npm run build:electron",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "pack": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder"
+  },
+  "dependencies": {
+    "next": "16.1.6",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@types/node": "25.4.0",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "concurrently": "9.2.1",
+    "cross-env": "10.1.0",
+    "electron": "41.0.0",
+    "electron-builder": "26.8.1",
+    "eslint": "9.39.4",
+    "eslint-config-next": "16.1.6",
+    "rimraf": "6.1.3",
+    "tsup": "8.5.1",
+    "tsx": "4.21.0",
+    "typescript": "5.9.3",
+    "wait-on": "9.0.4"
+  },
+  "build": {
+    "appId": "com.fyp.studyplannersystem",
+    "productName": "Study Planner System",
+    "files": [
+      "dist/electron/**",
+      ".next/**",
+      "public/**",
+      "package.json",
+      "next.config.*"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ]
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ]
+    }
+  }
+}

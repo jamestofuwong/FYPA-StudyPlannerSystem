@@ -10,6 +10,8 @@ coverage
 .next/
 out/
 build/
+dist/
+release/
 
 # Miscellaneous
 .DS_Store
@@ -26,7 +28,6 @@ yarn-error.log*
 
 # TypeScript
 *.tsbuildinfo
-next-env.d.ts
 
 # Editor
 .vscode/
