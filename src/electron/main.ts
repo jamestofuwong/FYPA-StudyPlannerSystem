@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from "electron";
+import { app, BrowserWindow, nativeTheme, ipcMain } from "electron";
 import {
   createServer,
   type IncomingMessage,
@@ -81,6 +81,18 @@ async function createMainWindow() {
     void nextServer?.close();
   });
 }
+
+ipcMain.handle("get-system-theme", () => {
+  return nativeTheme.shouldUseDarkColors ? "dark" : "light";
+});
+
+nativeTheme.on("updated", () => {
+  const theme = nativeTheme.shouldUseDarkColors ? "dark" : "light";
+
+  BrowserWindow.getAllWindows().forEach((win) => {
+    win.webContents.send("system-theme-changed", theme);
+  });
+});
 
 app.whenReady().then(() => createMainWindow());
 
