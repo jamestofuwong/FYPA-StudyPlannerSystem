@@ -21,9 +21,9 @@ export const NAV_SECTIONS: NavSection[] = [
     label: 'Dashboard',
     items: [
       { id: 'dashboard', icon: '🎓', label: 'Major Detection' },
-      { id: 'dashboard', icon: '📋', label: 'Advisory Plan', badge: 3 },
+      { id: 'dashboard', icon: '📋', label: 'Advisory Plan'},
       { id: 'dashboard', icon: '📈', label: 'Unit Progress' },
-      { id: 'dashboard', icon: '👥', label: 'All Students', badge: 42 },
+      { id: 'dashboard', icon: '👥', label: 'All Students'},
     ],
   },
   {
