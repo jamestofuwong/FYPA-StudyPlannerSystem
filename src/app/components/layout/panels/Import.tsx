@@ -1,8 +1,10 @@
 'use client';
 
 import styles from './shared.module.css';
+import { useToast } from '../ToastProvider';
 
 export default function ImportPanel() {
+    const { showToast } = useToast();
     return (
         <div className={styles.panel}>
             <div className={styles.sectionTitle}>PDF Planner Import &amp; OCR</div>
@@ -73,9 +75,9 @@ export default function ImportPanel() {
                             </div>
                         </div>
                         <div className={styles.btnGroup}>
-                            <button className={styles.btnPrimary}>🔍 Parse PDF (OCR)</button>
-                            <button className={styles.btnSuccess}>✅ Update Planner</button>
-                            <button className={styles.btnSecondary}>🗑️ Clear</button>
+                            <button className={styles.btnPrimary} onClick={() => showToast('OCR processing started...', 'info')}>🔍 Parse PDF (OCR)</button>
+                            <button className={styles.btnSuccess} onClick={() => showToast('Study planner updated successfully!', 'success')}>✅ Update Planner</button>
+                            <button className={styles.btnSecondary} onClick={() => showToast('Import session cleared.', 'info')}>🗑️ Clear</button>
                         </div>
                     </div>
 

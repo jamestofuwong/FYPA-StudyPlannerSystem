@@ -1,8 +1,10 @@
 'use client';
 
 import styles from './shared.module.css';
+import { useToast } from '../ToastProvider';
 
 export default function DashboardPanel() {
+    const { showToast } = useToast();
     return (
         <div className={styles.panel}>
 
@@ -59,8 +61,8 @@ export default function DashboardPanel() {
                             </div>
                         </div>
                         <div className={styles.majorActions}>
-                            <button className={styles.btnPrimary}>Generate Plan</button>
-                            <button className={styles.btnSecondary}>View Details</button>
+                            <button className={styles.btnPrimary} onClick={() => showToast('Advisory plan generated for James WONG', 'success')}>Generate Plan</button>
+                            <button className={styles.btnSecondary} onClick={() => showToast('Loading unit breakdown...', 'info')}>View Details</button>
                         </div>
                     </div>
 
@@ -89,8 +91,8 @@ export default function DashboardPanel() {
                         <div className={styles.cardHeader}>
                             <span className={styles.cardTitle}>Recommended Enrollment Path</span>
                             <div className={styles.btnGroup}>
-                                <button className={styles.btnSuccess}>📊 Export</button>
-                                <button className={styles.btnSecondary}>🔄 Recalculate</button>
+                                <button className={styles.btnSuccess} onClick={() => showToast('Advisory plan exported to Excel!', 'success')}>📊 Export</button>
+                                <button className={styles.btnSecondary} onClick={() => showToast('Recalculating advisory plan...', 'info')}>🔄 Recalculate</button>
                             </div>
                         </div>
                         <div className={styles.legend}>

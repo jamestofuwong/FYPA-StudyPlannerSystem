@@ -6,6 +6,7 @@ import TopBar from './TopBar';
 import Sidebar from './Sidebar';
 import TabBar from './TabBar';
 import StatusBar from './StatusBar';
+import { ToastProvider } from './ToastProvider';
 import { PanelId } from './NavConfig';
 import {
     DashboardPanel,
@@ -50,30 +51,31 @@ export default function AppShell() {
     }
 
     return (
-        <div className={styles.shell}>
-            <TopBar />
-
-            <div className={styles.body}>
-                <Sidebar
-                    activePanel={activePanel}
-                    onNavigate={handleNavigate}
-                    isCollapsed={sidebarCollapsed}
-                    onToggleCollapse={() => setSidebarCollapsed((v) => !v)}
-                />
-
-                <div className={styles.content}>
-                    <TabBar
-                        openTabs={openTabs}
+        <ToastProvider>
+            <div className={styles.shell}>
+                <TopBar />
+                <div className={styles.body}>
+                    <Sidebar
                         activePanel={activePanel}
                         onNavigate={handleNavigate}
-                        onCloseTab={handleCloseTab}
-                        onReorderTabs={handleReorderTabs}
+                        isCollapsed={sidebarCollapsed}
+                        onToggleCollapse={() => setSidebarCollapsed((v) => !v)}
                     />
-                    <div className={styles.panels}>{renderPanel()}</div>
+                    <div className={styles.content}>
+                        <TabBar
+                            openTabs={openTabs}
+                            activePanel={activePanel}
+                            onNavigate={handleNavigate}
+                            onCloseTab={handleCloseTab}
+                            onReorderTabs={handleReorderTabs}
+                        />
+                        <div className={styles.panels}>{renderPanel()}</div>
+                    </div>
                 </div>
+                <StatusBar activePanel={activePanel} />
             </div>
-
-            <StatusBar activePanel={activePanel} />
-        </div>
+        </ToastProvider>
     );
 }
+
+

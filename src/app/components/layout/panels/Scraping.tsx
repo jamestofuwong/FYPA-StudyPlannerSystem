@@ -1,8 +1,10 @@
 'use client';
 
 import styles from './shared.module.css';
+import { useToast } from '../ToastProvider';
 
 export default function ScrapingPanel() {
+    const { showToast } = useToast();
     return (
         <div className={styles.panel}>
             <div className={styles.sectionTitle}>Student Portal Data Scraping</div>
@@ -32,8 +34,8 @@ export default function ScrapingPanel() {
                                 </div>
                             </div>
                             <div className={styles.btnGroup}>
-                                <button className={styles.btnPrimary}>🔌 Test Connection</button>
-                                <button className={styles.btnSecondary}>💾 Save Credentials</button>
+                                <button className={styles.btnPrimary} onClick={() => showToast('Testing connection to portal...', 'info')}>🔌 Test Connection</button>
+                                <button className={styles.btnSecondary} onClick={() => showToast('Credentials saved for this session.', 'success')}>💾 Save Credentials</button>
                             </div>
                         </div>
 
@@ -57,9 +59,9 @@ export default function ScrapingPanel() {
                             </div>
                         </div>
                         <div className={styles.btnGroup}>
-                            <button className={styles.btnPrimary}>🕷️ Scrape Student Data</button>
-                            <button className={styles.btnSuccess}>⏰ Schedule Scrape</button>
-                            <button className={styles.btnDanger}>⛔ Stop</button>
+                            <button className={styles.btnPrimary} onClick={() => showToast('Scraping initiated...', 'info')}>🕷️ Scrape Student Data</button>
+                            <button className={styles.btnSuccess} onClick={() => showToast('Scraping scheduled for 11:00 PM tonight.', 'info')}>⏰ Schedule Scrape</button>
+                            <button className={styles.btnDanger} onClick={() => showToast('Scraping cancelled.', 'error')}>⛔ Stop</button>
                         </div>
                     </div>
 

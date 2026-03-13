@@ -1,8 +1,10 @@
 'use client';
 
 import styles from './shared.module.css';
+import { useToast } from '../ToastProvider';
 
 export default function ExportPanel() {
+    const { showToast } = useToast();
     return (
         <div className={styles.panel}>
             <div className={styles.sectionTitle}>Excel Export Center</div>
@@ -13,29 +15,29 @@ export default function ExportPanel() {
                     {/* Export cards grid */}
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 12 }}>
                         {[
-                            { icon: '📊', title: 'Dashboard Report', desc: 'Exports current student major detection results, match percentages, and completion stats.', btnCls: 'btnPrimary' },
-                            { icon: '📋', title: 'Advisory Plan', desc: 'Full advisory plan per student with recommended unit paths, missing units and alternatives.', btnCls: 'btnSuccess' },
-                            { icon: '👥', title: 'Student Data', desc: 'All student enrollment data scraped from portal including GPA, units, and cohort details.', btnCls: 'btnSecondary' },
+                            { icon: '📊', title: 'Dashboard Report', desc: 'Exports current student major detection results, match percentages, and completion stats.', btnCls: 'btnPrimary', msg: 'Dashboard Report exported successfully!' },
+                            { icon: '📋', title: 'Advisory Plan', desc: 'Full advisory plan per student with recommended unit paths, missing units and alternatives.', btnCls: 'btnPrimary', msg: 'Advisory Plans exported successfully!' },
+                            { icon: '👥', title: 'Student Data', desc: 'All student enrollment data scraped from portal including GPA, units, and cohort details.', btnCls: 'btnPrimary', msg: 'Student Data exported successfully!' },
                         ].map((c) => (
                             <div key={c.title} style={{ background: 'var(--card-bg)', border: '1px solid var(--panel-border)', borderRadius: 4, padding: 16, display: 'flex', flexDirection: 'column', gap: 10, cursor: 'pointer', transition: 'border-color 0.15s' }}>
                                 <div style={{ fontSize: 28 }}>{c.icon}</div>
                                 <div style={{ fontSize: 13, color: 'var(--text-white)', fontWeight: 600 }}>{c.title}</div>
                                 <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5, flex: 1 }}>{c.desc}</div>
-                                <button className={styles[c.btnCls as keyof typeof styles]} style={{ width: '100%', justifyContent: 'center' }}>📥 Export</button>
+                                <button className={styles[c.btnCls as keyof typeof styles]} style={{ width: '100%', justifyContent: 'center' }} onClick={() => showToast(c.msg, 'success')}>📥 Export</button>
                             </div>
                         ))}
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 16 }}>
                         {[
-                            { icon: '🎓', title: 'Major Analysis', desc: 'Breakdown of all students by detected major, second major possibilities, and confidence scores.', btnCls: 'btnPrimary' },
-                            { icon: '📄', title: 'Unit Planner DB', desc: 'Export the current study planner database — all programmes, units, prerequisites.', btnCls: 'btnSecondary' },
-                            { icon: '📈', title: 'Analytics Report', desc: 'Cohort-level analytics: average GPA, at-risk students, major distribution trends.', btnCls: 'btnSuccess' },
+                            { icon: '🎓', title: 'Major Analysis', desc: 'Breakdown of all students by detected major, second major possibilities, and confidence scores.', btnCls: 'btnPrimary', msg: 'Major Analysis exported successfully!' },
+                            { icon: '📄', title: 'Unit Planner DB', desc: 'Export the current study planner database — all programmes, units, prerequisites.', btnCls: 'btnPrimary', msg: 'Unit Planner DB exported successfully!' },
+                            { icon: '📈', title: 'Analytics Report', desc: 'Cohort-level analytics: average GPA, at-risk students, major distribution trends.', btnCls: 'btnPrimary', msg: 'Analytics Report exported successfully!' },
                         ].map((c) => (
-                            <div key={c.title} style={{ background: 'var(--card-bg)', border: '1px solid var(--panel-border)', borderRadius: 4, padding: 16, display: 'flex', flexDirection: 'column', gap: 10, cursor: 'pointer' }}>
+                            <div key={c.title} style={{ background: 'var(--card-bg)', border: '1px solid var(--panel-border)', borderRadius: 4, padding: 16, display: 'flex', flexDirection: 'column', gap: 10, cursor: 'pointer', transition: 'border-color 0.15s' }}>
                                 <div style={{ fontSize: 28 }}>{c.icon}</div>
                                 <div style={{ fontSize: 13, color: 'var(--text-white)', fontWeight: 600 }}>{c.title}</div>
                                 <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5, flex: 1 }}>{c.desc}</div>
-                                <button className={styles[c.btnCls as keyof typeof styles]} style={{ width: '100%', justifyContent: 'center' }}>📥 Export</button>
+                                <button className={styles[c.btnCls as keyof typeof styles]} style={{ width: '100%', justifyContent: 'center' }} onClick={() => showToast(c.msg, 'success')}>📥 Export</button>
                             </div>
                         ))}
                     </div>
@@ -62,8 +64,8 @@ export default function ExportPanel() {
                             </div>
                         </div>
                         <div className={styles.btnGroup}>
-                            <button className={styles.btnPrimary}>📦 Export All Reports</button>
-                            <button className={styles.btnSecondary}>📁 Open Output Folder</button>
+                            <button className={styles.btnPrimary} onClick={() => showToast('Exporting all reports...', 'info')}>📦 Export All Reports</button>
+                            <button className={styles.btnSecondary} onClick={() => showToast('Output folder opened.', 'info')}>📁 Open Output Folder</button>
                         </div>
                     </div>
                 </div>
