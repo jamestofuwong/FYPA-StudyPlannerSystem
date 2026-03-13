@@ -1,4 +1,4 @@
-export type PanelId = 'dashboard' | 'planners' | 'import' | 'export';
+export type PanelId = 'dashboard' | 'import' | 'scraping' | 'export';
 
 export interface NavItem {
   id: PanelId;
@@ -27,24 +27,23 @@ export const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
-    id: 'planners',
-    icon: '📄',
-    label: 'Planners',
-    items: [
-      { id: 'planners', icon: '📋', label: 'View Planners' },
-      { id: 'planners', icon: '🔍', label: 'Unit Lookup' },
-      { id: 'planners', icon: '⚙️', label: 'Planner Config' },
-    ],
-  },
-  {
     id: 'import',
     icon: '📥',
     label: 'Data Import',
     items: [
-      { id: 'import', icon: '📤', label: 'Import PDF Planner' },
-      { id: 'import', icon: '🔍', label: 'OCR Processing' },
-      { id: 'import', icon: '🕷️', label: 'Portal Scraping' },
-      { id: 'import', icon: '✅', label: 'Planner Review' },
+      { id: 'import',    icon: '📤', label: 'Import PDF Planner' },
+      { id: 'import',    icon: '🔍', label: 'OCR Processing' },
+      { id: 'import',    icon: '✅', label: 'Planner Review' },
+    ],
+  },
+  {
+    id: 'scraping',
+    icon: '🕷️',
+    label: 'Data Scraping',
+    items: [
+      { id: 'scraping', icon: '🔐', label: 'Portal Login' },
+      { id: 'scraping', icon: '⚙️', label: 'Scraping Config' },
+      { id: 'scraping', icon: '📥', label: 'Imported Students' },
     ],
   },
   {
