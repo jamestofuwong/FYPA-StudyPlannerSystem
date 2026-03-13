@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import styles from './AppShell.module.css';
 import TopBar from './TopBar';
 import Sidebar from './Sidebar';
@@ -9,55 +9,70 @@ import StatusBar from './StatusBar';
 import { PanelId } from './NavConfig';
 import {
     DashboardPanel,
-    PlannersPanel,
     ImportPanel,
+    ScrapingPanel,
     ExportPanel,
 } from './panels';
 
 export default function AppShell() {
+    const [openTabs, setOpenTabs] = useState<PanelId[]>(['dashboard']);
     const [activePanel, setActivePanel] = useState<PanelId>('dashboard');
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
+    const handleNavigate = useCallback((panel: PanelId) => {
+        setOpenTabs((prev) => prev.includes(panel) ? prev : [...prev, panel]);
+        setActivePanel(panel);
+    }, []);
+
+    const handleCloseTab = useCallback((panel: PanelId) => {
+        setOpenTabs((prev) => {
+            const idx = prev.indexOf(panel);
+            const next = prev.filter((p) => p !== panel);
+            if (panel === activePanel && next.length > 0) {
+                setActivePanel(next[Math.min(idx, next.length - 1)]);
+            }
+            return next;
+        });
+    }, [activePanel]);
+
+    const handleReorderTabs = useCallback((reordered: PanelId[]) => {
+        setOpenTabs(reordered);
+    }, []);
+
     function renderPanel() {
         switch (activePanel) {
-            case 'dashboard':
-                return <DashboardPanel />;
-            case 'planners':
-                return <PlannersPanel />;
-            case 'import':
-                return <ImportPanel />;
-            case 'export':
-                return <ExportPanel />;
-            default:
-                return <DashboardPanel />;
+            case 'dashboard': return <DashboardPanel />;
+            case 'import': return <ImportPanel />;
+            case 'scraping': return <ScrapingPanel />;
+            case 'export': return <ExportPanel />;
+            default: return <DashboardPanel />;
         }
     }
 
     return (
         <div className={styles.shell}>
-            {/* Top menu bar */}
             <TopBar />
 
-            {/* Main body: sidebar + content */}
             <div className={styles.body}>
                 <Sidebar
                     activePanel={activePanel}
-                    onNavigate={setActivePanel}
+                    onNavigate={handleNavigate}
                     isCollapsed={sidebarCollapsed}
                     onToggleCollapse={() => setSidebarCollapsed((v) => !v)}
                 />
 
-                {/* Right-side content column */}
                 <div className={styles.content}>
-                    {/* Tab bar at top of content */}
-                    <TabBar activePanel={activePanel} onNavigate={setActivePanel} />
-
-                    {/* Active panel content */}
+                    <TabBar
+                        openTabs={openTabs}
+                        activePanel={activePanel}
+                        onNavigate={handleNavigate}
+                        onCloseTab={handleCloseTab}
+                        onReorderTabs={handleReorderTabs}
+                    />
                     <div className={styles.panels}>{renderPanel()}</div>
                 </div>
             </div>
 
-            {/* Status bar at bottom */}
             <StatusBar activePanel={activePanel} />
         </div>
     );
