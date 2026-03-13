@@ -6,8 +6,8 @@ import { PanelId } from './NavConfig';
 
 const PANEL_LABELS: Record<PanelId, string> = {
     dashboard: 'Dashboard',
-    planners: 'Planners',
-    import: 'PDF Import',
+    scraping: 'Data Scraping',
+    import: 'Data Import',
     export: 'Export',
 };
 
