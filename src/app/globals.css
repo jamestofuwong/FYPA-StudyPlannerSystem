@@ -1,26 +1,87 @@
+/* ===== GLOBAL STYLES & CSS VARIABLES ===== */
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=Inter:wght@300;400;500;600;700&display=swap');
+
+:root {
+  /* Backgrounds */
+  --sidebar-bg: #1e1e1e;
+  --sidebar-border: #2d2d2d;
+  --main-bg: #252526;
+  --panel-bg: #2d2d30;
+  --panel-border: #3e3e42;
+  --card-bg: #333337;
+  --card-hover: #3a3a3f;
+
+  /* Highlight */
+  --active-highlight: #007acc;
+  --active-bg: rgba(0, 122, 204, 0.15);
+
+  /* Text */
+  --text-primary: #cccccc;
+  --text-secondary: #9cdcfe;
+  --text-muted: #6a6a6a;
+  --text-white: #ffffff;
+
+  /* Accents */
+  --accent-blue: #569cd6;
+  --accent-green: #4ec9b0;
+  --accent-yellow: #dcdcaa;
+  --accent-orange: #ce9178;
+  --accent-purple: #c586c0;
+  --accent-red: #f48771;
+
+  /* Status bar */
+  --statusbar-bg: #007acc;
+
+  /* Misc */
+  --row-alt: #2a2a2d;
+  --scrollbar-thumb: #424242;
+  --scrollbar-track: #1e1e1e;
+
+  /* Typography */
+  --font-mono: 'JetBrains Mono', monospace;
+  --font-sans: 'Inter', sans-serif;
+}
+
+*,
+*::before,
+*::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
 html,
 body {
   height: 100%;
-}
-
-:root {
-  --color-background: #f9fafb;
-  --color-surface: #ffffff;
-  --color-primary: #4f46e5;
-  --color-secondary: #6366f1;
-  --color-text: #111827;
-  --color-border: #e5e7eb;
+  overflow: hidden;
 }
 
 body {
-  margin: 0;
-  background: var(--color-background);
-  color: var(--color-text);
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
-    "Segoe UI", Roboto, Arial, "Noto Sans", "Apple Color Emoji",
-    "Segoe UI Emoji", "Segoe UI Symbol";
+  font-family: var(--font-sans);
+  background: var(--main-bg);
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
 }
 
-main {
-  padding: 16px;
+/* ===== SCROLLBAR ===== */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* ===== UTILITY ===== */
+.font-mono {
+  font-family: var(--font-mono);
 }
