@@ -1,0 +1,268 @@
+.sidebar {
+  width: 240px;
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--sidebar-border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  overflow: hidden;
+  transition: width 0.25s ease;
+}
+
+.sidebar.collapsed {
+  width: 32px;
+}
+
+/* Header */
+.sidebarHeader {
+  padding: 10px 12px 6px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--sidebar-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  min-height: 32px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* Center the button in the rail when collapsed */
+.sidebar.collapsed .sidebarHeader {
+  justify-content: center;
+  padding: 10px 0 6px;
+}
+
+/* Hide the "Explorer" label text when collapsed */
+.explorerLabel {
+  overflow: hidden;
+  opacity: 1;
+  transition: opacity 0.15s ease;
+  white-space: nowrap;
+}
+
+.sidebar.collapsed .explorerLabel {
+  opacity: 0;
+  width: 0;
+}
+
+/* Toggle button — always visible */
+.collapseBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 16px;
+  padding: 2px 4px;
+  line-height: 1;
+  transition: color 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 3px;
+  width: 24px;
+  height: 24px;
+}
+
+.collapseBtn:hover {
+  color: var(--text-white);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* Search */
+.sidebarSearch {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--sidebar-border);
+  flex-shrink: 0;
+  overflow: hidden;
+  transition: max-height 0.25s ease, opacity 0.15s ease, padding 0.25s ease;
+  max-height: 50px;
+  opacity: 1;
+}
+
+.sidebar.collapsed .sidebarSearch {
+  display: none;
+}
+
+.searchInput {
+  width: 100%;
+  background: #3c3c3c;
+  border: 1px solid #555;
+  border-radius: 3px;
+  color: var(--text-primary);
+  padding: 4px 8px;
+  font-size: 12px;
+  font-family: var(--font-sans);
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.searchInput:focus {
+  border-color: var(--active-highlight);
+}
+
+/* Tree area */
+.tree {
+  overflow-y: auto;
+  overflow-x: hidden;
+  flex: 1;
+  padding: 4px 0;
+  transition: opacity 0.15s ease;
+}
+
+.sidebar.collapsed .tree {
+  display: none;
+}
+
+/* ===== Section header ===== */
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  user-select: none;
+  transition: background 0.1s;
+  letter-spacing: 0.2px;
+  background: none;
+  border: none;
+  width: 100%;
+  text-align: left;
+  font-family: var(--font-sans);
+}
+
+.sectionHeader:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.chevron {
+  font-size: 9px;
+  color: var(--text-muted);
+  transition: transform 0.2s;
+  width: 10px;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.chevronCollapsed {
+  transform: rotate(-90deg);
+}
+
+.sectionIcon {
+  font-size: 14px;
+  width: 16px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+/* Collapsible children */
+.treeChildren {
+  overflow: hidden;
+  transition: max-height 0.25s ease;
+  max-height: 500px;
+}
+
+.treeChildrenCollapsed {
+  max-height: 0;
+}
+
+/* ===== Tree item ===== */
+.treeItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px 5px 32px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-primary);
+  user-select: none;
+  transition: background 0.1s;
+  border-left: 2px solid transparent;
+  position: relative;
+  background: none;
+  border-right: none;
+  border-top: none;
+  border-bottom: none;
+  width: 100%;
+  text-align: left;
+  font-family: var(--font-sans);
+}
+
+.treeItem:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.treeItem.active {
+  background: var(--active-bg);
+  border-left-color: var(--active-highlight);
+  color: var(--text-white);
+}
+
+.itemIcon {
+  font-size: 13px;
+  width: 16px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.itemLabel {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.badge {
+  margin-left: auto;
+  background: var(--active-highlight);
+  color: white;
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 8px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+/* ===== Bottom actions ===== */
+.sidebarActions {
+  border-top: 1px solid var(--sidebar-border);
+  padding: 8px 0;
+  flex-shrink: 0;
+  overflow: hidden;
+  transition: max-height 0.25s ease, opacity 0.15s ease, padding 0.25s ease;
+  max-height: 80px;
+  opacity: 1;
+}
+
+.sidebar.collapsed .sidebarActions {
+  display: none;
+}
+
+.actionItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px 5px 16px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-primary);
+  user-select: none;
+  transition: background 0.1s;
+  border: none;
+  background: none;
+  width: 100%;
+  text-align: left;
+  font-family: var(--font-sans);
+}
+
+.actionItem:hover {
+  background: rgba(255, 255, 255, 0.05);
+}   
