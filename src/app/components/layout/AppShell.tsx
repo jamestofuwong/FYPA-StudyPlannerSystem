@@ -4,7 +4,6 @@ import { useState } from 'react';
 import styles from './AppShell.module.css';
 import TopBar from './TopBar';
 import Sidebar from './Sidebar';
-import TabBar from './TabBar';
 import StatusBar from './StatusBar';
 import { PanelId } from './NavConfig';
 import {
