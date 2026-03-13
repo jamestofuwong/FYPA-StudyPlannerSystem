@@ -45,7 +45,7 @@ export default function Sidebar({
         <nav className={`${styles.sidebar} ${isCollapsed ? styles.collapsed : ''}`}>
             {/* Header */}
             <div className={styles.sidebarHeader}>
-                <span>Explorer</span>
+                <span className={styles.explorerLabel}>Explorer</span>
                 <button
                     className={styles.collapseBtn}
                     onClick={onToggleCollapse}
