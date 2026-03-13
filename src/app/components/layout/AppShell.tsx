@@ -4,6 +4,7 @@ import { useState } from 'react';
 import styles from './AppShell.module.css';
 import TopBar from './TopBar';
 import Sidebar from './Sidebar';
+import TabBar from './TabBar';
 import StatusBar from './StatusBar';
 import { PanelId } from './NavConfig';
 import {
@@ -45,6 +46,12 @@ export default function AppShell() {
                     isCollapsed={sidebarCollapsed}
                     onToggleCollapse={() => setSidebarCollapsed((v) => !v)}
                 />
+
+                {/* Right-side content column */}
+                <div className={styles.content}>
+                    {/* Tab bar at top of content */}
+                    <TabBar activePanel={activePanel} onNavigate={setActivePanel} />               
+                </div>
             </div>
         </div>
     );
