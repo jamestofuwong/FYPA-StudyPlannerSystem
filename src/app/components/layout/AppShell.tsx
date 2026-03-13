@@ -50,9 +50,15 @@ export default function AppShell() {
                 {/* Right-side content column */}
                 <div className={styles.content}>
                     {/* Tab bar at top of content */}
-                    <TabBar activePanel={activePanel} onNavigate={setActivePanel} />               
+                    <TabBar activePanel={activePanel} onNavigate={setActivePanel} />
+
+                    {/* Active panel content */}
+                    <div className={styles.panels}>{renderPanel()}</div>
                 </div>
             </div>
+
+            {/* Status bar at bottom */}
+            <StatusBar activePanel={activePanel} />
         </div>
     );
 }
