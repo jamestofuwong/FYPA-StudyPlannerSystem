@@ -1,0 +1,42 @@
+.statusbar {
+  height: 22px;
+  background: var(--statusbar-bg);
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.9);
+  flex-shrink: 0;
+  gap: 0;
+  font-family: var(--font-mono);
+  user-select: none;
+}
+
+.sbItem {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  padding: 0 6px;
+  height: 100%;
+  transition: background 0.1s;
+  white-space: nowrap;
+}
+
+.sbItem:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.sbRight {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+}
+
+.sbDot {
+  width: 6px;
+  height: 6px;
+  background: var(--accent-green);
+  border-radius: 50%;
+  flex-shrink: 0;
+}

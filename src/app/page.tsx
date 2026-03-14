@@ -1,3 +1,5 @@
+import AppShell from './components/layout/AppShell';
+
 export default function Home() {
-  return <main>Study Planner System</main>;
+  return <AppShell />;
 }
