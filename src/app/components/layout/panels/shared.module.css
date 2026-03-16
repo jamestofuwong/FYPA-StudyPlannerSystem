@@ -238,3 +238,116 @@
 .formInput:focus, .formSelect:focus { border-color: var(--active-highlight); }
 .formInputMono { font-family: var(--font-mono); font-size: 11px; }
 .formInputPassword { font-family: var(--font-mono); letter-spacing: 3px; }
+
+/* ===== STUDENT PANEL ===== */
+ 
+/* Input row — search bar with buttons side by side */
+.inputRow {
+  display: flex;
+  gap: 8px;
+}
+ 
+/* Empty state — shown before any student is loaded */
+.emptyState {
+  border: 1px dashed var(--panel-border);
+  border-radius: 4px;
+  padding: 40px 20px;
+  text-align: center;
+}
+.emptyStateIcon {
+  font-size: 28px;
+  margin-bottom: 8px;
+}
+.emptyStateTitle {
+  font-size: 13px;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+.emptyStateSub {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+ 
+/* Detail field value inside a card */
+.fieldValue {
+  font-size: 12px;
+  color: var(--text-primary);
+}
+.fieldValueMono {
+  font-size: 12px;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+}
+.fieldValueMuted {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* ===== COURSE LIST ===== */
+ 
+/* Wrapper for each term group */
+.termGroup {
+  margin-bottom: 20px;
+}
+ 
+/* Heading row: label + divider line */
+.termHeading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+ 
+/* Term label — active semester */
+.termLabel {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--accent-blue);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+ 
+/* Term label — empty/gap semester */
+.termLabelEmpty {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+ 
+/* Horizontal divider line in term heading */
+.termDivider {
+  flex: 1;
+  height: 1px;
+  background: var(--panel-border);
+}
+ 
+/* Empty semester notice box */
+.termEmpty {
+  border: 1px dashed var(--panel-border);
+  border-radius: 4px;
+  padding: 12px 16px;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+ 
+/* Right-aligned table cell */
+.tdRight {
+  text-align: right;
+}
+ 
+/* Muted dash for missing grade/value */
+.textMuted {
+  color: var(--text-muted);
+}
+
+/* Full-width grid cell (spans all columns) */
+.gridColFull {
+  grid-column: 1 / -1;
+}

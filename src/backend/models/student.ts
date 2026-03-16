@@ -29,6 +29,9 @@ export type ScrapedCourseListItem = {
 };
 
 export type ScrapedStudent = {
+  studentId?: string;
+  studentName?: string;
+
   course: ScrapedStudentCourse;
   status: ScrapedStudentStatus;
   cgpa: Cgpa;
@@ -38,5 +41,8 @@ export type ScrapedStudent = {
   enrollmentDate: ISODateString;
   graduationDate: ISODateString | null;
   scheduledCredits: CreditCount;
+
+  areasOfStudy?: string[];
+
   courseList: ScrapedCourseListItem[];
 };
