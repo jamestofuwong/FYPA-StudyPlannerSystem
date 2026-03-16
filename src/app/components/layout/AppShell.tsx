@@ -13,6 +13,7 @@ import {
     ImportPanel,
     ScrapingPanel,
     ExportPanel,
+    StudentPanel,
 } from './panels';
 
 export default function AppShell() {
@@ -46,6 +47,7 @@ export default function AppShell() {
             case 'import': return <ImportPanel />;
             case 'scraping': return <ScrapingPanel />;
             case 'export': return <ExportPanel />;
+            case 'student': return <StudentPanel />;
             default: return <DashboardPanel />;
         }
     }

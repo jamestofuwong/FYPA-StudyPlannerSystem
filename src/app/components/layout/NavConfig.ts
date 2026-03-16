@@ -1,4 +1,4 @@
-export type PanelId = 'dashboard' | 'import' | 'scraping' | 'export';
+export type PanelId = 'dashboard' | 'import' | 'scraping' | 'export' | 'student';
 
 export interface NavItem {
   id: PanelId;
@@ -54,6 +54,14 @@ export const NAV_SECTIONS: NavSection[] = [
       { id: 'export', icon: '📊', label: 'Export Reports' },
       { id: 'export', icon: '📅', label: 'Schedule Export' },
       { id: 'export', icon: '🗂️', label: 'Export History' },
+    ],
+  },
+  {
+    id: 'student',
+    icon: '👩‍🎓',
+    label: 'Student',
+    items: [
+      { id: 'student', icon: '📊', label: 'Student View' },
     ],
   },
 ];
