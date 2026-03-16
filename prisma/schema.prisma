@@ -1,0 +1,99 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Course {
+  id              String            @id @default(uuid())
+  code            String            @unique
+  name            String
+  scraper_aliases Json              @default("[]")
+  description     String?
+  is_active       Boolean           @default(true)
+  created_at      DateTime          @default(now())
+  updated_at      DateTime          @updatedAt
+  majors          Major[]
+  templates       PlannerTemplate[]
+
+  @@map("courses")
+}
+
+model Major {
+  id          String            @id @default(uuid())
+  course_id   String
+  course      Course            @relation(fields: [course_id], references: [id])
+  code        String            @unique
+  name        String
+  description String?
+  is_active   Boolean           @default(true)
+  created_at  DateTime          @default(now())
+  updated_at  DateTime          @updatedAt
+  templates   PlannerTemplate[]
+
+  @@map("majors")
+}
+
+model Unit {
+  id          String         @id @default(uuid())
+  unit_code   String         @unique
+  unit_name   String
+  description String?
+  created_at  DateTime       @default(now())
+  updated_at  DateTime       @updatedAt
+  templates   TemplateUnit[]
+
+  @@map("units")
+}
+
+model PlannerTemplate {
+  id              String         @id @default(uuid())
+  course_id       String
+  course          Course         @relation(fields: [course_id], references: [id])
+  major_id        String?
+  major           Major?         @relation(fields: [major_id], references: [id])
+  intake_year     Int
+  intake_month    Int?
+  version         String         @default("1.0")
+  label           String?
+  review_status   String         @default("pending")
+  is_active       Boolean        @default(true)
+  created_at      DateTime       @default(now())
+  updated_at      DateTime       @updatedAt
+  units           TemplateUnit[]
+
+  @@unique([course_id, major_id, intake_year, intake_month, version])
+  @@map("planner_templates")
+}
+
+enum UnitCategory {
+  core
+  major_core
+  elective_major
+  elective_free
+  mpu
+  WIP
+}
+
+model TemplateUnit {
+  id                  String          @id @default(uuid())
+  planner_template_id String
+  template            PlannerTemplate @relation(fields: [planner_template_id], references: [id])
+  unit_id             String
+  unit                Unit            @relation(fields: [unit_id], references: [id])
+  category            UnitCategory
+  year_level          Int
+  semester            Int
+  is_compulsory       Boolean         @default(true)
+
+  @@unique([planner_template_id, unit_id])
+  @@map("template_units")
+}
