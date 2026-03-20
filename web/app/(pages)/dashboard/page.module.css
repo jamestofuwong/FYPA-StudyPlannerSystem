@@ -78,7 +78,7 @@
 .studentMeta { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); }
 .studentSelect {
   margin-left: auto;
-  background: #1e1e1e;
+  background: var(--button-bg);
   border: 1px solid var(--panel-border);
   border-radius: 3px;
   color: var(--text-primary);
@@ -148,7 +148,7 @@
 .majorRow:hover { background: var(--card-hover); border-color: var(--accent-blue); }
 .majorRowName { font-size: 13px; color: var(--text-primary); flex: 1; }
 .majorRowPct  { font-family: var(--font-mono); font-size: 12px; color: var(--accent-yellow); width: 38px; text-align: right; }
-.progressWrap { flex: 1; background: #1a1a1a; border-radius: 2px; height: 5px; overflow: hidden; }
+.progressWrap { flex: 1; background: var(--surface-bg); border-radius: 2px; height: 5px; overflow: hidden; }
 .progressBar  { height: 100%; border-radius: 2px; }
 
 /* Advisory step */
@@ -179,7 +179,7 @@
 .btnGroup { display: flex; gap: 8px; flex-wrap: wrap; }
 .btnPrimary  { padding: 6px 12px; background: var(--active-highlight); color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 12px; font-family: var(--font-sans); transition: background 0.15s; }
 .btnPrimary:hover { background: #1a8ad4; }
-.btnSecondary { padding: 6px 12px; background: #3c3c3c; color: var(--text-primary); border: 1px solid var(--panel-border); border-radius: 3px; cursor: pointer; font-size: 12px; font-family: var(--font-sans); transition: all 0.15s; }
+.btnSecondary { padding: 6px 12px; background: var(--btn-secondary-bg); color: var(--text-primary); border: 1px solid var(--panel-border); border-radius: 3px; cursor: pointer; font-size: 12px; font-family: var(--font-sans); transition: all 0.15s; }
 .btnSecondary:hover { border-color: var(--accent-blue); color: var(--accent-blue); }
 .btnSuccess  { padding: 6px 12px; background: rgba(78,201,176,0.15); color: var(--accent-green); border: 1px solid rgba(78,201,176,0.3); border-radius: 3px; cursor: pointer; font-size: 12px; font-family: var(--font-sans); }
 .btnSuccess:hover { background: rgba(78,201,176,0.25); }
@@ -231,7 +231,7 @@
 .formGroup { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
 .formLabel { font-size: 11px; color: var(--text-muted); font-weight: 500; letter-spacing: 0.3px; }
 .formInput, .formSelect {
-  width: 100%; background: #1e1e1e; border: 1px solid var(--panel-border); border-radius: 3px;
+  width: 100%; background: var(--surface-bg); border: 1px solid var(--panel-border); border-radius: 3px;
   color: var(--text-primary); padding: 7px 10px; font-size: 12px; font-family: var(--font-sans);
   outline: none; transition: border-color 0.15s;
 }

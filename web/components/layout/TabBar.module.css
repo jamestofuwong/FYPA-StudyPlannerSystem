@@ -2,8 +2,8 @@
 /* Sits at the bottom of the shell spanning the FULL width — never shifts with sidebar */
 .tabBar {
   display: flex;
-  background: #2d2d2d;
-  border-bottom: 1px solid #1a1a1a;
+  background: var(--tabbar-bg);
+  border-bottom: 1px solid var(--tabbar-border);
   min-height: 35px;
   overflow-x: auto;
   flex-shrink: 0;
@@ -41,7 +41,7 @@
 
 .tab.active {
   background: var(--main-bg);
-  color: var(--text-white);
+  color: var(--text-muted);
   border-top: 2px solid var(--active-highlight);
 }
 

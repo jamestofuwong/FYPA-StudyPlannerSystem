@@ -13,7 +13,7 @@ export default function ScrapingPage() {
         <div className={styles.splitMain}>
           <div className={styles.card}>
             <div className={styles.cardTitle}>Portal Authentication</div>
-            <div style={{ background: '#1a1a1a', border: '1px solid var(--panel-border)', borderRadius: 4, padding: 14, marginBottom: 14 }}>
+            <div style={{ background: 'var(--card-bg)', border: '1px solid var(--panel-border)', borderRadius: 4, padding: 14, marginBottom: 14 }}>
               <div className={styles.formGrid2}>
                 <div className={styles.formGroup}>
                   <label className={styles.formLabel}>Portal URL</label>

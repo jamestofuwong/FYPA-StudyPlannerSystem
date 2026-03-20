@@ -1,13 +1,18 @@
-/* ===== GLOBAL STYLES & CSS VARIABLES ===== */
 :root {
   /* Backgrounds */
   --sidebar-bg: #1e1e1e;
+  --sidebar-search-bg: #2d2d30;
   --sidebar-border: #2d2d2d;
+  --topbar-bg: #252526;
+  --topbar-border: #3e3e42;
+  --tabbar-bg: #252526;
+  --tabbar-border: #3e3e42;
   --main-bg: #252526;
   --panel-bg: #2d2d30;
   --panel-border: #3e3e42;
   --card-bg: #333337;
   --card-hover: #3a3a3f;
+  --surface-bg: #3e3e42;
 
   /* Highlight */
   --active-highlight: #007acc;
@@ -17,7 +22,7 @@
   --text-primary: #cccccc;
   --text-secondary: #9cdcfe;
   --text-muted: #6a6a6a;
-  --text-white: #ffffff;
+  --text-logo: #666666;
 
   /* Accents */
   --accent-blue: #569cd6;
@@ -34,6 +39,10 @@
   --row-alt: #2a2a2d;
   --scrollbar-thumb: #424242;
   --scrollbar-track: #1e1e1e;
+
+  /* Button */
+  --button-bg: #3e3e42;
+  --btn-secondary-bg: #2d2d30;
 
   /* Typography */
   --font-mono: 'JetBrains Mono', monospace;

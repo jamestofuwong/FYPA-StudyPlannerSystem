@@ -20,15 +20,48 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     root.dataset.theme = theme;
 
     const palette = themes[theme];
-    root.style.setProperty("--color-background", palette.background);
-    root.style.setProperty("--color-surface", palette.surface);
-    root.style.setProperty("--color-primary", palette.primary);
-    root.style.setProperty("--color-secondary", palette.secondary);
-    root.style.setProperty("--color-text", palette.text);
-    root.style.setProperty("--color-border", palette.border);
+    
+    // Apply all CSS variables
+    root.style.setProperty("--sidebar-bg", palette.sidebarBg);
+    root.style.setProperty("--sidebar-search-bg", palette.sidebarSearchBg);
+    root.style.setProperty("--sidebar-border", palette.sidebarBorder);
+    root.style.setProperty("--topbar-bg", palette.topbarBg);
+    root.style.setProperty("--topbar-border", palette.topbarBorder);
+    root.style.setProperty("--tabbar-bg", palette.tabbarBg);
+    root.style.setProperty("--tabbar-border", palette.tabbarBorder);
+    root.style.setProperty("--main-bg", palette.mainBg);
+    root.style.setProperty("--panel-bg", palette.panelBg);
+    root.style.setProperty("--panel-border", palette.panelBorder);
+    root.style.setProperty("--card-bg", palette.cardBg);
+    root.style.setProperty("--card-hover", palette.cardHover);
+    root.style.setProperty("--surface-bg", palette.surfaceBg);
+    
+    root.style.setProperty("--active-highlight", palette.activeHighlight);
+    root.style.setProperty("--active-bg", palette.activeBg);
+    
+    root.style.setProperty("--text-primary", palette.textPrimary);
+    root.style.setProperty("--text-secondary", palette.textSecondary);
+    root.style.setProperty("--text-muted", palette.textMuted);
+    root.style.setProperty("--text-logo", palette.textLogo);
+    
+    root.style.setProperty("--accent-blue", palette.accentBlue);
+    root.style.setProperty("--accent-green", palette.accentGreen);
+    root.style.setProperty("--accent-yellow", palette.accentYellow);
+    root.style.setProperty("--accent-orange", palette.accentOrange);
+    root.style.setProperty("--accent-purple", palette.accentPurple);
+    root.style.setProperty("--accent-red", palette.accentRed);
+    
+    root.style.setProperty("--statusbar-bg", palette.statusbarBg);
+    
+    root.style.setProperty("--row-alt", palette.rowAlt);
+    root.style.setProperty("--scrollbar-thumb", palette.scrollbarThumb);
+    root.style.setProperty("--scrollbar-track", palette.scrollbarTrack);
 
-    document.body.style.background = palette.background;
-    document.body.style.color = palette.text;
+    root.style.setProperty("--button-bg", palette.buttonBg);
+    root.style.setProperty("--btn-secondary-bg", palette.btnSecondaryBg);
+
+    document.body.style.background = palette.mainBg;
+    document.body.style.color = palette.textPrimary;
   };
 
   useEffect(() => {
@@ -37,7 +70,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let cleanup = () => {
-      // no-op default
+      
     };
 
     const initTheme = async () => {
@@ -51,7 +84,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         try {
           theme = (await window.themeAPI.getSystemTheme()) as ThemeMode;
         } catch {
-          // fallback below
+          
         }
       }
 
@@ -71,7 +104,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         typeof window.themeAPI.onThemeChange === "function"
       ) {
         cleanup = () => {
-          // no explicit off API in this sample. Keep minimal.
+          
         };
         window.themeAPI.onThemeChange((next: ThemeMode) => {
           setMode(next);

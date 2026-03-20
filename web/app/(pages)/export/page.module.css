@@ -179,7 +179,7 @@
 .btnGroup { display: flex; gap: 8px; flex-wrap: wrap; }
 .btnPrimary  { padding: 6px 12px; background: var(--active-highlight); color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 12px; font-family: var(--font-sans); transition: background 0.15s; }
 .btnPrimary:hover { background: #1a8ad4; }
-.btnSecondary { padding: 6px 12px; background: #3c3c3c; color: var(--text-primary); border: 1px solid var(--panel-border); border-radius: 3px; cursor: pointer; font-size: 12px; font-family: var(--font-sans); transition: all 0.15s; }
+.btnSecondary { padding: 6px 12px; background: var(--btnSecondaryBg); color: var(--text-primary); border: 1px solid var(--panel-border); border-radius: 3px; cursor: pointer; font-size: 12px; font-family: var(--font-sans); transition: all 0.15s; }
 .btnSecondary:hover { border-color: var(--accent-blue); color: var(--accent-blue); }
 .btnSuccess  { padding: 6px 12px; background: rgba(78,201,176,0.15); color: var(--accent-green); border: 1px solid rgba(78,201,176,0.3); border-radius: 3px; cursor: pointer; font-size: 12px; font-family: var(--font-sans); }
 .btnSuccess:hover { background: rgba(78,201,176,0.25); }
@@ -197,13 +197,13 @@
 /* Table */
 .tableWrap { overflow-x: auto; border: 1px solid var(--panel-border); border-radius: 4px; margin-bottom: 16px; max-height: 280px; overflow-y: auto; }
 .table { width: 100%; border-collapse: collapse; font-size: 12px; }
-.table thead tr { background: #252527; position: sticky; top: 0; z-index: 1; }
+.table thead tr { background: var(--surface-bg); position: sticky; top: 0; z-index: 1; }
 .table thead th { padding: 8px 12px; text-align: left; color: var(--accent-blue); font-family: var(--font-mono); font-size: 11px; font-weight: 500; border-bottom: 1px solid var(--panel-border); white-space: nowrap; }
 .table tbody tr { border-bottom: 1px solid var(--sidebar-border); transition: background 0.1s; }
 .table tbody tr:nth-child(even) { background: var(--row-alt); }
 .table tbody tr:hover { background: rgba(0,122,204,0.1); cursor: pointer; }
 .table tbody td { padding: 7px 12px; color: var(--text-primary); }
-.code { font-family: var(--font-mono); background: #1a1a1a; padding: 1px 5px; border-radius: 2px; font-size: 11px; color: var(--accent-orange); }
+.code { font-family: var(--font-mono); background: var(--surface-bg); padding: 1px 5px; border-radius: 2px; font-size: 11px; color: var(--accent-orange); }
 
 /* Charts */
 .chartBox { background: #1a1a1a; border: 1px solid var(--panel-border); border-radius: 4px; padding: 14px; margin-bottom: 14px; }
@@ -231,7 +231,7 @@
 .formGroup { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
 .formLabel { font-size: 11px; color: var(--text-muted); font-weight: 500; letter-spacing: 0.3px; }
 .formInput, .formSelect {
-  width: 100%; background: #1e1e1e; border: 1px solid var(--panel-border); border-radius: 3px;
+  width: 100%; background: var(--surface-bg); border: 1px solid var(--panel-border); border-radius: 3px;
   color: var(--text-primary); padding: 7px 10px; font-size: 12px; font-family: var(--font-sans);
   outline: none; transition: border-color 0.15s;
 }

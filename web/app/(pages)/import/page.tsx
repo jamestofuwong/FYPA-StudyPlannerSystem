@@ -155,7 +155,7 @@ export default function ImportPage() {
               { name: 'DS_Planner_2324_scan.pdf', date: '2025-02-15 · 37/40 units · 3 manual corrections', status: 'Warning', cls: 'badgeOrange' },
               { name: 'CN_Planner_2324.pdf', date: '2025-01-10 · OCR confidence too low (45%)', status: 'Failed', cls: 'badgeRed' },
             ].map((h) => (
-              <div key={h.name} style={{ background: '#1a1a1a', border: '1px solid var(--panel-border)', borderRadius: 3, padding: 10, marginBottom: 8 }}>
+              <div key={h.name} style={{ background: 'var(--surface-bg)', border: '1px solid var(--panel-border)', borderRadius: 3, padding: 10, marginBottom: 8 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                   <span style={{ fontSize: 11, color: 'var(--text-white)', fontWeight: 600 }}>{h.name}</span>
                   <span className={`${styles.badge} ${styles[h.cls as keyof typeof styles]}`}>{h.status}</span>

@@ -1,7 +1,7 @@
 .topbar {
   height: 35px;
-  background: #323233;
-  border-bottom: 1px solid #1a1a1a;
+  background: var(--topbar-bg);
+  border-bottom: 1px solid var(--topbar-border);
   display: flex;
   align-items: center;
   padding: 0 16px;
@@ -17,7 +17,7 @@
   font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 500;
-  color: var(--text-white);
+  color: var(--text-logo);
   letter-spacing: 0.5px;
   display: flex;
   align-items: center;
