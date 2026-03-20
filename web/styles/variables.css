@@ -1,0 +1,42 @@
+/* ===== GLOBAL STYLES & CSS VARIABLES ===== */
+:root {
+  /* Backgrounds */
+  --sidebar-bg: #1e1e1e;
+  --sidebar-border: #2d2d2d;
+  --main-bg: #252526;
+  --panel-bg: #2d2d30;
+  --panel-border: #3e3e42;
+  --card-bg: #333337;
+  --card-hover: #3a3a3f;
+
+  /* Highlight */
+  --active-highlight: #007acc;
+  --active-bg: rgba(0, 122, 204, 0.15);
+
+  /* Text */
+  --text-primary: #cccccc;
+  --text-secondary: #9cdcfe;
+  --text-muted: #6a6a6a;
+  --text-white: #ffffff;
+
+  /* Accents */
+  --accent-blue: #569cd6;
+  --accent-green: #4ec9b0;
+  --accent-yellow: #dcdcaa;
+  --accent-orange: #ce9178;
+  --accent-purple: #c586c0;
+  --accent-red: #f48771;
+
+  /* Status bar */
+  --statusbar-bg: #007acc;
+
+  /* Misc */
+  --row-alt: #2a2a2d;
+  --scrollbar-thumb: #424242;
+  --scrollbar-track: #1e1e1e;
+
+  /* Typography */
+  --font-mono: 'JetBrains Mono', monospace;
+  --font-sans: 'Inter', sans-serif;
+}
+

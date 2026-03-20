@@ -4,33 +4,36 @@
   "version": "0.1.0",
   "main": "dist/electron/main.js",
   "scripts": {
-    "dev": "cross-env NODE_ENV=development NEXT_TELEMETRY_DISABLED=1 concurrently -k -n NEXT,ELECTRON_BUILD,ELECTRON -c cyan,yellow,magenta \"next dev -p 3000\" \"tsup src/electron/main.ts src/electron/preload.ts --format cjs --platform node --out-dir dist/electron --sourcemap --external electron --watch\" \"wait-on dist/electron/main.js http://127.0.0.1:3000 && cross-env NEXT_DEV_SERVER_URL=http://127.0.0.1:3000 electron .\"",
-    "build:next": "cross-env NEXT_TELEMETRY_DISABLED=1 next build",
-    "build:electron": "tsup src/electron/main.ts src/electron/preload.ts --format cjs --platform node --out-dir dist/electron --sourcemap --external electron",
-    "build": "npm run build:next && npm run build:electron",
-    "lint": "eslint .",
-    "typecheck": "tsc --noEmit",
+    "dev": "cross-env NODE_ENV=development NEXT_TELEMETRY_DISABLED=1 concurrently -k -n NEXT,ELECTRON_BUILD,ELECTRON -c cyan,yellow,magenta \"next dev web --webpack -p 3000\" \"tsup electron/main.ts electron/preload.ts --format cjs --platform node --out-dir dist/electron --sourcemap --external electron --watch\" \"wait-on dist/electron/main.js http://127.0.0.1:3000 && cross-env NEXT_DEV_SERVER_URL=http://127.0.0.1:3000 electron .\"",
+    "prisma:generate": "prisma generate --schema core/db/prisma/schema.prisma",
+    "build:app": "npm run prisma:generate && next build web",
+    "build:electron": "tsup electron/main.ts electron/preload.ts --format cjs --platform node --out-dir dist/electron --sourcemap --external electron",
+    "build": "npm run build:app && npm run build:electron",
+    "lint": "eslint web electron core",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p web/tsconfig.json",
     "pack": "npm run build && electron-builder --dir",
     "dist": "npm run build && electron-builder"
   },
   "dependencies": {
+    "@prisma/client": "^6.19.2",
     "next": "16.1.6",
     "react": "19.2.4",
     "react-dom": "19.2.4"
   },
   "devDependencies": {
-    "@prisma/client": "^6.19.2",
+    "@next/eslint-plugin-next": "16.1.6",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
     "@types/node": "25.4.0",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
+    "prisma": "^6.19.2",
     "concurrently": "9.2.1",
     "cross-env": "10.1.0",
-    "dotenv": "^17.3.1",
     "electron": "41.0.0",
     "electron-builder": "26.8.1",
     "eslint": "9.39.4",
     "eslint-config-next": "16.1.6",
-    "prisma": "^6.19.2",
     "rimraf": "6.1.3",
     "tsup": "8.5.1",
     "tsx": "^4.21.0",
@@ -40,12 +43,16 @@
   "build": {
     "appId": "com.fyp.studyplannersystem",
     "productName": "Study Planner System",
+    "asarUnpack": ["web/**", "node_modules/@prisma/client/**", "node_modules/.prisma/**"],
     "files": [
       "dist/electron/**",
-      ".next/**",
-      "public/**",
+      "web/**",
+      "core/**",
+      "electron/**",
+      "runtime/**",
+      "scripts/**",
       "package.json",
-      "next.config.*"
+      "README.md"
     ],
     "directories": {
       "output": "release"

@@ -1,0 +1,72 @@
+/* ===== TAB BAR ===== */
+/* Sits at the bottom of the shell spanning the FULL width — never shifts with sidebar */
+.tabBar {
+  display: flex;
+  background: #2d2d2d;
+  border-bottom: 1px solid #1a1a1a;
+  min-height: 35px;
+  overflow-x: auto;
+  flex-shrink: 0;
+  width: 100%;
+}
+
+.tabBar::-webkit-scrollbar {
+  height: 3px;
+}
+
+.tab {
+  padding: 8px 16px;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-right: 1px solid #1a1a1a;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  transition: background 0.1s, color 0.1s;
+  background: none;
+  border-left: none;
+  border-bottom: none;
+  border-top: 2px solid transparent;
+  font-family: var(--font-sans);
+  position: relative;
+  flex-shrink: 0;
+}
+
+.tab:hover {
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-primary);
+}
+
+.tab.active {
+  background: var(--main-bg);
+  color: var(--text-white);
+  border-top: 2px solid var(--active-highlight);
+}
+
+.tabIcon {
+  font-size: 13px;
+}
+
+.tabLabel {
+  font-size: 12px;
+}
+
+.tabClose {
+  opacity: 0.5;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
+  border-radius: 3px;
+  transition: opacity 0.15s, background 0.15s;
+}
+
+.tab:hover .tabClose {
+  opacity: 1;
+}
+
+.tabClose:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+

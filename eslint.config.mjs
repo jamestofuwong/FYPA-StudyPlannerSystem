@@ -5,12 +5,21 @@ const nextCoreWebVitals = nextPlugin.configs["core-web-vitals"];
 const nextBaseConfig = {
   name: nextCoreWebVitals.name,
   plugins: nextCoreWebVitals.plugins,
-  rules: nextCoreWebVitals.rules
+  rules: {
+    ...nextCoreWebVitals.rules,
+    "@next/next/no-html-link-for-pages": "off"
+  }
 };
 
 export default [
   {
-    ignores: ["dist/**", "release/**", ".next/**", "node_modules/**"]
+    ignores: [
+      "dist/**",
+      "release/**",
+      ".next/**",
+      "web/.next/**",
+      "node_modules/**"
+    ]
   },
   {
     files: ["**/*.{js,jsx,ts,tsx}"],
