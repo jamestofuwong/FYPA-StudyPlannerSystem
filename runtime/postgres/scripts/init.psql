@@ -4,8 +4,9 @@
 -- Scope  : Persistent storage for study planner templates ONLY.
 --          Student data is NEVER stored here (REQ-CON-105, REQ-DB-102).
 -- DBMS   : PostgreSQL (local, bundled)
--- Version: 1.4.0  |  Sprint 1 — removed credit_hours fields; graduation
---                    eligibility is derived from unit completion, not credits
+-- Version: 1.5.0  |  Sprint 1 — Restructured prerequisites into group/condition 
+--                    tables for AND/OR logic; updated unit_category enum; added 
+--                    WIL and prescribed_elective categories; semester expanded to 4 values.
 -- =============================================================================
 
 -- ---------------------------------------------------------------------------
@@ -41,7 +42,7 @@ INSERT INTO system_config (key, value, description) VALUES
 -- Top-level academic programmes as awarded by the university.
 -- A course is what a student is *enrolled in* (returned by the scraper).
 -- One course contains one or more majors/specialisations.
--- e.g. "Bachelor of Computer Science" → majors: Cybersecurity, AI, IoT
+-- e.g. "Bachelor of Computer Science" -> majors: Cybersecurity, AI, IoT
 -- Supports REQ-FUN-104 (scraper returns course), REQ-FUN-602 (filter templates
 -- by course before major detection).
 -- ===========================================================================
@@ -50,11 +51,6 @@ CREATE TABLE courses (
     id               UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
     code             VARCHAR(50)   NOT NULL UNIQUE,  -- e.g. 'BCS', 'BIT', 'BSE'
     name             VARCHAR(255)  NOT NULL,          -- e.g. 'Bachelor of Computer Science'
-    -- Scraper may return varying strings; store normalised aliases as a JSON array
-    -- e.g. '["B.Comp.Sc","Bachelor CS"]' for fuzzy matching at lookup time
-    scraper_aliases  JSONB         NOT NULL DEFAULT '[]',
-    description      TEXT,
-    is_active        BOOLEAN       NOT NULL DEFAULT TRUE,
     created_at       TIMESTAMPTZ   NOT NULL DEFAULT now(),
     updated_at       TIMESTAMPTZ   NOT NULL DEFAULT now()
 );
@@ -75,12 +71,11 @@ CREATE INDEX idx_courses_code ON courses(code);
 CREATE TABLE majors (
     id          UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
     course_id   UUID          NOT NULL REFERENCES courses(id) ON DELETE RESTRICT,
-    code        VARCHAR(50)   NOT NULL UNIQUE,  -- e.g. 'CS-SE', 'CS-AI'
     name        VARCHAR(255)  NOT NULL,          -- e.g. 'AI'
-    description TEXT,
-    is_active   BOOLEAN       NOT NULL DEFAULT TRUE,
     created_at  TIMESTAMPTZ   NOT NULL DEFAULT now(),
-    updated_at  TIMESTAMPTZ   NOT NULL DEFAULT now()
+    updated_at  TIMESTAMPTZ   NOT NULL DEFAULT now(),
+
+    UNIQUE (course_id, name)
 );
 
 COMMENT ON TABLE majors IS
@@ -106,7 +101,6 @@ CREATE TABLE units (
     id            UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
     unit_code     VARCHAR(20)   NOT NULL UNIQUE,  -- e.g. 'COS40003', 'COS20031'
     unit_name     VARCHAR(255)  NOT NULL,
-    description   TEXT,
     created_at    TIMESTAMPTZ   NOT NULL DEFAULT now(),
     updated_at    TIMESTAMPTZ   NOT NULL DEFAULT now()
 );
@@ -115,30 +109,46 @@ COMMENT ON TABLE units IS
     'Global unit catalogue. Populated from planner PDFs. REQ-DB-102.1';
 
 -- Pre-requisite relationships between units (derived from planners).
--- One unit may have multiple prerequisites; modelled as a junction table.
-CREATE TABLE unit_prerequisites (
-    unit_id         UUID  NOT NULL REFERENCES units(id) ON DELETE CASCADE,
-    prerequisite_id UUID  NOT NULL REFERENCES units(id) ON DELETE CASCADE,
-    PRIMARY KEY (unit_id, prerequisite_id),
-    CONSTRAINT no_self_prerequisite CHECK (unit_id <> prerequisite_id)
+-- Uses two tables to support AND/OR logic and credit point requirements:
+-- unit_prerequisite_groups — one group per OR branch
+-- unit_prerequisite_conditions — all conditions within a group = AND logic
+CREATE TABLE unit_prerequisite_groups (
+    id       UUID  PRIMARY KEY DEFAULT gen_random_uuid(),
+    unit_id  UUID  NOT NULL REFERENCES units(id) ON DELETE CASCADE
 );
 
-COMMENT ON TABLE unit_prerequisites IS
-    'Pre-requisite relationships between units. REQ-DB-102.1, REQ-FUN-303';
+COMMENT ON TABLE unit_prerequisite_groups IS
+    'Groups of prerequisites for a unit. Multiple groups = OR logic. REQ-DB-102.1, REQ-FUN-303';
+
+-- Prerequisite conditions — all conditions within a group must be met (AND logic)
+CREATE TABLE unit_prerequisite_conditions (
+    id                  UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    group_id            UUID         NOT NULL REFERENCES unit_prerequisite_groups(id) ON DELETE CASCADE,
+    prerequisite_type   VARCHAR(20)  NOT NULL CHECK (prerequisite_type IN ('unit', 'credit_points')),
+    unit_id             UUID         NULL REFERENCES units(id) ON DELETE CASCADE,
+    credit_points       NUMERIC(5,1) NULL,
+    CONSTRAINT valid_condition CHECK (
+        (prerequisite_type = 'unit'         AND unit_id IS NOT NULL AND credit_points IS NULL) OR
+        (prerequisite_type = 'credit_points' AND credit_points IS NOT NULL AND unit_id IS NULL)
+    )
+);
+
+COMMENT ON TABLE unit_prerequisite_conditions IS
+    'Individual conditions within a prerequisite group. All conditions in a group = AND logic. REQ-DB-102.1, REQ-FUN-303';
 
 
 -- ===========================================================================
 -- SECTION 5 — PLANNER TEMPLATES
 -- A template always belongs to a course (NOT NULL) and optionally to a major
 -- within that course (nullable). This supports three cases:
---   • course_id set, major_id set   → major-specific planner (e.g. CS › AI)
---   • course_id set, major_id NULL  → course-level planner, no major
+--   - course_id set, major_id set   -> major-specific planner (e.g. CS > AI)
+--   - course_id set, major_id NULL  -> course-level planner, no major
 --                                     (e.g. Foundation in Engineering, BAccounting)
---   • major_id without course_id    → prevented by trigger below
+--   - major_id without course_id    -> prevented by trigger below
 --
 -- Intake is identified by year + month. intake_month is nullable:
---   • intake_month set   → month-specific planner (e.g. March 2022, July 2022)
---   • intake_month NULL  → applies to all intakes within the year (year-level fallback)
+--   - intake_month set   -> month-specific planner (e.g. Feb/Mar 2022, Aug/Sept 2022)
+--   - intake_month NULL  -> applies to all intakes within the year (year-level fallback)
 --
 -- Integrity rule: if major_id is provided, it must belong to the same course
 -- as course_id — enforced via trigger below.
@@ -164,36 +174,18 @@ CREATE TABLE planner_templates (
                         CHECK (intake_month BETWEEN 1 AND 12),
                     -- e.g. 3 = March, 7 = July, 10 = October
                     -- NULL = year-level template (no month-specific variant issued)
-    version         VARCHAR(20)   NOT NULL DEFAULT '1.0',
-                    -- supports multiple versions per intake (e.g. revised mid-year)
 
-    -- Human-readable label
-    label           VARCHAR(255),
-                    -- e.g. 'BCS (AI) Mar 2022' or 'Foundation in Engineering Jul 2023'
-
-    -- PDF provenance
-    source_pdf_name  VARCHAR(512),   -- original filename for audit trail
-    ocr_processed_at TIMESTAMPTZ,
-    ocr_confidence   NUMERIC(5,2),   -- 0–100%; NULL until processed
-
-    -- Review gate — OCR output must be approved before use in matching (REQ-FUN-407)
-    review_status   VARCHAR(20)   NOT NULL DEFAULT 'pending'
-                        CHECK (review_status IN ('pending', 'reviewed', 'approved')),
-    reviewed_by     VARCHAR(255),
-    reviewed_at     TIMESTAMPTZ,
-
-    is_active       BOOLEAN       NOT NULL DEFAULT TRUE,
     created_at      TIMESTAMPTZ   NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ   NOT NULL DEFAULT now(),
 
-    -- Uniqueness: no two templates may share the same course + major + year + month + version.
+    -- Uniqueness: no two templates may share the same course + major + year + month.
     -- NULL intake_month is treated as its own distinct value by PostgreSQL UNIQUE,
     -- correctly separating year-level templates from month-specific ones.
-    UNIQUE (course_id, major_id, intake_year, intake_month, version)
+    UNIQUE (course_id, major_id, intake_year, intake_month)
 );
 
 COMMENT ON TABLE planner_templates IS
-    'One row per course × [major] × intake-year × [intake-month] × version. '
+    'One row per course × [major] × intake-year × [intake-month] '
     'major_id NULL = no specialisation. intake_month NULL = year-level fallback. '
     'REQ-DB-102.2, REQ-FUN-404–406';
 
@@ -230,32 +222,38 @@ CREATE TRIGGER trg_planner_major_course_check
 
 -- Unit categories recognised by the matching algorithm (REQ-FUN-603)
 CREATE TYPE unit_category AS ENUM (
-    'core',               -- Programme core; must complete
-    'major_core',         -- Major-specific core
-    'elective_major',     -- Major elective (counted towards major completion)
-    'elective_free',      -- Free elective (any unit qualifies)
-    'mpu',                -- Mata Pelajaran Umum (co-curriculum / compulsory MPU)
-    'WIP'                 -- Pending categorisation during OCR review
+    'core',                  -- Programme core; must complete
+    'major_core',            -- Major-specific core unit
+    'prescribed_elective',   -- Compulsory elective; unit always defined in planner
+    'elective',              -- Elective; unit_id filled (new planner) or NULL (old planner)
+    'wil',                   -- Work-Integrated Learning
+    'mpu'                    -- Mata Pelajaran Umum (co-curriculum / compulsory MPU)
 );
 
 CREATE TABLE template_units (
     id                  UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
     planner_template_id UUID            NOT NULL
                             REFERENCES planner_templates(id) ON DELETE CASCADE,
-    unit_id             UUID            NOT NULL
+    unit_id             UUID            NULL
                             REFERENCES units(id) ON DELETE RESTRICT,
 
     category            unit_category   NOT NULL,
     year_level          SMALLINT        NOT NULL CHECK (year_level BETWEEN 1 AND 6),
-    semester            SMALLINT        NOT NULL CHECK (semester BETWEEN 1 AND 3),
-                        -- 3 = special/short semester
+    semester            SMALLINT        NOT NULL CHECK (semester BETWEEN 1 AND 4),
+                        -- 1 = Semester 1
+                        -- 2 = Semester 2
+                        -- 3 = Winter Term
+                        -- 4 = Summer Term
 
-    is_compulsory       BOOLEAN         NOT NULL DEFAULT TRUE,
-                        -- FALSE for elective slots where any qualifying unit is accepted
+    created_at      TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ   NOT NULL DEFAULT now(),
 
-    display_order       SMALLINT        DEFAULT 0,  -- preserves PDF row order for display
-
-    created_at          TIMESTAMPTZ     NOT NULL DEFAULT now(),
+    -- unit_id can only be NULL for elective category (old planner version)
+    -- all other categories must have a unit_id defined
+    CONSTRAINT unit_id_required CHECK (
+        (category = 'elective' AND unit_id IS NULL) OR
+        (unit_id IS NOT NULL)
+    ),
 
     UNIQUE (planner_template_id, unit_id)
 );
@@ -281,9 +279,8 @@ CREATE TABLE elective_groups (
     planner_template_id UUID          NOT NULL
                             REFERENCES planner_templates(id) ON DELETE CASCADE,
     name                VARCHAR(255)  NOT NULL,   -- e.g. 'Science Elective'
-    category            unit_category NOT NULL DEFAULT 'elective_major',
-    min_units_required  SMALLINT      NOT NULL DEFAULT 1,
-    created_at          TIMESTAMPTZ   NOT NULL DEFAULT now()
+    created_at          TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    updated_at          TIMESTAMPTZ   NOT NULL DEFAULT now()
 );
 
 CREATE TABLE elective_group_units (
@@ -362,7 +359,7 @@ COMMENT ON TABLE audit_log IS
 -- Supports REQ-PER-101 (<5 s major detection) and REQ-SCA-102 (300+ planners).
 -- ===========================================================================
 
--- Major detection path: course_id → (optional major_id) → intake_year → intake_month
+-- Major detection path: course_id -> (optional major_id) -> intake_year -> intake_month
 -- course_id alone pre-filters all templates for a student's enrolled course
 CREATE INDEX idx_planner_course              ON planner_templates(course_id);
 CREATE INDEX idx_planner_course_major        ON planner_templates(course_id, major_id);
@@ -372,8 +369,9 @@ CREATE INDEX idx_planner_course_intake       ON planner_templates(course_id, int
 CREATE INDEX idx_units_code                  ON units(unit_code);
 
 -- Prerequisite chain lookups
-CREATE INDEX idx_prereq_unit                 ON unit_prerequisites(unit_id);
-CREATE INDEX idx_prereq_prerequisite         ON unit_prerequisites(prerequisite_id);
+CREATE INDEX idx_prereq_group_unit     ON unit_prerequisite_groups(unit_id);
+CREATE INDEX idx_prereq_cond_group     ON unit_prerequisite_conditions(group_id);
+CREATE INDEX idx_prereq_cond_unit      ON unit_prerequisite_conditions(unit_id);
 
 -- Elective resolution
 CREATE INDEX idx_elective_group_template     ON elective_groups(planner_template_id);
@@ -416,6 +414,13 @@ CREATE TRIGGER trg_system_config_updated_at
     BEFORE UPDATE ON system_config
     FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
+CREATE TRIGGER trg_template_units_updated_at
+    BEFORE UPDATE ON template_units
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+CREATE TRIGGER trg_elective_groups_updated_at
+    BEFORE UPDATE ON elective_groups
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 -- ===========================================================================
 -- SECTION 13 — SCHEMA VERSION TRACKING
@@ -429,7 +434,7 @@ CREATE TABLE schema_migrations (
 );
 
 INSERT INTO schema_migrations (version, description)
-VALUES ('1.4.0', 'Removed credit_hours from units and total_credit_hours from planner_templates; graduation eligibility derived from unit completion only. Sprint 1');
+VALUES ('1.5.0', 'Restructured prerequisites into group/condition tables for AND/OR logic; updated unit_category enum; added WIL and prescribed_elective categories; semester expanded to 4 values. Sprint 1');
 
 
 -- =============================================================================
