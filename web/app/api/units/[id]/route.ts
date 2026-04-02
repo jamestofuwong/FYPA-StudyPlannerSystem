@@ -2,6 +2,22 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import * as unitRepository from "../../../../../core/db/repositories/unitRepository";
 
+export async function GET(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  try {
+    const unit = await unitRepository.getUnitById(id);
+    if (!unit) {
+      return NextResponse.json({ error: "Unit not found" }, { status: 404 });
+    }
+    return NextResponse.json(unit, { status: 200 });
+  } catch {
+    return NextResponse.json({ error: "Failed to fetch unit" }, { status: 500 });
+  }
+}
+
 export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }

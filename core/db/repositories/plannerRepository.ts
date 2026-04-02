@@ -9,6 +9,17 @@ export async function getAllPlanners() {
   });
 }
 
+export async function getPlannerById(id: string) {
+  return await prisma.plannerTemplate.findUnique({
+    where: { id },
+    include: {
+      course: true,
+      major: true,
+      units: true
+    }
+  });
+}
+
 export async function createPlanner(data: any) {
   return await prisma.plannerTemplate.create({
     data
@@ -25,5 +36,15 @@ export async function updatePlanner(id: string, data: any) {
 export async function deletePlanner(id: string) {
   return await prisma.plannerTemplate.delete({
     where: { id }
+  });
+}
+
+export async function getPlannersByCourse(courseId: string) {
+  return await prisma.plannerTemplate.findMany({
+    where: { course_id: courseId },
+    include: {
+      course: true,
+      major: true
+    }
   });
 }

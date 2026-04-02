@@ -278,7 +278,6 @@ CREATE TABLE elective_groups (
     id                  UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
     planner_template_id UUID          NOT NULL
                             REFERENCES planner_templates(id) ON DELETE CASCADE,
-    name                VARCHAR(255)  NOT NULL,   -- e.g. 'Science Elective'
     created_at          TIMESTAMPTZ   NOT NULL DEFAULT now(),
     updated_at          TIMESTAMPTZ   NOT NULL DEFAULT now()
 );

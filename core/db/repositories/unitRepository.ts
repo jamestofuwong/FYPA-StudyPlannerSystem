@@ -4,6 +4,19 @@ export async function getAllUnits() {
   return await prisma.unit.findMany();
 }
 
+export async function getUnitById(id: string) {
+  return await prisma.unit.findUnique({
+    where: { id },
+    include: {
+      prerequisite_groups: {
+        include: {
+          conditions: true
+        }
+      }
+    }
+  });
+}
+
 export async function createUnit(data: any) {
   return await prisma.unit.create({
     data

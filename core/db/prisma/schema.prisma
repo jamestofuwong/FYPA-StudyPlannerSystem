@@ -89,7 +89,7 @@ model PlannerTemplate {
   @@map("planner_templates")
 }
 
-enum UnitCategory {
+enum unit_category {
   core
   major_core
   prescribed_elective
@@ -104,7 +104,7 @@ model TemplateUnit {
   template            PlannerTemplate @relation(fields: [planner_template_id], references: [id])
   unit_id             String?
   unit                Unit?           @relation(fields: [unit_id], references: [id])
-  category            UnitCategory
+  category            unit_category
   year_level          Int
   semester            Int
   created_at          DateTime        @default(now())
@@ -118,7 +118,6 @@ model ElectiveGroup {
   id                  String               @id @default(uuid())
   planner_template_id String
   template            PlannerTemplate      @relation(fields: [planner_template_id], references: [id])
-  name                String
   created_at          DateTime             @default(now())
   updated_at          DateTime             @updatedAt
   units               ElectiveGroupUnit[]

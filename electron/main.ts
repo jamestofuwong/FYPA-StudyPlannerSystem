@@ -8,6 +8,9 @@ import {
 import fs from "fs";
 import next from "next";
 import path from "path";
+import { startDatabase, stopDatabase, getDatabaseUrl } from '../runtime/postgres/db'
+
+let nextServerRef: NextServerHandle | undefined 
 
 type NextServerHandle = {
   url: string;
@@ -23,6 +26,14 @@ function isDirectory(dirPath: string): boolean {
     return false;
   }
 }
+
+// Suppress noisy warnings from Next.js about missing "done" callback in API routes (library issue)
+process.on('unhandledRejection', (reason) => {
+  if (reason instanceof TypeError && reason.message === 'done is not a function') {
+    return
+  }
+  console.error('[App] Unhandled rejection:', reason)
+})
 
 function getNextProjectDir(): string {
   const candidates = app.isPackaged
@@ -79,7 +90,6 @@ async function startNextServer(): Promise<NextServerHandle> {
 }
 
 async function createMainWindow() {
-  let nextServer: NextServerHandle | undefined;
 
   const preloadPath = path.join(app.getAppPath(), "dist/electron/preload.js");
 
@@ -103,17 +113,21 @@ async function createMainWindow() {
     await win.loadURL(devServerUrl);
     win.webContents.openDevTools({ mode: "detach" });
   } else {
-    nextServer = await startNextServer();
-    await win.loadURL(nextServer.url);
+    nextServerRef = await startNextServer()
+    await win.loadURL(nextServerRef.url);
   }
 
-  app.on("before-quit", () => {
-    void nextServer?.close();
-  });
+  // app.on("before-quit", () => {
+  //   void nextServer?.close();
+  // });
 }
 
 ipcMain.handle("get-system-theme", () => {
   return nativeTheme.shouldUseDarkColors ? "dark" : "light";
+});
+
+ipcMain.handle("get-database-url", () => {
+  return getDatabaseUrl();
 });
 
 nativeTheme.on("updated", () => {
@@ -124,7 +138,41 @@ nativeTheme.on("updated", () => {
   });
 });
 
-app.whenReady().then(() => createMainWindow());
+app.whenReady().then(async () => {
+  // Start embedded PostgreSQL
+  await startDatabase();
+
+  // Open window
+  await createMainWindow();
+});
+
+let isQuitting = false;
+
+app.on('before-quit', async (event) => {
+  if (isQuitting) return;
+  
+  event.preventDefault();
+  isQuitting = true;
+
+
+  const forceExit = setTimeout(() => {
+    console.warn('[App] Shutdown timed out, forcing exit');
+    app.exit(1);
+  }, 5000);
+
+  try {
+    await Promise.allSettled([
+      stopDatabase(),
+      nextServerRef?.close() ?? Promise.resolve()
+    ]);
+    clearTimeout(forceExit);
+    app.exit(0);
+  } catch (err) {
+    console.error('[App] Shutdown error:', err);
+    clearTimeout(forceExit);
+    app.exit(1);
+  }
+});
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
