@@ -15,6 +15,25 @@ function getSchemaPath(): string {
     : path.resolve(__dirname, '..', '..', 'runtime', 'postgres', 'scripts', 'init.psql')
 };
 
+// Get all seed files in order
+function getSeedFiles(): string[] {
+  const seedDir = app.isPackaged
+    ? path.join(process.resourcesPath, 'app.asar.unpacked', 'runtime', 'postgres', 'scripts', 'seed')
+    : path.resolve(__dirname, '..', '..', 'runtime', 'postgres', 'scripts', 'seed')
+  
+  if (!fs.existsSync(seedDir)) {
+    console.log('[DB] Seed directory not found:', seedDir)
+    return []
+  }
+  
+  // Get all .sql files and sort by name
+  const files = fs.readdirSync(seedDir)
+    .filter(file => file.endsWith('.sql'))
+    .sort()
+  
+  return files.map(file => path.join(seedDir, file))
+}
+
 function isValidCluster(dataDir: string): boolean {
   return fs.existsSync(path.join(dataDir, 'PG_VERSION'))
 }
@@ -30,6 +49,19 @@ export const DB_CONFIG = {
 export function getDatabaseUrl(): string {
     return `postgresql://${DB_CONFIG.user}:${DB_CONFIG.password}@${DB_CONFIG.host}:${DB_CONFIG.port}/${DB_CONFIG.database}`
 };
+
+async function runSqlFile(client: any, filePath: string, description: string): Promise<void> {
+  console.log(`[DB] Running ${description}...`)
+  const sql = fs.readFileSync(filePath, 'utf-8')
+  
+  try {
+    await client.query(sql)
+    console.log(`[DB] ${description} complete`)
+  } catch (err) {
+    console.error(`[DB] ${description} FAILED:`, err)
+    throw err
+  }
+}
 
 export async function startDatabase() : Promise<void> {
     if (pg) return
@@ -81,10 +113,24 @@ export async function startDatabase() : Promise<void> {
 
       await client.connect()
       try {
-        await client.query(schema)
-        console.log('[DB] Initial schema setup complete')
+        // Run schema first
+        await runSqlFile(client, getSchemaPath(), 'schema initialization')
+        
+        // Then run all seed files in order
+        const seedFiles = getSeedFiles()
+        if (seedFiles.length > 0) {
+          console.log(`[DB] Found ${seedFiles.length} seed file(s)`)
+          for (const seedFile of seedFiles) {
+            const fileName = path.basename(seedFile)
+            await runSqlFile(client, seedFile, `seed file: ${fileName}`)
+          }
+          console.log('[DB] All seed data loaded successfully')
+        } else {
+          console.log('[DB] No seed files found')
+        }
+        
       } catch (err) {
-        console.error('[DB] Schema setup FAILED:', err)
+        console.error('[DB] Database initialization FAILED:', err)
       } finally {
         await client.end()
       }
