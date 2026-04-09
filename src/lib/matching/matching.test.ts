@@ -1,7 +1,7 @@
 // ============================================================
 // matching.test.ts
 // Unit tests for MM-01 through MM-04
-// Uses Node.js built-in test runner — no Jest required.
+// Uses Node.js built-in test runner.
 //
 // Run with:
 //   npx tsx --test src/lib/matching/matching.test.ts
