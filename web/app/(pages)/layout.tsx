@@ -7,7 +7,10 @@ import TopBar from '../../components/layout/TopBar';
 import Sidebar from '../../components/layout/Sidebar';
 import TabBar from '../../components/layout/TabBar';
 import StatusBar from '../../components/layout/StatusBar';
+import PortalLoginModal from '../../components/layout/PortalLoginModal';
 import { ToastProvider } from '../../components/providers/ToastProvider';
+import { PortalAuthProvider } from '../../components/providers/PortalAuthContext';
+import { ScraperProvider } from '../../components/providers/ScraperContext';
 import { panelFromPathname, panelToPath, type PanelId } from '../../lib/navigation';
 
 export default function AppLayout({ children }: { children: ReactNode }) {
@@ -48,29 +51,34 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <ToastProvider>
-      <div className={styles.shell}>
-        <TopBar />
-        <div className={styles.body}>
-          <Sidebar
-            activePanel={activePanel}
-            onNavigate={handleNavigate}
-            isCollapsed={sidebarCollapsed}
-            onToggleCollapse={() => setSidebarCollapsed((v) => !v)}
-          />
-          <div className={styles.content}>
-            <TabBar
-              openTabs={openTabs}
+    <PortalAuthProvider>
+      <ScraperProvider>
+      <ToastProvider>
+        <div className={styles.shell}>
+          <TopBar />
+          <div className={styles.body}>
+            <Sidebar
               activePanel={activePanel}
               onNavigate={handleNavigate}
-              onCloseTab={handleCloseTab}
-              onReorderTabs={handleReorderTabs}
+              isCollapsed={sidebarCollapsed}
+              onToggleCollapse={() => setSidebarCollapsed((v) => !v)}
             />
-            <div className={styles.panels}>{children}</div>
+            <div className={styles.content}>
+              <TabBar
+                openTabs={openTabs}
+                activePanel={activePanel}
+                onNavigate={handleNavigate}
+                onCloseTab={handleCloseTab}
+                onReorderTabs={handleReorderTabs}
+              />
+              <div className={styles.panels}>{children}</div>
+            </div>
           </div>
+          <StatusBar activePanel={activePanel} />
         </div>
-        <StatusBar activePanel={activePanel} />
-      </div>
-    </ToastProvider>
+        <PortalLoginModal />
+      </ToastProvider>
+      </ScraperProvider>
+    </PortalAuthProvider>
   );
 }

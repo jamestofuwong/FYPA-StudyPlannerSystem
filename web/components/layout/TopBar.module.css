@@ -87,9 +87,9 @@
 }
 
 .userAvatar {
+  position: relative;
   width: 22px;
   height: 22px;
-  background: var(--accent-purple);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -98,6 +98,70 @@
   font-weight: 600;
   color: white;
   flex-shrink: 0;
+  transition: opacity 0.15s;
+}
+
+.avatarOnline {
+  background: var(--accent-purple);
+}
+
+.avatarOffline {
+  background: #555;
+}
+
+.avatarDot {
+  position: absolute;
+  bottom: -1px;
+  right: -1px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1.5px solid var(--topbar-bg);
+  pointer-events: none;
+}
+
+.dotOnline {
+  background: var(--accent-green);
+}
+
+.dotOffline {
+  background: #888;
+}
+
+.loginBtn {
+  padding: 3px 10px;
+  border-radius: 3px;
+  font-size: 11px;
+  cursor: pointer;
+  color: white;
+  background: var(--accent-blue);
+  border: none;
+  font-family: var(--font-sans);
+  transition: opacity 0.15s;
+  white-space: nowrap;
+}
+
+.loginBtn:hover {
+  opacity: 0.82;
+}
+
+.logoutBtn {
+  padding: 3px 10px;
+  border-radius: 3px;
+  font-size: 11px;
+  cursor: pointer;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-family: var(--font-sans);
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+
+.logoutBtn:hover {
+  background: rgba(244, 135, 113, 0.12);
+  color: var(--accent-red);
+  border-color: rgba(244, 135, 113, 0.3);
 }
 
 .notifDot {
