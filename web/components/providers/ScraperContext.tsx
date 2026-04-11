@@ -229,6 +229,20 @@ export function ScraperProvider({ children }: { children: ReactNode }) {
     else if (phase === 'login') setLoggedIn(false);
   }, [phase, setLoggedIn]);
 
+  // When login completes via the modal while the persistent webview is stuck on
+  // the Microsoft login page, navigate it back to the portal so it picks up the
+  // fresh session cookie and rejoins the scraping flow.
+  const prevIsLoggedInRef = useRef(isLoggedIn);
+  useEffect(() => {
+    const wasLoggedIn = prevIsLoggedInRef.current;
+    prevIsLoggedInRef.current = isLoggedIn;
+    if (!isLoggedIn || wasLoggedIn) return;       // only on false → true transition
+    if (phaseRef.current !== 'login') return;     // only when stuck on login page
+    const wv = webviewRef.current;
+    if (!wv) return;
+    try { wv.loadURL(TARGET_URL); } catch {}
+  }, [isLoggedIn]);
+
   // URL refresh
   const refreshUrl = useCallback(() => {
     const wv = webviewRef.current;
