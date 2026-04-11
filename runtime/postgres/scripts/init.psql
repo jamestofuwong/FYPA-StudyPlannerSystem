@@ -99,8 +99,9 @@ CREATE INDEX idx_majors_course ON majors(course_id);
 
 CREATE TABLE units (
     id            UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
-    unit_code     VARCHAR(20)   NOT NULL UNIQUE,  -- e.g. 'COS40003', 'COS20031'
+    unit_code     VARCHAR(20)   NOT NULL UNIQUE,    -- e.g. 'COS40003', 'COS20031'
     unit_name     VARCHAR(255)  NOT NULL,
+    offered_in    SMALLINT      DEFAULT NULL    CHECK (offered_in BETWEEN 1 AND 2), -- e.g. 1 or 2, null for every semester
     created_at    TIMESTAMPTZ   NOT NULL DEFAULT now(),
     updated_at    TIMESTAMPTZ   NOT NULL DEFAULT now()
 );
@@ -242,8 +243,8 @@ CREATE TABLE template_units (
     semester            SMALLINT        NOT NULL CHECK (semester BETWEEN 1 AND 4),
                         -- 1 = Semester 1
                         -- 2 = Semester 2
-                        -- 3 = Winter Term
-                        -- 4 = Summer Term
+                        -- 3 = Summer Term
+                        -- 4 = Winter Term
 
     created_at      TIMESTAMPTZ   NOT NULL DEFAULT now(),
     updated_at      TIMESTAMPTZ   NOT NULL DEFAULT now(),
@@ -435,10 +436,10 @@ CREATE TABLE schema_migrations (
 INSERT INTO schema_migrations (version, description)
 VALUES ('1.5.0', 'Restructured prerequisites into group/condition tables for AND/OR logic; updated unit_category enum; added WIL and prescribed_elective categories; semester expanded to 4 values. Sprint 1');
 
-
 -- ===========================================================================
 -- SECTION 14 — helper function
 -- ===========================================================================
+
 
 -- Helper: add a simple prerequisite (one group, one condition)
 CREATE OR REPLACE FUNCTION add_prereq_unit(
@@ -685,6 +686,46 @@ BEGIN
     END LOOP;
 
     RETURN v_elective_grp_id;
+END;
+$$;
+
+
+-- Helper: add an AND group with mixed condition types
+CREATE OR REPLACE FUNCTION add_prereq_mixed_group(
+    p_target     VARCHAR,
+    p_conditions VARCHAR[]
+) RETURNS VOID LANGUAGE plpgsql AS $$
+DECLARE
+    v_target_id UUID;
+    v_group_id  UUID;
+    v_type      VARCHAR;
+    v_value     VARCHAR;
+    v_unit_id   UUID;
+    i           INT;
+BEGIN
+    SELECT id INTO STRICT v_target_id FROM units WHERE unit_code = p_target;
+
+    INSERT INTO unit_prerequisite_groups (unit_id)
+    VALUES (v_target_id)
+    RETURNING id INTO v_group_id;
+
+    i := 1;
+    WHILE i < array_length(p_conditions, 1) LOOP
+        v_type  := p_conditions[i];
+        v_value := p_conditions[i + 1];
+
+        IF v_type = 'unit' THEN
+            SELECT id INTO STRICT v_unit_id FROM units WHERE unit_code = v_value;
+            INSERT INTO unit_prerequisite_conditions (group_id, prerequisite_type, unit_id)
+            VALUES (v_group_id, 'unit', v_unit_id);
+
+        ELSIF v_type = 'credit_points' THEN
+            INSERT INTO unit_prerequisite_conditions (group_id, prerequisite_type, credit_points)
+            VALUES (v_group_id, 'credit_points', v_value::NUMERIC);
+        END IF;
+
+        i := i + 2;
+    END LOOP;
 END;
 $$;
 
