@@ -179,6 +179,7 @@
 .btnGroup { display: flex; gap: 8px; flex-wrap: wrap; }
 .btnPrimary  { padding: 6px 12px; background: var(--active-highlight); color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 12px; font-family: var(--font-sans); transition: background 0.15s; }
 .btnPrimary:hover { background: #1a8ad4; }
+.btnPrimary:disabled { background: var(--text-muted); opacity: 0.5; cursor: not-allowed; pointer-events: none; }
 .btnSecondary { padding: 6px 12px; background: var(--btn-secondary-bg); color: var(--text-primary); border: 1px solid var(--panel-border); border-radius: 3px; cursor: pointer; font-size: 12px; font-family: var(--font-sans); transition: all 0.15s; }
 .btnSecondary:hover { border-color: var(--accent-blue); color: var(--accent-blue); }
 .btnSuccess  { padding: 6px 12px; background: rgba(78,201,176,0.15); color: var(--accent-green); border: 1px solid rgba(78,201,176,0.3); border-radius: 3px; cursor: pointer; font-size: 12px; font-family: var(--font-sans); }

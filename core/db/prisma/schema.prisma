@@ -41,6 +41,7 @@ model Unit {
   id                      String                      @id @default(uuid())
   unit_code               String                      @unique
   unit_name               String
+  offered_in              Int?
   created_at              DateTime                    @default(now())
   updated_at              DateTime                    @updatedAt
   templates               TemplateUnit[]
