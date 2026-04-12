@@ -9,7 +9,7 @@ import {
   DetectionResult,
   PlannerScoreRecord,
   RawStudentInput,
-} from "../../types/matching";
+} from "../../shared/types/matching";
 
 /**
  * detectMajors

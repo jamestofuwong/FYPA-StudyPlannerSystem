@@ -1,10 +1,10 @@
 // ============================================================
 // MM-02 – Planner Filter (Phase 1)
 // Three-level hierarchy: intake year -> intake semester -> scoring.
-// Scoring (Level 3) is handled in Phase 3 (scoring-engine.ts).
+// Scoring (Level 3) is handled in Phase 3 (scoringEngine.ts).
 // ============================================================
 
-import { AlgorithmConfig, PlannerTemplate } from "../../types/matching";
+import { AlgorithmConfig, PlannerTemplate } from "../../shared/types/matching";
 
 export class PlannerFilterError extends Error {
   constructor(message: string) {

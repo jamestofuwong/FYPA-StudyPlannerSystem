@@ -4,7 +4,7 @@
 // Uses Node.js built-in test runner.
 //
 // Run with:
-//   npx tsx --test src/lib/matching/matching.phase2test.ts
+//   npx tsx --test core/services/matching/__tests__/matching.phase2test.ts
 // ============================================================
 
 import { describe, test } from "node:test";
@@ -17,11 +17,11 @@ import {
   PlannerScoreRecord,
   StudentProfile,
   RawStudentInput,
-} from "../../types/matching";
+} from "../../../shared/types/matching";
 
-import { scorePlanners, applyWILExemption } from "./scoring-engine";
-import { detectMajors, mergeSort } from "./major-detector";
-import { buildDisplayPayload } from "./output-packager";
+import { scorePlanners, applyWILExemption } from "../scoringEngine";
+import { detectMajors, mergeSort } from "../majorDetector";
+import { buildDisplayPayload } from "../outputPackager";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

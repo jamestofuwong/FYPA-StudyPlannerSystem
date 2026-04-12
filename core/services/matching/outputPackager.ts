@@ -11,7 +11,7 @@ import {
   DisplayPayload,
   MajorDisplay,
   PlannerScoreRecord,
-} from "../../types/matching";
+} from "../../shared/types/matching";
 
 /**
  * buildDisplayPayload

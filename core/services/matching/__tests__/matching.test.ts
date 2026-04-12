@@ -4,17 +4,17 @@
 // Uses Node.js built-in test runner.
 //
 // Run with:
-//   npx tsx --test src/lib/matching/matching.test.ts
+//   npx tsx --test core/services/matching/__tests__/matching.test.ts
 // ============================================================
 
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 
-import { DEFAULT_CONFIG, AlgorithmConfig, UnitMasterEntry, PlannerTemplate, RawStudentInput } from "../../types/matching";
-import { validateConfig, ConfigValidationError } from "./config-validator";
-import { filterPlanners, PlannerFilterError } from "./planner-filter";
-import { normaliseCode, normaliseUnitCodes } from "./unit-normalizer";
-import { buildStudentProfile } from "./profile-builder";
+import { DEFAULT_CONFIG, AlgorithmConfig, UnitMasterEntry, PlannerTemplate, RawStudentInput } from "../../../shared/types/matching";
+import { validateConfig, ConfigValidationError } from "../configValidator";
+import { filterPlanners, PlannerFilterError } from "../plannerFilter";
+import { normaliseCode, normaliseUnitCodes } from "../unitNormalizer";
+import { buildStudentProfile } from "../profileBuilder";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

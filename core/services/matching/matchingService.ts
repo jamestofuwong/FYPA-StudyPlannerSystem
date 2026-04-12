@@ -5,14 +5,14 @@
 // No database queries occur during execution.
 // ============================================================
 
-import { AlgorithmConfig, DEFAULT_CONFIG, DisplayPayload, PlannerTemplate, RawStudentInput, UnitMasterEntry } from "../../types/matching";
-import { validateConfig } from "./config-validator";
-import { filterPlanners } from "./planner-filter";
-import { normaliseUnitCodes } from "./unit-normalizer";
-import { buildStudentProfile } from "./profile-builder";
-import { scorePlanners } from "./scoring-engine";
-import { detectMajors } from "./major-detector";
-import { buildDisplayPayload } from "./output-packager";
+import { AlgorithmConfig, DEFAULT_CONFIG, DisplayPayload, PlannerTemplate, RawStudentInput, UnitMasterEntry } from "../../shared/types/matching";
+import { validateConfig } from "./configValidator";
+import { filterPlanners } from "./plannerFilter";
+import { normaliseUnitCodes } from "./unitNormalizer";
+import { buildStudentProfile } from "./profileBuilder";
+import { scorePlanners } from "./scoringEngine";
+import { detectMajors } from "./majorDetector";
+import { buildDisplayPayload } from "./outputPackager";
 
 export interface MatchingServiceInput {
   student: RawStudentInput;

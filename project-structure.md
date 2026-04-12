@@ -40,7 +40,7 @@ Embedded PostgreSQL
 
 study-planner-system/
 │
-├── app/ # Next.js application (UI + API)
+├── web/ # Next.js application (UI + API)
 │ ├── app/ # Pages (UI rendered by Next.js)
 │ ├── app/api/ # Internal API routes (Next.js backend)
 │ └── components/ # Reusable components

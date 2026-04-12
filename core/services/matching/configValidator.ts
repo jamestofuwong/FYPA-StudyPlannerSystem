@@ -4,7 +4,7 @@
 // Rejects any config where weights do not sum to exactly 1.0.
 // ============================================================
 
-import { AlgorithmConfig } from "../../types/matching";
+import { AlgorithmConfig } from "../../shared/types/matching";
 
 const WEIGHT_PRECISION = 1e-9; // tolerance for floating-point rounding
 

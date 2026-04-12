@@ -9,7 +9,7 @@ import {
   PlannerScoreRecord,
   PlannerTemplate,
   StudentProfile,
-} from "../../types/matching";
+} from "../../shared/types/matching";
 
 /**
  * scorePlanners

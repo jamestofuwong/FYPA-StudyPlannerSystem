@@ -9,7 +9,7 @@ import {
   RawStudentInput,
   StudentProfile,
   UnitMasterEntry,
-} from "../../types/matching";
+} from "../../shared/types/matching";
 
 /**
  * buildStudentProfile
