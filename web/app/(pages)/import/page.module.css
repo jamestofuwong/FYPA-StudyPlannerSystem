@@ -179,6 +179,10 @@
 .btnGroup { display: flex; gap: 8px; flex-wrap: wrap; }
 .btnPrimary  { padding: 6px 12px; background: var(--active-highlight); color: white; border: none; border-radius: 3px; cursor: pointer; font-size: 12px; font-family: var(--font-sans); transition: background 0.15s; }
 .btnPrimary:hover { background: #1a8ad4; }
+.btnPrimary:disabled, .btnSecondary:disabled, .btnSuccess:disabled, .btnDanger:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
 .btnSecondary { padding: 6px 12px; background: var(--btn-secondary-bg); color: var(--text-primary); border: 1px solid var(--panel-border); border-radius: 3px; cursor: pointer; font-size: 12px; font-family: var(--font-sans); transition: all 0.15s; }
 .btnSecondary:hover { border-color: var(--accent-blue); color: var(--accent-blue); }
 .btnSuccess  { padding: 6px 12px; background: rgba(78,201,176,0.15); color: var(--accent-green); border: 1px solid rgba(78,201,176,0.3); border-radius: 3px; cursor: pointer; font-size: 12px; font-family: var(--font-sans); }
@@ -238,6 +242,291 @@
 .formInput:focus, .formSelect:focus { border-color: var(--active-highlight); }
 .formInputMono { font-family: var(--font-mono); font-size: 11px; }
 .formInputPassword { font-family: var(--font-mono); letter-spacing: 3px; }
+
+.hiddenInput {
+  display: none;
+}
+
+.dropZone {
+  border: 2px dashed var(--panel-border);
+  border-radius: 6px;
+  padding: 32px;
+  text-align: center;
+  cursor: pointer;
+  margin-bottom: 16px;
+  transition: border-color 0.2s, background 0.2s;
+  background: linear-gradient(135deg, rgba(0,122,204,0.08), rgba(30,30,30,0.25));
+}
+
+.dropZone:hover,
+.dropZoneActive {
+  border-color: var(--active-highlight);
+  background: linear-gradient(135deg, rgba(0,122,204,0.14), rgba(30,30,30,0.35));
+}
+
+.dropIcon {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px;
+  border: 1px solid rgba(86,156,214,0.35);
+  background: rgba(86,156,214,0.16);
+  color: var(--accent-blue);
+  font-size: 18px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+}
+
+.dropTitle {
+  font-size: 13px;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.dropSubtitle {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.dropMeta {
+  font-size: 11px;
+  color: var(--accent-green);
+  font-family: var(--font-mono);
+}
+
+.cardMeta {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 4px 0 12px;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.summaryGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.summaryItem {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--panel-border);
+  border-radius: 4px;
+  background: var(--surface-bg);
+}
+
+.summaryLabel {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-muted);
+}
+
+.summaryValue {
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.signalGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 10px 0 12px;
+}
+
+.signalRow {
+  padding: 8px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--panel-border);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.signalMain {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.signalRowLabel {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
+.signalBadge {
+  white-space: nowrap;
+}
+
+.signalStrong {
+  border-color: rgba(78,201,176,0.16);
+  background: rgba(78,201,176,0.04);
+}
+
+.signalModerate {
+  border-color: rgba(206,145,120,0.18);
+  background: rgba(206,145,120,0.04);
+}
+
+.signalCritical {
+  border-color: rgba(244,135,113,0.18);
+  background: rgba(244,135,113,0.04);
+}
+
+.signalNeutral {
+  border-color: rgba(86,156,214,0.16);
+  background: rgba(86,156,214,0.04);
+}
+
+.reasonBox {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 4px;
+  border: 1px solid rgba(86,156,214,0.2);
+  background: rgba(86,156,214,0.08);
+  color: var(--text-primary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.validationBox {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.validationIssue {
+  padding: 8px 10px;
+  border-radius: 4px;
+  border-left: 3px solid var(--accent-red);
+  border-top: 1px solid rgba(244,135,113,0.28);
+  border-right: 1px solid rgba(244,135,113,0.28);
+  border-bottom: 1px solid rgba(244,135,113,0.28);
+  background: rgba(244,135,113,0.1);
+  color: var(--text-primary);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.emptyCell {
+  text-align: center;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  padding: 18px 12px;
+}
+
+.historyRow {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--sidebar-border);
+}
+
+.historyList {
+  max-height: 320px;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+.historyList::-webkit-scrollbar {
+  width: 8px;
+}
+
+.historyList::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.historyList::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+}
+
+.historyList::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.24);
+}
+
+.historyRow:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.historyHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.historyMain {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.historyName {
+  font-size: 11px;
+  color: var(--text-primary);
+  font-weight: 600;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.historyDetail {
+  font-size: 10px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.statusRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  margin-bottom: 10px;
+}
+
+.statusLabel {
+  color: var(--text-muted);
+}
+
+.statusValue {
+  color: var(--text-primary);
+  text-align: right;
+  font-family: var(--font-mono);
+}
+
+@media (max-width: 1100px) {
+  .splitLayout {
+    flex-direction: column;
+  }
+
+  .splitSide {
+    width: auto;
+  }
+}
+
+@media (max-width: 720px) {
+  .summaryGrid,
+  .formGrid2 {
+    grid-template-columns: 1fr;
+  }
+
+  .dropZone {
+    padding: 22px 16px;
+  }
+}
 
 /* ===== STUDENT PANEL ===== */
  
