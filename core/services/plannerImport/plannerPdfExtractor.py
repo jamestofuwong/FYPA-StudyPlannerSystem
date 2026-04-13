@@ -204,11 +204,6 @@ def extract_tagged_text_from_pdf(file_path, colour_map=None, tolerance=0.05):
 
 
 def _get_colour_at_y(page, mid_y, content_right=None):
-    """
-    Return background colour of widest rect at mid_y.
-    content_right: restrict to rects with x0 < content_right (excludes sidebar).
-    Falls back to all rects if no content rect found.
-    """
     best, best_w = None, -1
     for r in page.rects:
         if (r.get('fill') and
@@ -237,7 +232,6 @@ def _get_row_colour(page, row_bbox, content_right=None):
 
 
 def _detect_content_right(page_words, page_width):
-    """Detect right boundary of main content (left 65% only, to exclude sidebar codes)."""
     content_zone = page_width * 0.65
     max_x = 0
     for w in page_words:
@@ -250,7 +244,6 @@ def _detect_content_right(page_words, page_width):
 
 
 def merge_split_codes(words):
-    """Merge split unit codes due to kerning space, e.g., 'C' + 'OS20001' -> 'COS20001'."""
     merged = []
     i = 0
     while i < len(words):
@@ -276,7 +269,6 @@ def merge_split_codes(words):
 
 
 def _split_merged_row(row_words, y_tol=8):
-    """Split tall merged PDF rows into sub-rows by y-proximity."""
     if not row_words:
         return []
     sorted_words = sorted(row_words, key=lambda w: (w['top'], w['x0']))
@@ -295,11 +287,6 @@ def _split_merged_row(row_words, y_tol=8):
 
 
 def _words_to_cells(sub_words, cell_bboxes):
-    """
-    Assign words to table cells by x-midpoint.
-    Full-width merged rows are split by word x-gap.
-    Overflow prereq words (x0>150 but no cell) get a virtual cell.
-    """
     sub_words = merge_split_codes(sub_words)
     valid_cells = [c for c in cell_bboxes if c and (c[2] - c[0]) >= 8]
 
@@ -380,11 +367,6 @@ def _words_to_cells(sub_words, cell_bboxes):
 # STEP 1: Colour legend detection
 # ---------------------------
 def detect_colour_legend(pdf):
-    """
-    Detect category colours from "N X Units" legend text.
-    Core/Major/Elective: widest rect. WIL sidebar box: narrowest sidebar rect.
-    Also detects WIL directly from ICT-prefix unit rows.
-    """
     legend = dict(DEFAULT_COLOUR_LEGEND)
     PATTERNS = [
         (r'\d+\s+Core\s+Units',              'core',        'widest'),
@@ -1100,7 +1082,7 @@ def format_extracted_planner(pdf_path):
 # ---------------------------
 if __name__ == "__main__":
     import sys
-    pdf_path = sys.argv[1] if len(sys.argv) > 1 else "test/planner6.pdf"
+    pdf_path = sys.argv[1] if len(sys.argv) > 1 else "test/planner1.pdf"
     formatted = format_extracted_planner(pdf_path)
     safe_text = formatted.encode("cp1252", errors="replace").decode("cp1252")
     print(safe_text)

@@ -4,6 +4,7 @@ import os
 import re
 import sys
 import requests
+import pdfplumber
 
 from plannerPdfExtractor import (
     extract_text_from_pdf,
@@ -11,12 +12,16 @@ from plannerPdfExtractor import (
     extract_metadata,
     extract_requirements,
     extract_units,
-    extract_elective_sections,
 )
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
 DEFAULT_MODEL_NAME = "deepseek-r1:1.5b"
 DEFAULT_LLM_RETRIES = 2
+UNIT_CODE_RE = re.compile(r"\b[A-Z]{3}\d{5}\b")
+YEAR_RE = re.compile(r"^\s*Year\s+(One|Two|Three|Four|Five|\d+)\s*$", re.IGNORECASE)
+SEM_RE = re.compile(r"^\s*Semester\s+(\d+)(?:\s*\|\s*([A-Za-z/]+)\s+(\d{4}))?.*$", re.IGNORECASE)
+TERM_RE = re.compile(r"^\s*(Summer(?:\s+Term)?|Winter(?:\s+Term)?)(?:\s*\|\s*([A-Za-z/]+)\s+(\d{4}))?.*$", re.IGNORECASE)
+YEAR_MAP = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5}
 
 # ---------------------------
 # Ollama call
@@ -54,10 +59,73 @@ def call_ollama_with_retries(prompt, model_name, retries=DEFAULT_LLM_RETRIES):
     raise error
 
 
+def build_json_repair_prompt(previous_response):
+    return f"""Return valid JSON only.
+Do not explain anything.
+Do not use markdown.
+Do not add prose before or after the JSON.
+
+Your previous answer did not follow the JSON requirement.
+Rewrite the same answer as valid JSON only.
+
+Allowed outputs:
+1. Exactly [] if there are no changes.
+2. Exactly one valid JSON object with this structure:
+{{
+  "course_information": {{
+    "course": string or null,
+    "major": string or null,
+    "intake": string or null,
+    "intake_year": integer or null,
+    "requirements": {{
+      "core": {{"count": integer or null, "cp": integer or null}},
+      "major": {{"count": integer or null, "cp": integer or null}},
+      "elective": {{"count": integer or null, "cp": integer or null}},
+      "wil": {{"count": integer or null, "cp": integer or null}}
+    }}
+  }},
+  "unit_changes": [
+    {{
+      "action": "add" or "update",
+      "unit_code": "CODE",
+      "year_level": integer or null,
+      "semester": integer or null,
+      "category": "core" or "major_core" or "elective" or "wil" or "mpu" or "prescribed_elective" or null,
+      "unit_name": string or null,
+      "prerequisite": string or null,
+      "offered_in": integer or null
+    }}
+  ]
+}}
+
+Previous response:
+{previous_response}
+"""
+
+
+def parse_or_repair_llm_json(response, model_name):
+    try:
+        return extract_json(response), []
+    except ValueError:
+        repair_prompt = build_json_repair_prompt(response)
+        repaired = call_ollama(repair_prompt, model_name)
+        parsed = extract_json(repaired)
+        return parsed, [
+            {
+                "attempt": "json_repair",
+                "status": "success",
+            }
+        ]
+
+
 # ---------------------------
 # Parse WIL unit name/prereq
 # ---------------------------
 def parse_wil_unit(u):
+    """
+    WIL units have their name and prerequisites mixed in the name field.
+    Split them: first bullet is the name, remaining bullets are prerequisites.
+    """
     raw = u.get('unit_name', u.get('name')) or ''
     # Split on ' - ' bullets
     parts = [p.strip() for p in re.split(r'\s*-\s+', raw) if p.strip()]
@@ -139,6 +207,7 @@ def output_category(category):
 # Deterministic assembly into target JSON schema
 # ---------------------------
 def unit_obj(u):
+    """Build a unit dict in the target schema."""
     obj = {
         "year_level":   coerce_int(u.get("year_level")),
         "semester":     coerce_int(u.get("semester")),
@@ -151,7 +220,7 @@ def unit_obj(u):
     return obj
 
 
-def assemble_json(file_name, metadata, requirements, units, elective_sections):
+def assemble_json(file_name, metadata, requirements, units):
     # Build requirements entry with count + cp
     def req_entry(key):
         val = requirements.get(key, {})
@@ -216,31 +285,283 @@ def assemble_json(file_name, metadata, requirements, units, elective_sections):
     }
 
 
-def prepare_llm_text(raw_text):
-    seen = set()
-    cleaned_lines = []
-    for line in raw_text.splitlines():
-        line = re.sub(r"\s+", " ", line).strip()
-        if not line:
-            continue
-        if line in seen:
-            continue
-        seen.add(line)
-        cleaned_lines.append(line)
-    return "\n".join(cleaned_lines)
+def _planner_sem_to_db_sem(planner_sem, season_label=None):
+    if season_label:
+        label = str(season_label).lower()
+        if "summer" in label:
+            return 3
+        if "winter" in label:
+            return 4
+    sem = coerce_int(planner_sem)
+    if sem is None:
+        return None
+    return 1 if sem % 2 == 1 else 2
 
 
-def build_structuring_prompt(file_name, raw_text):
-    return f"""Convert this tagged PDF text into a structured JSON planner. The tags come from table cell background rectangles, not text colour.
+def _planner_sem_to_year(planner_sem):
+    sem = coerce_int(planner_sem)
+    if sem is None:
+        return None
+    return (sem + 1) // 2
 
-Return ONLY one valid JSON object with this exact structure:
+
+def _clean_evidence_line(line):
+    line = re.sub(r"\s+", " ", str(line)).strip()
+    return line.replace("â€™", "'").replace("Ã¢â‚¬â„¢", "'")
+
+
+def _is_useful_evidence_line(line):
+    if not line:
+        return False
+    if re.search(r"swinburne\.edu|last updated|degree planner|copyright", line, re.IGNORECASE):
+        return False
+    if UNIT_CODE_RE.search(line):
+        return True
+    useful_patterns = [
+        r"bachelor of",
+        r"\bsemester\s+\d+\b",
+        r"\bsummer\b",
+        r"\bwinter\b",
+        r"\byear\s+(one|two|three|four|five|\d+)\b",
+        r"\bcore units\b",
+        r"\bmajor units\b",
+        r"\belective units\b",
+        r"\bwil placement\b",
+        r"\bcredit points\b",
+        r"\bwork integrated learning\b",
+        r"\bmajor\b",
+        r"\bintake\b",
+        r"\b\d{4}\b",
+    ]
+    return any(re.search(pattern, line, re.IGNORECASE) for pattern in useful_patterns)
+
+
+def _extract_page_lines(pdf_path):
+    pages = []
+    with pdfplumber.open(pdf_path) as pdf:
+        for page in pdf.pages:
+            text = page.extract_text() or ""
+            raw_lines = [_clean_evidence_line(line) for line in text.splitlines()]
+            pages.append([line for line in raw_lines if line])
+    return pages
+
+
+def _row_cells_text(row_cells):
+    parts = []
+    for cell in row_cells:
+        text = _clean_evidence_line("" if cell is None else str(cell))
+        if text:
+            parts.append(text)
+    return " | ".join(parts)
+
+
+def extract_useful_raw_evidence_lines(pdf_path, max_lines_per_page=120):
+    blocks = []
+    page_text_lines = _extract_page_lines(pdf_path)
+    with pdfplumber.open(pdf_path) as pdf:
+        for page_number, page in enumerate(pdf.pages, start=1):
+            page_lines = page_text_lines[page_number - 1]
+            tables = page.find_tables()
+
+            current_year = None
+            current_planner_sem = None
+            current_db_sem = None
+            page_block = [f"PAGE {page_number}"]
+
+            for raw_line in page_lines:
+                line = _clean_evidence_line(raw_line)
+                if not line:
+                    continue
+                if re.search(r"swinburne\.edu|last updated|degree planner|copyright", line, re.IGNORECASE):
+                    continue
+
+                year_match = YEAR_RE.match(line)
+                if year_match:
+                    token = year_match.group(1).lower()
+                    current_year = YEAR_MAP.get(token, int(token) if token.isdigit() else None)
+                    page_block.append(f"HEADER|year_level={current_year}|text={line}")
+                    continue
+
+                year_search = re.search(r"\bYear\s+(One|Two|Three|Four|Five|\d+)\b", line, re.IGNORECASE)
+                if year_search and "credit point" not in line.lower():
+                    token = year_search.group(1).lower()
+                    current_year = YEAR_MAP.get(token, int(token) if token.isdigit() else None)
+                    page_block.append(f"HEADER|year_level={current_year}|text=Year {year_search.group(1)}")
+                    continue
+
+                sem_match = SEM_RE.match(line)
+                if sem_match:
+                    current_planner_sem = int(sem_match.group(1))
+                    current_db_sem = _planner_sem_to_db_sem(current_planner_sem)
+                    season = sem_match.group(2)
+                    year_text = sem_match.group(3)
+                    page_block.append(
+                        f"HEADER|year_level={current_year}|planner_semester={current_planner_sem}|semester={current_db_sem}|season={season}|year={year_text}|text={line}"
+                    )
+                    continue
+
+                term_match = TERM_RE.match(line)
+                if term_match:
+                    season = term_match.group(1)
+                    current_planner_sem = None
+                    current_db_sem = _planner_sem_to_db_sem(None, season)
+                    page_block.append(
+                        f"HEADER|year_level={current_year}|planner_semester=null|semester={current_db_sem}|season={season}|year={term_match.group(3)}|text={line}"
+                    )
+                    continue
+
+                if _is_useful_evidence_line(line) and not UNIT_CODE_RE.search(line):
+                    page_block.append("INFO|" + line)
+
+            for table in tables:
+                extracted_rows = table.extract() or []
+                last_row_idx = None
+                for row_cells in extracted_rows:
+                    row_text = _row_cells_text(row_cells)
+                    if not row_text:
+                        continue
+                    if re.search(r"unit code|unit name|pre-?requisites?", row_text, re.IGNORECASE):
+                        continue
+
+                    sem_match = SEM_RE.match(row_text)
+                    if sem_match:
+                        current_planner_sem = int(sem_match.group(1))
+                        current_db_sem = _planner_sem_to_db_sem(current_planner_sem)
+                        season = sem_match.group(2)
+                        year_text = sem_match.group(3)
+                        page_block.append(
+                            f"HEADER|year_level={current_year}|planner_semester={current_planner_sem}|semester={current_db_sem}|season={season}|year={year_text}|text={row_text}"
+                        )
+                        continue
+
+                    term_match = TERM_RE.match(row_text)
+                    if term_match:
+                        season = term_match.group(1)
+                        current_planner_sem = None
+                        current_db_sem = _planner_sem_to_db_sem(None, season)
+                        page_block.append(
+                            f"HEADER|year_level={current_year}|planner_semester=null|semester={current_db_sem}|season={season}|year={term_match.group(3)}|text={row_text}"
+                        )
+                        continue
+
+                    if re.match(r"^\s*Co-req:", row_text, re.IGNORECASE) and last_row_idx is not None:
+                        page_block[last_row_idx] += " ; " + row_text
+                        continue
+
+                    code_match = UNIT_CODE_RE.search(row_text)
+                    if code_match:
+                        code = code_match.group(0)
+                        row_year = _planner_sem_to_year(current_planner_sem) or current_year
+                        page_block.append(
+                            f"ROW|year_level={row_year}|planner_semester={current_planner_sem}|semester={current_db_sem}|unit_code={code}|text={row_text}"
+                        )
+                        last_row_idx = len(page_block) - 1
+
+            deduped = []
+            seen = set()
+            for line in page_block:
+                if line in seen:
+                    continue
+                seen.add(line)
+                deduped.append(line)
+            blocks.extend(deduped[:max_lines_per_page])
+
+    return "\n".join(blocks)
+
+
+def build_improved_crosscheck_prompt(file_name, base_data, raw_lines, model_name=""):
+    current_units = []
+    cats = base_data.get("categories", {})
+    unit_groups = [
+        cats.get("core_units", []),
+        cats.get("major_units", []),
+        cats.get("elective_groups", {}).get("elective", []),
+        cats.get("elective_groups", {}).get("prescribed_elective", []),
+        cats.get("wil_group", []),
+        cats.get("mpu_group", []),
+    ]
+    for group in unit_groups:
+        for u in group:
+            code = u.get("unit_code", u.get("code"))
+            if code:
+                current_units.append(str(code).strip().upper())
+    current_units = sorted(set(current_units))
+    current_units_str = ", ".join(current_units)
+    base_json = json.dumps(base_data, ensure_ascii=False, indent=2)
+
+    if "deepseek" in (model_name or "").lower():
+        return f"""Return JSON only.
+Do not explain anything.
+Do not summarize the planner.
+Do not give study advice.
+Do not use markdown.
+
+Task:
+Compare the deterministic planner JSON against the RAW EVIDENCE.
+Return only a minimal correction patch.
+
+If no obvious correction is needed, return exactly:
+[]
+
+Otherwise return exactly one JSON array like:
+[
+  {{
+    "action": "add" or "update",
+    "unit_code": "CODE",
+    "year_level": 1,
+    "semester": 1,
+    "category": "core" or "major_core" or "elective" or "wil" or "mpu" or "prescribed_elective" or null,
+    "unit_name": "NAME",
+    "prerequisite": null,
+    "offered_in": null
+  }}
+]
+
+Rules:
+1. Return only JSON.
+2. No prose before or after JSON.
+3. If unsure, return [].
+4. Add missing units only if ROW evidence clearly shows them.
+5. Update existing units only if RAW EVIDENCE clearly proves a correction.
+6. semester must only be 1, 2, 3, or 4.
+7. prerequisite must be a string or null.
+
+CURRENT UNIT CODES:
+{current_units_str}
+
+DETERMINISTIC JSON:
+{base_json}
+
+RAW EVIDENCE:
+{raw_lines}
+"""
+
+    return f"""You are a university course planner extraction expert. Your task is to cross-check and correct a deterministic JSON extraction using raw PDF evidence.
+
+CRITICAL INSTRUCTIONS:
+1. The deterministic extraction may be incomplete.
+2. Add missing units when ROW evidence clearly proves they exist.
+3. Extract course metadata from INFO lines when clearly visible.
+4. Fix year_level and semester values using HEADER context.
+5. Return a JSON patch only.
+
+CURRENT STATE:
+- Units in deterministic JSON: {current_units_str}
+- Total units currently in JSON: {len(current_units)}
+
+EVIDENCE LINE TYPES:
+- PAGE N: Page number marker
+- HEADER|year_level=X|semester=Y|text=...: Year and semester context
+- INFO|...: Course metadata, requirements, notes
+- ROW|year_level=X|planner_semester=Y|semester=Z|unit_code=ABC12345|text=...: Unit row data
+
+Return ONLY valid JSON with this EXACT structure:
 {{
-  "file_name": "{file_name}",
   "course_information": {{
-    "course": string,
-    "major": string,
-    "intake": string,
-    "intake_year": integer,
+    "course": string or null,
+    "major": string or null,
+    "intake": string or null,
+    "intake_year": integer or null,
     "requirements": {{
       "core": {{"count": integer or null, "cp": integer or null}},
       "major": {{"count": integer or null, "cp": integer or null}},
@@ -248,291 +569,210 @@ Return ONLY one valid JSON object with this exact structure:
       "wil": {{"count": integer or null, "cp": integer or null}}
     }}
   }},
-  "categories": {{
-    "core_units": [unit],
-    "major_units": [unit],
-    "mpu_group": [unit],
-    "elective_groups": {{
-      "prescribed_elective": [unit],
-      "elective": [unit]
-    }},
-    "wil_group": [unit]
-  }}
+  "unit_changes": [
+    {{
+      "action": "add" or "update",
+      "unit_code": "CODE",
+      "year_level": integer or null,
+      "semester": integer or null,
+      "category": "core" or "major_core" or "elective" or "wil" or "mpu" or "prescribed_elective" or null,
+      "unit_name": string or null,
+      "prerequisite": string or null,
+      "offered_in": integer or null
+    }}
+  ]
 }}
 
-Each unit object must contain exactly:
-{{
-  "year_level": integer or null,
-  "semester": integer or null,
-  "category": string or null,
-  "unit_code": string,
-  "unit_name": string,
-  "prerequisite": string or null,
-  "offered_in": integer or null
-}}
+FIELD RULES:
+1. category:
+   - ENG, MTH, PHY, NPS prefix -> "core"
+   - CVE, MEE, PEH, ENV, BIO, CHE prefix -> "major_core" when the planner row is major-coloured or is a major row
+   - MGT, ACC, MKT, INF, ECO, HRM, PRM, COM, BCH, COS, BUS, INB, SOC, EEE, MDA prefix -> "elective" when shown as elective choice
+   - EAT or explicit Work Integrated Learning unit -> "wil"
+   - MPU prefix -> "mpu"
+2. semester must only be 1, 2, 3, or 4.
+3. odd planner semester -> 1, even planner semester -> 2, Summer -> 3, Winter -> 4.
+4. prerequisite must remain a single string, not an array.
+5. If raw evidence is not enough to prove a change, keep the deterministic value.
+6. Return JSON only.
 
-Rules:
-1. Use tags like [CORE], [MAJOR], [ELECTIVE], [WIL], [MPU], [PRESCRIBED_ELECTIVE] to help set the category field.
-2. Put elective units inside categories.elective_groups.elective, not directly under categories.
-3. Always include categories.elective_groups.prescribed_elective, even if it is an empty array.
-4. Always include mpu_group and wil_group, even if empty.
-5. Keep the exact planner wording for intake. Convert offered_in to integer when possible: Semester 1 -> 1, Semester 2 -> 2, Summer Term -> 3, Winter Term -> 4.
-6. year_level and semester are required for scheduled planner rows. Use null only for recommended elective pools or when the planner truly does not assign them.
-7. MPU-prefixed units belong in mpu_group, not core_units or major_units.
-8. Placeholder rows like "Elective 1" must be kept with unit_code "-" and unit_name "Elective 1".
-9. [GENERAL] means the text was in a white or missing background. Use it for metadata, headings, intake info, and any uncategorised planner text.
-10. Do not invent units. Do not drop units. Do not merge categories.
-11. If a prerequisite line contains an offering period at the end, move that period into offered_in.
-12. Return JSON only. No markdown. No explanation.
+DETERMINISTIC JSON:
+{base_json}
 
-TAGGED TEXT:
-{raw_text}
+RAW EVIDENCE:
+{raw_lines}
 """
 
 
-DEEPSEEK_PROMPT_TEMPLATE = """\
-Return JSON only.
-Do not explain anything.
-Do not restate the SUPPORT lines.
-Do not use markdown.
-
-Task:
-Review the INPUT JSON and return only a minimal correction patch.
-
-Output rules:
-1. If no obvious correction is needed, return exactly:
-[]
-2. Otherwise return exactly one JSON array of changes:
-[
-  {
-    "group": "core_units|major_units|mpu_group|wil_group|prescribed_elective|elective",
-    "unit_code": "UNITCODE",
-    "unit_name": "UNIT NAME",
-    "fields": {
-      "prerequisite": null,
-      "offered_in": 1
-    }
-  }
-]
-
-Rules:
-- Return only JSON.
-- No prose.
-- No SUPPORT summary.
-- No code fences.
-- No full planner JSON.
-- Do not add or remove units.
-- Only include fields that must change.
-- If unsure, return [].
-
-INPUT JSON:
-{input_json}
-
-SUPPORT:
-{support_text}
-"""
-
-
-def build_support_context(metadata, requirements, units):
-    lines = []
-    lines.append(
-        "META|course={}|major={}|intake={}|intake_year={}".format(
-            metadata.get("course"),
-            metadata.get("major"),
-            metadata.get("intake"),
-            metadata.get("intakeYear"),
-        )
-    )
-    for key in ("core", "major", "elective", "wil"):
-        value = requirements.get(key, {})
-        lines.append(
-            "REQ|{}|count={}|cp={}".format(
-                key,
-                value.get("count"),
-                value.get("cp"),
-            )
-        )
-    for unit in units:
-        lines.append(
-            "UNIT|{}|{}|{}|{}|{}|prereq={}|offered={}".format(
-                unit.get("year_level"),
-                unit.get("semester"),
-                output_category(unit.get("category")),
-                unit.get("unit_code", unit.get("code")),
-                unit.get("unit_name", unit.get("name")),
-                unit.get("prerequisite"),
-                normalise_offered_in(unit.get("offered_in")),
-            )
-        )
-    return "\n".join(lines)
-
-
-def build_validation_prompt(data, support_text=""):
-    input_str = json.dumps(data, indent=2, ensure_ascii=False)
-    return (
-        DEEPSEEK_PROMPT_TEMPLATE
-        .replace("{input_json}", input_str)
-        .replace("{support_text}", support_text)
-    )
-
-
-def is_patch_response(data):
-    return isinstance(data, dict) and "unit_changes" in data
-
-
-def _unit_group_container(categories, group_name):
-    if group_name in ("prescribedElective", "prescribed_elective"):
-        return (
-            categories.get("elective_groups", {}).get("prescribed_elective", [])
-            or categories.get("electiveGroups", {}).get("prescribedElective", [])
-        )
-    if group_name == "elective":
-        return (
-            categories.get("elective_groups", {}).get("elective", [])
-            or categories.get("electiveGroups", {}).get("elective", [])
-        )
-    legacy_map = {
-        "coreUnits": "core_units",
-        "majorUnits": "major_units",
-        "mpuGroup": "mpu_group",
-        "wilGroup": "wil_group",
-    }
-    resolved = legacy_map.get(group_name, group_name)
-    return categories.get(resolved, categories.get(group_name, []))
-
-
-def apply_patch_response(base_data, patch_data):
+def apply_crosscheck_patch(base_data, patch_data, file_name):
     data = json.loads(json.dumps(base_data))
-
-    course_patch = patch_data.get("course_information", {})
-    if isinstance(course_patch, dict):
-        target_ci = data.setdefault("course_information", {})
-        for key in ("course", "major", "intake", "intake_year", "intakeYear"):
-            if key in course_patch:
-                target_ci["intake_year" if key == "intakeYear" else key] = course_patch[key]
-
-        req_patch = course_patch.get("requirements", {})
-        if isinstance(req_patch, dict):
-            target_req = target_ci.setdefault("requirements", {})
-            for req_key in ("core", "major", "elective", "wil"):
-                if req_key in req_patch and isinstance(req_patch[req_key], dict):
-                    target_req.setdefault(req_key, {})
-                    for field in ("count", "cp"):
-                        if field in req_patch[req_key]:
-                            target_req[req_key][field] = req_patch[req_key][field]
+    if not isinstance(patch_data, dict):
+        return data
 
     categories = data.setdefault("categories", {})
+    containers = {
+        "core": categories.setdefault("core_units", []),
+        "major_core": categories.setdefault("major_units", []),
+        "mpu": categories.setdefault("mpu_group", []),
+        "prescribed_elective": categories.setdefault("elective_groups", {}).setdefault("prescribed_elective", []),
+        "elective": categories.setdefault("elective_groups", {}).setdefault("elective", []),
+        "wil": categories.setdefault("wil_group", []),
+    }
+    base_code_index = {}
+    for category_name, items in containers.items():
+        for item in items:
+            code = str(item.get("unit_code", "")).strip().upper()
+            if code:
+                base_code_index[code] = category_name
+
+    if "unit_changes" not in patch_data and isinstance(patch_data.get("units"), list):
+        alt_ci = {
+            "course": patch_data.get("course"),
+            "major": patch_data.get("major"),
+            "intake": patch_data.get("intake"),
+            "intake_year": patch_data.get("intake_year", patch_data.get("start_year")),
+            "requirements": patch_data.get("requirements", {}),
+        }
+        alt_units = []
+        for item in patch_data.get("units", []):
+            if not isinstance(item, dict):
+                continue
+            code = str(item.get("unit_code", "")).strip().upper()
+            if not code or len(code) > 12:
+                continue
+            category = base_code_index.get(code)
+            if category is None:
+                if code.startswith(("EAT", "NPS")) and "work integrated" in json.dumps(item).lower():
+                    category = "wil"
+                elif code.startswith("MPU"):
+                    category = "mpu"
+                elif code.startswith(("ENG", "MTH", "PHY", "NPS")):
+                    category = "core"
+                elif code.startswith(("CVE", "MEE", "PEH", "ENV", "BIO", "CHE")):
+                    category = "major_core"
+                else:
+                    category = "elective"
+            alt_units.append({
+                "year_level": item.get("year_level", item.get("year")),
+                "semester": item.get("semester"),
+                "category": category,
+                "unit_code": code,
+                "unit_name": item.get("unit_name"),
+                "prerequisite": item.get("prerequisite", item.get("prerequisites")),
+                "offered_in": item.get("offered_in"),
+            })
+        alt_data = {
+            "file_name": file_name,
+            "course_information": alt_ci,
+            "units": alt_units,
+        }
+        return normalise_llm_output(alt_data, file_name)
+
+    patch_ci = patch_data.get("course_information", {})
+    if isinstance(patch_ci, dict):
+        base_ci = data.setdefault("course_information", {})
+        for key in ("course", "major", "intake", "intake_year"):
+            value = patch_ci.get(key)
+            if value not in (None, ""):
+                base_ci[key] = value
+        patch_req = patch_ci.get("requirements", {})
+        if isinstance(patch_req, dict):
+            base_req = base_ci.setdefault("requirements", {})
+            for req_key in ("core", "major", "elective", "wil"):
+                req_value = patch_req.get(req_key)
+                if not isinstance(req_value, dict):
+                    continue
+                target = base_req.setdefault(req_key, {"count": None, "cp": None})
+                for field in ("count", "cp"):
+                    if req_value.get(field) is not None:
+                        target[field] = req_value.get(field)
+
+    code_index = {}
+    for category_name, items in containers.items():
+        for item in items:
+            code = str(item.get("unit_code", "")).strip().upper()
+            if code:
+                code_index[code] = (category_name, item)
+
     for change in patch_data.get("unit_changes", []):
         if not isinstance(change, dict):
             continue
-        group = change.get("group")
-        code = str(change.get("unit_code", change.get("code", ""))).strip().upper()
-        name = _normalised_text(change.get("unit_name", change.get("name")))
-        fields = change.get("fields", {})
-        if not isinstance(fields, dict):
+        code = str(change.get("unit_code", "")).strip().upper()
+        if not code:
             continue
-
-        units = _unit_group_container(categories, group)
-        target = None
-        for unit in units if isinstance(units, list) else []:
-            unit_code = str(unit.get("unit_code", unit.get("code", ""))).strip().upper()
-            unit_name = _normalised_text(unit.get("unit_name", unit.get("name")))
-            if unit_code == code and unit_name == name:
-                target = unit
-                break
-        if target is None:
+        action = str(change.get("action", "update")).strip().lower()
+        target_info = code_index.get(code)
+        if target_info:
+            _, target_unit = target_info
+            for field in ("year_level", "semester", "unit_name", "prerequisite", "offered_in"):
+                if field in change and change.get(field) is not None:
+                    target_unit[field] = change.get(field)
+            if change.get("category") in containers and change.get("category") != target_unit.get("category"):
+                old_category, old_unit = target_info
+                if old_unit in containers[old_category]:
+                    containers[old_category].remove(old_unit)
+                old_unit["category"] = change.get("category")
+                containers[change.get("category")].append(old_unit)
+                code_index[code] = (change.get("category"), old_unit)
             continue
+        if action != "add":
+            continue
+        category = change.get("category")
+        if category not in containers:
+            category = "elective"
+        new_unit = {
+            "year_level": change.get("year_level"),
+            "semester": change.get("semester"),
+            "category": category,
+            "unit_code": code,
+            "unit_name": change.get("unit_name") or "",
+            "prerequisite": change.get("prerequisite"),
+            "offered_in": change.get("offered_in"),
+        }
+        containers[category].append(new_unit)
+        code_index[code] = (category, new_unit)
 
-        for key, value in fields.items():
-            if key in ("year_level", "semester", "category", "unit_code", "unit_name", "prerequisite", "offered_in", "code", "name"):
-                if key == "code":
-                    target["unit_code"] = value
-                elif key == "name":
-                    target["unit_name"] = value
-                elif key == "category":
-                    target["category"] = output_category(value)
-                elif key == "offered_in":
-                    normalised = normalise_offered_in(value)
-                    if normalised is not None:
-                        target["offered_in"] = normalised
-                else:
-                    target[key] = value
-
-    return data
+    return normalise_llm_output(data, file_name)
 
 
-def overlay_llm_on_base(base_data, llm_data):
-    data = json.loads(json.dumps(base_data))
+def clean_unit_name(name):
+    if not name:
+        return name
+    name = re.sub(r'\s+[A-Z]{3}\d{5}@?\s*', ' ', str(name))
+    name = name.replace('@', '')
+    if name.endswith(' Nil'):
+        name = name[:-4]
+    return re.sub(r'\s+', ' ', name).strip()
 
-    llm_ci = llm_data.get("course_information", {})
-    base_ci = data.setdefault("course_information", {})
-    if isinstance(llm_ci, dict):
-        for key in ("course", "major", "intake", "intake_year", "intakeYear"):
-            if llm_ci.get(key) not in (None, "", {}):
-                base_ci["intake_year" if key == "intakeYear" else key] = llm_ci.get(key)
 
-        llm_req = llm_ci.get("requirements", {})
-        base_req = base_ci.setdefault("requirements", {})
-        if isinstance(llm_req, dict):
-            for req_key in ("core", "major", "elective", "wil"):
-                base_req.setdefault(req_key, {})
-                llm_req_val = llm_req.get(req_key, {})
-                if isinstance(llm_req_val, dict):
-                    for field in ("count", "cp"):
-                        if llm_req_val.get(field) is not None:
-                            base_req[req_key][field] = llm_req_val.get(field)
+def normalize_prerequisite(prereq):
+    if not prereq:
+        return prereq
+    prereq = re.sub(r'\s+Co-req:', '; Co-req:', str(prereq))
+    return re.sub(r'\s+', ' ', prereq).strip()
 
-    categories = data.setdefault("categories", {})
-    llm_categories = llm_data.get("categories", {})
-    llm_groups = {
-        "core_units": llm_categories.get("core_units", llm_categories.get("coreUnits", [])),
-        "major_units": llm_categories.get("major_units", llm_categories.get("majorUnits", [])),
-        "mpu_group": llm_categories.get("mpu_group", llm_categories.get("mpuGroup", [])),
-        "wil_group": llm_categories.get("wil_group", llm_categories.get("wilGroup", [])),
-        "prescribed_elective": (
-            llm_categories.get("elective_groups", {}).get("prescribed_elective", [])
-            or llm_categories.get("electiveGroups", {}).get("prescribedElective", [])
-        ),
-        "elective": (
-            llm_categories.get("elective_groups", {}).get("elective", [])
-            or llm_categories.get("electiveGroups", {}).get("elective", [])
-        ),
-    }
-    base_groups = {
-        "core_units": categories.get("core_units", []),
-        "major_units": categories.get("major_units", []),
-        "mpu_group": categories.get("mpu_group", []),
-        "wil_group": categories.get("wil_group", []),
-        "prescribed_elective": categories.get("elective_groups", {}).get("prescribed_elective", []),
-        "elective": categories.get("elective_groups", {}).get("elective", []),
-    }
 
-    for group_name, base_units in base_groups.items():
-        llm_index = _unit_index(llm_groups.get(group_name, []))
-        for base_unit in base_units if isinstance(base_units, list) else []:
-            key = (
-                str(base_unit.get("unit_code", base_unit.get("code", ""))).strip().upper(),
-                str(base_unit.get("unit_name", base_unit.get("name", ""))).strip(),
-            )
-            llm_unit = llm_index.get(key)
-            if not llm_unit:
-                continue
+def apply_enhanced_crosscheck_patch(base_data, patch_data, file_name):
+    data = apply_crosscheck_patch(base_data, patch_data, file_name)
 
-            if llm_unit.get("year_level") is not None:
-                base_unit["year_level"] = llm_unit.get("year_level")
-            if llm_unit.get("semester") is not None:
-                base_unit["semester"] = llm_unit.get("semester")
-            if llm_unit.get("category") not in (None, ""):
-                base_unit["category"] = output_category(llm_unit.get("category"))
-            if llm_unit.get("unit_code", llm_unit.get("code")) not in (None, ""):
-                base_unit["unit_code"] = llm_unit.get("unit_code", llm_unit.get("code"))
-            if llm_unit.get("unit_name", llm_unit.get("name")) not in (None, ""):
-                base_unit["unit_name"] = llm_unit.get("unit_name", llm_unit.get("name"))
-            if llm_unit.get("prerequisite") not in (None, ""):
-                base_unit["prerequisite"] = llm_unit.get("prerequisite")
-            if llm_unit.get("offered_in") not in (None, ""):
-                base_unit["offered_in"] = normalise_offered_in(llm_unit.get("offered_in"))
+    def process_unit(unit):
+        if 'semester' in unit:
+            original_sem = unit['semester']
+            unit['semester'] = _planner_sem_to_db_sem(unit['semester']) if coerce_int(unit['semester']) and coerce_int(unit['semester']) > 4 else coerce_int(unit['semester'])
+            if unit.get('year_level') is None and original_sem is not None:
+                unit['year_level'] = _planner_sem_to_year(original_sem)
+        if 'unit_name' in unit:
+            unit['unit_name'] = clean_unit_name(unit['unit_name'])
+        if 'prerequisite' in unit and unit['prerequisite']:
+            unit['prerequisite'] = normalize_prerequisite(unit['prerequisite'])
+        return unit
 
+    cats = data.get('categories', {})
+    for key in ('core_units', 'major_units', 'mpu_group', 'wil_group'):
+        cats[key] = [process_unit(u) for u in cats.get(key, [])]
+    eg = cats.get('elective_groups', {})
+    eg['elective'] = [process_unit(u) for u in eg.get('elective', [])]
+    eg['prescribed_elective'] = [process_unit(u) for u in eg.get('prescribed_elective', [])]
     return data
 
 
@@ -849,46 +1089,7 @@ def extract_json(text):
 # ---------------------------
 # Validate and normalise
 # ---------------------------
-def validate_and_normalise(data, silent=False):
-    errors = []
-
-    ci = data.get("course_information", {})
-    if not ci.get("course"):
-        errors.append("Missing course_information.course")
-    if not ci.get("major"):
-        errors.append("Missing course_information.major")
-    if not ci.get("intake"):
-        errors.append("Missing course_information.intake")
-    if not ci.get("intake_year"):
-        errors.append("Missing course_information.intake_year")
-
-    cats = data.get("categories", {})
-    if not isinstance(cats.get("elective_groups"), dict):
-        errors.append("categories.elective_groups is missing or invalid")
-        cats["elective_groups"] = {"prescribed_elective": [], "elective": []}
-
-    eg = cats.get("elective_groups", {})
-
-    if not cats.get("core_units"):
-        errors.append("core_units is empty")
-    if not cats.get("major_units"):
-        errors.append("major_units is empty")
-    if "prescribed_elective" not in eg:
-        errors.append("elective_groups.prescribed_elective is missing")
-    if "elective" not in eg:
-        errors.append("elective_groups.elective is missing")
-
-    if not silent and errors:
-        print("  WARNINGS:")
-        for e in errors:
-            print("    - " + e)
-    elif not silent:
-        print("  Validation passed.")
-
-    return data
-
-
-def collect_validation_issues(data):
+def _validation_issues(data):
     issues = []
     ci = data.get("course_information", {})
     if not ci.get("course"):
@@ -901,23 +1102,41 @@ def collect_validation_issues(data):
         issues.append("Missing course_information.intake_year")
 
     cats = data.get("categories", {})
+    if not isinstance(cats.get("elective_groups"), dict):
+        issues.append("categories.elective_groups is missing or invalid")
+        cats["elective_groups"] = {"prescribed_elective": [], "elective": []}
+
     eg = cats.get("elective_groups", {})
+
     if not cats.get("core_units"):
         issues.append("core_units is empty")
     if not cats.get("major_units"):
         issues.append("major_units is empty")
-    if not isinstance(eg, dict):
-        issues.append("elective_groups is missing or invalid")
-    else:
-        if "prescribed_elective" not in eg:
-            issues.append("elective_groups.prescribed_elective is missing")
-        if "elective" not in eg:
-            issues.append("elective_groups.elective is missing")
+    if "prescribed_elective" not in eg:
+        issues.append("elective_groups.prescribed_elective is missing")
+    if "elective" not in eg:
+        issues.append("elective_groups.elective is missing")
     return issues
 
 
-def determine_processing_outcome(data, llm_used, llm_applied, llm_error, validation_issues):
-    categories = data.get("categories", {})
+def validate_and_normalise(data, silent=False):
+    errors = _validation_issues(data)
+
+    if not silent and errors:
+        print("  WARNINGS:")
+        for e in errors:
+            print("    - " + e)
+    elif not silent:
+        print("  Validation passed.")
+
+    return data
+
+
+def collect_validation_issues(data):
+    return _validation_issues(data)
+
+
+def determine_processing_outcome(categories, llm_used, llm_applied, llm_error, validation_issues):
     core_count = len(categories.get("core_units", []))
     major_count = len(categories.get("major_units", []))
     if validation_issues:
@@ -956,9 +1175,7 @@ def process_planner_pdf(pdf_path, model_name=DEFAULT_MODEL_NAME, use_llm=True, l
     metadata = extract_metadata(cleaned_text)
     requirements = extract_requirements(cleaned_text)
     units = extract_units(pdf_path)
-    elective_sections = extract_elective_sections(pdf_path)
-
-    structured = assemble_json(base_name, metadata, requirements, units, elective_sections)
+    structured = assemble_json(base_name, metadata, requirements, units)
     llm_used = False
     llm_applied = False
     llm_error = None
@@ -967,16 +1184,13 @@ def process_planner_pdf(pdf_path, model_name=DEFAULT_MODEL_NAME, use_llm=True, l
 
     if use_llm:
         llm_used = True
-        support_text = build_support_context(metadata, requirements, units)
         try:
-            cleanup_prompt = build_validation_prompt(structured, support_text=support_text)
+            raw_evidence = extract_useful_raw_evidence_lines(pdf_path, max_lines_per_page=200)
+            cleanup_prompt = build_improved_crosscheck_prompt(base_name, structured, raw_evidence, model_name=model_name)
             response, llm_attempts = call_ollama_with_retries(cleanup_prompt, model_name, retries=llm_retries)
-            llm_structured = extract_json(response)
-            if is_patch_response(llm_structured):
-                llm_structured = apply_patch_response(structured, llm_structured)
-            else:
-                llm_structured = normalise_llm_output(llm_structured, base_name)
-                llm_structured = overlay_llm_on_base(structured, llm_structured)
+            llm_structured, repair_attempts = parse_or_repair_llm_json(response, model_name)
+            llm_attempts.extend(repair_attempts)
+            llm_structured = apply_enhanced_crosscheck_patch(structured, llm_structured, base_name)
             llm_structured = normalise_llm_output(llm_structured, base_name)
             accepted, reason = should_accept_llm_output(structured, llm_structured)
             if accepted:
@@ -991,7 +1205,7 @@ def process_planner_pdf(pdf_path, model_name=DEFAULT_MODEL_NAME, use_llm=True, l
     structured = validate_and_normalise(structured, silent=True)
     validation_issues = collect_validation_issues(structured)
     outcome = determine_processing_outcome(
-        structured,
+        structured.get("categories", {}),
         llm_used=llm_used,
         llm_applied=llm_applied,
         llm_error=llm_error,
@@ -1003,6 +1217,7 @@ def process_planner_pdf(pdf_path, model_name=DEFAULT_MODEL_NAME, use_llm=True, l
         "pdf_path": pdf_path,
         "model": model_name,
         "llm_mode": llm_mode,
+        "llm_strategy": "crosscheck",
         "llm_retries": llm_retries,
         "llm_used": llm_used,
         "llm_applied": llm_applied,

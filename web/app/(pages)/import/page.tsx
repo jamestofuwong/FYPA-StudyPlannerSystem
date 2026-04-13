@@ -109,7 +109,7 @@ export default function ImportPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isParsing, setIsParsing] = useState(false);
-  const [useLlm, setUseLlm] = useState(false);
+  const [useLlm, setUseLlm] = useState(true);
   const [planner, setPlanner] = useState<PlannerImportPlanner | null>(null);
   const [report, setReport] = useState<PlannerImportReport | null>(null);
   const [history, setHistory] = useState<ImportHistoryItem[]>([]);
@@ -267,14 +267,14 @@ export default function ImportPage() {
                 />
               </div>
               <div className={styles.formGroup}>
-                <label className={styles.formLabel}>LLM Cleanup</label>
+                <label className={styles.formLabel}>AI Review</label>
                 <select
                   className={styles.formSelect}
                   value={useLlm ? 'enabled' : 'disabled'}
                   onChange={(event) => setUseLlm(event.target.value === 'enabled')}
                 >
+                  <option value="enabled">Enabled</option>
                   <option value="disabled">Disabled</option>
-                  <option value="enabled">Enabled (Ollama)</option>
                 </select>
               </div>
             </div>
@@ -466,7 +466,7 @@ export default function ImportPage() {
               <span className={styles.statusValue}>{report?.validation_issues.length ?? 0}</span>
             </div>
             <div className={styles.statusRow}>
-              <span className={styles.statusLabel}>LLM Cleanup</span>
+              <span className={styles.statusLabel}>AI Review</span>
               <span className={styles.statusValue}>{useLlm ? 'Enabled' : 'Disabled'}</span>
             </div>
             <div className={styles.statusRow}>
