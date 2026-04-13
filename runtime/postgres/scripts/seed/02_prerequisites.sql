@@ -46,10 +46,12 @@ SELECT add_prereq_and_group('COS20028', ARRAY['COS10022', 'COS20007']);
 SELECT add_prereq_and_group('COS20083', ARRAY['COS10022', 'COS10009']);
 SELECT add_prereq_and_group('COS30015', ARRAY['COS10009', 'COS10026', 'TNE10006']);
 SELECT add_prereq_and_group('COS30020', ARRAY['COS10009', 'COS10026']);
-SELECT add_prereq_and_group('COS30043', ARRAY['COS10011', 'COS20007']);
+SELECT add_prereq_and_group('COS30041', ARRAY['COS20007', 'COS10011']);
+SELECT add_prereq_and_group('COS30043', ARRAY['COS20007', 'COS10026']);
 SELECT add_prereq_and_group('COS30081', ARRAY['COS20015', 'COS30019']);
 
 SELECT add_prereq_and_group('SWE30011', ARRAY['COS10011', 'COS20007']);
+SELECT add_prereq_and_group('SWE30012', ARRAY['SWE30011', 'COS20007']);
 
 
 -- OR group (either one satisfies the req)
