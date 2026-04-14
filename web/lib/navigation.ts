@@ -1,6 +1,6 @@
-export type PanelId = 'dashboard' | 'import' | 'scraping' | 'export' | 'student';
+export type PanelId = 'dashboard' | 'import' | 'scraping' | 'export' | 'student' | 'planners';
 
-export const PANEL_IDS: PanelId[] = ['dashboard', 'import', 'scraping', 'export', 'student'];
+export const PANEL_IDS: PanelId[] = ['dashboard', 'import', 'scraping', 'export', 'student', 'planners'];
 
 export function isPanelId(value: string): value is PanelId {
   return (PANEL_IDS as string[]).includes(value);
@@ -12,6 +12,7 @@ export const PANEL_PATHS: Record<PanelId, string> = {
   scraping: '/scraping',
   export: '/export',
   student: '/student',
+  planners: '/planners',
 };
 
 export function panelToPath(panel: PanelId): string {
@@ -57,7 +58,7 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { id: 'import', icon: '📤', label: 'Import PDF Planner' },
       { id: 'import', icon: '🔍', label: 'OCR Processing' },
-      { id: 'import', icon: '✅', label: 'Planner Review' },
+      { id: 'planners', icon: '✅', label: 'Planner Review' },
     ],
   },
   {

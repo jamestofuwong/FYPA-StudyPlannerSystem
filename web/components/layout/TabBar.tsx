@@ -3,6 +3,7 @@
 import { useRef } from 'react';
 import styles from './TabBar.module.css';
 import type { PanelId } from '../../lib/navigation';
+import { useEffect, useState } from 'react';
 
 interface TabMeta {
     id: PanelId;
@@ -16,6 +17,7 @@ const TAB_META: Record<PanelId, TabMeta> = {
     scraping: { id: 'scraping', icon: '🕷️', label: 'Data Scraping' },
     export: { id: 'export', icon: '📤', label: 'Export' },
     student: { id: 'student', icon: '👩‍🎓', label: 'Student' },
+    planners: { icon: '✅', label: 'Planner Review' },
 };
 
 interface TabBarProps {

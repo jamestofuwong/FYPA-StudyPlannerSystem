@@ -94,5 +94,8 @@
   },
   "optionalDependencies": {
     "@esbuild/win32-x64": "^0.28.0"
+  },
+  "prisma": {
+    "schema": "core/db/prisma/schema.prisma"
   }
 }

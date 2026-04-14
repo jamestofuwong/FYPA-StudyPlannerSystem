@@ -141,7 +141,7 @@ async function main() {
       // C. Link the Units to this specific Template
       for (const unitCode of majorInfo.units) {
         const dbUnit = await prisma.unit.findUnique({ where: { unit_code: unitCode } });
-        
+
         if (dbUnit) {
           await prisma.templateUnit.create({
             data: {

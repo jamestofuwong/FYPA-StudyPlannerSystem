@@ -4,7 +4,10 @@ export async function getAllPlanners() {
   return await prisma.plannerTemplate.findMany({
     include: {
       course: true,
-      major: true
+      major: true,
+      _count: {
+        select: { units: true }
+      }
     }
   });
 }
@@ -15,7 +18,11 @@ export async function getPlannerById(id: string) {
     include: {
       course: true,
       major: true,
-      units: true
+      units: {
+        include: {
+          unit: true
+        }
+      }
     }
   });
 }
