@@ -27,7 +27,8 @@
     "react-dom": "19.2.4"
   },
   "optionalDependencies": {
-    "@rollup/rollup-win32-x64-msvc": "^4.60.0"
+    "@rollup/rollup-win32-x64-msvc": "^4.60.0",
+    "@esbuild/win32-x64": "^0.28.0"
   },
   "devDependencies": {
     "@next/eslint-plugin-next": "16.1.6",
@@ -91,9 +92,6 @@
         "AppImage"
       ]
     }
-  },
-  "optionalDependencies": {
-    "@esbuild/win32-x64": "^0.28.0"
   },
   "prisma": {
     "schema": "core/db/prisma/schema.prisma"

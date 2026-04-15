@@ -215,6 +215,28 @@ export default function ImportPage() {
     showToast('Import session cleared.', 'info');
   };
 
+  const handleSaveToDatabase = async () => {
+    if (!planner) return;
+
+    setIsParsing(true);
+    try {
+      const response = await fetch('/api/planners/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ planner }),
+      });
+
+      if (!response.ok) throw new Error('Failed to save planner to database.');
+
+      showToast('Planner saved to database successfully!', 'success');
+
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Save failed', 'error');
+    } finally {
+      setIsParsing(false);
+    }
+  };
+
   return (
     <div className={styles.panel}>
       <div className={styles.sectionTitle}>PDF Planner Import &amp; OCR</div>
@@ -281,14 +303,14 @@ export default function ImportPage() {
 
             <div className={styles.btnGroup}>
               <button className={styles.btnPrimary} onClick={handleParse} disabled={isParsing || !selectedFile}>
-                {isParsing ? 'Parsing...' : 'Parse PDF'}
+                {isParsing && !planner ? 'Parsing...' : 'Parse PDF'}
               </button>
               <button
                 className={styles.btnSuccess}
-                onClick={() => showToast('Planner update wiring can be added next.', 'info')}
-                disabled={!planner}
+                onClick={handleSaveToDatabase}
+                disabled={isParsing || !planner}
               >
-                Update Planner
+                {isParsing && planner ? 'Saving to DB...' : 'Confirm & Save Planner'}
               </button>
               <button className={styles.btnSecondary} onClick={handleClear} disabled={isParsing}>
                 Clear

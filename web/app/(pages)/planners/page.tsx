@@ -8,6 +8,7 @@ export default function PlannersPage() {
   const [planners, setPlanners] = useState<any[]>([]);
   const [selectedPlanner, setSelectedPlanner] = useState<any | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     const fetchPlanners = async () => {
@@ -59,6 +60,8 @@ export default function PlannersPage() {
             type="text"
             placeholder="🔍 Filter planners..."
             className={styles.searchInput}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
           />
           <Link href="/import">
             <button className={styles.btnPrimary}>
@@ -73,7 +76,12 @@ export default function PlannersPage() {
           ) : planners.length === 0 ? (
             <div style={{ padding: '16px', color: '#888' }}>No planners found in database.</div>
           ) : (
-            planners.map((planner) => (
+            planners
+              .filter((planner) =>
+                planner.major?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                planner.course?.code?.toLowerCase().includes(searchQuery.toLowerCase())
+              )
+              .map((planner) => (
               <div
                 key={planner.id}
                 onClick={() => setSelectedPlanner(planner)}
