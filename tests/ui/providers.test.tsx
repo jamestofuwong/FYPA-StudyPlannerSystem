@@ -48,8 +48,7 @@ describe('ToastProvider Logic Coverage', () => {
     // 1. Open a toast
     fireEvent.click(screen.getByText('S'));
 
-    // 2. Find the close button (assuming it uses an 'X' or has a button role)
-    // Looking at common UI patterns, we check for a button or the '✕' text
+    // 2. Find the close button 
     const closeBtn = screen.queryByRole('button', { name: /✕/i }) || screen.getAllByRole('button')[0];
     
     if (closeBtn) {

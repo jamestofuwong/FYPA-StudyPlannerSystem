@@ -11,7 +11,6 @@ jest.mock('@/web/components/providers/ToastProvider', () => ({
 }));
 
 // 2. Mock the Scraper Context
-// This provides the initial data needed for your fetchDashboardData function
 jest.mock('@/web/components/providers/ScraperContext', () => ({
   useScraperContext: () => ({
     isBusy: false,
@@ -30,7 +29,7 @@ describe('Dashboard Ultimate Coverage Booster', () => {
   });
 
   test('triggers search and transitions to results (UIT-04)', async () => {
-    // Mock the specific API responses your code expects
+    // Mock the specific API responses code expects
     (global.fetch as jest.Mock).mockImplementation((url) => {
       if (url.includes('/api/match')) {
         return Promise.resolve({

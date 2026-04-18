@@ -124,8 +124,7 @@ export default function DashboardPage() {
       try {
         setInternalLoading(true);
 
-        // 1. Get real data from your Scraper Context
-        // This extracts the unit codes from the successful scrape you just did!
+        // 1. Get real data from Scraper Context
         const completedUnits = scrapeResult?.units?.map((u: any) => u.code) || ["COS10009", "COS10026", "COS10025"];
 
         // 2. Fetch Matching Engine Data

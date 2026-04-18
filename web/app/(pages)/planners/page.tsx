@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import styles from './page.module.css'; // Import your new CSS module!
+import styles from './page.module.css'; 
 
 export default function PlannersPage() {
   const [planners, setPlanners] = useState<any[]>([]);
