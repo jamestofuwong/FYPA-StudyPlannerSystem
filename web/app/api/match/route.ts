@@ -1,6 +1,28 @@
 import { NextResponse } from 'next/server';
 import { runMatchingPipeline } from '../../../../core/services/matching/matchingService';
 import * as plannerRepository from '../../../../core/db/repositories/plannerRepository';
+import type { PlannerTemplate, UnitMasterEntry } from '../../../../core/shared/types/matching';
+
+// Priority for resolving a unit's category when it appears in multiple planners.
+// Higher value wins.
+const CATEGORY_PRIORITY: Record<string, number> = {
+  major_core: 5,
+  prescribed_elective: 4,
+  core: 3,
+  elective: 2,
+  wil: 1,
+};
+
+function toMatchingCategory(prismaCategory: string): UnitMasterEntry['category'] | null {
+  switch (prismaCategory) {
+    case 'core':                return 'core';
+    case 'major_core':          return 'majorCore';
+    case 'prescribed_elective': return 'prescribed';
+    case 'elective':            return 'freeElective';
+    case 'wil':                 return 'WIL';
+    default:                    return null; // mpu, etc. excluded from scoring
+  }
+}
 
 export async function POST(request: Request) {
   try {
@@ -9,34 +31,69 @@ export async function POST(request: Request) {
 
     if (!student) return NextResponse.json({ error: "Missing student data" }, { status: 400 });
 
-    const planners = await plannerRepository.getAllPlanners();
+    const dbPlanners = await plannerRepository.getAllPlannersWithUnits();
 
-    const formattedPlanners = planners.map(p => ({
-      ...p,
-      requiredCore: ["COS10009", "COS20007", "COS10022", "COS10026", "TNE10006"],
-      requiredMajorCore: new Set(),
-      prescribedElectives: new Set(),
-      prescribedElectiveCategories: [],
-      openElectives: 0,
-      electivesCount: 0
+    // Build unitMasterTable from all template units across all planners.
+    // When a unit appears in multiple planners with different categories,
+    // the higher-priority category wins (major_core > prescribed > core > elective > wil).
+    const masterMap = new Map<string, { category: string; priority: number }>();
+    for (const planner of dbPlanners) {
+      for (const tu of planner.units) {
+        if (!tu.unit) continue;
+        const code = tu.unit.unit_code;
+        const priority = CATEGORY_PRIORITY[tu.category] ?? 0;
+        const existing = masterMap.get(code);
+        if (!existing || priority > existing.priority) {
+          masterMap.set(code, { category: tu.category, priority });
+        }
+      }
+    }
+
+    const unitMasterTable: UnitMasterEntry[] = [];
+    for (const [code, entry] of masterMap) {
+      const category = toMatchingCategory(entry.category);
+      if (!category) continue;
+      unitMasterTable.push({ code, name: '', category, creditHours: 12.5, subjectTags: [] });
+    }
+
+    // Map DB planners to the PlannerTemplate shape expected by the matching pipeline.
+    const formattedPlanners: PlannerTemplate[] = dbPlanners.map((p) => ({
+      plannerID: p.id,
+      majorName: p.major?.name ?? '',
+      intakeYear: p.intake_year,
+      intakeSemester: ((p.intake_month ?? 1) >= 7 ? 2 : 1) as 1 | 2,
+      requiredCore: p.units
+        .filter((u) => u.category === 'core' && u.unit)
+        .map((u) => u.unit!.unit_code),
+      requiredMajorCore: new Set(
+        p.units
+          .filter((u) => u.category === 'major_core' && u.unit)
+          .map((u) => u.unit!.unit_code)
+      ),
+      prescribedElectiveCategories: p.elective_groups.map((eg) => ({
+        categoryCode: eg.id,
+        pool: new Set(eg.units.map((egu) => egu.unit.unit_code)),
+        slots: 1,
+      })),
+      freeElectivePool: new Set(
+        p.units
+          .filter((u) => u.category === 'elective' && u.unit)
+          .map((u) => u.unit!.unit_code)
+      ),
+      freeElectiveSlotsRequired: p.units.filter((u) => u.category === 'elective').length,
     }));
 
-    const unitCatalog = student.completedUnitCodes.map((code: string) => ({
-          code: code,
-          creditPoints: 12.5
-        }));
-
     const result = runMatchingPipeline({
-      student: student,
-      planners: formattedPlanners as any,
-      unitMasterTable: unitCatalog as any,
-      config: { preferIntakeYear: false }
+      student,
+      planners: formattedPlanners,
+      unitMasterTable,
+      config: { preferIntakeYear: false },
     });
 
     return NextResponse.json({
       success: true,
       data: result.payload,
-      processingTime: result.durationMs
+      processingTime: result.durationMs,
     });
 
   } catch (error) {

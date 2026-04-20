@@ -143,6 +143,15 @@ export default function DashboardPage() {
     try {
       const completedUnits = student.courseList.map((c) => c.courseId);
 
+      // Parse year and semester from the raw portal date string (e.g. "02/2024", "Feb 2024")
+      const enrollStr = student.enrollmentDate ?? '';
+      const yearMatch = enrollStr.match(/\b(20\d{2})\b/);
+      const intakeYear = yearMatch ? parseInt(yearMatch[1], 10) : new Date().getFullYear();
+      // enrollmentDate is DD/MM/YYYY — take the second segment for month
+      const monthNumMatch = enrollStr.match(/^\d{1,2}\/(\d{1,2})\//);
+      const intakeMonth = monthNumMatch ? parseInt(monthNumMatch[1]) : 1;
+      const intakeSemester: 1 | 2 = intakeMonth >= 7 ? 2 : 1;
+
       // 1. Fetch Matching Engine Data
       const matchRes = await fetch('/api/match', {
         method: 'POST',
@@ -150,24 +159,36 @@ export default function DashboardPage() {
         body: JSON.stringify({
           student: {
             studentID: studentId,
-            courseCode: "BA-CS",
-            intakeYear: 2024,
+            courseCode: student.course,
+            intakeYear,
+            intakeSemester,
             completedUnitCodes: completedUnits,
+            hasWIL: false,
           },
         }),
       });
       const matchData = await matchRes.json();
 
-      // 2. Fetch Planner Template from DB
-      const plannerId = "49ef6140-9cce-46e3-95eb-51b33f847dc5";
+      if (!matchData.success) {
+        showToast("API Error: Check if server is running", "error");
+        return;
+      }
+
+      // 2. Fetch the top-ranked planner template from DB
+      const plannerId = matchData.data.rankedPlanners[0]?.plannerID;
+      if (!plannerId) {
+        showToast("No matching planner found for this student.", "error");
+        return;
+      }
       const plannerRes = await fetch(`/api/planners/${plannerId}`);
       const plannerData = await plannerRes.json();
 
-      if (matchData.success && plannerRes.ok) {
+      if (plannerRes.ok) {
         setDashboardData({
           match: matchData.data,
           planner: plannerData,
           completedCodes: completedUnits,
+          intakeYear,
         });
         setStudentLoaded(true);
         showToast("Dashboard sync complete!", "success");
@@ -185,7 +206,7 @@ export default function DashboardPage() {
     if (!dashboardData?.planner?.units) return [];
 
     return dashboardData.planner.units
-      .filter((u: any) => u.year_level === yearLevel)
+      .filter((u: any) => u.year_level === yearLevel && u.unit !== null)
       .map((u: any) => {
         const isDone = dashboardData.completedCodes.includes(u.unit.unit_code);
         return {
@@ -193,7 +214,7 @@ export default function DashboardPage() {
           name: u.unit.unit_name,
           grade: isDone ? 'A' : '—',
           sem: u.semester,
-          year: 2024 + (u.year_level - 1),
+          year: (dashboardData.intakeYear ?? new Date().getFullYear()) + (u.year_level - 1),
           type: u.category.replace('_', ' '),
           typeClass: u.category === 'core' ? 'badgeRed' : 'badgePurple',
           status: isDone ? '✓' : '—',

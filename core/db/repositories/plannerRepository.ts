@@ -12,6 +12,25 @@ export async function getAllPlanners() {
   });
 }
 
+export async function getAllPlannersWithUnits() {
+  return await prisma.plannerTemplate.findMany({
+    include: {
+      course: true,
+      major: true,
+      units: {
+        include: { unit: true }
+      },
+      elective_groups: {
+        include: {
+          units: {
+            include: { unit: true }
+          }
+        }
+      }
+    }
+  });
+}
+
 export async function getPlannerById(id: string) {
   return await prisma.plannerTemplate.findUnique({
     where: { id },
