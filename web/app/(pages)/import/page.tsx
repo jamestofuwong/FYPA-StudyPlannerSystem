@@ -7,7 +7,7 @@ import type {
   PlannerImportPlanner,
   PlannerImportReport,
   PlannerImportUnit,
-} from '../../../../core/services/plannerImport/types';
+} from '../../../../core/shared/types/plannerImport';
 
 type ImportHistoryItem = {
   id: string;

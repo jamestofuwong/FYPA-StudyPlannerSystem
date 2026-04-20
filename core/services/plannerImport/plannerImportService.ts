@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
-import type { PlannerImportResult } from "./types";
+import type { PlannerImportResult } from "../../shared/types/plannerImport";
 
 export type ExtractPlannerOptions = {
   filename?: string;
