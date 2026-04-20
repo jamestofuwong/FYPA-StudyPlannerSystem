@@ -413,18 +413,17 @@ export function ScraperProvider({ children }: { children: ReactNode }) {
     if (result.error) {
       setError(result.error);
       addLogs([`✗ Error: ${result.error}`]);
-      setBotStep('Error');
-      setPhase('error');
+      setBotStep('Error — ready for next student');
       await fetch('/api/scraper/status', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'error', error: result.error }),
       }).catch(() => {});
+      setPhase('ready');
       return;
     }
 
-    setPhase('done');
-    setBotStep('Student scrape complete');
+    setBotStep('Student scrape complete — ready for next student');
     setStepIndex(STUDENT_STEPS.length);
     refreshUrl();
 
@@ -441,6 +440,8 @@ export function ScraperProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({ status: 'error', error: 'Scrape returned no data' }),
       }).catch(() => {});
     }
+
+    setPhase('ready');
   }, [getAdapter, addLogs, setPhase, refreshUrl]);
 
   // ---------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import styles from './page.module.css';
 import { useToast } from '../../../components/providers/ToastProvider';
 import type { ScrapedStudent } from '../../../../core/shared/types/student';
@@ -112,6 +112,19 @@ export default function DashboardPage() {
   const [internalLoading, setInternalLoading] = useState(false);
   const [scraperApiStatus, setScraperApiStatus] = useState<string>('idle');
 
+  // Restore persisted session on mount
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem('dashboardSession');
+      if (saved) {
+        const { studentId, data } = JSON.parse(saved);
+        setStudentIdInput(studentId ?? '');
+        setDashboardData(data ?? null);
+        setStudentLoaded(!!data);
+      }
+    } catch {}
+  }, []);
+
   const loading = internalLoading;
   const isScraping = scraperApiStatus === 'scraping';
   const isWaitingForList = scraperApiStatus === 'pending';
@@ -184,13 +197,15 @@ export default function DashboardPage() {
       const plannerData = await plannerRes.json();
 
       if (plannerRes.ok) {
-        setDashboardData({
+        const data = {
           match: matchData.data,
           planner: plannerData,
           completedCodes: completedUnits,
           intakeYear,
-        });
+        };
+        setDashboardData(data);
         setStudentLoaded(true);
+        try { sessionStorage.setItem('dashboardSession', JSON.stringify({ studentId, data })); } catch {}
         showToast("Dashboard sync complete!", "success");
       } else {
         showToast("API Error: Check if server is running", "error");
@@ -263,6 +278,7 @@ export default function DashboardPage() {
     setStudentIdInput('');
     setDashboardData(null);
     setScraperApiStatus('idle');
+    try { sessionStorage.removeItem('dashboardSession'); } catch {}
     showToast('Student data cleared.', 'info');
   };
 
