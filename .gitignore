@@ -13,8 +13,9 @@ build/
 dist/
 release/
 
-# Python build artifacts
+# Build artifacts
 resources/python/
+resources/ollama/
 __pycache__/
 *.pyc
 .venv/

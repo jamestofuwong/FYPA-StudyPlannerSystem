@@ -9,6 +9,7 @@ import fs from "fs";
 import next from "next";
 import path from "path";
 import { startDatabase, stopDatabase, getDatabaseUrl } from '../runtime/postgres/db'
+import { startOllama, stopOllama } from '../runtime/ollama/ollama'
 
 let nextServerRef: NextServerHandle | undefined 
 
@@ -143,6 +144,9 @@ app.whenReady().then(async () => {
   // Start embedded PostgreSQL
   await startDatabase();
 
+  // Start Ollama (non-blocking — app opens even if Ollama isn't ready yet)
+  startOllama().catch((err) => console.error('[Ollama] Startup error:', err));
+
   // Open window
   await createMainWindow();
 });
@@ -164,6 +168,7 @@ app.on('before-quit', async (event) => {
   try {
     await Promise.allSettled([
       stopDatabase(),
+      stopOllama(),
       nextServerRef?.close() ?? Promise.resolve()
     ]);
     clearTimeout(forceExit);

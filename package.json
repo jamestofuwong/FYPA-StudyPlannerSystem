@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "main": "dist/electron/main.js",
   "scripts": {
-    "dev": "cross-env NODE_ENV=development NEXT_TELEMETRY_DISABLED=1 concurrently -k -n NEXT,ELECTRON_BUILD,ELECTRON -c cyan,yellow,magenta \"next dev web --webpack -p 3000\" \"tsup electron/main.ts electron/preload.ts --format cjs --platform node --out-dir dist/electron --sourcemap --external electron --watch\" \"wait-on dist/electron/main.js http://127.0.0.1:3000 && cross-env NEXT_DEV_SERVER_URL=http://127.0.0.1:3000 electron .\"",
+    "dev": "node scripts/ensure-ollama.js && cross-env NODE_ENV=development NEXT_TELEMETRY_DISABLED=1 concurrently -k -n NEXT,ELECTRON_BUILD,ELECTRON -c cyan,yellow,magenta \"next dev web --webpack -p 3000\" \"tsup electron/main.ts electron/preload.ts --format cjs --platform node --out-dir dist/electron --sourcemap --external electron --watch\" \"wait-on dist/electron/main.js http://127.0.0.1:3000 && cross-env NEXT_DEV_SERVER_URL=http://127.0.0.1:3000 electron .\"",
     "prisma:generate": "prisma generate --schema core/db/prisma/schema.prisma",
     "build:app": "npm run prisma:generate && next build web",
     "build:electron": "tsup electron/main.ts electron/preload.ts --format cjs --platform node --out-dir dist/electron --sourcemap --external electron",
@@ -12,6 +12,7 @@
     "lint": "eslint web electron core",
     "typecheck": "tsc --noEmit && tsc --noEmit -p web/tsconfig.json",
     "build:python": "node scripts/build-python.js",
+    "download:ollama": "node scripts/download-ollama.js",
     "pack": "npm run build && npm run build:python && electron-builder --dir",
     "dist": "npm run build && npm run build:python && electron-builder",
     "test": "jest",
@@ -81,19 +82,22 @@
     "mac": {
       "target": ["dmg"],
       "extraResources": [
-        { "from": "resources/python/plannerStructureService", "to": "plannerStructureService" }
+        { "from": "resources/python/plannerStructureService", "to": "plannerStructureService" },
+        { "from": "resources/ollama/ollama", "to": "ollama" }
       ]
     },
     "win": {
       "target": ["nsis"],
       "extraResources": [
-        { "from": "resources/python/plannerStructureService.exe", "to": "plannerStructureService.exe" }
+        { "from": "resources/python/plannerStructureService.exe", "to": "plannerStructureService.exe" },
+        { "from": "resources/ollama/ollama.exe", "to": "ollama.exe" }
       ]
     },
     "linux": {
       "target": ["AppImage"],
       "extraResources": [
-        { "from": "resources/python/plannerStructureService", "to": "plannerStructureService" }
+        { "from": "resources/python/plannerStructureService", "to": "plannerStructureService" },
+        { "from": "resources/ollama/ollama", "to": "ollama" }
       ]
     }
   },

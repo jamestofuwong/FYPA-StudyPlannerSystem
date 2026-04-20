@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
 import styles from './page.module.css';
 import { useToast } from '../../../components/providers/ToastProvider';
 import type {
@@ -102,6 +102,13 @@ function flattenUnits(planner: PlannerImportPlanner | null): PlannerImportUnit[]
   ];
 }
 
+type OllamaStatus = {
+  ollama: 'unknown' | 'available' | 'unavailable';
+  model: 'unknown' | 'ready' | 'pulling' | 'unavailable';
+  pullProgress: number;
+  pullError: string | null;
+};
+
 export default function ImportPage() {
   const { showToast } = useToast();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -113,6 +120,32 @@ export default function ImportPage() {
   const [planner, setPlanner] = useState<PlannerImportPlanner | null>(null);
   const [report, setReport] = useState<PlannerImportReport | null>(null);
   const [history, setHistory] = useState<ImportHistoryItem[]>([]);
+  const [ollamaStatus, setOllamaStatus] = useState<OllamaStatus>({
+    ollama: 'unknown', model: 'unknown', pullProgress: 0, pullError: null,
+  });
+
+  // Poll Ollama status on mount and while model is pulling
+  useEffect(() => {
+    let interval: ReturnType<typeof setInterval>;
+
+    const check = async () => {
+      const res = await fetch('/api/ollama/status').catch(() => null);
+      if (!res?.ok) return;
+      const data = await res.json() as OllamaStatus;
+      setOllamaStatus(data);
+      // Stop polling once model is ready or definitively unavailable
+      if (data.model === 'ready' || (data.ollama === 'unavailable' && data.model !== 'pulling')) {
+        clearInterval(interval);
+      }
+    };
+
+    check();
+    interval = setInterval(check, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const modelReady = ollamaStatus.model === 'ready';
+  const effectiveUseLlm = useLlm && modelReady;
 
   const units = useMemo(() => flattenUnits(planner), [planner]);
 
@@ -161,6 +194,17 @@ export default function ImportPage() {
     handleFileSelected(event.dataTransfer.files?.[0] ?? null);
   };
 
+  const handleDownloadModel = async () => {
+    const res = await fetch('/api/ollama/pull', { method: 'POST' }).catch(() => null);
+    if (!res?.ok) {
+      showToast('Failed to start model download.', 'error');
+      return;
+    }
+    const data = await res.json();
+    showToast(data.message ?? 'Downloading AI model...', 'info');
+    setOllamaStatus((prev) => ({ ...prev, model: 'pulling', pullProgress: 0 }));
+  };
+
   const handleParse = async () => {
     if (!selectedFile) {
       showToast('Choose a PDF before parsing.', 'error');
@@ -171,7 +215,7 @@ export default function ImportPage() {
     try {
       const formData = new FormData();
       formData.append('file', selectedFile);
-      formData.append('useLlm', String(useLlm));
+      formData.append('useLlm', String(effectiveUseLlm));
 
       const response = await fetch('/api/planners', {
         method: 'POST',
@@ -294,12 +338,39 @@ export default function ImportPage() {
                   className={styles.formSelect}
                   value={useLlm ? 'enabled' : 'disabled'}
                   onChange={(event) => setUseLlm(event.target.value === 'enabled')}
+                  disabled={!modelReady}
                 >
                   <option value="enabled">Enabled</option>
                   <option value="disabled">Disabled</option>
                 </select>
               </div>
             </div>
+
+            {/* Ollama / model status */}
+            {ollamaStatus.ollama === 'unavailable' && (
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 10, padding: '6px 10px', background: 'rgba(244,135,113,0.08)', border: '1px solid rgba(244,135,113,0.25)', borderRadius: 4 }}>
+                AI model server is not running — AI Review is disabled.
+              </div>
+            )}
+            {ollamaStatus.ollama === 'available' && ollamaStatus.model === 'unavailable' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, padding: '6px 10px', background: 'rgba(206,153,62,0.08)', border: '1px solid rgba(206,153,62,0.25)', borderRadius: 4 }}>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)', flex: 1 }}>AI model not downloaded — required for LLM review (~1.1 GB).</span>
+                <button className={styles.btnSecondary} style={{ fontSize: 11, padding: '3px 10px' }} onClick={handleDownloadModel}>Download</button>
+              </div>
+            )}
+            {ollamaStatus.model === 'pulling' && (
+              <div style={{ marginBottom: 10, padding: '6px 10px', background: 'rgba(86,156,214,0.08)', border: '1px solid rgba(86,156,214,0.25)', borderRadius: 4 }}>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Downloading AI model... {ollamaStatus.pullProgress}%</div>
+                <div style={{ height: 4, background: 'var(--surface-bg)', borderRadius: 2, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${ollamaStatus.pullProgress}%`, background: 'var(--accent-blue)', transition: 'width 0.3s' }} />
+                </div>
+              </div>
+            )}
+            {ollamaStatus.pullError && (
+              <div style={{ fontSize: 11, color: 'var(--accent-red)', marginBottom: 10 }}>
+                Download failed: {ollamaStatus.pullError}
+              </div>
+            )}
 
             <div className={styles.btnGroup}>
               <button className={styles.btnPrimary} onClick={handleParse} disabled={isParsing || !selectedFile}>
