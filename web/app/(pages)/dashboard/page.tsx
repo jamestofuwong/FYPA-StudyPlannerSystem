@@ -5,63 +5,6 @@ import styles from './page.module.css';
 import { useToast } from '../../../components/providers/ToastProvider';
 import type { ScrapedStudent } from '../../../../core/shared/types/student';
 
-// ---------------------------------------------------------------------------
-// Static mock data (mirrors sums-mockup.html)
-// ---------------------------------------------------------------------------
-
-// const YEAR1_UNITS = [
-//   { code: 'COS10009', name: 'Introduction to Programming',                     grade: 'A',   sem: '1 · Feb 2024', year: 2024, type: 'Core',              typeClass: 'badgeRed',    status: '✓', statusColor: 'var(--accent-green)' },
-//   { code: 'COS10026', name: 'Computing Technology Inquiry Project',              grade: 'A-',  sem: '1 · Feb 2024', year: 2024, type: 'Core',              typeClass: 'badgeRed',    status: '✓', statusColor: 'var(--accent-green)' },
-//   { code: 'COS10025', name: 'Technology in an Indigenous Context Project',       grade: 'B+',  sem: '1 · Feb 2024', year: 2024, type: 'Core',              typeClass: 'badgeRed',    status: '✓', statusColor: 'var(--accent-green)' },
-//   { code: 'COS10003', name: 'Computer and Logic Essentials',                     grade: 'B+',  sem: '1 · Feb 2024', year: 2024, type: 'Core',              typeClass: 'badgeRed',    status: '✓', statusColor: 'var(--accent-green)' },
-//   { code: 'MPU3273',  name: 'Integrity and Anti-Corruption',                     grade: 'B',   sem: '1 · Feb 2024', year: 2024, type: 'MPU',               typeClass: 'badgeOrange', status: '✓', statusColor: 'var(--accent-green)' },
-//   { code: 'MPU3212',  name: 'Bahasa Kebangsaan A',                               grade: 'B',   sem: 'Winter · Jun 2024', year: 2024, type: 'MPU',          typeClass: 'badgeOrange', status: '◆', statusColor: 'var(--accent-yellow)' },
-//   { code: 'COS20007', name: 'Object-oriented Programming',                       grade: 'A-',  sem: '2 · Aug 2024', year: 2024, type: 'Core',              typeClass: 'badgeRed',    status: '✓', statusColor: 'var(--accent-green)' },
-//   { code: 'TNE10006', name: 'Networks & Switching',                              grade: 'B+',  sem: '2 · Aug 2024', year: 2024, type: 'Core',              typeClass: 'badgeRed',    status: '✓', statusColor: 'var(--accent-green)' },
-//   { code: 'COS10022', name: 'Introduction to Data Science',                      grade: 'A',   sem: '2 · Aug 2024', year: 2024, type: 'Pre-scribed Elec.', typeClass: 'badgeBlue',   status: '✓', statusColor: 'var(--accent-green)' },
-//   { code: 'MPU3193',  name: 'Philosophy and Current Issues',                     grade: 'B',   sem: '2 · Aug 2024', year: 2024, type: 'MPU',               typeClass: 'badgeOrange', status: '✓', statusColor: 'var(--accent-green)' },
-// ];
-//
-// const YEAR2_UNITS = [
-//   { code: 'COS30018', name: 'Intelligent Systems',                               grade: 'A',   sem: '1 · Feb 2025', year: 2025, type: 'AI Major',          typeClass: 'badgePurple', status: '✓', statusColor: 'var(--accent-green)', missing: false },
-//   { code: 'COS20019', name: 'Cloud Computing Architecture',                      grade: 'B+',  sem: '1 · Feb 2025', year: 2025, type: 'Core',              typeClass: 'badgeRed',    status: '✓', statusColor: 'var(--accent-green)', missing: false },
-//   { code: 'COS20031', name: 'Computing Technology Design Project',                grade: '—',   sem: '1 · Feb 2025', year: 2025, type: 'Core',              typeClass: 'badgeRed',    status: '⚠', statusColor: 'var(--accent-red)',   missing: true  },
-//   { code: 'COS30019', name: 'Introduction to Artificial Intelligence',            grade: 'A-',  sem: '1 · Feb 2025', year: 2025, type: 'AI Major',          typeClass: 'badgePurple', status: '✓', statusColor: 'var(--accent-green)', missing: false },
-//   { code: 'MPU3183',  name: 'Penghayatan Etika dan Peradaban',                    grade: 'B',   sem: '1 · Feb 2025', year: 2025, type: 'MPU',               typeClass: 'badgeOrange', status: '✓', statusColor: 'var(--accent-green)', missing: false },
-//   { code: 'COS10004', name: 'Computer Systems',                                   grade: 'B+',  sem: '2 · Aug 2025', year: 2025, type: 'Core',              typeClass: 'badgeRed',    status: '✓', statusColor: 'var(--accent-green)', missing: false },
-//   { code: 'COS30049', name: 'Computing Technology Innovation Project',            grade: '—',   sem: '2 · Aug 2025', year: 2025, type: 'Core',              typeClass: 'badgeRed',    status: '⚠', statusColor: 'var(--accent-red)',   missing: true  },
-//   { code: 'SWE30009', name: 'Software Testing and Reliability',                   grade: 'B',   sem: '2 · Aug 2025', year: 2025, type: 'Pre-scribed Elec.', typeClass: 'badgeBlue',   status: '✓', statusColor: 'var(--accent-green)', missing: false },
-//   { code: 'COS30015', name: 'IT Security',                                        grade: 'B+',  sem: '2 · Aug 2025', year: 2025, type: 'Pre-scribed Elec.', typeClass: 'badgeBlue',   status: '✓', statusColor: 'var(--accent-green)', missing: false },
-// ];
-//
-// const YEAR3_UNITS = [
-//   { code: 'COS40005', name: 'Computing Technology Project A',                    grade: 'In Progress', sem: '1 · Feb 2026', year: 2026, type: 'Core',     typeClass: 'badgeRed',    status: '◎', statusColor: 'var(--accent-blue)',   missing: false },
-//   { code: 'SWE30003', name: 'Software Architecture and Design',                   grade: '—',   sem: '1 · Feb 2026', year: 2026, type: 'Core',              typeClass: 'badgeRed',    status: '⚠', statusColor: 'var(--accent-red)',   missing: true  },
-//   { code: 'COS40007', name: 'Artificial Intelligence for Engineering',            grade: '—',   sem: '1 · Feb 2026', year: 2026, type: 'AI Major',          typeClass: 'badgePurple', status: '⚠', statusColor: 'var(--accent-red)',   missing: true  },
-//   { code: 'COS40006', name: 'Computing Technology Project B',                     grade: '—',   sem: '2 · Aug 2026', year: 2026, type: 'Core',              typeClass: 'badgeRed',    status: '⚠', statusColor: 'var(--accent-red)',   missing: true  },
-//   { code: 'COS30082', name: 'Applied Machine Learning',                           grade: '—',   sem: '2 · Aug 2026', year: 2026, type: 'AI Major',          typeClass: 'badgePurple', status: '⚠', statusColor: 'var(--accent-red)',   missing: true  },
-// ];
-
-// const PREREQ_ROWS = [
-//   { unit: 'COS20007', requires: 'COS10009', label: 'Object-oriented Programming',                                 rel: 'requires →',  badge: 'Met',                    badgeClass: 'badgeGreen',  missing: false },
-//   { unit: 'COS30018', requires: 'COS20007', label: 'Intelligent Systems',                                         rel: 'requires →',  badge: 'Met',                    badgeClass: 'badgeGreen',  missing: false },
-//   { unit: 'COS30019', requires: 'COS20007', label: 'Introduction to Artificial Intelligence',                     rel: 'requires →',  badge: 'Met',                    badgeClass: 'badgeGreen',  missing: false },
-//   { unit: 'COS10004', requires: 'COS10009', label: 'Computer Systems (co-requisite)',                             rel: 'co-req →',    badge: 'Met',                    badgeClass: 'badgeGreen',  missing: false },
-//   { unit: 'COS20031', requires: 'COS10009', label: 'Computing Technology Design Project — prereq met, unit not taken', rel: 'requires →', badge: 'Prereq Met — Not Enrolled', badgeClass: 'badgeOrange', missing: true },
-//   { unit: 'COS40005', requires: '175cp',    label: 'Computing Technology Project A — requires 175 credit points', rel: 'requires →',  badge: 'Met (175cp achieved)',   badgeClass: 'badgeGreen',  missing: true },
-//   { unit: 'COS30082', requires: 'COS30018 / COS30019', label: 'Applied Machine Learning — either Intelligent Systems or Intro to AI', rel: 'requires →', badge: 'Met', badgeClass: 'badgeGreen', missing: true },
-//   { unit: 'SWE30003', requires: 'COS20007 + 150cp', label: 'Software Architecture and Design — not enrolled this semester', rel: 'requires →', badge: 'Prereq Met — Not Enrolled', badgeClass: 'badgeOrange', missing: true },
-// ];
-//
-// const GRAD_ROWS = [
-//   { code: 'COS20031',    name: 'Computing Technology Design Project',          type: 'Core',    typeCls: 'badgeRed',    prereq: 'COS10009 ✓ / COS10026 ✓', offered: 'Any',            badge: 'Not Enrolled',       badgeCls: 'badgeOrange' },
-//   { code: 'COS30049',    name: 'Computing Technology Innovation Project',      type: 'Core',    typeCls: 'badgeRed',    prereq: '—',                        offered: 'Any',            badge: 'Missing',            badgeCls: 'badgeRed'    },
-//   { code: 'SWE30003',    name: 'Software Architecture and Design',             type: 'Core',    typeCls: 'badgeRed',    prereq: 'COS20007 ✓ + 150cp ✓',    offered: 'Feb/Mar only',   badge: 'Not Enrolled',       badgeCls: 'badgeOrange' },
-//   { code: 'COS40007',    name: 'Artificial Intelligence for Engineering',      type: 'AI Major', typeCls: 'badgePurple', prereq: 'COS10009 ✓ + 100cp ✓',   offered: 'Feb/Mar only',   badge: 'Not Enrolled',       badgeCls: 'badgeOrange' },
-//   { code: 'COS40006',    name: 'Computing Technology Project B',               type: 'Core',    typeCls: 'badgeRed',    prereq: 'COS40005 (in progress)',   offered: 'Aug/Sept only',  badge: 'Pending COS40005',   badgeCls: 'badgeYellow' },
-//   { code: 'COS30082',    name: 'Applied Machine Learning',                     type: 'AI Major', typeCls: 'badgePurple', prereq: 'COS30018 ✓ / COS30019 ✓', offered: 'Aug/Sept only', badge: 'Sem 2 2026',         badgeCls: 'badgeYellow' },
-//   { code: 'Electives ×6', name: '6 Elective Units Required (incl. recommended electives)', type: 'Elective', typeCls: 'badgeBlue', prereq: 'Various', offered: 'Various', badge: 'Pending', badgeCls: 'badgeYellow' },
-// ];
 
 // ---------------------------------------------------------------------------
 // Helper sub-components
@@ -127,9 +70,24 @@ export default function DashboardPage() {
     } catch {}
   }, []);
 
+  // Poll scraper status on mount so the dashboard reflects initializing state
+  // even before the user clicks Search.
+  useEffect(() => {
+    const poll = async () => {
+      const res = await fetch('/api/scraper/status').catch(() => null);
+      if (!res?.ok) return;
+      const data = await res.json();
+      setScraperApiStatus((prev) => (prev === 'scraping' || prev === 'pending' ? prev : data.status));
+    };
+    poll();
+    const id = globalThis.setInterval(poll, 2000);
+    return () => globalThis.clearInterval(id);
+  }, []);
+
   const loading = internalLoading;
+  const isInitializing = scraperApiStatus === 'initializing';
   const isScraping = scraperApiStatus === 'scraping';
-  const isWaitingForList = scraperApiStatus === 'pending';
+  const isWaitingForList = scraperApiStatus === 'pending' || isInitializing;
 
   // Polls /api/scraper/status until the scraper bot finishes (or errors/times out).
   const pollScraperResult = async (): Promise<ScrapedStudent | null> => {
@@ -302,10 +260,11 @@ export default function DashboardPage() {
           style={{ flex: 1 }}
           value={studentIdInput}
           onChange={(e) => setStudentIdInput(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-          placeholder="Enter Student ID (e.g. BA-CS-2024-0091)"
+          onKeyDown={(e) => e.key === 'Enter' && !isInitializing && handleSearch()}
+          placeholder={isInitializing ? 'Waiting for scraper…' : 'Enter Student ID (e.g. BA-CS-2024-0091)'}
+          disabled={isInitializing}
         />
-        <button className={styles.btnPrimary} onClick={handleSearch} disabled={loading}>
+        <button className={styles.btnPrimary} onClick={handleSearch} disabled={loading || isInitializing}>
           Search
         </button>
       </div>
@@ -313,15 +272,15 @@ export default function DashboardPage() {
       {/* ── Loading states ─────────────────────────────────────────────── */}
       {isWaitingForList && (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '60px 20px', textAlign: 'center' }}>
-          <div style={{ fontSize: 48, opacity: 0.25 }}>🎓</div>
-          <div style={{ fontSize: 14, fontWeight: 600 }}>Loading student list...</div>
+          <div className={styles.spinner} />
+          <div style={{ fontSize: 14, fontWeight: 600, marginTop: 12 }}>Loading student list...</div>
         </div>
       )}
 
       {isScraping && (
-        <div style={{ padding: 40, textAlign: 'center' }}>
-          <div style={{ fontSize: 28, animation: 'spin 1.5s linear infinite' }}>⟳</div>
-          <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Retrieving data...</div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '60px 20px', textAlign: 'center' }}>
+          <div className={styles.spinner} />
+          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 12 }}>Retrieving data...</div>
         </div>
       )}
 

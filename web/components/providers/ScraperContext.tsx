@@ -448,6 +448,14 @@ export function ScraperProvider({ children }: { children: ReactNode }) {
   // Auto-run — delegates to core orchestrator
   // ---------------------------------------------------------------------------
 
+  const putApiStatus = useCallback((status: string, extra?: object) => {
+    fetch('/api/scraper/status', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status, ...extra }),
+    }).catch(() => {});
+  }, []);
+
   const runAutoSteps = useCallback(async () => {
     if (autoRunActiveRef.current) return;
     if (autoRunIndexRef.current >= AUTO_RUN_STEPS.length) return;
@@ -457,6 +465,7 @@ export function ScraperProvider({ children }: { children: ReactNode }) {
     autoRunActiveRef.current = true;
     setError(null);
     setPhase('scraping');
+    putApiStatus('initializing');
 
     const result = await runAutoRun(adapter, autoRunIndexRef.current, {
       onLog: addLogs,
@@ -469,6 +478,7 @@ export function ScraperProvider({ children }: { children: ReactNode }) {
       setError(result.error);
       setPhase('error');
       autoRunActiveRef.current = false;
+      putApiStatus('idle');
       return;
     }
 
@@ -476,6 +486,7 @@ export function ScraperProvider({ children }: { children: ReactNode }) {
       setShowBrowser(true);
       setPhase('login');
       autoRunActiveRef.current = false;
+      putApiStatus('idle');
       return;
     }
 
@@ -483,7 +494,8 @@ export function ScraperProvider({ children }: { children: ReactNode }) {
     setStepIndex(AUTO_RUN_STEPS.length);
     setPhase('ready');
     refreshUrl();
-  }, [getAdapter, addLogs, setPhase, refreshUrl]);
+    putApiStatus('idle');
+  }, [getAdapter, addLogs, setPhase, refreshUrl, putApiStatus]);
 
   useEffect(() => {
     if (!isElectron) return;

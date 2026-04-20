@@ -1,6 +1,6 @@
 import type { ScrapedStudent } from '../../../../core/shared/types/student';
 
-export type ScraperQueueStatus = 'idle' | 'pending' | 'scraping' | 'done' | 'error';
+export type ScraperQueueStatus = 'idle' | 'initializing' | 'pending' | 'scraping' | 'done' | 'error';
 
 type ScraperQueueState = {
   status: ScraperQueueStatus;
