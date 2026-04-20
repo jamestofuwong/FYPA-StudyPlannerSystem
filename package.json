@@ -11,8 +11,9 @@
     "build": "npm run build:app && npm run build:electron",
     "lint": "eslint web electron core",
     "typecheck": "tsc --noEmit && tsc --noEmit -p web/tsconfig.json",
-    "pack": "npm run build && electron-builder --dir",
-    "dist": "npm run build && electron-builder",
+    "build:python": "node scripts/build-python.js",
+    "pack": "npm run build && npm run build:python && electron-builder --dir",
+    "dist": "npm run build && npm run build:python && electron-builder",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage"
@@ -78,18 +79,21 @@
       "output": "release"
     },
     "mac": {
-      "target": [
-        "dmg"
+      "target": ["dmg"],
+      "extraResources": [
+        { "from": "resources/python/plannerStructureService", "to": "plannerStructureService" }
       ]
     },
     "win": {
-      "target": [
-        "nsis"
+      "target": ["nsis"],
+      "extraResources": [
+        { "from": "resources/python/plannerStructureService.exe", "to": "plannerStructureService.exe" }
       ]
     },
     "linux": {
-      "target": [
-        "AppImage"
+      "target": ["AppImage"],
+      "extraResources": [
+        { "from": "resources/python/plannerStructureService", "to": "plannerStructureService" }
       ]
     }
   },

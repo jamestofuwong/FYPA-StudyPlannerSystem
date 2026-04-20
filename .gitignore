@@ -13,6 +13,11 @@ build/
 dist/
 release/
 
+# Python build artifacts
+resources/python/
+__pycache__/
+*.pyc
+
 # Miscellaneous
 .DS_Store
 *.pem

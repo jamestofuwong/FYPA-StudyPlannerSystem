@@ -11,12 +11,35 @@ export type ExtractPlannerOptions = {
   llmRetries?: number;
 };
 
-function resolvePythonExecutable(): string {
-  return process.env.PYTHON_EXECUTABLE?.trim() || "python";
-}
+type PythonCommand = {
+  executable: string;
+  /** Args that precede the temp PDF path (empty when using a compiled binary). */
+  prefixArgs: string[];
+};
 
-function resolveScriptPath(): string {
-  return path.join(process.cwd(), "core", "services", "plannerImport", "plannerStructureService.py");
+/**
+ * Resolves how to invoke the planner import script.
+ *
+ * - Packaged Electron app: `process.resourcesPath` is set by Electron.
+ *   The compiled binary is bundled there via extraResources in electron-builder.
+ *   We spawn it directly — no Python runtime required on the user's machine.
+ *
+ * - Development / standalone Next.js: fall back to python3 (or PYTHON_EXECUTABLE)
+ *   and the raw .py script.
+ */
+function resolvePythonCommand(): PythonCommand {
+  if (process.resourcesPath) {
+    const ext = process.platform === "win32" ? ".exe" : "";
+    const binary = path.join(process.resourcesPath, `plannerStructureService${ext}`);
+    return { executable: binary, prefixArgs: [] };
+  }
+
+  const executable = process.env.PYTHON_EXECUTABLE?.trim() || "python3";
+  const scriptPath = path.join(
+    process.cwd(),
+    "core", "services", "plannerImport", "plannerStructureService.py"
+  );
+  return { executable, prefixArgs: [scriptPath] };
 }
 
 function sanitiseFilename(filename: string): string {
@@ -51,19 +74,14 @@ export async function extractPlannerFromPdf(
   try {
     await writeFile(tempFile, pdfBuffer);
 
-    const args = [resolveScriptPath(), tempFile];
-    if (options.useLlm === false) {
-      args.push("--no-llm");
-    }
-    if (options.model) {
-      args.push("--model", options.model);
-    }
-    if (typeof options.llmRetries === "number") {
-      args.push("--llm-retries", String(options.llmRetries));
-    }
+    const { executable, prefixArgs } = resolvePythonCommand();
+    const args = [...prefixArgs, tempFile];
+    if (options.useLlm === false) args.push("--no-llm");
+    if (options.model) args.push("--model", options.model);
+    if (typeof options.llmRetries === "number") args.push("--llm-retries", String(options.llmRetries));
 
     const result = await new Promise<PlannerImportResult>((resolve, reject) => {
-      const child = spawn(resolvePythonExecutable(), args, {
+      const child = spawn(executable, args, {
         cwd: process.cwd(),
         stdio: ["ignore", "pipe", "pipe"],
       });
