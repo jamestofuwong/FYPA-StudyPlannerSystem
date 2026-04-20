@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { savePlannerFromImport } from '../../../../../core/db/repositories/plannerRepository';
+import type { PlannerImportPlanner } from '../../../../../core/shared/types/plannerImport';
 
 export async function POST(req: Request) {
   try {
@@ -10,7 +11,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Invalid planner data structure' }, { status: 400 });
     }
 
-    const result = await savePlannerFromImport(planner);
+    const result = await savePlannerFromImport(planner as PlannerImportPlanner);
     return NextResponse.json({ success: true, plannerId: result.id });
   } catch (error: any) {
     console.error('SAVE ERROR:', error);

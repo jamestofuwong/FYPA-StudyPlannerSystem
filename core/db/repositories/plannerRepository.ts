@@ -1,4 +1,5 @@
 import { prisma } from "../client";
+import type { PlannerImportPlanner } from "../../shared/types/plannerImport";
 
 export async function getAllPlanners() {
   return await prisma.plannerTemplate.findMany({
@@ -75,26 +76,7 @@ export async function getPlannersByCourse(courseId: string) {
   });
 }
 
-export type PlannerImportInput = {
-  course_information: {
-    course: string;
-    course_name?: string;
-    major: string;
-    intake_year: string | number;
-  };
-  categories: {
-    core_units?: any[];
-    major_units?: any[];
-    mpu_group?: any[];
-    wil_group?: any[];
-    elective_groups?: {
-      prescribed_elective?: any[];
-      elective?: any[];
-    };
-  };
-};
-
-export async function savePlannerFromImport(planner: PlannerImportInput) {
+export async function savePlannerFromImport(planner: PlannerImportPlanner) {
   const { course_information, categories } = planner;
 
   return await prisma.$transaction(async (tx) => {
@@ -103,7 +85,7 @@ export async function savePlannerFromImport(planner: PlannerImportInput) {
       update: {},
       create: {
         code: course_information.course,
-        name: course_information.course_name || course_information.course,
+        name: course_information.course,
       },
     });
 
@@ -125,7 +107,7 @@ export async function savePlannerFromImport(planner: PlannerImportInput) {
       data: {
         course_id: course.id,
         major_id: major.id,
-        intake_year: parseInt(String(course_information.intake_year)) || 2025,
+        intake_year: course_information.intake_year ?? 2025,
       },
     });
 
