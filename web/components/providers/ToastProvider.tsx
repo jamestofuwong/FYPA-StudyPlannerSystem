@@ -27,6 +27,16 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
     }, 3500);
+
+    if (process.env.NODE_ENV === 'development') {
+      if (type === 'error') {
+        console.error(`[Toast:error] ${message}`);
+      } else if (type === 'info') {
+        console.info(`[Toast:info] ${message}`);
+      } else {
+        console.log(`[Toast:success] ${message}`);
+      }
+    }
   }, []);
 
   const ICONS: Record<ToastType, string> = {

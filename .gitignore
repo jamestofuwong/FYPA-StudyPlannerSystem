@@ -17,6 +17,7 @@ release/
 resources/python/
 __pycache__/
 *.pyc
+.venv/
 
 # Miscellaneous
 .DS_Store
@@ -30,6 +31,7 @@ yarn-error.log*
 # Local env files
 .env*.local
 .env
+web/.env
 
 # TypeScript
 *.tsbuildinfo
