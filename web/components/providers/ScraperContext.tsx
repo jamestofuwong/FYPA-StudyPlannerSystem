@@ -164,7 +164,7 @@ function PersistentWebview({
 // ---------------------------------------------------------------------------
 
 export function ScraperProvider({ children }: { children: ReactNode }) {
-  const { partitionId, isLoggedIn, setLoggedIn, resetSession } = usePortalAuth();
+  const { partitionId, isLoggedIn, setLoggedIn, setPortalLoading, resetSession } = usePortalAuth();
 
   const webviewRef                      = useRef<ElectronWebviewTag | null>(null);
   const [webviewReady, setWebviewReady] = useState(false);
@@ -209,11 +209,18 @@ export function ScraperProvider({ children }: { children: ReactNode }) {
     setPhase('browser');
   }, [isElectron, setPhase]);
 
-  // Sync phase → global login state
+  // Sync phase → global login + loading state
   useEffect(() => {
-    if (phase === 'ready' || phase === 'done') setLoggedIn(true);
-    else if (phase === 'login') setLoggedIn(false);
-  }, [phase, setLoggedIn]);
+    if (phase === 'browser') {
+      setPortalLoading(true);
+    } else if (phase === 'ready' || phase === 'done' || phase === 'scraping') {
+      setLoggedIn(true);
+      setPortalLoading(false);
+    } else if (phase === 'login' || phase === 'error') {
+      setLoggedIn(false);
+      setPortalLoading(false);
+    }
+  }, [phase, setLoggedIn, setPortalLoading]);
 
   // When login completes, navigate the webview back to the portal.
   const prevIsLoggedInRef = useRef(isLoggedIn);

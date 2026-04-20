@@ -6,7 +6,7 @@ import { usePortalAuth } from '../providers/PortalAuthContext';
 const NAV_ITEMS = ['File', 'Edit', 'View', 'Tools', 'Help'];
 
 export default function TopBar() {
-  const { isLoggedIn, openLoginModal, resetSession } = usePortalAuth();
+  const { isLoggedIn, isPortalLoading, openLoginModal, resetSession } = usePortalAuth();
 
   return (
     <header className={styles.topbar}>
@@ -30,7 +30,12 @@ export default function TopBar() {
 
       {/* User info */}
       <div className={styles.userInfo}>
-        {isLoggedIn ? (
+        {isPortalLoading ? (
+          <div className={styles.loadingBtn}>
+            <div className={styles.spinner} />
+            Logging in...
+          </div>
+        ) : isLoggedIn ? (
           <button className={styles.logoutBtn} onClick={resetSession}>
             Log out
           </button>
@@ -39,7 +44,6 @@ export default function TopBar() {
             Log in to Portal
           </button>
         )}
-
       </div>
     </header>
   );

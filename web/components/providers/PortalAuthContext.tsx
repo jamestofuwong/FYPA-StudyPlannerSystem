@@ -8,9 +8,11 @@ import { createContext, useCallback, useContext, useState, type ReactNode } from
 
 export type PortalAuthState = {
   isLoggedIn: boolean;
+  isPortalLoading: boolean;
   partitionId: string;
   isModalOpen: boolean;
   setLoggedIn: (v: boolean) => void;
+  setPortalLoading: (v: boolean) => void;
   openLoginModal: () => void;
   closeLoginModal: () => void;
   resetSession: () => void;
@@ -37,6 +39,7 @@ function makePartitionId(): string {
 
 export function PortalAuthProvider({ children }: { children: ReactNode }) {
   const [isLoggedIn, setLoggedIn] = useState(false);
+  const [isPortalLoading, setPortalLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [partitionId, setPartitionId] = useState(() => {
     try {
@@ -58,7 +61,7 @@ export function PortalAuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <PortalAuthContext.Provider
-      value={{ isLoggedIn, partitionId, isModalOpen, setLoggedIn, openLoginModal, closeLoginModal, resetSession }}
+      value={{ isLoggedIn, isPortalLoading, partitionId, isModalOpen, setLoggedIn, setPortalLoading, openLoginModal, closeLoginModal, resetSession }}
     >
       {children}
     </PortalAuthContext.Provider>

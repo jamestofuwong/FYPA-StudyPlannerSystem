@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import styles from './page.module.css';
 import { useToast } from '../../../components/providers/ToastProvider';
+import { usePortalAuth } from '../../../components/providers/PortalAuthContext';
 import type { ScrapedStudent } from '../../../../core/shared/types/student';
 
 
@@ -48,6 +49,7 @@ function ProgressBar({ pct, color }: { pct: number; color: string }) {
 
 export default function DashboardPage() {
   const { showToast } = useToast();
+  const { isLoggedIn, isPortalLoading, openLoginModal } = usePortalAuth();
   const [studentIdInput, setStudentIdInput] = useState('');
   const [scrapedStudent, setScrapedStudent] = useState<{ student: ScrapedStudent; studentId: string } | null>(null);
   const [studentLoaded, setStudentLoaded] = useState(false);
@@ -88,6 +90,7 @@ export default function DashboardPage() {
   const isInitializing = scraperApiStatus === 'initializing';
   const isScraping = scraperApiStatus === 'scraping';
   const isWaitingForList = scraperApiStatus === 'pending' || isInitializing;
+  const isDisabled = !isLoggedIn || isPortalLoading || isInitializing || loading;
 
   // Polls /api/scraper/status until the scraper bot finishes (or errors/times out).
   const pollScraperResult = async (): Promise<ScrapedStudent | null> => {
@@ -260,24 +263,40 @@ export default function DashboardPage() {
           style={{ flex: 1 }}
           value={studentIdInput}
           onChange={(e) => setStudentIdInput(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && !isInitializing && handleSearch()}
-          placeholder={isInitializing ? 'Waiting for scraper…' : 'Enter Student ID (e.g. BA-CS-2024-0091)'}
-          disabled={isInitializing}
+          onKeyDown={(e) => e.key === 'Enter' && !isDisabled && handleSearch()}
+          placeholder={!isLoggedIn ? 'Log in to proceed' : isPortalLoading ? 'Logging in to portal…' : isInitializing ? 'Waiting for scraper…' : 'Enter Student ID (e.g. BA-CS-2024-0091)'}
+          disabled={isDisabled}
         />
-        <button className={styles.btnPrimary} onClick={handleSearch} disabled={loading || isInitializing}>
+        <button className={styles.btnPrimary} onClick={handleSearch} disabled={isDisabled}>
           Search
         </button>
       </div>
 
       {/* ── Loading states ─────────────────────────────────────────────── */}
-      {isWaitingForList && (
+      {!isLoggedIn && !isPortalLoading && (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '60px 20px', textAlign: 'center' }}>
+          <div style={{ fontSize: 48, opacity: 0.25 }}>🔒</div>
+          <div style={{ fontSize: 14, fontWeight: 600, marginTop: 12 }}>Log in to proceed</div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4, marginBottom: 14 }}>Connect to the student portal to search for students.</div>
+          <button className={styles.btnPrimary} onClick={openLoginModal}>Log in to Portal</button>
+        </div>
+      )}
+
+      {isPortalLoading && (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '60px 20px', textAlign: 'center' }}>
+          <div className={styles.spinner} />
+          <div style={{ fontSize: 14, fontWeight: 600, marginTop: 12 }}>Logging in to portal...</div>
+        </div>
+      )}
+
+      {!isPortalLoading && isWaitingForList && (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '60px 20px', textAlign: 'center' }}>
           <div className={styles.spinner} />
           <div style={{ fontSize: 14, fontWeight: 600, marginTop: 12 }}>Loading student list...</div>
         </div>
       )}
 
-      {isScraping && (
+      {!isPortalLoading && isScraping && (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '60px 20px', textAlign: 'center' }}>
           <div className={styles.spinner} />
           <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 12 }}>Retrieving data...</div>
@@ -285,7 +304,7 @@ export default function DashboardPage() {
       )}
 
       {/* ── Empty state ──────────────────────────────────────────────────── */}
-      {!loading && !studentLoaded && !isWaitingForList && (
+      {isLoggedIn && !isPortalLoading && !loading && !studentLoaded && !isWaitingForList && (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '60px 20px', textAlign: 'center' }}>
           <div style={{ fontSize: 48, opacity: 0.25 }}>🎓</div>
           <div style={{ fontSize: 14, fontWeight: 600 }}>Enter a Student ID to begin</div>
