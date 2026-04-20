@@ -14,11 +14,15 @@ import {
   sanitizeUrl, TARGET_URL,
   type WebviewAdapter,
 } from '../../../core/services/scrapper/advisorScraperService';
-import { DISMISS_DROPDOWN_JS } from '../../../core/services/scrapper/advisorScraperScripts';
+import {
+  AUTO_RUN_STEPS, STUDENT_STEPS,
+  runAutoRun, runStudentScrape,
+} from '../../../core/services/scrapper/scraperOrchestrator';
 import { usePortalAuth } from './PortalAuthContext';
 
 // ---------------------------------------------------------------------------
-// WebviewAdapter wrapping the persistent Electron <webview>
+// WebviewAdapterImpl — Electron-specific implementation of WebviewAdapter.
+// Wraps the <webview> DOM element so the core service never touches Electron.
 // ---------------------------------------------------------------------------
 
 class WebviewAdapterImpl implements WebviewAdapter {
@@ -55,17 +59,6 @@ class WebviewAdapterImpl implements WebviewAdapter {
 }
 
 // ---------------------------------------------------------------------------
-// Auto-run steps
-// ---------------------------------------------------------------------------
-
-const AUTO_RUN_STEPS: ScraperStepId[] = [
-  'go-degree',
-  'open-degree-iframe',
-  'click-student-dropdown',
-  'wait-for-kendo-list',
-];
-
-// ---------------------------------------------------------------------------
 // Context type
 // ---------------------------------------------------------------------------
 
@@ -87,16 +80,16 @@ export type ScraperContextValue = {
   execNextStep: () => void;
   execAll: () => void;
   handleClearSession: () => void;
-  /** Set student ID and run the remaining scraping steps for that student. */
   scrapeStudent: (id: string) => void;
-  /** Pass as a ref callback to the slot div on the scraping page. */
   registerWebviewSlot: (el: HTMLDivElement | null) => void;
 };
 
 const ScraperContext = createContext<ScraperContextValue | null>(null);
 
 // ---------------------------------------------------------------------------
-// PersistentWebview — fixed container that tracks the scraping-page slot
+// PersistentWebview — fixed-position overlay that tracks the scraping-page
+// slot div. Stays mounted for the lifetime of the app so the webview session
+// is never lost on navigation.
 // ---------------------------------------------------------------------------
 
 type WebviewSlotRect = { top: number; left: number; width: number; height: number };
@@ -113,23 +106,16 @@ function PersistentWebview({
   const [rect, setRect] = useState<WebviewSlotRect | null>(null);
 
   useEffect(() => {
-    if (!slotElement) {
-      setRect(null);
-      return;
-    }
-
+    if (!slotElement) { setRect(null); return; }
     const update = () => {
       const r = slotElement.getBoundingClientRect();
       setRect({ top: r.top, left: r.left, width: r.width, height: r.height });
     };
-
     update();
-
     const ro = new ResizeObserver(update);
     ro.observe(slotElement);
     document.addEventListener('scroll', update, true);
     window.addEventListener('resize', update);
-
     return () => {
       ro.disconnect();
       document.removeEventListener('scroll', update, true);
@@ -173,7 +159,8 @@ function PersistentWebview({
 }
 
 // ---------------------------------------------------------------------------
-// ScraperProvider
+// ScraperProvider — wires the core orchestrator to React state and the
+// Electron webview. All business logic lives in core/services/scrapper/.
 // ---------------------------------------------------------------------------
 
 export function ScraperProvider({ children }: { children: ReactNode }) {
@@ -181,7 +168,6 @@ export function ScraperProvider({ children }: { children: ReactNode }) {
 
   const webviewRef                      = useRef<ElectronWebviewTag | null>(null);
   const [webviewReady, setWebviewReady] = useState(false);
-  // Skip auto-run if already logged in (re-render / re-mount after navigation)
   const autoRunIndexRef  = useRef(isLoggedIn ? AUTO_RUN_STEPS.length : 0);
   const autoRunActiveRef = useRef(false);
   const prevPartitionRef = useRef(partitionId);
@@ -229,21 +215,22 @@ export function ScraperProvider({ children }: { children: ReactNode }) {
     else if (phase === 'login') setLoggedIn(false);
   }, [phase, setLoggedIn]);
 
-  // When login completes via the modal while the persistent webview is stuck on
-  // the Microsoft login page, navigate it back to the portal so it picks up the
-  // fresh session cookie and rejoins the scraping flow.
+  // When login completes, navigate the webview back to the portal.
   const prevIsLoggedInRef = useRef(isLoggedIn);
   useEffect(() => {
     const wasLoggedIn = prevIsLoggedInRef.current;
     prevIsLoggedInRef.current = isLoggedIn;
-    if (!isLoggedIn || wasLoggedIn) return;       // only on false → true transition
-    if (phaseRef.current !== 'login') return;     // only when stuck on login page
+    if (!isLoggedIn || wasLoggedIn) return;
+    if (phaseRef.current !== 'login') return;
     const wv = webviewRef.current;
     if (!wv) return;
     try { wv.loadURL(TARGET_URL); } catch {}
   }, [isLoggedIn]);
 
-  // URL refresh
+  // ---------------------------------------------------------------------------
+  // URL tracking — updates currentUrl and phase based on webview navigation
+  // ---------------------------------------------------------------------------
+
   const refreshUrl = useCallback(() => {
     const wv = webviewRef.current;
     if (!wv) return;
@@ -262,7 +249,6 @@ export function ScraperProvider({ children }: { children: ReactNode }) {
     }
   }, [setPhase]);
 
-  // Webview event listeners
   useEffect(() => {
     const wv = webviewRef.current;
     if (!wv) return;
@@ -276,11 +262,7 @@ export function ScraperProvider({ children }: { children: ReactNode }) {
     const onNavigate = (e: any) => {
       const url = typeof e?.url === 'string' ? e.url : wv.getURL();
       setCurrentUrl(url);
-      if (isMicrosoftLoginUrl(url)) {
-        setShowBrowser(true);
-        setPhase('login');
-        return;
-      }
+      if (isMicrosoftLoginUrl(url)) { setShowBrowser(true); setPhase('login'); return; }
       exitLoginMode(url);
       if (isLoggedInPortalUrl(url) && phaseRef.current !== 'scraping') {
         setShowBrowser(false);
@@ -289,17 +271,12 @@ export function ScraperProvider({ children }: { children: ReactNode }) {
     };
 
     const onDidFinishLoad = () => {
-      try {
-        const url = wv.getURL();
-        if (!isMicrosoftLoginUrl(url)) exitLoginMode(url);
-      } catch {}
+      try { const url = wv.getURL(); if (!isMicrosoftLoginUrl(url)) exitLoginMode(url); } catch {}
     };
 
     const onDidFailLoad = (e: any) => {
       if (e?.isMainFrame === false) return;
-      const rawUrl =
-        typeof e?.validatedURL === 'string' ? e.validatedURL :
-        typeof e?.url === 'string' ? e.url : '';
+      const rawUrl = typeof e?.validatedURL === 'string' ? e.validatedURL : typeof e?.url === 'string' ? e.url : '';
       const safeUrl = sanitizeUrl(rawUrl) ?? rawUrl;
       setError(`Load failed (${String(e?.errorCode ?? '')}): ${String(e?.errorDescription ?? '')} ${safeUrl}`.trim());
       setBotStep('Load failed');
@@ -327,7 +304,6 @@ export function ScraperProvider({ children }: { children: ReactNode }) {
     };
   }, [webviewReady, setPhase]);
 
-  // URL polling while active
   useEffect(() => {
     if (phase === 'idle') return;
     refreshUrl();
@@ -336,7 +312,7 @@ export function ScraperProvider({ children }: { children: ReactNode }) {
   }, [refreshUrl, phase]);
 
   // ---------------------------------------------------------------------------
-  // Step runners
+  // Adapter factory
   // ---------------------------------------------------------------------------
 
   const getAdapter = useCallback((): WebviewAdapter | null => {
@@ -344,6 +320,10 @@ export function ScraperProvider({ children }: { children: ReactNode }) {
     if (!wv) return null;
     return new WebviewAdapterImpl(wv);
   }, []);
+
+  // ---------------------------------------------------------------------------
+  // Step runners — thin wrappers that update React state around core calls
+  // ---------------------------------------------------------------------------
 
   const execStep = useCallback(async (stepId: ScraperStepId) => {
     const adapter = getAdapter();
@@ -409,19 +389,7 @@ export function ScraperProvider({ children }: { children: ReactNode }) {
     }
   }, [getAdapter, studentId, addLogs, setPhase, refreshUrl]);
 
-  // ---------------------------------------------------------------------------
-  // scrapeStudent — set ID then run the 4 student-specific steps
-  // ---------------------------------------------------------------------------
-
-  const STUDENT_STEPS: ScraperStepId[] = [
-    'click-student-dropdown',
-    'wait-for-kendo-list',
-    'enter-student-id',
-    'click-dropdown',
-    'select-dropdown',
-    'scrape-program-data',
-  ];
-
+  // scrapeStudent — delegates to core orchestrator, then reports result via API.
   const scrapeStudent = useCallback(async (id: string) => {
     const adapter = getAdapter();
     if (!adapter) return;
@@ -429,30 +397,54 @@ export function ScraperProvider({ children }: { children: ReactNode }) {
     setError(null);
     setPhase('scraping');
     setBotStep('Starting student scrape…');
-    try {
-      for (const stepId of STUDENT_STEPS) {
-        const stepLabel = SCRAPER_STEPS.find((s) => s.id === stepId)?.label ?? stepId;
-        setBotStep(stepLabel);
-        const result = await runScraperStep(stepId, adapter, { studentId: id });
-        addLogs(result.logs);
-        if (result.scrapeResult) setScrapeResult(result.scrapeResult);
-        if (result.loginDetected) { setShowBrowser(true); setPhase('login'); return; }
-      }
-      setPhase('done');
-      setBotStep('Student scrape complete');
-      setStepIndex(SCRAPER_STEPS.length);
-      refreshUrl();
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setError(msg);
-      addLogs([`✗ Error: ${msg}`]);
+
+    const result = await runStudentScrape(adapter, id, {
+      onLog: addLogs,
+      onBotStep: setBotStep,
+      onScrapeResult: setScrapeResult,
+    });
+
+    if (result.loginDetected) {
+      setShowBrowser(true);
+      setPhase('login');
+      return;
+    }
+
+    if (result.error) {
+      setError(result.error);
+      addLogs([`✗ Error: ${result.error}`]);
       setBotStep('Error');
       setPhase('error');
+      await fetch('/api/scraper/status', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'error', error: result.error }),
+      }).catch(() => {});
+      return;
+    }
+
+    setPhase('done');
+    setBotStep('Student scrape complete');
+    setStepIndex(STUDENT_STEPS.length);
+    refreshUrl();
+
+    if (result.finalResult?.scraped) {
+      await fetch('/api/scraper', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(result.finalResult),
+      }).catch(() => {});
+    } else {
+      await fetch('/api/scraper/status', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'error', error: 'Scrape returned no data' }),
+      }).catch(() => {});
     }
   }, [getAdapter, addLogs, setPhase, refreshUrl]);
 
   // ---------------------------------------------------------------------------
-  // Auto-run
+  // Auto-run — delegates to core orchestrator
   // ---------------------------------------------------------------------------
 
   const runAutoSteps = useCallback(async () => {
@@ -465,39 +457,32 @@ export function ScraperProvider({ children }: { children: ReactNode }) {
     setError(null);
     setPhase('scraping');
 
-    while (autoRunIndexRef.current < AUTO_RUN_STEPS.length) {
-      const stepId = AUTO_RUN_STEPS[autoRunIndexRef.current];
-      setBotStep(SCRAPER_STEPS.find((s) => s.id === stepId)?.label ?? stepId);
-      try {
-        const result = await runScraperStep(stepId, adapter, { studentId });
-        addLogs(result.logs);
-        autoRunIndexRef.current += 1;
-        if (isMicrosoftLoginUrl(adapter.getURL())) {
-          setShowBrowser(true);
-          setPhase('login');
-          autoRunActiveRef.current = false;
-          return;
-        }
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        setError(msg);
-        addLogs([`✗ Auto-run error: ${msg}`]);
-        setPhase('error');
-        autoRunActiveRef.current = false;
-        return;
-      }
+    const result = await runAutoRun(adapter, autoRunIndexRef.current, {
+      onLog: addLogs,
+      onBotStep: setBotStep,
+    });
+
+    autoRunIndexRef.current = result.completedIndex;
+
+    if (result.error) {
+      setError(result.error);
+      setPhase('error');
+      autoRunActiveRef.current = false;
+      return;
     }
 
-    // Dismiss the open dropdown so the next scrapeStudent call opens it fresh.
-    try { await adapter.executeJavaScript(DISMISS_DROPDOWN_JS); } catch {}
-    await new Promise<void>((r) => globalThis.setTimeout(r, 300));
+    if (result.loginDetected) {
+      setShowBrowser(true);
+      setPhase('login');
+      autoRunActiveRef.current = false;
+      return;
+    }
 
     autoRunActiveRef.current = false;
     setStepIndex(AUTO_RUN_STEPS.length);
     setPhase('ready');
-    setBotStep('Ready — enter Student ID to continue');
     refreshUrl();
-  }, [getAdapter, studentId, addLogs, setPhase, refreshUrl]);
+  }, [getAdapter, addLogs, setPhase, refreshUrl]);
 
   useEffect(() => {
     if (!isElectron) return;
@@ -506,6 +491,34 @@ export function ScraperProvider({ children }: { children: ReactNode }) {
     if (autoRunActiveRef.current) return;
     void runAutoSteps();
   }, [isElectron, phase, runAutoSteps]);
+
+  // ---------------------------------------------------------------------------
+  // Poll /api/scraper/status when ready — pick up student IDs queued by the
+  // dashboard and kick off scrapeStudent automatically.
+  // ---------------------------------------------------------------------------
+
+  useEffect(() => {
+    if (!isElectron) return;
+    if (phase !== 'ready') return;
+
+    const id = globalThis.setInterval(async () => {
+      if (phaseRef.current !== 'ready') return;
+      const res = await fetch('/api/scraper/status').catch(() => null);
+      if (!res?.ok) return;
+      const data: { status: string; studentId: string | null } = await res.json();
+      if (data.status === 'pending' && data.studentId) {
+        const sid = data.studentId;
+        await fetch('/api/scraper/status', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'scraping' }),
+        }).catch(() => {});
+        void scrapeStudent(sid);
+      }
+    }, 1000);
+
+    return () => globalThis.clearInterval(id);
+  }, [isElectron, phase, scrapeStudent]);
 
   // ---------------------------------------------------------------------------
   // Session reset (partition change)
@@ -549,7 +562,6 @@ export function ScraperProvider({ children }: { children: ReactNode }) {
       }}
     >
       {children}
-      {/* Persistent webview: always mounted, follows the scraping-page slot */}
       {isElectron && (
         <PersistentWebview
           webviewRef={webviewRef}

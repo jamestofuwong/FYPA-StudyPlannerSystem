@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import styles from './page.module.css';
 import { useToast } from '../../../components/providers/ToastProvider';
-import { useScraperContext } from '../../../components/providers/ScraperContext';
+import type { ScrapedStudent } from '../../../../core/shared/types/student';
 
 // ---------------------------------------------------------------------------
 // Static mock data (mirrors sums-mockup.html)
@@ -105,66 +105,80 @@ function ProgressBar({ pct, color }: { pct: number; color: string }) {
 
 export default function DashboardPage() {
   const { showToast } = useToast();
-  const { scrapeStudent, phase, scrapeResult, isBusy, isElectron, botStep } = useScraperContext();
   const [studentIdInput, setStudentIdInput] = useState('');
   const [studentLoaded, setStudentLoaded] = useState(false);
   const [openYears, setOpenYears] = useState<Set<number>>(new Set([1, 2, 3]));
   const [dashboardData, setDashboardData] = useState<any>(null);
   const [internalLoading, setInternalLoading] = useState(false);
+  const [scraperApiStatus, setScraperApiStatus] = useState<string>('idle');
 
-  const loading = isBusy || internalLoading;
+  const loading = internalLoading;
+  const isScraping = scraperApiStatus === 'scraping';
+  const isWaitingForList = scraperApiStatus === 'pending';
 
-  // Scraper status logic
-  const DATA_SCRAPE_LABELS = new Set(['Enter student ID', 'Click enrollment dropdown', 'Select enrollment option', 'Scrape program data']);
-  const isScraping = isBusy && !studentLoaded && DATA_SCRAPE_LABELS.has(botStep);
-  const isWaitingForList = isBusy && !studentLoaded && !DATA_SCRAPE_LABELS.has(botStep);
+  // Polls /api/scraper/status until the scraper bot finishes (or errors/times out).
+  const pollScraperResult = async (): Promise<ScrapedStudent | null> => {
+    const TIMEOUT_MS = 120_000;
+    const INTERVAL_MS = 1_000;
+    const deadline = Date.now() + TIMEOUT_MS;
 
-  // Database Fetcher
-  const fetchDashboardData = async (studentId: string) => {
-      try {
-        setInternalLoading(true);
-
-        // 1. Get real data from Scraper Context
-        const completedUnits = scrapeResult?.units?.map((u: any) => u.code) || ["COS10009", "COS10026", "COS10025"];
-
-        // 2. Fetch Matching Engine Data
-        const matchRes = await fetch('/api/match', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            student: {
-              studentID: studentId,
-              courseCode: "BA-CS",
-              intakeYear: 2024,
-              completedUnitCodes: completedUnits
-            }
-          })
-        });
-        const matchData = await matchRes.json();
-
-        // 3. Fetch Planner Template from DB (Using your validated ID)
-        const plannerId = "49ef6140-9cce-46e3-95eb-51b33f847dc5";
-        const plannerRes = await fetch(`/api/planners/${plannerId}`);
-        const plannerData = await plannerRes.json();
-
-        if (matchData.success && plannerRes.ok) {
-          setDashboardData({
-            match: matchData.data,
-            planner: plannerData,
-            completedCodes: completedUnits
-          });
-          setStudentLoaded(true);
-          showToast("Dashboard sync complete!", "success");
-        } else {
-           showToast("API Error: Check if server is running", "error");
-        }
-      } catch (error) {
-        console.error("Dashboard Fetch Error:", error);
-        showToast("Failed to fetch real data.", "error");
-      } finally {
-        setInternalLoading(false);
+    while (Date.now() < deadline) {
+      await new Promise<void>((r) => globalThis.setTimeout(r, INTERVAL_MS));
+      const res = await fetch('/api/scraper/status').catch(() => null);
+      if (!res?.ok) continue;
+      const data: { status: string; result: ScrapedStudent | null; error: string | null } = await res.json();
+      setScraperApiStatus(data.status);
+      if (data.status === 'done' && data.result) return data.result;
+      if (data.status === 'error') {
+        showToast(data.error ?? 'Scrape failed.', 'error');
+        return null;
       }
-    };
+    }
+    showToast('Scrape timed out. Check the scraper bot.', 'error');
+    return null;
+  };
+
+  // Database Fetcher — called after scraping completes with the mapped student data.
+  const fetchDashboardData = async (studentId: string, student: ScrapedStudent) => {
+    try {
+      const completedUnits = student.courseList.map((c) => c.courseId);
+
+      // 1. Fetch Matching Engine Data
+      const matchRes = await fetch('/api/match', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          student: {
+            studentID: studentId,
+            courseCode: "BA-CS",
+            intakeYear: 2024,
+            completedUnitCodes: completedUnits,
+          },
+        }),
+      });
+      const matchData = await matchRes.json();
+
+      // 2. Fetch Planner Template from DB
+      const plannerId = "49ef6140-9cce-46e3-95eb-51b33f847dc5";
+      const plannerRes = await fetch(`/api/planners/${plannerId}`);
+      const plannerData = await plannerRes.json();
+
+      if (matchData.success && plannerRes.ok) {
+        setDashboardData({
+          match: matchData.data,
+          planner: plannerData,
+          completedCodes: completedUnits,
+        });
+        setStudentLoaded(true);
+        showToast("Dashboard sync complete!", "success");
+      } else {
+        showToast("API Error: Check if server is running", "error");
+      }
+    } catch (error) {
+      console.error("Dashboard Fetch Error:", error);
+      showToast("Failed to fetch data.", "error");
+    }
+  };
 
   // Unit Filtering Logic
   const getUnitsByYear = (yearLevel: number) => {
@@ -197,16 +211,37 @@ export default function DashboardPage() {
     });
   };
 
-  const handleSearch = () => {
-    if (!studentIdInput.trim()) { showToast('Enter a Student ID.', 'error'); return; }
+  const handleSearch = async () => {
+    const id = studentIdInput.trim();
+    if (!id) { showToast('Enter a Student ID.', 'error'); return; }
     setStudentLoaded(false);
-    fetchDashboardData(studentIdInput.trim());
+    setInternalLoading(true);
+    try {
+      // 1. Queue the student ID for the scraper bot via API
+      const startRes = await fetch('/api/scraper/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ studentId: id }),
+      });
+      if (!startRes.ok) {
+        showToast('Failed to queue scrape. Is the server running?', 'error');
+        return;
+      }
+      // 2. Wait for the scraper bot to finish
+      const student = await pollScraperResult();
+      if (!student) return;
+      // 3. Fetch matching + planner data
+      await fetchDashboardData(id, student);
+    } finally {
+      setInternalLoading(false);
+    }
   };
 
   const handleClear = () => {
     setStudentLoaded(false);
     setStudentIdInput('');
     setDashboardData(null);
+    setScraperApiStatus('idle');
     showToast('Student data cleared.', 'info');
   };
 

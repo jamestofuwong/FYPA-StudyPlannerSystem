@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { ScrapeResult } from "../../../../core/shared/types/scraping";
 import type { ScrapedStudent, ScrapedCourseListItem } from "../../../../core/shared/types/student";
+import { scraperStore } from "./store";
 
 // Map a successful ScrapeResult to the ScrapedStudent shape used by the rest of the app.
 function mapToScrapedStudent(result: ScrapeResult & { scraped: true }): ScrapedStudent {
@@ -53,5 +54,11 @@ export async function POST(req: NextRequest) {
   }
 
   const student = mapToScrapedStudent(result);
+
+  // Update the shared store so the dashboard polling loop can pick up the result.
+  scraperStore.status = 'done';
+  scraperStore.result = student;
+  scraperStore.error = null;
+
   return NextResponse.json(student, { status: 200 });
 }
