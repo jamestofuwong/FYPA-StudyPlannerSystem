@@ -1,6 +1,6 @@
-export type PanelId = 'dashboard' | 'import' | 'scraping' | 'export' | 'student' | 'planners';
+export type PanelId = 'dashboard' | 'import' | 'scraping' | 'planners';
 
-export const PANEL_IDS: PanelId[] = ['dashboard', 'import', 'scraping', 'export', 'student', 'planners'];
+export const PANEL_IDS: PanelId[] = ['dashboard', 'import', 'scraping', 'planners'];
 
 export function isPanelId(value: string): value is PanelId {
   return (PANEL_IDS as string[]).includes(value);
@@ -10,8 +10,6 @@ export const PANEL_PATHS: Record<PanelId, string> = {
   dashboard: '/dashboard',
   import: '/import',
   scraping: '/scraping',
-  export: '/export',
-  student: '/student',
   planners: '/planners',
 };
 
@@ -43,48 +41,25 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     id: 'main',
     icon: '📊',
-    label: 'Dashboard',
+    label: 'Major Detection',
     items: [
       { id: 'dashboard', icon: '🎓', label: 'Major Detection' },
-      { id: 'dashboard', icon: '📋', label: 'Advisory Plan' },
-      { id: 'dashboard', icon: '📈', label: 'Unit Progress' },
-      { id: 'dashboard', icon: '👥', label: 'All Students' },
     ],
   },
   {
     id: 'import',
     icon: '📥',
-    label: 'Data Import',
+    label: 'Study Planners',
     items: [
-      { id: 'import', icon: '📤', label: 'Import PDF Planner' },
-      { id: 'import', icon: '🔍', label: 'OCR Processing' },
-      { id: 'planners', icon: '✅', label: 'Planner Review' },
+      { id: 'planners', icon: '📋', label: 'Study Planners' },
     ],
   },
   {
     id: 'scraping',
     icon: '🕷️',
-    label: 'Data Scraping',
+    label: 'Scraping Bot',
     items: [
-      { id: 'scraping', icon: '🔐', label: 'Portal Login' },
-      { id: 'scraping', icon: '⚙️', label: 'Scraping Config' },
-      { id: 'scraping', icon: '📥', label: 'Imported Students' },
+      { id: 'scraping', icon: '🕷️', label: 'Scraping Bot' },
     ],
-  },
-  {
-    id: 'export',
-    icon: '📤',
-    label: 'Export',
-    items: [
-      { id: 'export', icon: '📊', label: 'Export Reports' },
-      { id: 'export', icon: '📅', label: 'Schedule Export' },
-      { id: 'export', icon: '🗂️', label: 'Export History' },
-    ],
-  },
-  {
-    id: 'student',
-    icon: '👩‍🎓',
-    label: 'Student',
-    items: [{ id: 'student', icon: '📊', label: 'Student View' }],
   },
 ];
