@@ -106,12 +106,14 @@ export async function runStudentScrape(
 ): Promise<StudentScrapeResult> {
   const { onLog, onBotStep, onScrapeResult } = callbacks;
   let finalResult: ScrapeResult | null = null;
+  let studentName: string | undefined;
 
   try {
     for (const stepId of STUDENT_STEPS) {
       onBotStep(SCRAPER_STEPS.find((s) => s.id === stepId)?.label ?? stepId);
       const result = await runScraperStep(stepId, adapter, { studentId });
       onLog(result.logs);
+      if (result.studentName) studentName = result.studentName;
       if (result.scrapeResult) {
         finalResult = result.scrapeResult;
         onScrapeResult?.(result.scrapeResult);
@@ -122,6 +124,11 @@ export async function runStudentScrape(
     const error = e instanceof Error ? e.message : String(e);
     onLog([`✗ Error: ${error}`]);
     return { finalResult, loginDetected: false, error };
+  }
+
+  // Attach the name captured from the dropdown into the final scrape result.
+  if (finalResult?.scraped && studentName) {
+    finalResult = { ...finalResult, studentName };
   }
 
   return { finalResult, loginDetected: false };

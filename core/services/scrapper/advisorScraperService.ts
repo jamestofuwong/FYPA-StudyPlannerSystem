@@ -69,6 +69,7 @@ export type StepResult = {
   logs: string[];
   scrapeResult?: ScrapeResult;
   loginDetected?: boolean;
+  studentName?: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -188,6 +189,11 @@ export async function runScraperStep(
     const data = await adapter.executeJavaScript<EnterIdResult>(ENTER_STUDENT_ID_JS(studentId));
     if (data.success) {
       logs.push(`✓ Clicked list item: ${data.clickedText}`);
+      // Extract the student name by removing the student ID from the clicked text.
+      const rawName = (data.clickedText ?? '').replace(studentId, '').replace(/\s+/g, ' ').trim();
+      const studentName = rawName || undefined;
+      if (studentName) logs.push(`✓ Student name extracted: ${studentName}`);
+      return { logs, studentName };
     } else {
       logs.push(`✗ ${data.error}`);
     }

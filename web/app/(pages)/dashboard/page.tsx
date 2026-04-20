@@ -106,6 +106,7 @@ function ProgressBar({ pct, color }: { pct: number; color: string }) {
 export default function DashboardPage() {
   const { showToast } = useToast();
   const [studentIdInput, setStudentIdInput] = useState('');
+  const [scrapedStudent, setScrapedStudent] = useState<{ student: ScrapedStudent; studentId: string } | null>(null);
   const [studentLoaded, setStudentLoaded] = useState(false);
   const [openYears, setOpenYears] = useState<Set<number>>(new Set([1, 2, 3]));
   const [dashboardData, setDashboardData] = useState<any>(null);
@@ -120,6 +121,7 @@ export default function DashboardPage() {
         const { studentId, data } = JSON.parse(saved);
         setStudentIdInput(studentId ?? '');
         setDashboardData(data ?? null);
+        if (data?.student) setScrapedStudent({ student: data.student, studentId: data.studentId ?? studentId });
         setStudentLoaded(!!data);
       }
     } catch {}
@@ -202,6 +204,8 @@ export default function DashboardPage() {
           planner: plannerData,
           completedCodes: completedUnits,
           intakeYear,
+          student,
+          studentId,
         };
         setDashboardData(data);
         setStudentLoaded(true);
@@ -251,6 +255,9 @@ export default function DashboardPage() {
     const id = studentIdInput.trim();
     if (!id) { showToast('Enter a Student ID.', 'error'); return; }
     setStudentLoaded(false);
+    setScrapedStudent(null);
+    setDashboardData(null);
+    setScraperApiStatus('idle');
     setInternalLoading(true);
     try {
       // 1. Queue the student ID for the scraper bot via API
@@ -266,7 +273,9 @@ export default function DashboardPage() {
       // 2. Wait for the scraper bot to finish
       const student = await pollScraperResult();
       if (!student) return;
-      // 3. Fetch matching + planner data
+      // 3. Show identity card immediately — matching is still running
+      setScrapedStudent({ student, studentId: id });
+      // 4. Fetch matching + planner data
       await fetchDashboardData(id, student);
     } finally {
       setInternalLoading(false);
@@ -276,6 +285,7 @@ export default function DashboardPage() {
   const handleClear = () => {
     setStudentLoaded(false);
     setStudentIdInput('');
+    setScrapedStudent(null);
     setDashboardData(null);
     setScraperApiStatus('idle');
     try { sessionStorage.removeItem('dashboardSession'); } catch {}
@@ -323,24 +333,46 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* ── Identity Card — shown as soon as scraper returns ───────────── */}
+      {scrapedStudent && (() => {
+        const s = scrapedStudent.student;
+        const fields: [string, string][] = [
+          ['Student ID',        scrapedStudent.studentId ?? '—'],
+          ['GPA',               s?.cgpa != null ? String(s.cgpa) : '—'],
+          ['Grade Level',       s?.gradeLevel || '—'],
+          ['Enroll Date',       s?.enrollmentDate || '—'],
+          ['Exp. Grad Date',    s?.graduationDate || '—'],
+          ['Credits Required',  s?.creditsRequired != null ? String(s.creditsRequired) : '—'],
+          ['Credits Completed', s?.creditsCompleted != null ? String(s.creditsCompleted) : '—'],
+        ];
+        return (
+          <div style={{ background: 'var(--card-bg)', border: '1px solid var(--panel-border)', borderRadius: 4, padding: '12px 14px', marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 14, fontWeight: 600 }}>{s?.studentName || scrapedStudent.studentId || '—'}</div>
+              </div>
+              <button className={styles.btnDanger} onClick={handleClear}>✕ Clear</button>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '6px 16px' }}>
+              {fields.map(([label, value]) => (
+                <div key={label}>
+                  <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</div>
+                  <div style={{ fontSize: 12, fontWeight: 500 }}>{value}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* ── Dashboard Content ────────────────────────────────────────────── */}
       {!loading && studentLoaded && dashboardData && (
         <div>
-          {/* Identity Card */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--card-bg)', border: '1px solid var(--panel-border)', borderRadius: 4, padding: '10px 14px', marginBottom: 16 }}>
-            <div className={styles.avatar}>SN</div>
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 600 }}>{studentIdInput}</div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                {dashboardData.planner.course.name} · {dashboardData.planner.major?.name}
-              </div>
-            </div>
-            <button className={styles.btnDanger} style={{ marginLeft: 'auto' }} onClick={handleClear}>✕ Clear</button>
-          </div>
 
           {/* Primary Major Progress */}
           <div style={{ background: 'var(--card-bg)', border: '1px solid var(--panel-border)', borderRadius: 4, padding: '14px 16px', marginBottom: 10 }}>
-            <div style={{ fontSize: 18, fontWeight: 700 }}>{dashboardData.planner.course.name}</div>
+            <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 2 }}>{dashboardData.planner.course.name}</div>
+            <div style={{ fontSize: 18, fontWeight: 700 }}>{dashboardData.planner.major?.name ?? dashboardData.match.primaryMajor?.majorName ?? '—'}</div>
             <ProgressBar pct={dashboardData.match.primaryMajor.matchPct} color="var(--accent-blue)" />
             <div style={{ fontSize: 12, marginTop: 8 }}>Match Percentage: <strong>{dashboardData.match.primaryMajor.matchPct}%</strong></div>
           </div>

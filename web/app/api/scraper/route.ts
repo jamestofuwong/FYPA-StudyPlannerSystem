@@ -18,6 +18,7 @@ function mapToScrapedStudent(result: ScrapeResult & { scraped: true }): ScrapedS
   }));
 
   return {
+    studentName: result.studentName ?? undefined,
     course: d.program ?? "",
     status: d.status ?? "",
     cgpa: parseFloat(d.enrollmentCumGPA ?? "") || 0,

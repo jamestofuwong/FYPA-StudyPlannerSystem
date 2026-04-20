@@ -61,6 +61,7 @@ export type ScrapeResult =
   | { scraped: false; error?: string }
   | {
       scraped: true;
+      studentName?: string;
       data: ScrapedProgramData;
       rawGrid?: string[][];
       rowCount?: number;
