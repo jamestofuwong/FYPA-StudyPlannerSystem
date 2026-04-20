@@ -264,7 +264,7 @@ export default function DashboardPage() {
           value={studentIdInput}
           onChange={(e) => setStudentIdInput(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && !isDisabled && handleSearch()}
-          placeholder={!isLoggedIn ? 'Log in to proceed' : isPortalLoading ? 'Logging in to portal…' : isInitializing ? 'Waiting for scraper…' : 'Enter Student ID (e.g. BA-CS-2024-0091)'}
+          placeholder={!isLoggedIn ? 'Log in to proceed' : isPortalLoading ? 'Logging in to portal…' : isInitializing ? 'Waiting for scraper…' : 'Enter Student ID'}
           disabled={isDisabled}
         />
         <button className={styles.btnPrimary} onClick={handleSearch} disabled={isDisabled}>
@@ -296,7 +296,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {!isPortalLoading && isScraping && (
+      {!isPortalLoading && isScraping && !scrapedStudent && (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '60px 20px', textAlign: 'center' }}>
           <div className={styles.spinner} />
           <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 12 }}>Retrieving data...</div>
@@ -342,6 +342,14 @@ export default function DashboardPage() {
           </div>
         );
       })()}
+
+      {/* ── Matching spinner — shown after scrape, before match result ─── */}
+      {scrapedStudent && !dashboardData && loading && (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '40px 20px', textAlign: 'center' }}>
+          <div className={styles.spinner} />
+          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 12 }}>Matching student to planner...</div>
+        </div>
+      )}
 
       {/* ── Dashboard Content ────────────────────────────────────────────── */}
       {!loading && studentLoaded && dashboardData && (
