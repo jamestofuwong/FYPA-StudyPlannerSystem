@@ -26,11 +26,12 @@
     "embedded-postgres": "^18.3.0-beta.16",
     "next": "16.1.6",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "xlsx": "^0.18.5"
   },
   "optionalDependencies": {
-    "@rollup/rollup-win32-x64-msvc": "^4.60.0",
-    "@esbuild/win32-x64": "^0.28.0"
+    "@esbuild/win32-x64": "^0.28.0",
+    "@rollup/rollup-win32-x64-msvc": "^4.60.0"
   },
   "devDependencies": {
     "@next/eslint-plugin-next": "16.1.6",
@@ -80,24 +81,48 @@
       "output": "release"
     },
     "mac": {
-      "target": ["dmg"],
+      "target": [
+        "dmg"
+      ],
       "extraResources": [
-        { "from": "resources/python/plannerStructureService", "to": "plannerStructureService" },
-        { "from": "resources/ollama/ollama", "to": "ollama" }
+        {
+          "from": "resources/python/plannerStructureService",
+          "to": "plannerStructureService"
+        },
+        {
+          "from": "resources/ollama/ollama",
+          "to": "ollama"
+        }
       ]
     },
     "win": {
-      "target": ["nsis"],
+      "target": [
+        "nsis"
+      ],
       "extraResources": [
-        { "from": "resources/python/plannerStructureService.exe", "to": "plannerStructureService.exe" },
-        { "from": "resources/ollama/ollama.exe", "to": "ollama.exe" }
+        {
+          "from": "resources/python/plannerStructureService.exe",
+          "to": "plannerStructureService.exe"
+        },
+        {
+          "from": "resources/ollama/ollama.exe",
+          "to": "ollama.exe"
+        }
       ]
     },
     "linux": {
-      "target": ["AppImage"],
+      "target": [
+        "AppImage"
+      ],
       "extraResources": [
-        { "from": "resources/python/plannerStructureService", "to": "plannerStructureService" },
-        { "from": "resources/ollama/ollama", "to": "ollama" }
+        {
+          "from": "resources/python/plannerStructureService",
+          "to": "plannerStructureService"
+        },
+        {
+          "from": "resources/ollama/ollama",
+          "to": "ollama"
+        }
       ]
     }
   },

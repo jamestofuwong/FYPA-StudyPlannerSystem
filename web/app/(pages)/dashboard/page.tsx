@@ -5,6 +5,8 @@ import styles from './page.module.css';
 import { useToast } from '../../../components/providers/ToastProvider';
 import { usePortalAuth } from '../../../components/providers/PortalAuthContext';
 import type { ScrapedStudent } from '../../../../core/shared/types/student';
+import ExportModal from '../../../components/ExportModal';
+import type { ExportInput } from '../../../../core/shared/types/export';
 
 
 // ---------------------------------------------------------------------------
@@ -57,6 +59,7 @@ export default function DashboardPage() {
   const [dashboardData, setDashboardData] = useState<any>(null);
   const [internalLoading, setInternalLoading] = useState(false);
   const [scraperApiStatus, setScraperApiStatus] = useState<string>('idle');
+  const [showExportModal, setShowExportModal] = useState(false);
 
   // Restore persisted session on mount
   useEffect(() => {
@@ -357,8 +360,13 @@ export default function DashboardPage() {
 
           {/* Primary Major Progress */}
           <div style={{ background: 'var(--card-bg)', border: '1px solid var(--panel-border)', borderRadius: 4, padding: '14px 16px', marginBottom: 10 }}>
-            <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 2 }}>{dashboardData.planner.course.name}</div>
-            <div style={{ fontSize: 18, fontWeight: 700 }}>{dashboardData.planner.major?.name ?? dashboardData.match.primaryMajor?.majorName ?? '—'}</div>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 2 }}>{dashboardData.planner.course.name}</div>
+                <div style={{ fontSize: 18, fontWeight: 700 }}>{dashboardData.planner.major?.name ?? dashboardData.match.primaryMajor?.majorName ?? '—'}</div>
+              </div>
+              <button className={styles.btnSecondary} onClick={() => setShowExportModal(true)}>Export</button>
+            </div>
             <ProgressBar pct={dashboardData.match.primaryMajor.matchPct} color="var(--accent-blue)" />
             <div style={{ fontSize: 12, marginTop: 8 }}>Match Percentage: <strong>{dashboardData.match.primaryMajor.matchPct}%</strong></div>
           </div>
@@ -420,6 +428,23 @@ export default function DashboardPage() {
           </div>
         </div>
       )}
+
+      {/* ── Export Modal ─────────────────────────────────────────────────── */}
+      {showExportModal && dashboardData && scrapedStudent && (() => {
+        const exportInput: Omit<ExportInput, 'options'> = {
+          studentId: scrapedStudent.studentId,
+          student: scrapedStudent.student,
+          match: dashboardData.match,
+          planner: {
+            course: dashboardData.planner.course,
+            major: dashboardData.planner.major ?? null,
+            units: dashboardData.planner.units,
+          },
+          completedCodes: dashboardData.completedCodes,
+          intakeYear: dashboardData.intakeYear,
+        };
+        return <ExportModal exportInput={exportInput} onClose={() => setShowExportModal(false)} />;
+      })()}
     </div>
   );
 }
