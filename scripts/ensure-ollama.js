@@ -19,5 +19,12 @@ if (fs.existsSync(binary)) {
   process.exit(0);
 }
 
-console.log('[ensure-ollama] Ollama binary not found, downloading...');
-execSync(`node "${path.join(__dirname, 'download-ollama.js')}"`, { stdio: 'inherit' });
+console.log('[ensure-ollama] Ollama binary not found, attempting download...');
+try {
+  execSync(`node "${path.join(__dirname, 'download-ollama.js')}"`, { stdio: 'inherit' });
+} catch (err) {
+  console.warn('[ensure-ollama] Download failed — AI Review will be unavailable until the binary is present.');
+  console.warn('[ensure-ollama] Run "npm run download:ollama" manually when network access is available,');
+  console.warn('[ensure-ollama] or copy the Ollama binary to resources/ollama/ollama' + (process.platform === 'win32' ? '.exe' : '') + ' manually.');
+  // Do not exit with error — the app can still run without Ollama.
+}
