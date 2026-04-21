@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node scripts/ensure-ollama.js && cross-env NODE_ENV=development NEXT_TELEMETRY_DISABLED=1 concurrently -k -n NEXT,ELECTRON_BUILD,ELECTRON -c cyan,yellow,magenta \"next dev web --webpack -p 3000\" \"tsup electron/main.ts electron/preload.ts --format cjs --platform node --out-dir dist/electron --sourcemap --external electron --watch\" \"wait-on dist/electron/main.js http://127.0.0.1:3000 && cross-env NEXT_DEV_SERVER_URL=http://127.0.0.1:3000 electron .\"",
     "prisma:generate": "prisma generate --schema core/db/prisma/schema.prisma",
-    "build:app": "npm run prisma:generate && next build web",
+    "build:app": "npm run prisma:generate && next build web --webpack",
     "build:electron": "tsup electron/main.ts electron/preload.ts --format cjs --platform node --out-dir dist/electron --sourcemap --external electron",
     "build": "npm run build:app && npm run build:electron",
     "lint": "eslint web electron core",
