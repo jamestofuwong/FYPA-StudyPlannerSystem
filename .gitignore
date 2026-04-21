@@ -10,6 +10,9 @@ coverage
 .next/
 out/
 build/
+!build/icon.icns
+!build/icon.ico
+!build/icon.png
 dist/
 release/
 
