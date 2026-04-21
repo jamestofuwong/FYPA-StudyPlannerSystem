@@ -7,6 +7,107 @@
   height: 100%;
 }
 
+/* Split-screen mode (file selected) — no overflow, children fill height */
+.panelSplit {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--main-bg);
+  height: 100%;
+}
+
+/* Split screen row: PDF left, results right */
+.splitScreen {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Left pane: PDF viewer */
+.pdfPane {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--panel-border);
+}
+
+.pdfHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--panel-border);
+  background: var(--surface-bg);
+  flex-shrink: 0;
+}
+
+.pdfFileName {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pdfViewer {
+  flex: 1;
+  width: 100%;
+  border: none;
+  background: var(--main-bg);
+}
+
+/* Right pane: controls + results */
+.resultsPane {
+  width: 400px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  padding: 16px 16px;
+}
+
+/* In the results pane, the table does not need its own inner scroll —
+   the pane itself scrolls. Remove the max-height cap. */
+.resultsPane .tableWrap {
+  max-height: none;
+  overflow-y: visible;
+}
+
+/* Spinner */
+.spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--panel-border);
+  border-top-color: var(--accent-blue);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 900px) {
+  .splitScreen {
+    flex-direction: column;
+  }
+  .pdfPane {
+    flex: none;
+    height: 45vh;
+    border-right: none;
+    border-bottom: 1px solid var(--panel-border);
+  }
+  .resultsPane {
+    width: auto;
+    flex: 1;
+  }
+}
+
 /* Section title */
 .sectionTitle {
   font-size: 11px;

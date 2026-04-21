@@ -91,14 +91,15 @@ function badgeClassForCategory(category: string | null): keyof typeof styles {
 
 function flattenUnits(planner: PlannerImportPlanner | null): PlannerImportUnit[] {
   if (!planner) return [];
-
+  const c = planner.categories ?? {};
+  const eg = c.elective_groups ?? {};
   return [
-    ...planner.categories.core_units,
-    ...planner.categories.major_units,
-    ...planner.categories.mpu_group,
-    ...planner.categories.elective_groups.prescribed_elective,
-    ...planner.categories.elective_groups.elective,
-    ...planner.categories.wil_group,
+    ...(c.core_units ?? []),
+    ...(c.major_units ?? []),
+    ...(c.mpu_group ?? []),
+    ...(eg.prescribed_elective ?? []),
+    ...(eg.elective ?? []),
+    ...(c.wil_group ?? []),
   ];
 }
 
@@ -114,6 +115,7 @@ export default function ImportPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isParsing, setIsParsing] = useState(false);
   const [useLlm, setUseLlm] = useState(true);
@@ -124,6 +126,13 @@ export default function ImportPage() {
     ollama: 'unknown', model: 'unknown', pullProgress: 0, pullError: null,
   });
 
+  // Revoke old object URL when file changes or component unmounts
+  useEffect(() => {
+    return () => {
+      if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+    };
+  }, [pdfUrl]);
+
   // Poll Ollama status on mount and while model is pulling
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
@@ -133,7 +142,6 @@ export default function ImportPage() {
       if (!res?.ok) return;
       const data = await res.json() as OllamaStatus;
       setOllamaStatus(data);
-      // Stop polling once model is ready or definitively unavailable
       if (data.model === 'ready' || (data.ollama === 'unavailable' && data.model !== 'pulling')) {
         clearInterval(interval);
       }
@@ -180,7 +188,11 @@ export default function ImportPage() {
       showToast('Please choose a PDF planner file.', 'error');
       return;
     }
+    if (pdfUrl) URL.revokeObjectURL(pdfUrl);
     setSelectedFile(file);
+    setPdfUrl(URL.createObjectURL(file));
+    setPlanner(null);
+    setReport(null);
     showToast(`Selected ${file.name}`, 'info');
   };
 
@@ -250,7 +262,9 @@ export default function ImportPage() {
   };
 
   const handleClear = () => {
+    if (pdfUrl) URL.revokeObjectURL(pdfUrl);
     setSelectedFile(null);
+    setPdfUrl(null);
     setPlanner(null);
     setReport(null);
     if (fileInputRef.current) {
@@ -281,54 +295,112 @@ export default function ImportPage() {
     }
   };
 
-  return (
-    <div className={styles.panel}>
-      <div className={styles.sectionTitle}>PDF Planner Import &amp; OCR</div>
+  // ── Hidden file input (shared between both states) ────────────────────────
+  const fileInput = (
+    <input
+      ref={fileInputRef}
+      type="file"
+      accept="application/pdf,.pdf"
+      className={styles.hiddenInput}
+      onChange={handleInputChange}
+    />
+  );
 
-      <div className={styles.splitLayout}>
-        <div className={styles.splitMain}>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="application/pdf,.pdf"
-            className={styles.hiddenInput}
-            onChange={handleInputChange}
-          />
+  // ── Before file selected: full-width drop zone ────────────────────────────
+  if (!selectedFile) {
+    return (
+      <div className={styles.panel}>
+        {fileInput}
+        <div className={styles.sectionTitle}>PDF Planner Import &amp; OCR</div>
+        <div
+          role="button"
+          tabIndex={0}
+          className={`${styles.dropZone} ${isDragging ? styles.dropZoneActive : ''}`}
+          onClick={() => fileInputRef.current?.click()}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInputRef.current?.click(); }
+          }}
+          onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+          onDragLeave={() => setIsDragging(false)}
+          onDrop={handleDrop}
+        >
+          <div className={styles.dropIcon}>PDF</div>
+          <div className={styles.dropTitle}>Drag and drop a study planner PDF here</div>
+          <div className={styles.dropSubtitle}>or click to browse files. Parsed data stays inside the app flow.</div>
+          <div className={styles.dropMeta}>No file selected</div>
+        </div>
 
-          <div
-            role="button"
-            tabIndex={0}
-            className={`${styles.dropZone} ${isDragging ? styles.dropZoneActive : ''}`}
-            onClick={() => fileInputRef.current?.click()}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' || event.key === ' ') {
-                event.preventDefault();
-                fileInputRef.current?.click();
-              }
-            }}
-            onDragOver={(event) => {
-              event.preventDefault();
-              setIsDragging(true);
-            }}
-            onDragLeave={() => setIsDragging(false)}
-            onDrop={handleDrop}
-          >
-            <div className={styles.dropIcon}>PDF</div>
-            <div className={styles.dropTitle}>Drag and drop a study planner PDF here</div>
-            <div className={styles.dropSubtitle}>or click to browse files. Parsed data stays inside the app flow.</div>
-            <div className={styles.dropMeta}>
-              {selectedFile ? `Selected: ${selectedFile.name}` : 'No file selected'}
+        {/* Import history below the drop zone */}
+        {history.length > 0 && (
+          <>
+            <div className={styles.sectionTitle} style={{ marginTop: 8 }}>Import History</div>
+            <div className={styles.card}>
+              <div className={styles.historyList}>
+                {history.map((item) => (
+                  <div key={item.id} className={styles.historyRow}>
+                    <div className={styles.historyHeader}>
+                      <div className={styles.historyMain}>
+                        <span className={styles.historyName}>{item.name}</span>
+                        <span className={styles.historyDetail}>{item.detail}</span>
+                      </div>
+                      <span className={`${styles.badge} ${styles[item.cls]}`}>{item.status}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+          </>
+        )}
+      </div>
+    );
+  }
 
+  // ── After file selected: split screen ─────────────────────────────────────
+  return (
+    <div className={styles.panelSplit}>
+      {fileInput}
+
+      <div className={styles.splitScreen}>
+        {/* ── Left: PDF viewer ─────────────────────────────────────────── */}
+        <div className={styles.pdfPane}>
+          <div className={styles.pdfHeader}>
+            <span className={styles.pdfFileName}>{selectedFile.name}</span>
+            <button
+              className={styles.btnSecondary}
+              style={{ fontSize: 11, padding: '3px 10px' }}
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isParsing}
+            >
+              Change
+            </button>
+            <button
+              className={styles.btnDanger}
+              style={{ fontSize: 11, padding: '3px 10px' }}
+              onClick={handleClear}
+              disabled={isParsing}
+            >
+              ✕ Clear
+            </button>
+          </div>
+          <iframe
+            src={pdfUrl ?? ''}
+            title="PDF Preview"
+            className={styles.pdfViewer}
+          />
+        </div>
+
+        {/* ── Right: controls + results ─────────────────────────────────── */}
+        <div className={styles.resultsPane}>
+
+          {/* Import Configuration */}
+          <div className={styles.sectionTitle}>Import Configuration</div>
           <div className={styles.card}>
-            <div className={styles.cardTitle}>Import Configuration</div>
             <div className={styles.formGrid2}>
               <div className={styles.formGroup}>
                 <label className={styles.formLabel}>Selected PDF</label>
                 <input
                   className={`${styles.formInput} ${styles.formInputMono}`}
-                  value={selectedFile?.name ?? 'Awaiting file selection'}
+                  value={selectedFile.name}
                   readOnly
                 />
               </div>
@@ -337,7 +409,7 @@ export default function ImportPage() {
                 <select
                   className={styles.formSelect}
                   value={useLlm ? 'enabled' : 'disabled'}
-                  onChange={(event) => setUseLlm(event.target.value === 'enabled')}
+                  onChange={(e) => setUseLlm(e.target.value === 'enabled')}
                   disabled={!modelReady}
                 >
                   <option value="enabled">Enabled</option>
@@ -346,7 +418,7 @@ export default function ImportPage() {
               </div>
             </div>
 
-            {/* Ollama / model status */}
+            {/* Ollama / model status notices */}
             {ollamaStatus.ollama === 'unavailable' && (
               <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 10, padding: '6px 10px', background: 'rgba(244,135,113,0.08)', border: '1px solid rgba(244,135,113,0.25)', borderRadius: 4 }}>
                 AI model server is not running — AI Review is disabled.
@@ -373,7 +445,7 @@ export default function ImportPage() {
             )}
 
             <div className={styles.btnGroup}>
-              <button className={styles.btnPrimary} onClick={handleParse} disabled={isParsing || !selectedFile}>
+              <button className={styles.btnPrimary} onClick={handleParse} disabled={isParsing}>
                 {isParsing && !planner ? 'Parsing...' : 'Parse PDF'}
               </button>
               <button
@@ -381,192 +453,169 @@ export default function ImportPage() {
                 onClick={handleSaveToDatabase}
                 disabled={isParsing || !planner}
               >
-                {isParsing && planner ? 'Saving to DB...' : 'Confirm & Save Planner'}
-              </button>
-              <button className={styles.btnSecondary} onClick={handleClear} disabled={isParsing}>
-                Clear
+                {isParsing && planner ? 'Saving...' : 'Confirm & Save'}
               </button>
             </div>
           </div>
 
-          {summary ? (
-            <div className={styles.card}>
-              <div className={styles.cardTitle}>Extracted Planner Summary</div>
-              <div className={styles.summaryGrid}>
-                <div className={styles.summaryItem}>
-                  <span className={styles.summaryLabel}>Course</span>
-                  <span className={styles.summaryValue}>{summary.course}</span>
+          {/* Parsing spinner */}
+          {isParsing && !planner && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 0', color: 'var(--text-muted)', fontSize: 12 }}>
+              <div className={styles.spinner} />
+              Parsing PDF...
+            </div>
+          )}
+
+          {/* Extracted Planner Summary */}
+          {summary && (
+            <>
+              <div className={styles.sectionTitle}>Extracted Summary</div>
+              <div className={styles.card}>
+                <div className={styles.summaryGrid}>
+                  <div className={styles.summaryItem}>
+                    <span className={styles.summaryLabel}>Course</span>
+                    <span className={styles.summaryValue}>{summary.course}</span>
+                  </div>
+                  <div className={styles.summaryItem}>
+                    <span className={styles.summaryLabel}>Major</span>
+                    <span className={styles.summaryValue}>{summary.major}</span>
+                  </div>
+                  <div className={styles.summaryItem}>
+                    <span className={styles.summaryLabel}>Intake</span>
+                    <span className={styles.summaryValue}>{summary.intake}</span>
+                  </div>
+                  <div className={styles.summaryItem}>
+                    <span className={styles.summaryLabel}>Intake Year</span>
+                    <span className={styles.summaryValue}>{summary.intakeYear}</span>
+                  </div>
+                  <div className={styles.summaryItem}>
+                    <span className={styles.summaryLabel}>Core</span>
+                    <span className={styles.summaryValue}>{formatRequirement(summary.core)}</span>
+                  </div>
+                  <div className={styles.summaryItem}>
+                    <span className={styles.summaryLabel}>Major</span>
+                    <span className={styles.summaryValue}>{formatRequirement(summary.majorReq)}</span>
+                  </div>
+                  <div className={styles.summaryItem}>
+                    <span className={styles.summaryLabel}>Elective</span>
+                    <span className={styles.summaryValue}>{formatRequirement(summary.elective)}</span>
+                  </div>
+                  <div className={styles.summaryItem}>
+                    <span className={styles.summaryLabel}>WIL</span>
+                    <span className={styles.summaryValue}>{formatRequirement(summary.wil)}</span>
+                  </div>
                 </div>
-                <div className={styles.summaryItem}>
-                  <span className={styles.summaryLabel}>Major</span>
-                  <span className={styles.summaryValue}>{summary.major}</span>
+
+                <div className={styles.signalGrid}>
+                  <div className={`${styles.signalRow} ${styles[summary.statusTone]}`}>
+                    <div className={styles.signalMain}>
+                      <span className={styles.signalRowLabel}>Import Status</span>
+                      <span className={`${styles.badge} ${styles.signalBadge} ${styles[summary.statusTone]}`}>{summary.statusLabel}</span>
+                    </div>
+                  </div>
+                  <div className={`${styles.signalRow} ${styles[summary.confidenceTone]}`}>
+                    <div className={styles.signalMain}>
+                      <span className={styles.signalRowLabel}>Confidence</span>
+                      <span className={`${styles.badge} ${styles.signalBadge} ${styles[summary.confidenceTone]}`}>{summary.confidence}</span>
+                    </div>
+                  </div>
+                  <div className={`${styles.signalRow} ${summary.llmApplied ? styles.signalModerate : styles.signalNeutral}`}>
+                    <div className={styles.signalMain}>
+                      <span className={styles.signalRowLabel}>LLM Review</span>
+                      <span className={`${styles.badge} ${styles.signalBadge} ${summary.llmApplied ? styles.signalModerate : styles.signalNeutral}`}>
+                        {summary.llmApplied ? 'Applied' : 'Not Applied'}
+                      </span>
+                    </div>
+                  </div>
+                  <div className={`${styles.signalRow} ${summary.missingCount > 0 ? styles.signalCritical : styles.signalStrong}`}>
+                    <div className={styles.signalMain}>
+                      <span className={styles.signalRowLabel}>Missing Data</span>
+                      <span className={`${styles.badge} ${styles.signalBadge} ${summary.missingCount > 0 ? styles.signalCritical : styles.signalStrong}`}>
+                        {summary.missingCount > 0 ? `${summary.missingCount} issue${summary.missingCount > 1 ? 's' : ''}` : 'None'}
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <div className={styles.summaryItem}>
-                  <span className={styles.summaryLabel}>Intake</span>
-                  <span className={styles.summaryValue}>{summary.intake}</span>
-                </div>
-                <div className={styles.summaryItem}>
-                  <span className={styles.summaryLabel}>Intake Year</span>
-                  <span className={styles.summaryValue}>{summary.intakeYear}</span>
-                </div>
-                <div className={styles.summaryItem}>
-                  <span className={styles.summaryLabel}>Core</span>
-                  <span className={styles.summaryValue}>{formatRequirement(summary.core)}</span>
-                </div>
-                <div className={styles.summaryItem}>
-                  <span className={styles.summaryLabel}>Major</span>
-                  <span className={styles.summaryValue}>{formatRequirement(summary.majorReq)}</span>
-                </div>
-                <div className={styles.summaryItem}>
-                  <span className={styles.summaryLabel}>Elective</span>
-                  <span className={styles.summaryValue}>{formatRequirement(summary.elective)}</span>
-                </div>
-                <div className={styles.summaryItem}>
-                  <span className={styles.summaryLabel}>WIL</span>
-                  <span className={styles.summaryValue}>{formatRequirement(summary.wil)}</span>
-                </div>
+
+                {summary.reason && <div className={styles.reasonBox}>{summary.reason}</div>}
+
+                {summary.validationIssues.length > 0 && (
+                  <div className={styles.validationBox}>
+                    {summary.validationIssues.map((issue) => (
+                      <div key={issue} className={styles.validationIssue}>{issue}</div>
+                    ))}
+                  </div>
+                )}
               </div>
+            </>
+          )}
 
-              <div className={styles.signalGrid}>
-                <div className={`${styles.signalRow} ${styles[summary.statusTone]}`}>
-                  <div className={styles.signalMain}>
-                    <span className={styles.signalRowLabel}>Import Status</span>
-                    <span className={`${styles.badge} ${styles.signalBadge} ${styles[summary.statusTone]}`}>{summary.statusLabel}</span>
-                  </div>
-                </div>
-                <div className={`${styles.signalRow} ${styles[summary.confidenceTone]}`}>
-                  <div className={styles.signalMain}>
-                    <span className={styles.signalRowLabel}>Confidence</span>
-                    <span className={`${styles.badge} ${styles.signalBadge} ${styles[summary.confidenceTone]}`}>{summary.confidence}</span>
-                  </div>
-                </div>
-                <div className={`${styles.signalRow} ${summary.llmApplied ? styles.signalModerate : styles.signalNeutral}`}>
-                  <div className={styles.signalMain}>
-                    <span className={styles.signalRowLabel}>LLM Review</span>
-                    <span className={`${styles.badge} ${styles.signalBadge} ${summary.llmApplied ? styles.signalModerate : styles.signalNeutral}`}>
-                      {summary.llmApplied ? 'Applied' : 'Not Applied'}
-                    </span>
-                  </div>
-                </div>
-                <div className={`${styles.signalRow} ${summary.missingCount > 0 ? styles.signalCritical : styles.signalStrong}`}>
-                  <div className={styles.signalMain}>
-                    <span className={styles.signalRowLabel}>Missing Data</span>
-                    <span className={`${styles.badge} ${styles.signalBadge} ${summary.missingCount > 0 ? styles.signalCritical : styles.signalStrong}`}>
-                    {summary.missingCount > 0 ? `${summary.missingCount} issue${summary.missingCount > 1 ? 's' : ''}` : 'None'}
-                    </span>
-                  </div>
-                </div>
+          {/* Parsed Units Table — always shown once planner is available */}
+          {planner && (
+            <>
+              <div className={styles.sectionTitle}>Parsed Units</div>
+              <div className={styles.tableWrap}>
+                <table className={styles.table}>
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Unit Code</th>
+                      <th>Unit Name</th>
+                      <th>Sem</th>
+                      <th>Year</th>
+                      <th>Type</th>
+                      <th>Prerequisite</th>
+                      <th>Offered In</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {units.length > 0 ? units.map((unit, index) => (
+                      <tr key={`${unit.unit_code}-${unit.unit_name}-${index}`}>
+                        <td>{index + 1}</td>
+                        <td><code className={styles.code}>{unit.unit_code}</code></td>
+                        <td>{unit.unit_name}</td>
+                        <td>{unit.semester ?? '-'}</td>
+                        <td>{unit.year_level ?? '-'}</td>
+                        <td>
+                          <span className={`${styles.badge} ${styles[badgeClassForCategory(unit.category)]}`}>
+                            {categoryLabel(unit.category)}
+                          </span>
+                        </td>
+                        <td>{unit.prerequisite ? <code className={styles.code}>{unit.prerequisite}</code> : '-'}</td>
+                        <td>{unit.offered_in ?? '-'}</td>
+                      </tr>
+                    )) : (
+                      <tr>
+                        <td colSpan={8} className={styles.emptyCell}>No units were extracted from this planner.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
+            </>
+          )}
 
-              {summary.reason ? (
-                <div className={styles.reasonBox}>{summary.reason}</div>
-              ) : null}
-
-              {summary.validationIssues.length > 0 ? (
-                <div className={styles.validationBox}>
-                  {summary.validationIssues.map((issue) => (
-                    <div key={issue} className={styles.validationIssue}>
-                      {issue}
+          {/* Import History */}
+          {history.length > 0 && (
+            <>
+              <div className={styles.sectionTitle}>Import History</div>
+              <div className={styles.card}>
+                <div className={styles.historyList}>
+                  {history.map((item) => (
+                    <div key={item.id} className={styles.historyRow}>
+                      <div className={styles.historyHeader}>
+                        <div className={styles.historyMain}>
+                          <span className={styles.historyName}>{item.name}</span>
+                          <span className={styles.historyDetail}>{item.detail}</span>
+                        </div>
+                        <span className={`${styles.badge} ${styles[item.cls]}`}>{item.status}</span>
+                      </div>
                     </div>
                   ))}
                 </div>
-              ) : null}
-            </div>
-          ) : null}
-
-          <div className={styles.sectionTitle}>OCR Preview - Parsed Units</div>
-          <div className={styles.tableWrap}>
-            <table className={styles.table}>
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Unit Code</th>
-                  <th>Unit Name</th>
-                  <th>Sem</th>
-                  <th>Year</th>
-                  <th>Type</th>
-                  <th>Prerequisite</th>
-                  <th>Offered In</th>
-                </tr>
-              </thead>
-              <tbody>
-                {units.length > 0 ? (
-                  units.map((unit, index) => (
-                    <tr key={`${unit.unit_code}-${unit.unit_name}-${index}`}>
-                      <td>{index + 1}</td>
-                      <td>
-                        <code className={styles.code}>{unit.unit_code}</code>
-                      </td>
-                      <td>{unit.unit_name}</td>
-                      <td>{unit.semester ?? '-'}</td>
-                      <td>{unit.year_level ?? '-'}</td>
-                      <td>
-                        <span className={`${styles.badge} ${styles[badgeClassForCategory(unit.category)]}`}>
-                          {categoryLabel(unit.category)}
-                        </span>
-                      </td>
-                      <td>{unit.prerequisite ? <code className={styles.code}>{unit.prerequisite}</code> : '-'}</td>
-                      <td>{unit.offered_in ?? '-'}</td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={8} className={styles.emptyCell}>
-                      Parse a planner PDF to preview extracted units here.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div className={styles.splitSide}>
-          <div className={styles.sectionTitle}>Import History</div>
-          <div className={styles.card}>
-            <div className={styles.cardTitle}>Recent Imports</div>
-            <div className={styles.historyList}>
-              {history.length > 0 ? (
-                history.map((item) => (
-                  <div key={item.id} className={styles.historyRow}>
-                    <div className={styles.historyHeader}>
-                      <div className={styles.historyMain}>
-                        <span className={styles.historyName}>{item.name}</span>
-                        <span className={styles.historyDetail}>{item.detail}</span>
-                      </div>
-                      <span className={`${styles.badge} ${styles[item.cls]}`}>{item.status}</span>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className={styles.emptyStateSub}>No planner imports in this session yet.</div>
-              )}
-            </div>
-          </div>
-
-          <div className={styles.card}>
-            <div className={styles.cardTitle}>Parser Status</div>
-            <div className={styles.statusRow}>
-              <span className={styles.statusLabel}>Selected File</span>
-              <span className={styles.statusValue}>{selectedFile?.name ?? 'None'}</span>
-            </div>
-            <div className={styles.statusRow}>
-              <span className={styles.statusLabel}>Units Parsed</span>
-              <span className={styles.statusValue}>{units.length}</span>
-            </div>
-            <div className={styles.statusRow}>
-              <span className={styles.statusLabel}>Validation Issues</span>
-              <span className={styles.statusValue}>{report?.validation_issues.length ?? 0}</span>
-            </div>
-            <div className={styles.statusRow}>
-              <span className={styles.statusLabel}>AI Review</span>
-              <span className={styles.statusValue}>{useLlm ? 'Enabled' : 'Disabled'}</span>
-            </div>
-            <div className={styles.statusRow}>
-              <span className={styles.statusLabel}>Backend Model</span>
-              <span className={styles.statusValue}>{report?.model ?? 'deepseek-r1:1.5b'}</span>
-            </div>
-          </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>
