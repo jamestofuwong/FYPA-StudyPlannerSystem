@@ -38,7 +38,8 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         const idx = prev.indexOf(panel);
         const next = prev.filter((p) => p !== panel);
         if (panel === activePanel && next.length > 0) {
-          router.push(panelToPath(next[Math.min(idx, next.length - 1)]));
+          const target = next[Math.min(idx, next.length - 1)];
+          setTimeout(() => router.push(panelToPath(target)), 0);
         }
         return next;
       });

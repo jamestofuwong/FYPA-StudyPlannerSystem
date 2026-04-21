@@ -35,7 +35,7 @@ function buildMajorMatchSheet(input: ExportInput): XLSX.WorkSheet {
     ['Major',                       primary?.majorName ?? '—'],
     ['Match Percentage',            primary ? `${primary.matchPct}%` : '—'],
     ['Detection Status',            match.status],
-    [''],
+    ['', ''],
     ['Category Breakdown', ''],
     ['Core Units Matched',          primary ? `${primary.breakdown.core.matched} / ${primary.breakdown.core.required}` : '—'],
     ['Major Core Units Matched',    primary ? `${primary.breakdown.majorCore.matched} / ${primary.breakdown.majorCore.required}` : '—'],
@@ -45,7 +45,7 @@ function buildMajorMatchSheet(input: ExportInput): XLSX.WorkSheet {
   ];
 
   if (primary?.breakdown.core.missingUnits?.length) {
-    rows.push(['']);
+    rows.push(['', '']);
     rows.push(['Missing Core Units', primary.breakdown.core.missingUnits.join(', ')]);
   }
   if (primary?.breakdown.majorCore.missingUnits?.length) {
