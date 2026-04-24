@@ -15,7 +15,7 @@ export async function POST(req: Request) {
     const buffer = generateExport(input);
     const filename = `student-${input.studentId}-report.xlsx`;
 
-    return new Response(buffer, {
+    return new Response(new Uint8Array(buffer), {
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         'Content-Disposition': `attachment; filename="${filename}"`,

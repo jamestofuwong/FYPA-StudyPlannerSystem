@@ -22,7 +22,6 @@
   "dependencies": {
     "@prisma/client": "^6.19.2",
     "dotenv": "^17.3.1",
-    "electron": "^41.2.0",
     "embedded-postgres": "^18.3.0-beta.16",
     "next": "16.1.6",
     "react": "19.2.4",
@@ -45,6 +44,7 @@
     "@typescript-eslint/parser": "^8.0.0",
     "concurrently": "9.2.1",
     "cross-env": "10.1.0",
+    "electron": "^41.2.0",
     "electron-builder": "26.8.1",
     "eslint": "9.39.4",
     "eslint-config-next": "16.1.6",
@@ -61,11 +61,7 @@
   "build": {
     "appId": "com.fyp.studyplannersystem",
     "productName": "Study Planner System",
-    "asarUnpack": [
-      "web/**",
-      "node_modules/@prisma/client/**",
-      "node_modules/.prisma/**"
-    ],
+    "asar": false,
     "files": [
       "dist/electron/**",
       "web/**",
@@ -76,6 +72,12 @@
       "package.json",
       "README.md"
     ],
+    "extraFiles": [
+      {
+        "from": "node_modules/@local",
+        "to": "Resources/app/node_modules/@local"
+      }
+    ],
     "directories": {
       "output": "release"
     },
@@ -83,6 +85,7 @@
       "target": [
         "dmg"
       ],
+      "identity": null,
       "extraResources": [
         {
           "from": "resources/python/plannerStructureService",

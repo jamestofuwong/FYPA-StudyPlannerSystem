@@ -23,7 +23,8 @@ export async function GET() {
     const plannerRepository = await import("../../../../core/db/repositories/plannerRepository");
     const planners = await plannerRepository.getAllPlanners();
     return NextResponse.json(planners, { status: 200 });
-  } catch {
+  } catch (err) {
+    console.error('[/api/planners GET]', err);
     return NextResponse.json({ error: "Failed to fetch planners" }, { status: 500 });
   }
 }

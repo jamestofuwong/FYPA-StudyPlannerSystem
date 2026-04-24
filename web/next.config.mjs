@@ -12,6 +12,7 @@ dotenv.config({ path: path.join(__dirname, '..', '.env'), override: false })
 const nextConfig = {
   reactStrictMode: true,
   transpilePackages: ['core'],
+  serverExternalPackages: ['@local/prisma-client'],
   webpack: (config) => {
     config.resolve.fallback = { fs: false, net: false, tls: false };
     return config;

@@ -9,16 +9,24 @@ function getDataDir(): string {
     return path.join(app.getPath('userData'), 'pgdata');
 };
 
+function getAppResourcePath(...segments: string[]): string {
+  // With asar: false, files are under Resources/app/
+  // With asar: true,  files are under Resources/app.asar.unpacked/
+  const noAsar   = path.join(process.resourcesPath, 'app', ...segments);
+  const withAsar = path.join(process.resourcesPath, 'app.asar.unpacked', ...segments);
+  return fs.existsSync(noAsar) ? noAsar : withAsar;
+}
+
 function getSchemaPath(): string {
   return app.isPackaged
-    ? path.join(process.resourcesPath, 'app.asar.unpacked', 'runtime', 'postgres', 'scripts', 'init.psql')
+    ? getAppResourcePath('runtime', 'postgres', 'scripts', 'init.psql')
     : path.resolve(__dirname, '..', '..', 'runtime', 'postgres', 'scripts', 'init.psql')
 };
 
 // Get all seed files in order
 function getSeedFiles(): string[] {
   const seedDir = app.isPackaged
-    ? path.join(process.resourcesPath, 'app.asar.unpacked', 'runtime', 'postgres', 'scripts', 'seed')
+    ? getAppResourcePath('runtime', 'postgres', 'scripts', 'seed')
     : path.resolve(__dirname, '..', '..', 'runtime', 'postgres', 'scripts', 'seed')
   
   if (!fs.existsSync(seedDir)) {

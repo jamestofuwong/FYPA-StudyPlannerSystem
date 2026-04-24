@@ -24,6 +24,17 @@ const WORK_DIR = path.join(ROOT, 'build', 'pyinstaller');
 const BINARY_NAME = 'plannerStructureService';
 
 const isWin = process.platform === 'win32';
+
+// Load PYTHON_EXECUTABLE from web/.env if not already set in the environment
+if (!process.env.PYTHON_EXECUTABLE) {
+  const envPath = path.join(ROOT, 'web', '.env');
+  if (fs.existsSync(envPath)) {
+    const envContent = fs.readFileSync(envPath, 'utf-8');
+    const match = envContent.match(/^PYTHON_EXECUTABLE\s*=\s*["']?(.+?)["']?\s*$/m);
+    if (match) process.env.PYTHON_EXECUTABLE = match[1].trim();
+  }
+}
+
 const python = process.env.PYTHON_EXECUTABLE?.trim() || (isWin ? 'python' : 'python3');
 
 // Ensure output dirs exist

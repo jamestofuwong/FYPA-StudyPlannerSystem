@@ -28,9 +28,10 @@ type PythonCommand = {
  *   and the raw .py script.
  */
 function resolvePythonCommand(): PythonCommand {
-  if (process.resourcesPath) {
+  if ((process as NodeJS.Process & { resourcesPath?: string }).resourcesPath) {
     const ext = process.platform === "win32" ? ".exe" : "";
-    const binary = path.join(process.resourcesPath, `plannerStructureService${ext}`);
+    const resourcesPath = (process as NodeJS.Process & { resourcesPath: string }).resourcesPath;
+    const binary = path.join(resourcesPath, `plannerStructureService${ext}`);
     return { executable: binary, prefixArgs: [] };
   }
 

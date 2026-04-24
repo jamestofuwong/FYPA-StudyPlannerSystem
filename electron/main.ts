@@ -39,6 +39,8 @@ process.on('unhandledRejection', (reason) => {
 function getNextProjectDir(): string {
   const candidates = app.isPackaged
     ? [
+        path.join(process.resourcesPath, "app", "web"),
+        path.join(process.resourcesPath, "app", "app"),
         path.join(process.resourcesPath, "app.asar.unpacked", "web"),
         path.join(process.resourcesPath, "app.asar.unpacked", "app")
       ]
@@ -116,6 +118,7 @@ async function createMainWindow() {
     win.webContents.openDevTools({ mode: "detach" });
   } else {
     nextServerRef = await startNextServer()
+    console.log('[Next.js] Server started at:', nextServerRef.url);
     await win.loadURL(nextServerRef.url);
   }
 
@@ -143,6 +146,9 @@ nativeTheme.on("updated", () => {
 app.whenReady().then(async () => {
   // Start embedded PostgreSQL
   await startDatabase();
+
+  // Expose DATABASE_URL to the Next.js server process (Prisma needs it)
+  process.env.DATABASE_URL = getDatabaseUrl();
 
   // Start Ollama (non-blocking — app opens even if Ollama isn't ready yet)
   startOllama().catch((err) => console.error('[Ollama] Startup error:', err));
