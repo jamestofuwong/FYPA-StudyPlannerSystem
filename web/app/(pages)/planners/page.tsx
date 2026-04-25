@@ -72,9 +72,9 @@ export default function PlannersPage() {
 
         <div className={styles.listItems}>
           {isLoading ? (
-            <div style={{ padding: '16px', color: '#888' }}>Loading database...</div>
+            <div className={styles.emptyState} style={{ padding: '16px' }}>Loading database...</div>
           ) : planners.length === 0 ? (
-            <div style={{ padding: '16px', color: '#888' }}>No planners found in database.</div>
+            <div className={styles.emptyState} style={{ padding: '16px' }}>No planners found in database.</div>
           ) : (
             planners
               .filter((planner) =>
@@ -136,7 +136,7 @@ export default function PlannersPage() {
                           {unitItem.category?.replace('_', ' ') || 'core'}
                         </span>
                       </td>
-                      <td style={{ color: '#9CDCFE' }}>
+                      <td className={styles.yearSem}>
                         Y{unitItem.year_level} S{unitItem.semester}
                       </td>
                     </tr>

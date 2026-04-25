@@ -1,20 +1,20 @@
 .layout {
   display: flex;
   height: 100vh;
-  background-color: #252526;
-  color: #CCCCCC;
+  background-color: var(--main-bg);
+  color: var(--text-primary);
 }
 
 .listPanel {
   width: 320px;
-  border-right: 1px solid #3E3E42;
+  border-right: 1px solid var(--panel-border);
   display: flex;
   flex-direction: column;
 }
 
 .listHeader {
   padding: 16px;
-  border-bottom: 1px solid #3E3E42;
+  border-bottom: 1px solid var(--panel-border);
   display: flex;
   gap: 8px;
 }
@@ -22,15 +22,19 @@
 .searchInput {
   flex: 1;
   padding: 8px;
-  background-color: #1E1E1E;
-  border: 1px solid #3E3E42;
-  color: #fff;
+  background-color: var(--sidebar-bg);
+  border: 1px solid var(--panel-border);
+  color: var(--text-primary);
   border-radius: 4px;
+}
+
+.searchInput::placeholder {
+  color: var(--text-muted);
 }
 
 .btnPrimary {
   padding: 8px 12px;
-  background-color: #007ACC;
+  background-color: var(--active-highlight);
   color: #fff;
   border: none;
   border-radius: 4px;
@@ -39,7 +43,7 @@
 }
 
 .btnPrimary:hover {
-  background-color: #005f9e;
+  opacity: 0.85;
 }
 
 .listItems {
@@ -50,29 +54,29 @@
 .listItem {
   padding: 12px 16px;
   cursor: pointer;
-  border-bottom: 1px solid #2D2D30;
+  border-bottom: 1px solid var(--panel-border);
   border-left: 3px solid transparent;
   transition: background-color 0.1s;
 }
 
 .listItem:hover {
-  background-color: rgba(255, 255, 255, 0.05);
+  background-color: var(--card-hover);
 }
 
 .listItemActive {
-  background-color: rgba(0, 122, 204, 0.15);
-  border-left: 3px solid #007ACC;
+  background-color: var(--active-bg);
+  border-left: 3px solid var(--active-highlight);
 }
 
 .majorName {
   font-weight: 600;
-  color: #fff;
+  color: var(--text-primary);
   margin-bottom: 4px;
 }
 
 .itemMeta {
   font-size: 11px;
-  color: #9CDCFE;
+  color: var(--text-secondary);
   font-family: monospace;
 }
 
@@ -80,32 +84,32 @@
   flex: 1;
   padding: 24px;
   overflow-y: auto;
-  background-color: #1E1E1E;
+  background-color: var(--panel-bg);
 }
 
 .detailHeader {
   margin-bottom: 24px;
   padding-bottom: 16px;
-  border-bottom: 1px solid #3E3E42;
+  border-bottom: 1px solid var(--panel-border);
 }
 
 .detailTitle {
   font-size: 24px;
-  color: #fff;
+  color: var(--text-primary);
   margin-bottom: 8px;
 }
 
 .detailMeta {
   font-size: 13px;
-  color: #888;
+  color: var(--text-muted);
   font-family: monospace;
 }
 
 .tableContainer {
-  background-color: #2D2D30;
+  background-color: var(--panel-bg);
   border-radius: 6px;
   overflow: hidden;
-  border: 1px solid #3E3E42;
+  border: 1px solid var(--panel-border);
 }
 
 .table {
@@ -116,43 +120,49 @@
 }
 
 .table thead {
-  background-color: #333337;
+  background-color: var(--card-bg);
 }
 
 .table th {
   padding: 12px 16px;
-  color: #569CD6;
-  border-bottom: 1px solid #3E3E42;
+  color: var(--accent-blue);
+  border-bottom: 1px solid var(--panel-border);
 }
 
 .table td {
   padding: 12px 16px;
+  color: var(--text-primary);
 }
 
 .table tr {
-  border-bottom: 1px solid #3E3E42;
+  border-bottom: 1px solid var(--panel-border);
 }
 
 .table tbody tr:nth-child(even) {
-  background-color: #252526;
+  background-color: var(--row-alt);
 }
 
 .unitCode {
   font-family: monospace;
-  color: #CE9178;
+  color: var(--accent-orange);
 }
 
 .unitName {
-  color: #fff;
+  color: var(--text-primary);
 }
 
 .categoryBadge {
   padding: 2px 8px;
-  background-color: rgba(197, 134, 192, 0.2);
-  color: #C586C0;
+  background-color: rgba(135, 100, 184, 0.2);
+  color: var(--accent-purple);
   border-radius: 4px;
   font-size: 11px;
   text-transform: uppercase;
+}
+
+.yearSem {
+  color: var(--text-secondary);
+  font-family: monospace;
 }
 
 .emptyState {
@@ -160,5 +170,5 @@
   height: 100%;
   align-items: center;
   justify-content: center;
-  color: #888;
+  color: var(--text-muted);
 }

@@ -70,7 +70,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           <div
             key={toast.id}
             style={{
-              background: '#323232',
+              background: 'var(--card-bg)',
               border: `1px solid var(--panel-border)`,
               borderLeft: `3px solid ${BORDER[toast.type]}`,
               borderRadius: 4,
