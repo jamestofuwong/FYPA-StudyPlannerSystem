@@ -382,9 +382,9 @@ export default function ImportPage() {
               ✕ Clear
             </button>
           </div>
-          <iframe
+          <embed
             src={pdfUrl ?? ''}
-            title="PDF Preview"
+            type="application/pdf"
             className={styles.pdfViewer}
           />
         </div>
