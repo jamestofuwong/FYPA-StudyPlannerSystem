@@ -39,8 +39,6 @@ export default function StatusBar({ activePanel }: StatusBarProps) {
                 <span className={styles.sbDot} />
                 Connected
             </div>
-            <div className={styles.sbItem}>📂 CSF_Planner_2425</div>
-            <div className={styles.sbItem}>👥 81 Students</div>
             <div className={styles.sbItem}>📋 {PANEL_LABELS[activePanel]}</div>
 
             <div className={styles.sbRight}>
