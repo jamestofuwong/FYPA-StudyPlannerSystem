@@ -150,17 +150,21 @@ nativeTheme.on("updated", () => {
 });
 
 app.whenReady().then(async () => {
-  // Start embedded PostgreSQL
-  await startDatabase();
-
-  // Expose DATABASE_URL to the Next.js server process (Prisma needs it)
+  // Set DATABASE_URL immediately so Prisma has the connection string
   process.env.DATABASE_URL = getDatabaseUrl();
 
   // Start Ollama (non-blocking — app opens even if Ollama isn't ready yet)
   startOllama().catch((err) => console.error('[Ollama] Startup error:', err));
 
-  // Open window
-  await createMainWindow();
+  // Open window immediately — don't block on DB init
+  const [, windowResult] = await Promise.allSettled([
+    startDatabase().catch((err) => console.error('[DB] Startup failed:', err)),
+    createMainWindow(),
+  ]);
+
+  if (windowResult.status === 'rejected') {
+    console.error('[App] Failed to create main window:', windowResult.reason);
+  }
 });
 
 let isQuitting = false;
