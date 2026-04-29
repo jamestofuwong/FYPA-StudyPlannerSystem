@@ -11,7 +11,7 @@ import path from "path";
 import { startDatabase, stopDatabase, getDatabaseUrl } from '../runtime/postgres/db'
 import { startOllama, stopOllama } from '../runtime/ollama/ollama'
 
-let nextServerRef: NextServerHandle | undefined 
+let nextServerRef: NextServerHandle | undefined
 
 type NextServerHandle = {
   url: string;
@@ -19,6 +19,25 @@ type NextServerHandle = {
 };
 
 const devServerUrl = process.env.NEXT_DEV_SERVER_URL;
+
+// ── File logger (writes to userData/logs/main.log) ───────────────────────────
+let logStream: fs.WriteStream | null = null;
+
+function initLogger() {
+  const logsDir = path.join(app.getPath('userData'), 'logs');
+  fs.mkdirSync(logsDir, { recursive: true });
+  logStream = fs.createWriteStream(path.join(logsDir, 'main.log'), { flags: 'w' });
+  const write = (level: string, args: unknown[]) => {
+    const line = `[${new Date().toISOString()}] [${level}] ${args.map(String).join(' ')}\n`;
+    logStream?.write(line);
+    process.stdout.write(line);
+  };
+  console.log   = (...a) => write('INFO',  a);
+  console.warn  = (...a) => write('WARN',  a);
+  console.error = (...a) => write('ERROR', a);
+}
+
+app.whenReady().then(initLogger);
 
 function isDirectory(dirPath: string): boolean {
   try {
