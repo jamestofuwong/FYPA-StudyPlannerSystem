@@ -93,6 +93,7 @@ export async function startDatabase() : Promise<void> {
         password: DB_CONFIG.password,
         port: DB_CONFIG.port,
         persistent: true,   // data persisits accross app restart
+        initdbFlags: ['--locale=C', '--encoding=UTF8'],
     });
 
     // initialise (create data dir and pg cluster if first run)
