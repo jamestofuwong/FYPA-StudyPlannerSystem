@@ -24,14 +24,7 @@ export type PortalAuthState = {
 
 const PortalAuthContext = createContext<PortalAuthState | null>(null);
 
-function makePartitionId(): string {
-  try {
-    if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-      return `persist:sisportal-advisor-${(crypto as any).randomUUID()}`;
-    }
-  } catch {}
-  return `persist:sisportal-advisor-${Date.now()}`;
-}
+const PORTAL_PARTITION = 'persist:sisportal-advisor';
 
 // ---------------------------------------------------------------------------
 // Provider
@@ -41,21 +34,13 @@ export function PortalAuthProvider({ children }: { children: ReactNode }) {
   const [isLoggedIn, setLoggedIn] = useState(false);
   const [isPortalLoading, setPortalLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [partitionId, setPartitionId] = useState(() => {
-    try {
-      return localStorage.getItem('advisor-partition-id') ?? 'persist:sisportal-advisor';
-    } catch {
-      return 'persist:sisportal-advisor';
-    }
-  });
+  const partitionId = PORTAL_PARTITION;
 
   const openLoginModal  = useCallback(() => setIsModalOpen(true),  []);
   const closeLoginModal = useCallback(() => setIsModalOpen(false), []);
 
   const resetSession = useCallback(() => {
-    const next = makePartitionId();
-    try { localStorage.setItem('advisor-partition-id', next); } catch {}
-    setPartitionId(next);
+    try { window.portalAPI?.clearSession(); } catch {}
     setLoggedIn(false);
   }, []);
 

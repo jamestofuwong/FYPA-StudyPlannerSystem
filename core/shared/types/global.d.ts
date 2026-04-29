@@ -11,6 +11,9 @@ declare global {
         electron?: string;
       };
     };
+    portalAPI?: {
+      clearSession: () => Promise<void>;
+    };
   }
 
   // Electron <webview> element type used in the renderer process.

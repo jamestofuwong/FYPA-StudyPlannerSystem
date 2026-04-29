@@ -11,3 +11,7 @@ contextBridge.exposeInMainWorld("themeAPI", {
     ipcRenderer.on("system-theme-changed", (_, theme) => callback(theme));
   }
 });
+
+contextBridge.exposeInMainWorld("portalAPI", {
+  clearSession: () => ipcRenderer.invoke("clear-portal-session"),
+});

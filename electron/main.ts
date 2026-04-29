@@ -1,4 +1,4 @@
-import { app, BrowserWindow, nativeTheme, ipcMain } from "electron";
+import { app, BrowserWindow, nativeTheme, ipcMain, session } from "electron";
 import {
   createServer,
   type IncomingMessage,
@@ -129,6 +129,12 @@ async function createMainWindow() {
 
 ipcMain.handle("get-system-theme", () => {
   return nativeTheme.shouldUseDarkColors ? "dark" : "light";
+});
+
+ipcMain.handle("clear-portal-session", async () => {
+  const ses = session.fromPartition("persist:sisportal-advisor");
+  await ses.clearStorageData();
+  await ses.clearCache();
 });
 
 ipcMain.handle("get-database-url", () => {
