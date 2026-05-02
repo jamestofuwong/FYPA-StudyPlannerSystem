@@ -14,6 +14,7 @@ import {
   sanitizeUrl, TARGET_URL,
   type WebviewAdapter,
 } from '../../../core/services/scrapper/advisorScraperService';
+import { FETCH_STUDENT_SUGGESTIONS_JS } from '../../../core/services/scrapper/advisorScraperScripts';
 import {
   AUTO_RUN_STEPS, STUDENT_STEPS,
   runAutoRun, runStudentScrape,
@@ -82,6 +83,7 @@ export type ScraperContextValue = {
   handleClearSession: () => void;
   scrapeStudent: (id: string) => void;
   registerWebviewSlot: (el: HTMLDivElement | null) => void;
+  fetchStudentSuggestions: (query: string) => Promise<{ text: string; id: string; name: string }[]>;
 };
 
 const ScraperContext = createContext<ScraperContextValue | null>(null);
@@ -560,6 +562,21 @@ export function ScraperProvider({ children }: { children: ReactNode }) {
 
   const handleClearSession = useCallback(() => resetSession(), [resetSession]);
 
+  const fetchStudentSuggestions = useCallback(async (query: string): Promise<{ text: string; id: string; name: string }[]> => {
+    if (!query.trim()) return [];
+    const adapter = getAdapter();
+    if (!adapter) return [];
+    if (phaseRef.current !== 'ready') return [];
+    try {
+      const result = await adapter.executeJavaScript<{ success: boolean; options: { text: string; id: string; name: string }[]; error?: string }>(
+        FETCH_STUDENT_SUGGESTIONS_JS(query)
+      );
+      return result?.success ? (result.options ?? []) : [];
+    } catch {
+      return [];
+    }
+  }, [getAdapter]);
+
   const registerWebviewSlot = useCallback((el: HTMLDivElement | null) => {
     setSlotElement(el);
   }, []);
@@ -579,6 +596,7 @@ export function ScraperProvider({ children }: { children: ReactNode }) {
         scrapeStudent:    (id) => { void scrapeStudent(id); },
         handleClearSession,
         registerWebviewSlot,
+        fetchStudentSuggestions,
       }}
     >
       {children}

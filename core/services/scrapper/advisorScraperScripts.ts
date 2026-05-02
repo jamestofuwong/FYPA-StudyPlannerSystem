@@ -3,6 +3,131 @@
 // These are pure constants — no Electron or React dependencies.
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// FETCH_STUDENT_SUGGESTIONS_JS — opens the Kendo student dropdown (if not
+// already open), types a partial student ID into the filter input, and
+// returns the matching list items WITHOUT clicking/selecting any item.
+// Used for autocomplete in the dashboard search bar.
+// ---------------------------------------------------------------------------
+
+export function FETCH_STUDENT_SUGGESTIONS_JS(query: string): string {
+  return `
+  (async () => {
+    const query = ${JSON.stringify(query)};
+    const norm = (t) => (t ?? "").replace(/\\s+/g, " ").trim();
+    const delay = (ms) => new Promise(r => setTimeout(r, ms));
+    const isVisible = (el) => {
+      try {
+        if (!el) return false;
+        const s = getComputedStyle(el);
+        if (s.display === "none" || s.visibility === "hidden") return false;
+        const r = el.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+      } catch { return false; }
+    };
+
+    // Check if the Kendo popup is already open
+    let popup =
+      document.querySelector('.k-animation-container .k-list-container') ??
+      document.querySelector('.k-popup') ?? null;
+
+    if (!popup || !isVisible(popup)) {
+      // Open the first kendo-dropdownlist (the student dropdown)
+      const host = document.querySelector('kendo-dropdownlist');
+      if (!host) return { success: false, error: "Dropdown not found", options: [] };
+
+      const trigger =
+        host.querySelector(".k-input-button") ??
+        host.querySelector(".k-select") ??
+        host.querySelector("button") ??
+        host.querySelector("[role='combobox']") ??
+        host;
+
+      try {
+        trigger.focus?.();
+        const r = trigger.getBoundingClientRect();
+        const cx = r.left + r.width / 2;
+        const cy = r.top + r.height / 2;
+        const mk = (type) =>
+          new MouseEvent(type, { bubbles: true, cancelable: true, view: window, clientX: cx, clientY: cy });
+        trigger.dispatchEvent(mk("pointerover"));
+        trigger.dispatchEvent(mk("pointerdown"));
+        trigger.dispatchEvent(mk("mousedown"));
+        trigger.dispatchEvent(mk("mouseup"));
+        trigger.dispatchEvent(mk("pointerup"));
+        trigger.dispatchEvent(mk("click"));
+      } catch {}
+
+      await delay(400);
+
+      popup =
+        document.querySelector('.k-animation-container .k-list-container') ??
+        document.querySelector('.k-popup') ?? null;
+      if (!popup) return { success: false, error: "Popup did not open", options: [] };
+    }
+
+    // Find the filter input inside the popup and type the query
+    const input = popup.querySelector('input, [role="textbox"], .k-input');
+    if (!input) return { success: false, error: "Filter input not found", options: [] };
+
+    input.focus();
+    input.value = query;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+
+    // Wait for the list to filter
+    await delay(400);
+
+    // Read back the filtered items
+    const listUl = document.querySelector('kendo-list ul');
+    if (!listUl) return { success: false, error: "List not found", options: [] };
+
+    const items = Array.from(listUl.querySelectorAll('li'));
+    const options = [];
+    for (const li of items) {
+      // The portal uses a multi-column Kendo dropdown.
+      // Try to find column spans by the known .multidropdowncol-list class first,
+      // then fall back to all direct spans, then the raw text content.
+      const colSpans = Array.from(
+        li.querySelectorAll('[class*="multidropdowncol"] span, .multidropdowncol-list span')
+      ).map(s => norm(s.textContent)).filter(t => t.length > 0);
+
+      let id = '', name = '';
+
+      if (colSpans.length >= 2) {
+        // First column = student ID, second column = student name
+        id   = colSpans[0];
+        name = colSpans[1];
+      } else {
+        // Fallback: collect all unique non-empty span texts in the item
+        const allSpans = Array.from(li.querySelectorAll('span'))
+          .map(s => norm(s.textContent))
+          .filter(t => t.length > 0);
+        // Deduplicate while preserving order
+        const seen = new Set();
+        const unique = allSpans.filter(t => seen.has(t) ? false : (seen.add(t), true));
+        if (unique.length >= 2) {
+          id   = unique[0];
+          name = unique.slice(1).join(' ');
+        } else {
+          // Last resort: full text content, split on first space
+          const full = norm(li.textContent);
+          if (!full) continue;
+          const spaceIdx = full.indexOf(' ');
+          id   = spaceIdx > 0 ? full.slice(0, spaceIdx) : full;
+          name = spaceIdx > 0 ? full.slice(spaceIdx + 1).trim() : '';
+        }
+      }
+
+      if (!id) continue;
+      options.push({ text: name ? id + ' ' + name : id, id, name });
+    }
+
+    return { success: true, options };
+  })()
+  `;
+}
+
 export const FIND_IFRAME_POLLING_JS = `
   (async () => {
     const findSrc = () => {

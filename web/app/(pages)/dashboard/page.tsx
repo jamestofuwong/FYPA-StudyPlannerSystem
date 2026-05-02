@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import styles from './page.module.css';
 import { useToast } from '../../../components/providers/ToastProvider';
 import { usePortalAuth } from '../../../components/providers/PortalAuthContext';
+import { useScraperContext } from '../../../components/providers/ScraperContext';
 import type { ScrapedStudent } from '../../../../core/shared/types/student';
 import ExportModal from '../../../components/ExportModal';
 import type { ExportInput } from '../../../../core/shared/types/export';
@@ -52,6 +53,7 @@ function ProgressBar({ pct, color }: { pct: number; color: string }) {
 export default function DashboardPage() {
   const { showToast } = useToast();
   const { isLoggedIn, isPortalLoading, openLoginModal } = usePortalAuth();
+  const { fetchStudentSuggestions, phase: scraperPhase } = useScraperContext();
   const [studentIdInput, setStudentIdInput] = useState('');
   const [scrapedStudent, setScrapedStudent] = useState<{ student: ScrapedStudent; studentId: string } | null>(null);
   const [studentLoaded, setStudentLoaded] = useState(false);
@@ -60,6 +62,10 @@ export default function DashboardPage() {
   const [internalLoading, setInternalLoading] = useState(false);
   const [scraperApiStatus, setScraperApiStatus] = useState<string>('idle');
   const [showExportModal, setShowExportModal] = useState(false);
+  const [suggestions, setSuggestions] = useState<{ text: string; id: string; name: string }[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [selectedStudentName, setSelectedStudentName] = useState('');
+  const suggestionsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Restore persisted session on mount
   useEffect(() => {
@@ -215,9 +221,35 @@ export default function DashboardPage() {
     });
   };
 
+  const handleInputChange = (value: string) => {
+    setStudentIdInput(value);
+    setSelectedStudentName('');
+    if (suggestionsTimerRef.current) clearTimeout(suggestionsTimerRef.current);
+    if (!value.trim() || scraperPhase !== 'ready') {
+      setSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+    suggestionsTimerRef.current = setTimeout(async () => {
+      const opts = await fetchStudentSuggestions(value.trim());
+      setSuggestions(opts);
+      setShowSuggestions(opts.length > 0);
+    }, 300);
+  };
+
+  const handleSelectSuggestion = (id: string, name: string) => {
+    setStudentIdInput(id);
+    setSelectedStudentName(name);
+    setSuggestions([]);
+    setShowSuggestions(false);
+  };
+
   const handleSearch = async () => {
     const id = studentIdInput.trim();
     if (!id) { showToast('Enter a Student ID.', 'error'); return; }
+    setSuggestions([]);
+    setShowSuggestions(false);
+    setSelectedStudentName('');
     setStudentLoaded(false);
     setScrapedStudent(null);
     setDashboardData(null);
@@ -261,15 +293,38 @@ export default function DashboardPage() {
       {/* ── Search bar ──────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
         <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>🔍</span>
-        <input
-          className={`${styles.formInput} ${styles.formInputMono}`}
-          style={{ flex: 1 }}
-          value={studentIdInput}
-          onChange={(e) => setStudentIdInput(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && !isDisabled && handleSearch()}
-          placeholder={!isLoggedIn ? 'Log in to proceed' : isPortalLoading ? 'Logging in to portal…' : isInitializing ? 'Waiting for scraper…' : 'Enter Student ID'}
-          disabled={isDisabled}
-        />
+        <div className={styles.suggestionsWrap}>
+          <input
+            className={`${styles.formInput} ${styles.formInputMono}`}
+            value={studentIdInput}
+            onChange={(e) => handleInputChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') { setShowSuggestions(false); return; }
+              if (e.key === 'Enter' && !isDisabled) handleSearch();
+            }}
+            onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+            onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
+            placeholder={!isLoggedIn ? 'Log in to proceed' : isPortalLoading ? 'Logging in to portal…' : isInitializing ? 'Waiting for scraper…' : 'Student ID or name'}
+            disabled={isDisabled}
+          />
+          {selectedStudentName && (
+            <div className={styles.selectedName}>{selectedStudentName}</div>
+          )}
+          {showSuggestions && suggestions.length > 0 && (
+            <div className={styles.suggestionsList}>
+              {suggestions.map((s, i) => (
+                <div
+                  key={i}
+                  className={styles.suggestionItem}
+                  onMouseDown={(e) => { e.preventDefault(); handleSelectSuggestion(s.id, s.name); }}
+                >
+                  <span className={styles.suggestionId}>{s.id}</span>
+                  {s.name && <span className={styles.suggestionName}>{s.name}</span>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
         <button className={styles.btnPrimary} onClick={handleSearch} disabled={isDisabled}>
           Search
         </button>
