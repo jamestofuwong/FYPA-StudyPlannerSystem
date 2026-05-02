@@ -6,6 +6,7 @@ export async function GET() {
   return NextResponse.json({
     status: scraperStore.status,
     studentId: scraperStore.studentId,
+    enrollmentMode: scraperStore.enrollmentMode,
     result: scraperStore.result,
     error: scraperStore.error,
   });

@@ -1,10 +1,12 @@
 import type { ScrapedStudent } from '../../../../core/shared/types/student';
 
 export type ScraperQueueStatus = 'idle' | 'initializing' | 'pending' | 'scraping' | 'done' | 'error';
+export type EnrollmentMode = 'latest' | 'earliest' | 'mpu';
 
 type ScraperQueueState = {
   status: ScraperQueueStatus;
   studentId: string | null;
+  enrollmentMode: EnrollmentMode;
   result: ScrapedStudent | null;
   error: string | null;
 };
@@ -14,6 +16,7 @@ type ScraperQueueState = {
 export const scraperStore: ScraperQueueState = {
   status: 'idle',
   studentId: null,
+  enrollmentMode: 'latest',
   result: null,
   error: null,
 };

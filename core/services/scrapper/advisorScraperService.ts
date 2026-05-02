@@ -4,6 +4,7 @@ import {
   WAIT_FOR_KENDO_DROPDOWN_JS,
   CLICK_STUDENT_DROPDOWN_JS,
   WAIT_FOR_KENDO_LIST_JS,
+  OPEN_STUDENT_DROPDOWN_JS,
   DISMISS_DROPDOWN_JS,
   ENTER_STUDENT_ID_JS,
   CLICK_DROPDOWN_JS,
@@ -139,7 +140,7 @@ type GridDataResult = {
 export async function runScraperStep(
   stepId: ScraperStepId,
   adapter: WebviewAdapter,
-  opts?: { studentId?: string }
+  opts?: { studentId?: string; enrollmentMode?: 'latest' | 'earliest' | 'mpu' }
 ): Promise<StepResult> {
   const logs: string[] = [];
 
@@ -183,6 +184,16 @@ export async function runScraperStep(
       logs.push(`✗ ${data.error}`);
     }
 
+  } else if (stepId === "open-student-dropdown") {
+    logs.push("→ Opening student dropdown");
+    const data = await adapter.executeJavaScript<{ success: boolean; alreadyOpen?: boolean; attempt?: number; polls?: number; error?: string }>(OPEN_STUDENT_DROPDOWN_JS);
+    if (data.success) {
+      const detail = data.alreadyOpen ? "already open" : `attempt ${data.attempt}, poll ${data.polls}`;
+      logs.push(`✓ Student dropdown open (${detail})`);
+    } else {
+      logs.push(`✗ ${data.error ?? "Failed to open student dropdown"}`);
+    }
+
   } else if (stepId === "enter-student-id") {
     const studentId = opts?.studentId ?? "";
     logs.push(`→ Entering student ID ${studentId}`);
@@ -209,7 +220,7 @@ export async function runScraperStep(
 
   } else if (stepId === "select-dropdown") {
     logs.push("→ Selecting best enrollment option");
-    const data = await adapter.executeJavaScript<SelectResult>(FIND_AND_SELECT_JS);
+    const data = await adapter.executeJavaScript<SelectResult>(FIND_AND_SELECT_JS(opts?.enrollmentMode ?? 'latest'));
     if (data.clicked && data.selectedOption) {
       logs.push(`✓ Selected: ${data.selectedOption.text}`);
     } else {
@@ -264,7 +275,7 @@ export async function runScraperStep(
 
 export async function runAllSteps(
   adapter: WebviewAdapter,
-  opts?: { studentId?: string }
+  opts?: { studentId?: string; enrollmentMode?: 'latest' | 'earliest' | 'mpu' }
 ): Promise<StepResult> {
   const allStepIds: ScraperStepId[] = [
     "go-degree",

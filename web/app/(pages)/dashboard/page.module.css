@@ -418,6 +418,22 @@
   text-overflow: ellipsis;
 }
 
+/* Enrollment mode selector */
+.enrollSelect {
+  background: var(--surface-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 3px;
+  color: var(--text-primary);
+  padding: 7px 8px;
+  font-size: 12px;
+  font-family: var(--font-sans);
+  outline: none;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.enrollSelect:focus { border-color: var(--active-highlight); }
+.enrollSelect:disabled { opacity: 0.5; cursor: not-allowed; }
+
 /* Loading spinner */
 .spinner {
   width: 28px;

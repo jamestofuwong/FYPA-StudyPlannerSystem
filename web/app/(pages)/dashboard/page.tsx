@@ -62,6 +62,7 @@ export default function DashboardPage() {
   const [internalLoading, setInternalLoading] = useState(false);
   const [scraperApiStatus, setScraperApiStatus] = useState<string>('idle');
   const [showExportModal, setShowExportModal] = useState(false);
+  const [enrollmentMode, setEnrollmentMode] = useState<'latest' | 'earliest' | 'mpu'>('latest');
   const [suggestions, setSuggestions] = useState<{ text: string; id: string; name: string }[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedStudentName, setSelectedStudentName] = useState('');
@@ -260,7 +261,7 @@ export default function DashboardPage() {
       const startRes = await fetch('/api/scraper/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ studentId: id }),
+        body: JSON.stringify({ studentId: id, enrollmentMode }),
       });
       if (!startRes.ok) {
         showToast('Failed to queue scrape. Is the server running?', 'error');
@@ -325,6 +326,16 @@ export default function DashboardPage() {
             </div>
           )}
         </div>
+        <select
+          className={styles.enrollSelect}
+          value={enrollmentMode}
+          onChange={(e) => setEnrollmentMode(e.target.value as 'latest' | 'earliest' | 'mpu')}
+          disabled={isDisabled}
+        >
+          <option value="latest">Latest</option>
+          <option value="earliest">Earliest</option>
+          <option value="mpu">MPU</option>
+        </select>
         <button className={styles.btnPrimary} onClick={handleSearch} disabled={isDisabled}>
           Search
         </button>

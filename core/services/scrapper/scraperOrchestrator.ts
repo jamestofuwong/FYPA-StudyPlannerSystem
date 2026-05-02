@@ -22,8 +22,7 @@ export const AUTO_RUN_STEPS: ScraperStepId[] = [
 
 // Runs per-student after the auto-run phase completes.
 export const STUDENT_STEPS: ScraperStepId[] = [
-  'click-student-dropdown',
-  'wait-for-kendo-list',
+  'open-student-dropdown',
   'enter-student-id',
   'click-dropdown',
   'select-dropdown',
@@ -102,6 +101,7 @@ export async function runAutoRun(
 export async function runStudentScrape(
   adapter: WebviewAdapter,
   studentId: string,
+  enrollmentMode: 'latest' | 'earliest' | 'mpu',
   callbacks: OrchestratorCallbacks,
 ): Promise<StudentScrapeResult> {
   const { onLog, onBotStep, onScrapeResult } = callbacks;
@@ -111,7 +111,7 @@ export async function runStudentScrape(
   try {
     for (const stepId of STUDENT_STEPS) {
       onBotStep(SCRAPER_STEPS.find((s) => s.id === stepId)?.label ?? stepId);
-      const result = await runScraperStep(stepId, adapter, { studentId });
+      const result = await runScraperStep(stepId, adapter, { studentId, enrollmentMode });
       onLog(result.logs);
       if (result.studentName) studentName = result.studentName;
       if (result.scrapeResult) {

@@ -12,6 +12,7 @@ export type ScraperStepId =
   | "open-degree-iframe"
   | "click-student-dropdown"
   | "wait-for-kendo-list"
+  | "open-student-dropdown"
   | "enter-student-id"
   | "click-dropdown"
   | "select-dropdown"
@@ -27,6 +28,7 @@ export const SCRAPER_STEPS: ScraperStep[] = [
   { id: "open-degree-iframe",     label: "Open iframe src" },
   { id: "click-student-dropdown", label: "Click student dropdown" },
   { id: "wait-for-kendo-list",    label: "Wait for student list" },
+  { id: "open-student-dropdown",  label: "Open student dropdown" },
   { id: "enter-student-id",       label: "Enter student ID" },
   { id: "click-dropdown",         label: "Click enrollment dropdown" },
   { id: "select-dropdown",        label: "Select enrollment option" },

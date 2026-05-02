@@ -128,6 +128,79 @@ export function FETCH_STUDENT_SUGGESTIONS_JS(query: string): string {
   `;
 }
 
+// ---------------------------------------------------------------------------
+// OPEN_STUDENT_DROPDOWN_JS — clicks the student kendo-dropdownlist and polls
+// until the popup is actually visible and contains list items. Retries up to
+// 5 times so it recovers from cases where the trigger click is ignored.
+// ---------------------------------------------------------------------------
+
+export const OPEN_STUDENT_DROPDOWN_JS = `
+  (async () => {
+    const delay = (ms) => new Promise(r => setTimeout(r, ms));
+    const isVisible = (el) => {
+      try {
+        if (!el) return false;
+        const s = getComputedStyle(el);
+        if (s.display === 'none' || s.visibility === 'hidden') return false;
+        const r = el.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+      } catch { return false; }
+    };
+
+    const findPopup = () =>
+      document.querySelector('.k-animation-container .k-list-container') ??
+      document.querySelector('.k-popup') ?? null;
+
+    const popupReady = () => {
+      const p = findPopup();
+      if (!p || !isVisible(p)) return false;
+      return p.querySelectorAll('li').length > 0;
+    };
+
+    // Already open — nothing to do.
+    if (popupReady()) return { success: true, alreadyOpen: true };
+
+    const host = document.querySelector('kendo-dropdownlist');
+    if (!host) return { success: false, error: 'kendo-dropdownlist not found' };
+
+    const trigger =
+      host.querySelector('.k-input-button') ??
+      host.querySelector('.k-select') ??
+      host.querySelector('button') ??
+      host.querySelector("[role='combobox']") ??
+      host;
+
+    const clickTrigger = () => {
+      try { trigger.focus?.(); } catch {}
+      try {
+        const r = trigger.getBoundingClientRect();
+        const cx = r.left + r.width / 2;
+        const cy = r.top + r.height / 2;
+        const mk = (type) =>
+          new MouseEvent(type, { bubbles: true, cancelable: true, view: window, clientX: cx, clientY: cy });
+        trigger.dispatchEvent(mk('pointerover'));
+        trigger.dispatchEvent(mk('mouseover'));
+        trigger.dispatchEvent(mk('pointerdown'));
+        trigger.dispatchEvent(mk('mousedown'));
+        trigger.dispatchEvent(mk('mouseup'));
+        trigger.dispatchEvent(mk('pointerup'));
+        trigger.dispatchEvent(mk('click'));
+      } catch { try { trigger.click?.(); } catch {} }
+    };
+
+    for (let attempt = 0; attempt < 5; attempt++) {
+      clickTrigger();
+      // Poll for the popup to appear (up to 1 s per attempt).
+      for (let poll = 0; poll < 10; poll++) {
+        await delay(100);
+        if (popupReady()) return { success: true, attempt, polls: poll };
+      }
+    }
+
+    return { success: false, error: 'Popup did not open after 5 attempts' };
+  })()
+`;
+
 export const FIND_IFRAME_POLLING_JS = `
   (async () => {
     const findSrc = () => {
@@ -339,14 +412,54 @@ export function ENTER_STUDENT_ID_JS(studentId: string): string {
   (async () => {
     const targetId = ${JSON.stringify(studentId)};
     const norm = (t) => (t ?? "").replace(/\\s+/g, " ").trim();
+    const delay = (ms) => new Promise(r => setTimeout(r, ms));
+    const isVisible = (el) => {
+      try {
+        if (!el) return false;
+        const s = getComputedStyle(el);
+        if (s.display === 'none' || s.visibility === 'hidden') return false;
+        const r = el.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+      } catch { return false; }
+    };
 
-    let popup = document.querySelector('.k-popup, .k-animation-container .k-list-container');
-    let attempts = 0;
-    while (!popup && attempts < 20) {
-      await new Promise(r => setTimeout(r, 200));
-      popup = document.querySelector('.k-popup, .k-animation-container .k-list-container');
-      attempts++;
+    const findPopup = () =>
+      document.querySelector('.k-animation-container .k-list-container') ??
+      document.querySelector('.k-popup') ?? null;
+
+    let popup = findPopup();
+
+    // If the popup is not already visible, open the student dropdown ourselves.
+    if (!popup || !isVisible(popup)) {
+      const host = document.querySelector('kendo-dropdownlist');
+      if (!host) return { success: false, error: "Student dropdown not found" };
+
+      const trigger =
+        host.querySelector('.k-input-button') ??
+        host.querySelector('.k-select') ??
+        host.querySelector('button') ??
+        host.querySelector("[role='combobox']") ??
+        host;
+
+      try {
+        trigger.focus?.();
+        const r = trigger.getBoundingClientRect();
+        const cx = r.left + r.width / 2;
+        const cy = r.top + r.height / 2;
+        const mk = (type) =>
+          new MouseEvent(type, { bubbles: true, cancelable: true, view: window, clientX: cx, clientY: cy });
+        trigger.dispatchEvent(mk('pointerover'));
+        trigger.dispatchEvent(mk('pointerdown'));
+        trigger.dispatchEvent(mk('mousedown'));
+        trigger.dispatchEvent(mk('mouseup'));
+        trigger.dispatchEvent(mk('pointerup'));
+        trigger.dispatchEvent(mk('click'));
+      } catch {}
+
+      await delay(400);
+      popup = findPopup();
     }
+
     if (!popup) return { success: false, error: "Popup not found" };
 
     const input = popup.querySelector('input, [role="textbox"], .k-input');
@@ -360,14 +473,28 @@ export function ENTER_STUDENT_ID_JS(studentId: string): string {
     const listUl = document.querySelector('kendo-list ul');
     if (!listUl) return { success: false, error: "List not found" };
 
+    // Helper: extract the student ID column text from a list item.
+    // Mirrors the multi-column extraction strategy in FETCH_STUDENT_SUGGESTIONS_JS.
+    const getItemId = (li) => {
+      // Strategy 1: first multi-column span
+      const colSpan = li.querySelector('[class*="multidropdowncol"] span, .multidropdowncol-list span');
+      if (colSpan) return norm(colSpan.textContent);
+      // Strategy 2: first unique span
+      const spans = Array.from(li.querySelectorAll('span')).map(s => norm(s.textContent)).filter(t => t.length > 0);
+      if (spans.length > 0) return spans[0];
+      // Strategy 3: first token of full text
+      const full = norm(li.textContent);
+      const spaceIdx = full.indexOf(' ');
+      return spaceIdx > 0 ? full.slice(0, spaceIdx) : full;
+    };
+
     let foundItem = null;
     let pollCount = 0;
     while (!foundItem && pollCount < 30) {
       await new Promise(r => setTimeout(r, 300));
       const items = listUl.querySelectorAll('li');
       for (const li of items) {
-        const firstSpan = li.querySelector('div span:first-child, span:first-child');
-        if (firstSpan && norm(firstSpan.textContent).includes(targetId)) {
+        if (getItemId(li).includes(targetId)) {
           foundItem = li;
           break;
         }
@@ -377,7 +504,25 @@ export function ENTER_STUDENT_ID_JS(studentId: string): string {
 
     if (!foundItem) return { success: false, error: "No list item containing the ID found" };
 
-    foundItem.click();
+    // Use full pointer+mouse event sequence — Kendo requires more than a bare click().
+    const clickEl = (el) => {
+      try {
+        const r = el.getBoundingClientRect();
+        const cx = r.left + r.width / 2;
+        const cy = r.top + r.height / 2;
+        const mk = (type) =>
+          new MouseEvent(type, { bubbles: true, cancelable: true, view: window, clientX: cx, clientY: cy });
+        el.dispatchEvent(mk('pointerover'));
+        el.dispatchEvent(mk('mouseover'));
+        el.dispatchEvent(mk('pointerdown'));
+        el.dispatchEvent(mk('mousedown'));
+        el.dispatchEvent(mk('mouseup'));
+        el.dispatchEvent(mk('pointerup'));
+        el.dispatchEvent(mk('click'));
+      } catch { el.click?.(); }
+    };
+
+    clickEl(foundItem);
     await new Promise(r => setTimeout(r, 500));
 
     return { success: true, clickedText: norm(foundItem.textContent) };
@@ -497,8 +642,10 @@ export const CLICK_DROPDOWN_JS = `
   })()
 `;
 
-export const FIND_AND_SELECT_JS = `
+export function FIND_AND_SELECT_JS(mode: 'latest' | 'earliest' | 'mpu' = 'latest'): string {
+  return `
   (async () => {
+    const mode = ${JSON.stringify(mode)};
     const norm = (t) => (t ?? "").replace(/\\s+/g, " ").trim();
     const isVisible = (el) => {
       try {
@@ -582,22 +729,29 @@ export const FIND_AND_SELECT_JS = `
       allOptions.push({ text, value, _el: li });
     }
 
-    const filtered = allOptions.filter(o => !o.text.includes("Mata Pelajaran Umum"));
-
+    const isMpu = (text) => text.includes("Mata Pelajaran Umum");
     const extractCode = (text) => { const m = text.match(/\\(([^)]+)\\)\\s*$/); return m ? m[1] : null; };
 
-    let best = null, bestCode = null;
-    for (const opt of filtered) {
-      const code = extractCode(opt.text);
-      if (!code) continue;
-      if (!bestCode || code > bestCode) { bestCode = code; best = opt; }
+    let best = null;
+    if (mode === 'mpu') {
+      best = allOptions.find(o => isMpu(o.text)) ?? null;
+    } else {
+      const filtered = allOptions.filter(o => !isMpu(o.text));
+      let bestCode = null;
+      for (const opt of filtered) {
+        const code = extractCode(opt.text);
+        if (!code) continue;
+        if (!bestCode || (mode === 'earliest' ? code < bestCode : code > bestCode)) {
+          bestCode = code; best = opt;
+        }
+      }
     }
 
     const clean = (arr) => arr.map(({ text, value }) => ({ text, value }));
 
     if (!best) {
       return { found: true, expanded: true,
-               allOptions: clean(allOptions), filteredOptions: clean(filtered),
+               allOptions: clean(allOptions), filteredOptions: [],
                selectedOption: null, clicked: false,
                error: "no option remaining after filtering" };
     }
@@ -616,12 +770,12 @@ export const FIND_AND_SELECT_JS = `
     return {
       found: true, expanded: true,
       allOptions: clean(allOptions),
-      filteredOptions: clean(filtered),
       selectedOption: { text: best.text, value: best.value },
       clicked: true,
     };
   })()
-`;
+  `;
+}
 
 export const WAIT_FOR_PROGRAM_SECTION_JS = `
   (async () => {
