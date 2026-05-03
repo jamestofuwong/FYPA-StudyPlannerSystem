@@ -69,9 +69,9 @@ export default function Sidebar({
 
             {/* Bottom quick actions */}
             <div className={styles.sidebarActions}>
-                <button className={styles.actionItem} onClick={() => onNavigate('scraping')}>
-                    <span className={styles.itemIcon}>🔄</span>
-                    Sync Portal Data
+                <button className={styles.actionItem} onClick={() => onNavigate('settings')}>
+                    <span className={styles.itemIcon}>⚙️</span>
+                    Settings
                 </button>
             </div>
         </nav>

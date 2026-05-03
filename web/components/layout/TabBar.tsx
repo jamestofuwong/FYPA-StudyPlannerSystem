@@ -16,6 +16,7 @@ const TAB_META: Record<PanelId, TabMeta> = {
     import: { id: 'import', icon: '📥', label: 'Data Import' },
     scraping: { id: 'scraping', icon: '🕷️', label: 'Data Scraping' },
     planners: { id: 'planners', icon: '✅', label: 'Study Planners' },
+    settings: { id: 'settings', icon: '⚙️', label: 'Settings' },
 };
 
 interface TabBarProps {

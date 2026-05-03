@@ -1,6 +1,6 @@
-export type PanelId = 'dashboard' | 'import' | 'scraping' | 'planners';
+export type PanelId = 'dashboard' | 'import' | 'scraping' | 'planners' | 'settings';
 
-export const PANEL_IDS: PanelId[] = ['dashboard', 'import', 'scraping', 'planners'];
+export const PANEL_IDS: PanelId[] = ['dashboard', 'import', 'scraping', 'planners', 'settings'];
 
 export function isPanelId(value: string): value is PanelId {
   return (PANEL_IDS as string[]).includes(value);
@@ -11,6 +11,7 @@ export const PANEL_PATHS: Record<PanelId, string> = {
   import: '/import',
   scraping: '/scraping',
   planners: '/planners',
+  settings: '/settings',
 };
 
 export function panelToPath(panel: PanelId): string {
