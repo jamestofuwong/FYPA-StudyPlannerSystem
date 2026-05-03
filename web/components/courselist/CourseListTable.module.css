@@ -1,0 +1,259 @@
+/* Section title */
+.sectionTitle {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sectionTitle::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--panel-border);
+}
+
+/* Badges */
+.badge { 
+  display: inline-block; 
+  padding: 2px 7px; 
+  border-radius: 3px; 
+  font-size: 10px; 
+  font-weight: 600; 
+  letter-spacing: 0.5px; 
+  font-family: var(--font-mono); 
+}
+.badgeBlue   { background: rgba(86,156,214,0.2);  color: var(--accent-blue);   border: 1px solid rgba(86,156,214,0.3); }
+.badgeGreen  { background: rgba(78,201,176,0.2);  color: var(--accent-green);  border: 1px solid rgba(78,201,176,0.3); }
+.badgeYellow { background: rgba(220,220,170,0.15); color: var(--accent-yellow); border: 1px solid rgba(220,220,170,0.25); }
+.badgeOrange { background: rgba(206,145,120,0.2); color: var(--accent-orange); border: 1px solid rgba(206,145,120,0.3); }
+.badgeRed    { background: rgba(244,135,113,0.2); color: var(--accent-red);    border: 1px solid rgba(244,135,113,0.3); }
+.badgePurple { background: rgba(180,130,220,0.2); color: var(--accent-purple);  border: 1px solid rgba(180,130,220,0.3); }
+
+.badgeSelect {
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  outline: none;
+  white-space: normal;
+  word-wrap: break-word;
+  width: 82px;
+}
+
+.badgeSelect option {
+  background: var(--card-bg);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  padding: 4px 8px;
+}
+
+/* Table */
+.tableWrap { 
+  overflow-x: auto; 
+  border: 1px solid var(--panel-border); 
+  border-radius: 4px; 
+  margin-bottom: 16px; 
+}
+.table { 
+  width: 100%; 
+  border-collapse: collapse; 
+  font-size: 12px; 
+  table-layout: fixed;
+}
+.table thead tr { 
+  background: var(--surface-bg); 
+  position: sticky; 
+  top: 0; 
+  z-index: 1; 
+}
+.table thead th { 
+  padding: 8px 12px; 
+  text-align: left; 
+  color: var(--accent-blue); 
+  font-family: var(--font-mono); 
+  font-size: 11px; 
+  font-weight: 500; 
+  border-bottom: 1px solid var(--panel-border); 
+  white-space: nowrap;
+ 
+}
+.table tbody tr { 
+  border-bottom: 1px solid var(--sidebar-border); 
+  transition: background 0.1s; 
+}
+.table tbody tr:nth-child(even) { 
+  background: var(--row-alt); 
+}
+.table tbody tr:hover { 
+  background: rgba(0,122,204,0.1); 
+  
+}
+.table tbody td { 
+  padding: 7px 12px; 
+  color: var(--text-primary);
+
+}
+
+.code { 
+  font-family: var(--font-mono); 
+  background: var(--surface-bg); 
+  padding: 1px 5px; 
+  border-radius: 2px; 
+  font-size: 11px; 
+  color: var(--accent-orange); 
+}
+
+/* Course List */
+.termGroup {
+  margin-bottom: 20px;
+}
+
+.termHeading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.termLabel {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--accent-blue);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+.termLabelEmpty {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+.termDivider {
+  flex: 1;
+  height: 1px;
+  background: var(--panel-border);
+}
+
+.termEmpty {
+  border: 1px dashed var(--panel-border);
+  border-radius: 4px;
+  padding: 12px 16px;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.textMuted {
+  color: var(--text-muted);
+}
+
+/* Edit Inputs */
+.editInput {
+  width: 100%;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-primary);
+  padding: 3px 6px;
+  font-size: 12px;
+  font-family: var(--font-sans);
+  border-radius: 2px;
+  outline: none;
+  transition: border-color 0.15s;
+  white-space: normal;
+  word-wrap: break-word;
+}
+
+.editInput:hover {
+  border-color: var(--panel-border);
+}
+
+.editInput:focus {
+  border-color: var(--active-highlight);
+  background: var(--surface-bg);
+}
+.editInput::placeholder {
+  color: var(--text-muted);
+}
+
+.editTextarea {
+  width: 100%;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-primary);
+  padding: 3px 6px;
+  font-size: 12px;
+  font-family: var(--font-sans);
+  border-radius: 2px;
+  outline: none;
+  resize: none;
+  overflow-y: hidden;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.editTextarea:hover {
+  border-color: var(--panel-border);
+}
+
+.editTextarea:focus {
+  border-color: var(--active-highlight);
+  background: var(--surface-bg);
+}
+
+.addUnitBtn {
+  width: 100%;
+  padding: 6px;
+  background: transparent;
+  border: 1px dashed var(--panel-border);
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.15s;
+}
+
+.addUnitBtn:hover {
+  border-color: var(--accent-blue);
+  color: var(--accent-blue);
+  background: rgba(0,122,204,0.05);
+}
+
+.deleteBtn {
+  background: transparent;
+  border: 1px solid rgba(244,135,113,0.3);
+  color: var(--accent-red);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 5px;
+  border-radius: 3px;
+  transition: all 0.15s;
+}
+
+.deleteBtn:hover {
+  background: rgba(244,135,113,0.2);
+  color: var(--accent-red);
+}
+
+.table th:last-child,
+.table td:last-child {
+  width: 45px;
+  padding: 4px 4px;
+  text-align: center;
+}
+
+.addSemesterSection {
+  margin: 12px 0;
+}

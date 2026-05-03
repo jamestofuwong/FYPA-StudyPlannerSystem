@@ -10,6 +10,8 @@ import type {
   PlannerImportUnit,
 } from '../../../../core/shared/types/plannerImport';
 
+import CourseListTable, { getSemesterOrder } from '../../../components/courselist/CourseListTable';
+
 type ImportHistoryItem = {
   id: string;
   name: string;
@@ -71,30 +73,6 @@ function formatConfidenceScore(score: number | undefined): string {
   return `${Math.round(score * 100)}%`;
 }
 
-function categoryLabel(category: string | null): string {
-  if (!category) return 'Unknown';
-  return category
-    .replace(/_/g, ' ')
-    .replace(/\b\w/g, (char) => char.toUpperCase());
-}
-
-function badgeClassForCategory(category: string | null): keyof typeof styles {
-  switch (category) {
-    case 'core':
-      return 'badgeBlue';
-    case 'major_core':
-      return 'badgeOrange';
-    case 'mpu':
-      return 'badgeYellow';
-    case 'wil':
-      return 'badgeRed';
-    case 'prescribed_elective':
-      return 'badgeOrange';
-    default:
-      return 'badgeGreen';
-  }
-}
-
 function flattenUnits(planner: PlannerImportPlanner | null): PlannerImportUnit[] {
   if (!planner) return [];
   const c = planner.categories ?? {};
@@ -127,6 +105,8 @@ export default function ImportPage() {
   const [isParsing, setIsParsing] = useState(false);
   const [useLlm, setUseLlm] = useState(true);
   const [planner, setPlanner] = useState<PlannerImportPlanner | null>(null);
+  const [editableUnits, setEditableUnits] = useState<PlannerImportUnit[]>([]);
+  const unitCounterRef = useRef(0);
   const [report, setReport] = useState<PlannerImportReport | null>(null);
   const [history, setHistory] = useState<ImportHistoryItem[]>([]);
   const [ollamaStatus, setOllamaStatus] = useState<OllamaStatus>({
@@ -162,8 +142,6 @@ export default function ImportPage() {
   const modelReady = ollamaStatus.model === 'ready';
   const effectiveUseLlm = useLlm && modelReady;
 
-  const units = useMemo(() => flattenUnits(planner), [planner]);
-
   const summary = useMemo(() => {
     if (!planner || !report) return null;
 
@@ -191,6 +169,166 @@ export default function ImportPage() {
       validationIssues,
     };
   }, [planner, report]);
+
+  // Sync editable units when planner data changes
+  useEffect(() => {
+    if (planner) {
+      const units = flattenUnits(planner);
+      const unitsWithId = units.map((u, i) => ({ ...u, _id: `unit-${i}` } as PlannerImportUnit & { _id: string }));
+      setEditableUnits(unitsWithId);
+    }
+  }, [planner]);
+
+  // Parse intake month from string
+  function parseIntakeMonth(intake: string): number {
+    const lower = intake?.toLowerCase().trim() || '';
+    
+    const firstMonth = lower.split('/')[0].trim();
+    
+    const months: Record<string, number> = {
+      january: 1, jan: 1,
+      february: 2, feb: 2,
+      march: 3, mar: 3,
+      april: 4, apr: 4,
+      may: 5,
+      june: 6, jun: 6,
+      july: 7, jul: 7,
+      august: 8, aug: 8,
+      september: 9, sep: 9, sept: 9,
+      october: 10, oct: 10,
+      november: 11, nov: 11,
+      december: 12, dec: 12,
+    };
+    
+    return months[firstMonth] || 0;
+  }
+
+  // Get the correct label for semester values
+  function getSemesterLabel(
+    sem: number, 
+    intakeMonth: number
+  ): string {
+    switch (sem) {
+      case 1:
+        return 'Semester 1';
+      case 2:
+        return 'Semester 2';
+      case 3:
+        return 'Summer Term';
+      case 4:
+        return 'Winter Term';
+      default:
+        return `Semester ${sem}`;
+    }
+  }
+
+  // Group units by year and semester
+  const yearGroups = useMemo(() => {
+    if (!planner) return [];
+    
+    const intakeMonth = parseIntakeMonth(planner.course_information.intake || '');
+    
+    const grouped = new Map<number, Map<number, PlannerImportUnit[]>>();
+
+    // Use editableUnits instead of units
+    for (const unit of editableUnits as PlannerImportUnit[]) {
+      const year = parseInt(String(unit.year_level)) || 1;
+      const sem = parseInt(String(unit.semester)) || 1;
+      
+      if (!grouped.has(year)) {
+        grouped.set(year, new Map());
+      }
+      
+      const yearMap = grouped.get(year)!;
+      if (!yearMap.has(sem)) {
+        yearMap.set(sem, []);
+      }
+      
+      yearMap.get(sem)!.push(unit);
+    }
+    
+    // Determine max year
+    let maxYear = 1;
+    for (const year of grouped.keys()) {
+      if (year > maxYear) maxYear = year;
+    }
+    
+    // Get the correct semester display order based on intake
+    const semesterOrder = getSemesterOrder(intakeMonth);
+    
+    // Build structured output
+    const result = [];
+    for (let year = 1; year <= maxYear; year++) {
+      const semesters = [];
+      const yearMap = grouped.get(year) || new Map();
+      
+      for (const sem of semesterOrder) {
+        const list = yearMap.get(sem) || [];
+  
+        semesters.push({
+          semester: sem,
+          label: getSemesterLabel(sem, intakeMonth),
+          list,
+          isEmpty: list.length === 0
+        });
+      }
+      
+      // Only include year if it has at least one non-empty semester
+      // OR if it has mandatory semesters (1 & 2) that we always show
+      const hasContent = semesters.some(s => !s.isEmpty);
+      const hasMandatorySemesters = semesters.some(s => s.semester <= 2);
+      
+      if (hasContent || hasMandatorySemesters) {
+        result.push({
+          year,
+          label: `Year ${year}`,
+          semesters,
+          isEmpty: !hasContent
+        });
+      }
+    }
+
+    return result;
+  }, [editableUnits, planner]);
+
+  // Edit handler functions
+  const handleUnitEdit = (
+    id: string, 
+    field: keyof PlannerImportUnit, 
+    value: string | number | null
+  ) => {
+    setEditableUnits(prev => 
+      prev.map(unit => 
+        (unit as any)._id === id ? { ...unit, [field]: value } : unit
+      )
+    );
+  };
+
+  const handleAddUnit = (year: number, semester: number) => {
+    unitCounterRef.current += 1;
+    const newUnit = {
+      unit_code: `NEW${Math.floor(1000 + Math.random() * 9000)}`,
+      unit_name: '',
+      category: 'core' as const,
+      prerequisite: null,
+      offered_in: null,
+      year_level: year,
+      semester: semester,
+      _id: `new-${unitCounterRef.current}`,
+    } as PlannerImportUnit & { _id: string };
+    setEditableUnits(prev => [...prev, newUnit]);
+  };
+
+  const handleDeleteUnit = (id: string) => {
+    setEditableUnits(prev => prev.filter(u => (u as any)._id !== id));
+  };
+
+
+
+
+
+
+  
 
   const handleFileSelected = (file: File | null) => {
     if (!file) return;
@@ -250,6 +388,11 @@ export default function ImportPage() {
       }
 
       const payload = data as PlannerApiResponse;
+      console.log('=== PARSED PLANNER DATA ===');
+console.log(JSON.stringify(payload.planner, null, 2));
+console.log('=== PARSED REPORT ===');
+console.log(JSON.stringify(payload.report, null, 2));
+
       setPlanner(payload.planner);
       setReport(payload.report);
       setHistory((prev) => [
@@ -288,20 +431,30 @@ export default function ImportPage() {
 
     setIsParsing(true);
     try {
+      // Create updated planner with edited units
+      const updatedPlanner = {
+        ...planner,
+        categories: {
+          core_units: editableUnits.filter(u => u.category === 'core'),
+          major_units: editableUnits.filter(u => u.category === 'major_core'),
+          mpu_group: editableUnits.filter(u => u.category === 'mpu'),
+          wil_group: editableUnits.filter(u => u.category === 'wil'),
+          elective_groups: {
+            prescribed_elective: editableUnits.filter(u => u.category === 'prescribed_elective'),
+            elective: editableUnits.filter(u => u.category === 'elective'),
+          },
+        },
+      };
+
       const response = await fetch('/api/planners/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ planner }),
+        body: JSON.stringify({ planner: updatedPlanner }),
       });
 
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        throw new Error(data.error || 'Failed to save planner to database.');
-      }
+      if (!response.ok) throw new Error('Failed to save planner to database.');
 
       showToast('Planner saved to database successfully!', 'success');
-      router.push('/planners');
-
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Save failed', 'error');
     } finally {
@@ -576,47 +729,15 @@ export default function ImportPage() {
 
           {/* Parsed Units Table — always shown once planner is available */}
           {planner && (
-            <>
-              <div className={styles.sectionTitle}>Parsed Units</div>
-              <div className={styles.tableWrap}>
-                <table className={styles.table}>
-                  <thead>
-                    <tr>
-                      <th>#</th>
-                      <th>Unit Code</th>
-                      <th>Unit Name</th>
-                      <th>Sem</th>
-                      <th>Year</th>
-                      <th>Type</th>
-                      <th>Prerequisite</th>
-                      <th>Offered In</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {units.length > 0 ? units.map((unit, index) => (
-                      <tr key={`${unit.unit_code}-${unit.unit_name}-${index}`}>
-                        <td>{index + 1}</td>
-                        <td><code className={styles.code}>{unit.unit_code}</code></td>
-                        <td>{unit.unit_name}</td>
-                        <td>{unit.semester ?? '-'}</td>
-                        <td>{unit.year_level ?? '-'}</td>
-                        <td>
-                          <span className={`${styles.badge} ${styles[badgeClassForCategory(unit.category)]}`}>
-                            {categoryLabel(unit.category)}
-                          </span>
-                        </td>
-                        <td>{unit.prerequisite ? <code className={styles.code}>{unit.prerequisite}</code> : '-'}</td>
-                        <td>{unit.offered_in ?? '-'}</td>
-                      </tr>
-                    )) : (
-                      <tr>
-                        <td colSpan={8} className={styles.emptyCell}>No units were extracted from this planner.</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </>
+            <CourseListTable 
+            yearGroups={yearGroups}
+            editable={true}
+            onUnitEdit={handleUnitEdit}
+            onAddUnit={handleAddUnit}
+            onDeleteUnit={handleDeleteUnit}
+            intakeMonth={parseIntakeMonth(planner?.course_information?.intake || '')}
+            emptyMessage="No units were extracted from this planner."
+        />
           )}
 
           {/* Import History */}
