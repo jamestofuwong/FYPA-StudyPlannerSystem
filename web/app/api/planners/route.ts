@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { extractPlannerFromPdf } from "../../../../core/services/plannerImport/plannerImportService";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 function parseBoolean(value: FormDataEntryValue | null, fallback = false): boolean {
   if (typeof value !== "string") {
@@ -22,7 +23,10 @@ export async function GET() {
   try {
     const plannerRepository = await import("../../../../core/db/repositories/plannerRepository");
     const planners = await plannerRepository.getAllPlanners();
-    return NextResponse.json(planners, { status: 200 });
+    return NextResponse.json(planners, {
+      status: 200,
+      headers: { "Cache-Control": "no-store" },
+    });
   } catch (err) {
     console.error('[/api/planners GET]', err);
     return NextResponse.json({ error: "Failed to fetch planners" }, { status: 500 });

@@ -13,7 +13,7 @@ export default function PlannersPage() {
   useEffect(() => {
     const fetchPlanners = async () => {
       try {
-        const response = await fetch('/api/planners');
+        const response = await fetch('/api/planners', { cache: 'no-store' });
         if (response.ok) {
           const data = await response.json();
           console.log("DEBUG DATA:", data);

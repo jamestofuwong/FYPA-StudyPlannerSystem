@@ -44,6 +44,8 @@ export type PlannerImportReport = {
   pdf_path: string;
   model: string;
   llm_mode: string;
+  llm_strategy?: string;
+  enhanced_evidence?: boolean;
   llm_retries: number;
   llm_used: boolean;
   llm_applied: boolean;
@@ -56,6 +58,13 @@ export type PlannerImportReport = {
     reason: string;
   };
   unit_counts: Record<string, number>;
+  confidence?: {
+    overall_score: number;
+    level: string;
+    manual_review_required: boolean;
+    signals: Record<string, number>;
+    issues: string[];
+  };
 };
 
 export type PlannerImportResult = {

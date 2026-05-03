@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
+import { useRouter } from 'next/navigation';
 import styles from './page.module.css';
 import { useToast } from '../../../components/providers/ToastProvider';
 import type {
@@ -65,6 +66,11 @@ function formatRequirement(value: { count: number | null; cp: number | null }): 
   return `${count} units / ${cp} cp`;
 }
 
+function formatConfidenceScore(score: number | undefined): string {
+  if (typeof score !== 'number' || !Number.isFinite(score)) return '-';
+  return `${Math.round(score * 100)}%`;
+}
+
 function categoryLabel(category: string | null): string {
   if (!category) return 'Unknown';
   return category
@@ -111,6 +117,7 @@ type OllamaStatus = {
 };
 
 export default function ImportPage() {
+  const router = useRouter();
   const { showToast } = useToast();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -174,6 +181,9 @@ export default function ImportPage() {
       statusLabel: getImportStatusLabel(report.outcome.status),
       statusTone: getStatusTone(getImportStatusLabel(report.outcome.status)),
       confidence: report.outcome.confidence,
+      confidenceScore: report.confidence?.overall_score,
+      confidenceScoreLabel: formatConfidenceScore(report.confidence?.overall_score),
+      manualReviewRequired: report.confidence?.manual_review_required ?? report.outcome.status === 'manual_review_required',
       confidenceTone: getConfidenceTone(report.outcome.confidence),
       reason: validationIssues.length > 0 ? null : report.outcome.reason,
       llmApplied: report.llm_applied,
@@ -247,7 +257,7 @@ export default function ImportPage() {
           id: `${selectedFile.name}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           name: selectedFile.name,
           status: getImportStatusLabel(payload.report.outcome.status),
-          detail: `${payload.report.unit_counts.core_units ?? 0} core units | ${payload.report.unit_counts.major_units ?? 0} major units | ${payload.report.outcome.confidence} confidence`,
+          detail: `${payload.report.unit_counts.core_units ?? 0} core units | ${payload.report.unit_counts.major_units ?? 0} major units | ${formatConfidenceScore(payload.report.confidence?.overall_score)} score`,
           cls: payload.report.validation_issues.length ? 'badgeOrange' : 'badgeGreen',
         },
         ...prev.slice(0, 4),
@@ -284,9 +294,13 @@ export default function ImportPage() {
         body: JSON.stringify({ planner }),
       });
 
-      if (!response.ok) throw new Error('Failed to save planner to database.');
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to save planner to database.');
+      }
 
       showToast('Planner saved to database successfully!', 'success');
+      router.push('/planners');
 
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Save failed', 'error');
@@ -516,7 +530,17 @@ export default function ImportPage() {
                   <div className={`${styles.signalRow} ${styles[summary.confidenceTone]}`}>
                     <div className={styles.signalMain}>
                       <span className={styles.signalRowLabel}>Confidence</span>
-                      <span className={`${styles.badge} ${styles.signalBadge} ${styles[summary.confidenceTone]}`}>{summary.confidence}</span>
+                      <span className={`${styles.badge} ${styles.signalBadge} ${styles[summary.confidenceTone]}`}>
+                        {summary.confidence} ({summary.confidenceScoreLabel})
+                      </span>
+                    </div>
+                  </div>
+                  <div className={`${styles.signalRow} ${summary.manualReviewRequired ? styles.signalCritical : styles.signalStrong}`}>
+                    <div className={styles.signalMain}>
+                      <span className={styles.signalRowLabel}>Review Decision</span>
+                      <span className={`${styles.badge} ${styles.signalBadge} ${summary.manualReviewRequired ? styles.signalCritical : styles.signalStrong}`}>
+                        {summary.manualReviewRequired ? 'Manual Review' : 'Ready'}
+                      </span>
                     </div>
                   </div>
                   <div className={`${styles.signalRow} ${summary.llmApplied ? styles.signalModerate : styles.signalNeutral}`}>

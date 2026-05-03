@@ -1,8 +1,26 @@
 import { prisma } from "../client";
 import type { PlannerImportPlanner } from "../../shared/types/plannerImport";
 
+function normaliseImportedUnitCode(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+
+  const code = value.trim().toUpperCase().replace(/[@#]+$/g, "");
+  if (!code || code === "-" || code === "NONE") return null;
+  if (/^ELECTIVE\s+\d+$/i.test(code)) return null;
+
+  return code;
+}
+
+function toPlannerNumber(value: unknown, fallback: number): number {
+  const parsed = typeof value === "number" ? value : Number.parseInt(String(value ?? ""), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
 export async function getAllPlanners() {
   return await prisma.plannerTemplate.findMany({
+    orderBy: {
+      created_at: "desc",
+    },
     include: {
       course: true,
       major: true,
@@ -78,14 +96,20 @@ export async function getPlannersByCourse(courseId: string) {
 
 export async function savePlannerFromImport(planner: PlannerImportPlanner) {
   const { course_information, categories } = planner;
+  const courseCode = course_information.course?.trim();
+  const majorName = course_information.major?.trim() || "General Program";
+
+  if (!courseCode) {
+    throw new Error("Cannot save planner: missing course information.");
+  }
 
   return await prisma.$transaction(async (tx) => {
     const course = await tx.course.upsert({
-      where: { code: course_information.course },
+      where: { code: courseCode },
       update: {},
       create: {
-        code: course_information.course,
-        name: course_information.course,
+        code: courseCode,
+        name: courseCode,
       },
     });
 
@@ -93,12 +117,12 @@ export async function savePlannerFromImport(planner: PlannerImportPlanner) {
       where: {
         course_id_name: {
           course_id: course.id,
-          name: course_information.major,
+          name: majorName,
         },
       },
       update: {},
       create: {
-        name: course_information.major,
+        name: majorName,
         course_id: course.id,
       },
     });
@@ -120,25 +144,31 @@ export async function savePlannerFromImport(planner: PlannerImportPlanner) {
       ...(categories.elective_groups?.elective?.map((u: any) => ({ ...u, cat: 'elective' })) ?? []),
     ];
 
+    const attachedUnitIds = new Set<string>();
+
     for (const u of allUnits) {
-      if (!u.unit_code) continue;
+      const unitCode = normaliseImportedUnitCode(u.unit_code);
+      if (!unitCode) continue;
 
       const unitDef = await tx.unit.upsert({
-        where: { unit_code: u.unit_code },
+        where: { unit_code: unitCode },
         update: { unit_name: u.unit_name || 'Unknown Unit' },
         create: {
-          unit_code: u.unit_code,
+          unit_code: unitCode,
           unit_name: u.unit_name || 'Unknown Unit',
         },
       });
+
+      if (attachedUnitIds.has(unitDef.id)) continue;
+      attachedUnitIds.add(unitDef.id);
 
       await tx.templateUnit.create({
         data: {
           planner_template_id: newPlanner.id,
           unit_id: unitDef.id,
           category: u.cat,
-          year_level: parseInt(u.year_level) || 1,
-          semester: parseInt(u.semester) || 1,
+          year_level: toPlannerNumber(u.year_level, 1),
+          semester: toPlannerNumber(u.semester, 1),
         },
       });
     }
