@@ -24,6 +24,7 @@ type CourseListTableProps = {
     onDeleteUnit?: (unitCode: string) => void;
     onAddSemester?: (year: number, semester: number, label: string) => void;
     intakeMonth?: number;
+    unplacedElectives?: PlannerImportUnit[];
 };
 
 function categoryLabel(category: string | null): string {
@@ -69,7 +70,8 @@ export default function CourseListTable({
     onAddUnit,
     onDeleteUnit,
     onAddSemester,
-    intakeMonth = 0
+    intakeMonth = 0,
+    unplacedElectives = []
 }: CourseListTableProps) {
   
     const totalUnits = yearGroups.reduce((count, year) => {
@@ -302,5 +304,111 @@ export default function CourseListTable({
             </div>
             );
         })}
+        {/* Recommended Electives (unplaced) */}
+        {unplacedElectives.length > 0 && (
+            <div className={styles.termGroup}>
+                <div className={styles.termHeading}>
+                    <span className={styles.termLabel}>Recommended Electives</span>
+                    <div className={styles.termDivider} />
+                </div>
+                <div className={styles.tableWrap}>
+                    <table className={styles.table}>
+                        <thead>
+                            <tr>
+                                <th>UNIT CODE</th>
+                                <th>UNIT TITLE</th>
+                                <th>TYPE</th>
+                                <th>PREREQUISITE</th>
+                                <th>OFFERED IN</th>
+                                {editable && onDeleteUnit && <th></th>}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {unplacedElectives.map((unit: PlannerImportUnit, index: number) => (
+                                <tr key={`unplaced-${index}`}>
+                                    <td>
+                                        {editable && onUnitEdit ? (
+                                            <input 
+                                                key={(unit as any)._id}
+                                                type="text" 
+                                                value={unit.unit_code || ''} 
+                                                onChange={(e) => onUnitEdit((unit as any)._id, 'unit_code', e.target.value)}
+                                                className={styles.editInput} 
+                                            />
+                                        ) : (
+                                            <code className={styles.code}>{unit.unit_code}</code>
+                                        )}
+                                    </td>
+                                    <td>
+                                        {editable && onUnitEdit ? (
+                                            <div contentEditable suppressContentEditableWarning className={styles.editTextarea} onBlur={(e) => onUnitEdit((unit as any)._id, 'unit_name', e.currentTarget.textContent || '')}>{unit.unit_name || ''}</div>
+                                        ) : (
+                                            unit.unit_name || 'Unknown Unit'
+                                        )}
+                                    </td>
+                                    <td>
+                                        {editable && onUnitEdit ? (
+                                            <select value={unit.category || 'elective'} onChange={(e) => onUnitEdit((unit as any)._id, 'category', e.target.value)} className={`${styles.badge} ${styles[badgeClassForCategory(unit.category)]} ${styles.badgeSelect}`}>
+                                                <option value="core">Core</option>
+                                                <option value="major_core">Major Core</option>
+                                                <option value="mpu">MPU</option>
+                                                <option value="wil">WIL</option>
+                                                <option value="prescribed_elective">Prescribed Elective</option>
+                                                <option value="elective">Elective</option>
+                                            </select>
+                                        ) : (
+                                            <span className={`${styles.badge} ${styles[badgeClassForCategory(unit.category)]}`}>{categoryLabel(unit.category)}</span>
+                                        )}
+                                    </td>
+                                    <td>
+                                        {editable && onUnitEdit ? (
+                                            <input 
+                                                type="text" 
+                                                defaultValue={unit.prerequisite || ''} 
+                                                onBlur={(e) => onUnitEdit((unit as any)._id, 'prerequisite', e.target.value || null)}
+                                                className={styles.editInput} 
+                                                placeholder="-" 
+                                            />
+                                        ) : (
+                                            unit.prerequisite ? <code className={styles.code}>{unit.prerequisite}</code> : <span className={styles.textMuted}>-</span>
+                                        )}
+                                    </td>
+                                    <td>
+                                        {editable && onUnitEdit ? (
+                                            <select 
+                                                value={unit.offered_in ?? ''} 
+                                                onChange={(e) => {
+                                                    const val = e.target.value;
+                                                    onUnitEdit((unit as any)._id, 'offered_in', val === '' ? null : Number(val));
+                                                }} 
+                                                className={styles.editInput}
+                                            >
+                                                <option value="">-</option>
+                                                <option value="1">1</option>
+                                                <option value="2">2</option>
+                                            </select>
+                                        ) : (
+                                            unit.offered_in || <span className={styles.textMuted}>-</span>
+                                        )}
+                                    </td>
+                                    {editable && onDeleteUnit && (
+                                        <td>
+                                            <button
+                                                className={styles.deleteBtn}
+                                                onClick={() => onDeleteUnit((unit as any)._id)}
+                                                title="Delete unit"
+                                            >
+                                                DEL
+                                            </button>
+                                        </td>
+                                    )}
+                                </tr>
+                            ))}
+                                    
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        )}
     </>);
 }

@@ -232,6 +232,8 @@ export default function ImportPage() {
 
     // Use editableUnits instead of units
     for (const unit of editableUnits as PlannerImportUnit[]) {
+      // Filter unplaced electives
+      if (unit.year_level == null || unit.semester == null) continue;
       const year = parseInt(String(unit.year_level)) || 1;
       const sem = parseInt(String(unit.semester)) || 1;
       
@@ -274,7 +276,6 @@ export default function ImportPage() {
       }
       
       // Only include year if it has at least one non-empty semester
-      // OR if it has mandatory semesters (1 & 2) that we always show
       const hasContent = semesters.some(s => !s.isEmpty);
       const hasMandatorySemesters = semesters.some(s => s.semester <= 2);
       
@@ -290,6 +291,11 @@ export default function ImportPage() {
 
     return result;
   }, [editableUnits, planner]);
+
+  // Filter unplaced electives
+  const unplacedElectives = useMemo(() => {
+    return editableUnits.filter(u => u.year_level == null || u.semester == null);
+  }, [editableUnits]);
 
   // Edit handler functions
   const handleUnitEdit = (
@@ -322,13 +328,6 @@ export default function ImportPage() {
   const handleDeleteUnit = (id: string) => {
     setEditableUnits(prev => prev.filter(u => (u as any)._id !== id));
   };
-
-
-
-
-
-
-  
 
   const handleFileSelected = (file: File | null) => {
     if (!file) return;
@@ -726,14 +725,15 @@ export default function ImportPage() {
           {/* Parsed Units Table — always shown once planner is available */}
           {planner && (
             <CourseListTable 
-            yearGroups={yearGroups}
-            editable={true}
-            onUnitEdit={handleUnitEdit}
-            onAddUnit={handleAddUnit}
-            onDeleteUnit={handleDeleteUnit}
-            intakeMonth={parseIntakeMonth(planner?.course_information?.intake || '')}
-            emptyMessage="No units were extracted from this planner."
-        />
+              yearGroups={yearGroups}
+              editable={true}
+              onUnitEdit={handleUnitEdit}
+              onAddUnit={handleAddUnit}
+              onDeleteUnit={handleDeleteUnit}
+              intakeMonth={parseIntakeMonth(planner?.course_information?.intake || '')}
+              unplacedElectives={unplacedElectives}
+              emptyMessage="No units were extracted from this planner."
+            />
           )}
 
           {/* Import History */}
