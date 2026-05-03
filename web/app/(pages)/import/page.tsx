@@ -388,10 +388,6 @@ export default function ImportPage() {
       }
 
       const payload = data as PlannerApiResponse;
-      console.log('=== PARSED PLANNER DATA ===');
-console.log(JSON.stringify(payload.planner, null, 2));
-console.log('=== PARSED REPORT ===');
-console.log(JSON.stringify(payload.report, null, 2));
 
       setPlanner(payload.planner);
       setReport(payload.report);
