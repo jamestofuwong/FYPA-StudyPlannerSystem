@@ -4,9 +4,10 @@ import styles from './page.module.css';
 import { useTheme, type ThemePreference } from '../../../styles/themeProvider';
 
 const THEME_OPTIONS: { value: ThemePreference; label: string; description: string }[] = [
-  { value: 'system', label: 'System',  description: 'Follows your OS theme preference' },
-  { value: 'light',  label: 'Light',   description: 'Always use the light theme' },
-  { value: 'dark',   label: 'Dark',    description: 'Always use the dark theme' },
+  { value: 'system', label: 'System',          description: 'Follows your OS theme preference' },
+  { value: 'light',  label: 'Light',           description: 'Always use the light theme' },
+  { value: 'dark',   label: 'Dark',            description: 'Always use the dark theme' },
+  { value: 'portal', label: 'Original Portal', description: 'Matches the student portal — dark sidebar, white content, steel blue accents' },
 ];
 
 export default function SettingsPage() {

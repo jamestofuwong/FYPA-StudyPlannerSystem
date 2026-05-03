@@ -1,4 +1,4 @@
-export type ThemeMode = "light" | "dark";
+export type ThemeMode = "light" | "dark" | "portal";
 
 interface ThemeColors {
   // Backgrounds
@@ -127,6 +127,53 @@ export const themes: Record<ThemeMode, ThemeColors> = {
 
     buttonBg: "#3e3e42",
     btnSecondaryBg: "#2d2d30",
-  }
+  },
+
+  portal: {
+    sidebarBg: "#2b2623",
+    sidebarSearchBg: "#3a3431",
+    sidebarBorder: "#4a4440",
+
+    topbarBg: "#f7f7f7",
+    topbarBorder: "#d6d6d6",
+
+    tabbarBg: "#efefef",
+    tabbarBorder: "#d0d0d0",
+
+    mainBg: "#f3f3f3",
+
+    panelBg: "#ffffff",
+    panelBorder: "#d9d9d9",
+
+    cardBg: "#ffffff",
+    cardHover: "#f5f5f5",
+
+    surfaceBg: "#fafafa",
+
+    activeHighlight: "#6fa3c8",
+    activeBg: "#e6eef5",
+
+    textPrimary: "#2e2e2e",
+    textSecondary: "#5a5a5a",
+    textMuted: "#8a8a8a",
+    textLogo: "#ffffff",
+
+    accentBlue: "#6fa3c8",
+    accentGreen: "#6fbf73",
+    accentYellow: "#e6c15a",
+    accentOrange: "#e08a4e",
+    accentPurple: "#9a7fd1",
+    accentRed: "#d96b6b",
+
+    statusbarBg: "#2b2623",
+
+    rowAlt: "#f7f7f7",
+
+    scrollbarThumb: "#c2c2c2",
+    scrollbarTrack: "#eeeeee",
+
+    buttonBg: "#6fa3c8",
+    btnSecondaryBg: "#e0e0e0",
+  },
 };
 

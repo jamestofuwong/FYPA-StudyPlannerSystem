@@ -3,8 +3,8 @@
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { themes } from "./theme";
 
-type ThemeMode = "light" | "dark";
-export type ThemePreference = "system" | "light" | "dark";
+type ThemeMode = "light" | "dark" | "portal";
+export type ThemePreference = "system" | "light" | "dark" | "portal";
 
 interface ThemeContextType {
   mode: ThemeMode;
@@ -94,7 +94,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     preferenceRef.current = p;
     setPreferenceState(p);
     localStorage.setItem(STORAGE_KEY, p);
-    if (p === "light" || p === "dark") {
+    if (p !== "system") {
       setMode(p);
     } else {
       void detectSystemTheme().then(setMode);
@@ -107,14 +107,14 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const initTheme = async () => {
       const saved = localStorage.getItem(STORAGE_KEY) as ThemePreference | null;
       const pref: ThemePreference =
-        saved === "light" || saved === "dark" || saved === "system"
+        saved === "light" || saved === "dark" || saved === "system" || saved === "portal"
           ? saved
           : "system";
 
       preferenceRef.current = pref;
       setPreferenceState(pref);
 
-      if (pref === "light" || pref === "dark") {
+      if (pref !== "system") {
         setMode(pref);
         return;
       }
