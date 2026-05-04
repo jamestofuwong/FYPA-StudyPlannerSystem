@@ -207,23 +207,27 @@ export default function DashboardPage() {
     const planner = dashboardData?.planners?.[selectedPlannerIdx];
     if (!planner?.units) return [];
 
+    // c.grade  (cells[6]) = actual grade e.g. "HD", "D", "C", "P"
+    // c.status (cells[5]) = completion status e.g. "Completed"
+    const gradeMap = new Map<string, string>(
+      (scrapedStudent?.student?.courseList ?? []).map((c: any) => [c.courseId, c.grade])
+    );
+    const statusMap = new Map<string, string>(
+      (scrapedStudent?.student?.courseList ?? []).map((c: any) => [c.courseId, c.status])
+    );
+
     return planner.units
       .filter((u: any) => u.year_level === yearLevel && u.unit !== null)
-      .map((u: any) => {
-        const isDone = dashboardData.completedCodes.includes(u.unit.unit_code);
-        return {
-          code: u.unit.unit_code,
-          name: u.unit.unit_name,
-          grade: isDone ? 'A' : '—',
-          sem: u.semester,
-          year: (dashboardData.intakeYear ?? new Date().getFullYear()) + (u.year_level - 1),
-          type: u.category.replace('_', ' '),
-          typeClass: u.category === 'core' ? 'badgeRed' : 'badgePurple',
-          status: isDone ? '✓' : '—',
-          statusColor: isDone ? 'var(--accent-green)' : 'var(--text-muted)',
-          missing: !isDone
-        };
-      });
+      .map((u: any) => ({
+        code: u.unit.unit_code,
+        name: u.unit.unit_name,
+        grade: gradeMap.get(u.unit.unit_code) ?? '—',
+        sem: u.semester,
+        year: (dashboardData.intakeYear ?? new Date().getFullYear()) + (u.year_level - 1),
+        type: u.category.replace('_', ' '),
+        typeClass: u.category === 'core' ? 'badgeRed' : 'badgePurple',
+        status: statusMap.get(u.unit.unit_code) ?? '—',
+      }));
   };
 
   const toggleYear = (year: number) => {
@@ -489,30 +493,36 @@ export default function DashboardPage() {
           })().map((year) => {
             const units = getUnitsByYear(year);
             const open = openYears.has(year);
-            const completedCount = units.filter((u: any) => u.status === '✓').length;
-
             return (
               <div key={year} style={{ marginBottom: 8, border: '1px solid var(--panel-border)', borderRadius: 4, overflow: 'hidden' }}>
                 <div onClick={() => toggleYear(year)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'var(--surface-bg)', cursor: 'pointer' }}>
                   <span style={{ transition: '0.15s', transform: open ? 'rotate(0deg)' : 'rotate(-90deg)' }}>▾</span>
                   <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--accent-blue)' }}>YEAR {year}</span>
-                  <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 8 }}>{completedCount} of {units.length} units completed</span>
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 8 }}>{units.length} units</span>
                 </div>
                 {open && (
                   <div style={{ overflowX: 'auto' }}>
-                    <table className={styles.table}>
+                    <table className={styles.table} style={{ tableLayout: 'fixed', width: '100%' }}>
+                      <colgroup>
+                        <col style={{ width: 110 }} />
+                        <col style={{ width: 'auto' }} />
+                        <col style={{ width: 70 }} />
+                        <col style={{ width: 70 }} />
+                        <col style={{ width: 200 }} />
+                        <col style={{ width: 110 }} />
+                      </colgroup>
                       <thead>
                         <tr><th>Unit Code</th><th>Unit Name</th><th>Grade</th><th>Sem</th><th>Type</th><th>Status</th></tr>
                       </thead>
                       <tbody>
                         {units.map((u: any) => (
                           <tr key={u.code}>
-                            <td><InlineCode red={u.missing}>{u.code}</InlineCode></td>
+                            <td><InlineCode>{u.code}</InlineCode></td>
                             <td>{u.name}</td>
                             <td>{u.grade}</td>
                             <td>Sem {u.sem}</td>
                             <td><Badge label={u.type} cls={u.typeClass as BadgeClass} /></td>
-                            <td style={{ color: u.statusColor }}>{u.status}</td>
+                            <td>{u.status}</td>
                           </tr>
                         ))}
                       </tbody>

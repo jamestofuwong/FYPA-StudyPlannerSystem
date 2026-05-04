@@ -909,7 +909,7 @@ export const EXTRACT_GRID_JS = `
     const courseData = [];
     for (let i = startIdx; i < rows.length; i++) {
       const cells = rows[i].querySelectorAll('td');
-      if (cells.length < 7) continue;
+      if (cells.length < 8) continue;
 
       const getCellText = (cell) => {
         const div = cell.querySelector('div');
@@ -919,11 +919,12 @@ export const EXTRACT_GRID_JS = `
       courseData.push({
         courseId:    getCellText(cells[0]),
         courseTitle: getCellText(cells[1]),
-        credits:     getCellText(cells[2]),
-        earned:      getCellText(cells[3]),
-        status:      getCellText(cells[4]),
-        grade:       getCellText(cells[5]),
-        term:        getCellText(cells[6]),
+        level:       getCellText(cells[2]),
+        credits:     getCellText(cells[3]),
+        earned:      getCellText(cells[4]),
+        status:      getCellText(cells[5]),
+        grade:       getCellText(cells[6]),
+        term:        getCellText(cells[7]),
       });
     }
 

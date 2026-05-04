@@ -203,7 +203,7 @@
 .table tbody tr { border-bottom: 1px solid var(--sidebar-border); transition: background 0.1s; }
 .table tbody tr:nth-child(even) { background: var(--row-alt); }
 .table tbody tr:hover { background: rgba(0,122,204,0.1); cursor: pointer; }
-.table tbody td { padding: 7px 12px; color: var(--text-primary); }
+.table tbody td { padding: 7px 12px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .code { font-family: var(--font-mono); background: #1a1a1a; padding: 1px 5px; border-radius: 2px; font-size: 11px; color: var(--accent-orange); }
 
 /* Charts */
