@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ChangeEvent, type DragEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import styles from './page.module.css';
 import { useToast } from '../../../components/providers/ToastProvider';
@@ -25,43 +25,6 @@ type PlannerApiResponse = {
   report: PlannerImportReport;
 };
 
-function getImportStatusLabel(status: string): string {
-  switch (status) {
-    case 'deterministic_ok':
-      return 'Parsed Successfully';
-    case 'llm_fallback_used':
-      return 'Parsed with LLM Review';
-    case 'manual_review_required':
-      return 'Needs Manual Review';
-    default:
-      return 'Processed';
-  }
-}
-
-function getConfidenceTone(confidence: string): keyof typeof styles {
-  switch (confidence) {
-    case 'high':
-      return 'signalStrong';
-    case 'medium':
-      return 'signalModerate';
-    default:
-      return 'signalCritical';
-  }
-}
-
-function getStatusTone(status: string): keyof typeof styles {
-  switch (status) {
-    case 'Parsed Successfully':
-      return 'signalStrong';
-    case 'Parsed with LLM Review':
-      return 'signalModerate';
-    case 'Needs Manual Review':
-      return 'signalCritical';
-    default:
-      return 'signalNeutral';
-  }
-}
-
 function formatRequirement(value: { count: number | null; cp: number | null }): string {
   const count = value.count ?? '-';
   const cp = value.cp ?? '-';
@@ -71,6 +34,63 @@ function formatRequirement(value: { count: number | null; cp: number | null }): 
 function formatConfidenceScore(score: number | undefined): string {
   if (typeof score !== 'number' || !Number.isFinite(score)) return '-';
   return `${Math.round(score * 100)}%`;
+}
+
+function getConfidenceLevel(score: number | undefined): string {
+  if (typeof score !== 'number' || !Number.isFinite(score)) return 'Unknown';
+  if (score >= 0.9) return 'High';
+  if (score >= 0.75) return 'Medium';
+  return 'Low';
+}
+
+function getConfidenceTone(score: number | undefined): keyof typeof styles {
+  if (typeof score !== 'number' || !Number.isFinite(score)) return 'signalNeutral';
+  if (score >= 0.9) return 'signalStrong';
+  if (score >= 0.75) return 'signalModerate';
+  return 'signalCritical';
+}
+
+function getResultStatusLabels(score: number | undefined, hasValidationIssues: boolean) {
+  if (typeof score !== 'number' || !Number.isFinite(score)) {
+    return hasValidationIssues
+      ? {
+          importStatus: 'Extraction Completed with Issues',
+          validationStatus: 'Review Required',
+          reviewDecision: 'Manual Review Required',
+          tone: 'signalCritical' as keyof typeof styles,
+        }
+      : {
+          importStatus: 'Extraction Completed',
+          validationStatus: 'Passed',
+          reviewDecision: 'Ready',
+          tone: 'signalStrong' as keyof typeof styles,
+        };
+  }
+
+  if (typeof score === 'number' && Number.isFinite(score) && score < 0.75) {
+    return {
+      importStatus: 'Extraction Completed with Issues',
+      validationStatus: 'Review Required',
+      reviewDecision: 'Manual Review Required',
+      tone: 'signalCritical' as keyof typeof styles,
+    };
+  }
+
+  if (score < 0.9) {
+    return {
+      importStatus: 'Extraction Completed',
+      validationStatus: 'Review Recommended',
+      reviewDecision: 'Check Before Saving',
+      tone: 'signalModerate' as keyof typeof styles,
+    };
+  }
+
+  return {
+    importStatus: 'Extraction Completed',
+    validationStatus: 'Passed',
+    reviewDecision: 'Ready',
+    tone: 'signalStrong' as keyof typeof styles,
+  };
 }
 
 function flattenUnits(planner: PlannerImportPlanner | null): PlannerImportUnit[] {
@@ -98,9 +118,12 @@ export default function ImportPage() {
   const router = useRouter();
   const { showToast } = useToast();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const splitScreenRef = useRef<HTMLDivElement | null>(null);
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [pdfPaneWidth, setPdfPaneWidth] = useState<number | null>(null);
+  const [isResizing, setIsResizing] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isParsing, setIsParsing] = useState(false);
   const [useLlm, setUseLlm] = useState(true);
@@ -141,11 +164,20 @@ export default function ImportPage() {
 
   const modelReady = ollamaStatus.model === 'ready';
   const effectiveUseLlm = useLlm && modelReady;
+  const pdfViewerUrl = pdfUrl ? `${pdfUrl}#toolbar=0&navpanes=0` : '';
 
   const summary = useMemo(() => {
     if (!planner || !report) return null;
 
     const validationIssues = Array.from(new Set(report.validation_issues));
+    const confidenceScore = report.confidence?.overall_score;
+    const hasConfidenceScore = typeof confidenceScore === 'number' && Number.isFinite(confidenceScore);
+    const resultLabels = getResultStatusLabels(confidenceScore, validationIssues.length > 0);
+    const llmReviewLabel = !report.llm_used
+      ? 'Disabled'
+      : report.llm_applied
+        ? 'Enabled (Applied)'
+        : 'Enabled (No Changes)';
 
     return {
       course: planner.course_information.course || 'Unknown course',
@@ -156,15 +188,18 @@ export default function ImportPage() {
       majorReq: planner.course_information.requirements.major,
       elective: planner.course_information.requirements.elective,
       wil: planner.course_information.requirements.wil,
-      statusLabel: getImportStatusLabel(report.outcome.status),
-      statusTone: getStatusTone(getImportStatusLabel(report.outcome.status)),
-      confidence: report.outcome.confidence,
-      confidenceScore: report.confidence?.overall_score,
-      confidenceScoreLabel: formatConfidenceScore(report.confidence?.overall_score),
-      manualReviewRequired: report.confidence?.manual_review_required ?? report.outcome.status === 'manual_review_required',
-      confidenceTone: getConfidenceTone(report.outcome.confidence),
-      reason: validationIssues.length > 0 ? null : report.outcome.reason,
-      llmApplied: report.llm_applied,
+      statusLabel: resultLabels.importStatus,
+      statusTone: resultLabels.tone,
+      hasConfidenceScore,
+      confidenceScoreLabel: formatConfidenceScore(confidenceScore),
+      confidenceLevelLabel: getConfidenceLevel(confidenceScore),
+      confidenceTone: getConfidenceTone(confidenceScore),
+      validationStatusLabel: resultLabels.validationStatus,
+      validationStatusTone: resultLabels.tone,
+      reviewDecisionLabel: resultLabels.reviewDecision,
+      reviewDecisionTone: resultLabels.tone,
+      llmReviewLabel,
+      llmReviewTone: !report.llm_used ? 'signalNeutral' : report.llm_applied ? 'signalModerate' : 'signalStrong',
       missingCount: validationIssues.length,
       validationIssues,
     };
@@ -353,6 +388,42 @@ export default function ImportPage() {
     handleFileSelected(event.dataTransfer.files?.[0] ?? null);
   };
 
+  const handleResizeStart = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    const container = splitScreenRef.current;
+    if (!container) return;
+
+    const updatePaneWidth = (clientX: number) => {
+      const rect = container.getBoundingClientRect();
+      if (rect.width <= 0) return;
+
+      const dividerWidth = 9;
+      const minPdfWidth = Math.min(260, rect.width * 0.4);
+      const minResultsWidth = Math.min(360, rect.width * 0.45);
+      const maxPdfWidth = rect.width - dividerWidth - minResultsWidth;
+      const nextWidth = clientX - rect.left;
+
+      setPdfPaneWidth(Math.min(maxPdfWidth, Math.max(minPdfWidth, nextWidth)));
+    };
+
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      moveEvent.preventDefault();
+      updatePaneWidth(moveEvent.clientX);
+    };
+
+    const handlePointerUp = () => {
+      setIsResizing(false);
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+    };
+
+    setIsResizing(true);
+    event.currentTarget.setPointerCapture(event.pointerId);
+    updatePaneWidth(event.clientX);
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp, { once: true });
+  };
+
   const handleDownloadModel = async () => {
     const res = await fetch('/api/ollama/pull', { method: 'POST' }).catch(() => null);
     if (!res?.ok) {
@@ -387,6 +458,13 @@ export default function ImportPage() {
       }
 
       const payload = data as PlannerApiResponse;
+      const importStatus = getResultStatusLabels(
+        payload.report.confidence?.overall_score,
+        payload.report.validation_issues.length > 0
+      ).importStatus;
+      const scoreDetail = payload.report.confidence?.overall_score !== undefined
+        ? `${formatConfidenceScore(payload.report.confidence.overall_score)} score`
+        : 'AI review disabled';
 
       setPlanner(payload.planner);
       setReport(payload.report);
@@ -394,8 +472,8 @@ export default function ImportPage() {
         {
           id: `${selectedFile.name}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           name: selectedFile.name,
-          status: getImportStatusLabel(payload.report.outcome.status),
-          detail: `${payload.report.unit_counts.core_units ?? 0} core units | ${payload.report.unit_counts.major_units ?? 0} major units | ${formatConfidenceScore(payload.report.confidence?.overall_score)} score`,
+          status: importStatus,
+          detail: `${payload.report.unit_counts.core_units ?? 0} core units | ${payload.report.unit_counts.major_units ?? 0} major units | ${scoreDetail}`,
           cls: payload.report.validation_issues.length ? 'badgeOrange' : 'badgeGreen',
         },
         ...prev.slice(0, 4),
@@ -447,9 +525,11 @@ export default function ImportPage() {
         body: JSON.stringify({ planner: updatedPlanner }),
       });
 
-      if (!response.ok) throw new Error('Failed to save planner to database.');
+      const data = await response.json().catch(() => ({})) as { plannerId?: string; error?: string };
+      if (!response.ok) throw new Error(data.error || 'Failed to save planner to database.');
 
       showToast('Planner saved to database successfully!', 'success');
+      router.push(data.plannerId ? `/planners?plannerId=${encodeURIComponent(data.plannerId)}` : '/planners');
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Save failed', 'error');
     } finally {
@@ -522,40 +602,57 @@ export default function ImportPage() {
     <div className={styles.panelSplit}>
       {fileInput}
 
-      <div className={styles.splitScreen}>
+      <div
+        ref={splitScreenRef}
+        className={`${styles.splitScreen} ${isResizing ? styles.splitScreenResizing : ''}`}
+        style={pdfPaneWidth ? { '--pdf-pane-width': `${pdfPaneWidth}px` } as CSSProperties : undefined}
+      >
         {/* ── Left: PDF viewer ─────────────────────────────────────────── */}
         <div className={styles.pdfPane}>
-          <div className={styles.pdfHeader}>
-            <span className={styles.pdfFileName}>{selectedFile.name}</span>
-            <button
-              className={styles.btnSecondary}
-              style={{ fontSize: 11, padding: '3px 10px' }}
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isParsing}
-            >
-              Change
-            </button>
-            <button
-              className={styles.btnDanger}
-              style={{ fontSize: 11, padding: '3px 10px' }}
-              onClick={handleClear}
-              disabled={isParsing}
-            >
-              ✕ Clear
-            </button>
-          </div>
           <embed
-            src={pdfUrl ?? ''}
+            src={pdfViewerUrl}
             type="application/pdf"
             className={styles.pdfViewer}
           />
         </div>
 
         {/* ── Right: controls + results ─────────────────────────────────── */}
+        <button
+          type="button"
+          className={styles.splitDivider}
+          onPointerDown={handleResizeStart}
+          aria-label="Resize PDF preview and import panel"
+        />
+
         <div className={styles.resultsPane}>
 
           {/* Import Configuration */}
-          <div className={styles.sectionTitle}>Import Configuration</div>
+          <div className={styles.importStickyHeader}>
+            <div className={styles.importHeaderTitle}>Import Configuration</div>
+            <div className={styles.importHeaderActions}>
+              <button
+                className={styles.btnSecondary}
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isParsing}
+              >
+                Reupload
+              </button>
+              <button
+                className={styles.btnDanger}
+                onClick={handleClear}
+                disabled={isParsing}
+              >
+                Clear
+              </button>
+              <button
+                className={styles.btnSuccess}
+                onClick={handleSaveToDatabase}
+                disabled={isParsing || !planner}
+              >
+                {isParsing && planner ? 'Saving...' : 'Confirm & Save'}
+              </button>
+            </div>
+          </div>
           <div className={styles.card}>
             <div className={styles.formGrid2}>
               <div className={styles.formGroup}>
@@ -578,6 +675,12 @@ export default function ImportPage() {
                   <option value="disabled">Disabled</option>
                 </select>
               </div>
+            </div>
+
+            <div className={styles.btnGroup} style={{ marginBottom: 12 }}>
+              <button className={styles.btnPrimary} onClick={handleParse} disabled={isParsing}>
+                {isParsing && !planner ? 'Uploading...' : 'Upload'}
+              </button>
             </div>
 
             {/* Ollama / model status notices */}
@@ -605,19 +708,6 @@ export default function ImportPage() {
                 Download failed: {ollamaStatus.pullError}
               </div>
             )}
-
-            <div className={styles.btnGroup}>
-              <button className={styles.btnPrimary} onClick={handleParse} disabled={isParsing}>
-                {isParsing && !planner ? 'Parsing...' : 'Parse PDF'}
-              </button>
-              <button
-                className={styles.btnSuccess}
-                onClick={handleSaveToDatabase}
-                disabled={isParsing || !planner}
-              >
-                {isParsing && planner ? 'Saving...' : 'Confirm & Save'}
-              </button>
-            </div>
           </div>
 
           {/* Parsing spinner */}
@@ -668,48 +758,60 @@ export default function ImportPage() {
                   </div>
                 </div>
 
-                <div className={styles.signalGrid}>
-                  <div className={`${styles.signalRow} ${styles[summary.statusTone]}`}>
-                    <div className={styles.signalMain}>
-                      <span className={styles.signalRowLabel}>Import Status</span>
-                      <span className={`${styles.badge} ${styles.signalBadge} ${styles[summary.statusTone]}`}>{summary.statusLabel}</span>
+                <div className={styles.resultSummary}>
+                  <div className={styles.resultGroup}>
+                    <div className={styles.resultGroupTitle}>Overall Result</div>
+                    <div className={styles.resultBadgeRow}>
+                      <span className={styles.resultLabel}>Import Status</span>
+                      <span className={`${styles.badge} ${styles.pillBadge} ${styles[summary.statusTone]}`}>{summary.statusLabel}</span>
                     </div>
-                  </div>
-                  <div className={`${styles.signalRow} ${styles[summary.confidenceTone]}`}>
-                    <div className={styles.signalMain}>
-                      <span className={styles.signalRowLabel}>Confidence</span>
-                      <span className={`${styles.badge} ${styles.signalBadge} ${styles[summary.confidenceTone]}`}>
-                        {summary.confidence} ({summary.confidenceScoreLabel})
+                    <div className={styles.resultBadgeRow}>
+                      <span className={styles.resultLabel}>Validation Status</span>
+                      <span className={`${styles.badge} ${styles.pillBadge} ${styles[summary.validationStatusTone as keyof typeof styles]}`}>
+                        {summary.validationStatusLabel}
+                      </span>
+                    </div>
+                    <div className={styles.resultBadgeRow}>
+                      <span className={styles.resultLabel}>Review Decision</span>
+                      <span className={`${styles.badge} ${styles.pillBadge} ${styles[summary.reviewDecisionTone as keyof typeof styles]}`}>
+                        {summary.reviewDecisionLabel}
                       </span>
                     </div>
                   </div>
-                  <div className={`${styles.signalRow} ${summary.manualReviewRequired ? styles.signalCritical : styles.signalStrong}`}>
-                    <div className={styles.signalMain}>
-                      <span className={styles.signalRowLabel}>Review Decision</span>
-                      <span className={`${styles.badge} ${styles.signalBadge} ${summary.manualReviewRequired ? styles.signalCritical : styles.signalStrong}`}>
-                        {summary.manualReviewRequired ? 'Manual Review' : 'Ready'}
+
+                  {summary.hasConfidenceScore && (
+                    <div className={`${styles.confidencePanel} ${styles[summary.confidenceTone]}`}>
+                      <div className={styles.confidenceHeader}>
+                        <span className={styles.resultGroupTitle}>Confidence</span>
+                        <span className={`${styles.badge} ${styles.pillBadge} ${styles[summary.confidenceTone]}`}>
+                          {summary.confidenceLevelLabel}
+                        </span>
+                      </div>
+                      <div className={styles.confidenceScore}>{summary.confidenceScoreLabel}</div>
+                      <div className={styles.confidenceCaption}>Extraction Reliability</div>
+                    </div>
+                  )}
+
+                  <div className={styles.resultGroup}>
+                    <div className={styles.resultGroupTitle}>AI Review</div>
+                    <div className={styles.resultBadgeRow}>
+                      <span className={styles.resultLabel}>LLM Review</span>
+                      <span className={`${styles.badge} ${styles.pillBadge} ${styles[summary.llmReviewTone as keyof typeof styles]}`}>
+                        {summary.llmReviewLabel}
                       </span>
                     </div>
                   </div>
-                  <div className={`${styles.signalRow} ${summary.llmApplied ? styles.signalModerate : styles.signalNeutral}`}>
-                    <div className={styles.signalMain}>
-                      <span className={styles.signalRowLabel}>LLM Review</span>
-                      <span className={`${styles.badge} ${styles.signalBadge} ${summary.llmApplied ? styles.signalModerate : styles.signalNeutral}`}>
-                        {summary.llmApplied ? 'Applied' : 'Not Applied'}
-                      </span>
-                    </div>
-                  </div>
-                  <div className={`${styles.signalRow} ${summary.missingCount > 0 ? styles.signalCritical : styles.signalStrong}`}>
-                    <div className={styles.signalMain}>
-                      <span className={styles.signalRowLabel}>Missing Data</span>
-                      <span className={`${styles.badge} ${styles.signalBadge} ${summary.missingCount > 0 ? styles.signalCritical : styles.signalStrong}`}>
-                        {summary.missingCount > 0 ? `${summary.missingCount} issue${summary.missingCount > 1 ? 's' : ''}` : 'None'}
+
+                  <div className={styles.resultGroup}>
+                    <div className={styles.resultGroupTitle}>Data Quality</div>
+                    <div className={styles.resultBadgeRow}>
+                      <span className={styles.resultLabel}>Missing Data</span>
+                      <span className={`${styles.badge} ${styles.pillBadge} ${summary.missingCount > 0 ? styles.signalCritical : styles.signalStrong}`}>
+                        {summary.missingCount > 0 ? `${summary.missingCount} issue${summary.missingCount > 1 ? 's' : ''}` : 'None detected'}
                       </span>
                     </div>
                   </div>
                 </div>
-
-                {summary.reason && <div className={styles.reasonBox}>{summary.reason}</div>}
 
                 {summary.validationIssues.length > 0 && (
                   <div className={styles.validationBox}>
