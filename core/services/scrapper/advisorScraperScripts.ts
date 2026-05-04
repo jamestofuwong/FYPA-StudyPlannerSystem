@@ -642,10 +642,11 @@ export const CLICK_DROPDOWN_JS = `
   })()
 `;
 
-export function FIND_AND_SELECT_JS(mode: 'latest' | 'earliest' | 'mpu' = 'latest'): string {
+export function FIND_AND_SELECT_JS(mode: 'latest' | 'earliest' | 'mpu' | 'by-text' = 'latest', targetText?: string): string {
   return `
   (async () => {
     const mode = ${JSON.stringify(mode)};
+    const targetText = ${JSON.stringify(targetText ?? null)};
     const norm = (t) => (t ?? "").replace(/\\s+/g, " ").trim();
     const isVisible = (el) => {
       try {
@@ -733,7 +734,9 @@ export function FIND_AND_SELECT_JS(mode: 'latest' | 'earliest' | 'mpu' = 'latest
     const extractCode = (text) => { const m = text.match(/\\(([^)]+)\\)\\s*$/); return m ? m[1] : null; };
 
     let best = null;
-    if (mode === 'mpu') {
+    if (mode === 'by-text' && targetText) {
+      best = allOptions.find(o => o.text === targetText) ?? allOptions.find(o => o.text.includes(targetText)) ?? null;
+    } else if (mode === 'mpu') {
       best = allOptions.find(o => isMpu(o.text)) ?? null;
     } else {
       const filtered = allOptions.filter(o => !isMpu(o.text));

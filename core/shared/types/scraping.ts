@@ -52,6 +52,7 @@ export type ScrapedProgramData = {
 export type ScrapedCourseRow = {
   courseId: string;
   courseTitle: string;
+  level: string;
   credits: string;
   earned: string;
   status: string;
@@ -69,4 +70,6 @@ export type ScrapeResult =
       rowCount?: number;
       gridRows?: ScrapedCourseRow[];
       gridRowCount?: number;
+      enrollmentOptions?: { text: string }[];
+      selectedEnrollment?: string;
     };

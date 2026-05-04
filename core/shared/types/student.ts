@@ -46,4 +46,7 @@ export type ScrapedStudent = {
   areasOfStudy?: string[];
 
   courseList: ScrapedCourseListItem[];
+
+  enrollmentOptions?: { text: string }[];
+  selectedEnrollment?: string;
 };

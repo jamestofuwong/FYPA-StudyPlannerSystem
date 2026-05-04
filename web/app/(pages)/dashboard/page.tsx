@@ -134,9 +134,10 @@ export default function DashboardPage() {
   };
 
   // Database Fetcher — called after scraping completes with the mapped student data.
-  const fetchDashboardData = async (studentId: string, student: ScrapedStudent) => {
+  const fetchDashboardData = async (studentId: string, student: ScrapedStudent, mpuCourseList: any[] = []) => {
     try {
-      const completedUnits = student.courseList.map((c) => c.courseId);
+      const mpuCompleted = mpuCourseList.filter((c) => c.grade === 'COMP').map((c) => c.courseId);
+      const completedUnits = [...new Set([...student.courseList.map((c) => c.courseId), ...mpuCompleted])];
 
       // Parse year and semester from the raw portal date string (e.g. "02/2024", "Feb 2024")
       const enrollStr = student.enrollmentDate ?? '';
@@ -188,6 +189,8 @@ export default function DashboardPage() {
           intakeYear,
           student,
           studentId,
+          enrollmentMode,
+          mpuCourseList,
         };
         setDashboardData(data);
         setStudentLoaded(true);
@@ -209,11 +212,18 @@ export default function DashboardPage() {
 
     // c.grade  (cells[6]) = actual grade e.g. "HD", "D", "C", "P"
     // c.status (cells[5]) = completion status e.g. "Completed"
+    // MPU units live in a separate enrollment — fall back to MPU course list for grade/status.
     const gradeMap = new Map<string, string>(
       (scrapedStudent?.student?.courseList ?? []).map((c: any) => [c.courseId, c.grade])
     );
     const statusMap = new Map<string, string>(
       (scrapedStudent?.student?.courseList ?? []).map((c: any) => [c.courseId, c.status])
+    );
+    const mpuGradeMap = new Map<string, string>(
+      (dashboardData.mpuCourseList ?? []).map((c: any) => [c.courseId, c.grade])
+    );
+    const mpuStatusMap = new Map<string, string>(
+      (dashboardData.mpuCourseList ?? []).map((c: any) => [c.courseId, c.status])
     );
 
     return planner.units
@@ -221,13 +231,57 @@ export default function DashboardPage() {
       .map((u: any) => ({
         code: u.unit.unit_code,
         name: u.unit.unit_name,
-        grade: gradeMap.get(u.unit.unit_code) ?? '—',
+        grade: gradeMap.get(u.unit.unit_code) ?? mpuGradeMap.get(u.unit.unit_code) ?? '—',
         sem: u.semester,
         year: (dashboardData.intakeYear ?? new Date().getFullYear()) + (u.year_level - 1),
         type: u.category.replace('_', ' '),
         typeClass: u.category === 'core' ? 'badgeRed' : 'badgePurple',
-        status: statusMap.get(u.unit.unit_code) ?? '—',
+        status: statusMap.get(u.unit.unit_code) ?? mpuStatusMap.get(u.unit.unit_code) ?? '—',
       }));
+  };
+
+  // Scrapes the MPU enrollment for a student if it exists and the current enrollment is not MPU.
+  // Returns the MPU courseList so it can be used to supplement completedCodes for matching.
+  const fetchMpuCourseList = async (id: string, mainStudent: ScrapedStudent): Promise<any[]> => {
+    const isAlreadyMpu = (mainStudent.selectedEnrollment ?? '').includes('Mata Pelajaran Umum');
+    if (isAlreadyMpu) return [];
+    const mpuOption = mainStudent.enrollmentOptions?.find((o) => o.text.includes('Mata Pelajaran Umum'));
+    if (!mpuOption) return [];
+    const startRes = await fetch('/api/scraper/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ studentId: id, enrollmentMode: 'by-text', enrollmentText: mpuOption.text }),
+    }).catch(() => null);
+    if (!startRes?.ok) return [];
+    const mpuStudent = await pollScraperResult();
+    return mpuStudent?.courseList ?? [];
+  };
+
+  const handleSwitchEnrollment = (enrollmentText: string) => {
+    const id = studentIdInput.trim();
+    if (!id) return;
+    setSuggestions([]);
+    setShowSuggestions(false);
+    setSelectedStudentName('');
+    setStudentLoaded(false);
+    setScrapedStudent(null);
+    setDashboardData(null);
+    setScraperApiStatus('idle');
+    setSelectedPlannerIdx(0);
+    setInternalLoading(true);
+    fetch('/api/scraper/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ studentId: id, enrollmentMode: 'by-text', enrollmentText }),
+    }).then(async (startRes) => {
+      if (!startRes.ok) { showToast('Failed to queue scrape.', 'error'); setInternalLoading(false); return; }
+      const scraped = await pollScraperResult();
+      if (!scraped) { setInternalLoading(false); return; }
+      setScrapedStudent({ student: scraped, studentId: id });
+      const mpuCourseList = await fetchMpuCourseList(id, scraped);
+      await fetchDashboardData(id, scraped, mpuCourseList);
+      setInternalLoading(false);
+    }).catch(() => { showToast('Failed to fetch data.', 'error'); setInternalLoading(false); });
   };
 
   const toggleYear = (year: number) => {
@@ -289,8 +343,10 @@ export default function DashboardPage() {
       if (!student) return;
       // 3. Show identity card immediately — matching is still running
       setScrapedStudent({ student, studentId: id });
-      // 4. Fetch matching + planner data
-      await fetchDashboardData(id, student);
+      // 4. Scrape MPU enrollment to supplement completedCodes for matching
+      const mpuCourseList = await fetchMpuCourseList(id, student);
+      // 5. Fetch matching + planner data
+      await fetchDashboardData(id, student, mpuCourseList);
     } finally {
       setInternalLoading(false);
     }
@@ -428,6 +484,33 @@ export default function DashboardPage() {
                 </div>
               ))}
             </div>
+            {(() => {
+              const options = scrapedStudent?.student?.enrollmentOptions;
+              if (!options || options.length === 0) return null;
+              const current = scrapedStudent?.student?.selectedEnrollment;
+              return (
+                <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--panel-border)', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>Enrolment</span>
+                  {options.map((opt) => {
+                    const active = opt.text === current;
+                    return (
+                      <button
+                        key={opt.text}
+                        onClick={() => !active && handleSwitchEnrollment(opt.text)}
+                        disabled={loading}
+                        style={{
+                          fontSize: 11, padding: '2px 10px', borderRadius: 12, cursor: active ? 'default' : 'pointer',
+                          border: active ? '1px solid var(--accent-blue)' : '1px solid var(--panel-border)',
+                          background: active ? 'var(--active-bg, rgba(111,163,200,0.15))' : 'transparent',
+                          color: active ? 'var(--accent-blue)' : 'var(--text-muted)',
+                          fontWeight: active ? 600 : 400,
+                        }}
+                      >{opt.text}</button>
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </div>
         );
       })()}
@@ -441,8 +524,51 @@ export default function DashboardPage() {
       )}
 
       {/* ── Dashboard Content ────────────────────────────────────────────── */}
-      {!loading && studentLoaded && dashboardData && (
-        <div>
+      {!loading && studentLoaded && dashboardData && (() => {
+        const isMpu = (scrapedStudent?.student?.selectedEnrollment ?? '').includes('Mata Pelajaran Umum');
+
+        if (isMpu) {
+          const courseList: any[] = scrapedStudent?.student?.courseList ?? [];
+          return (
+            <div>
+              <div className={styles.sectionTitle}>Course List</div>
+              <div style={{ overflowX: 'auto', border: '1px solid var(--panel-border)', borderRadius: 4 }}>
+                <table className={styles.table} style={{ tableLayout: 'fixed', width: '100%' }}>
+                  <colgroup>
+                    <col style={{ width: 110 }} />
+                    <col style={{ width: 'auto' }} />
+                    <col style={{ width: 60 }} />
+                    <col style={{ width: 70 }} />
+                    <col style={{ width: 70 }} />
+                    <col style={{ width: 110 }} />
+                    <col style={{ width: 70 }} />
+                    <col style={{ width: 110 }} />
+                  </colgroup>
+                  <thead>
+                    <tr><th>Course ID</th><th>Course Title</th><th>Level</th><th>Credits</th><th>Earned</th><th>Status</th><th>Grade</th><th>Term</th></tr>
+                  </thead>
+                  <tbody>
+                    {courseList.map((c: any, i: number) => (
+                      <tr key={c.courseId ?? i}>
+                        <td><InlineCode>{c.courseId}</InlineCode></td>
+                        <td>{c.courseTitle}</td>
+                        <td>{c.level ?? '—'}</td>
+                        <td>{c.credits}</td>
+                        <td>{c.creditsEarned}</td>
+                        <td>{c.status}</td>
+                        <td>{c.grade}</td>
+                        <td>{c.term}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        }
+
+        return (
+          <div>
 
           {/* Ranked Planners selector */}
           <div className={styles.sectionTitle}>Ranked Planners</div>
@@ -516,7 +642,7 @@ export default function DashboardPage() {
                       </thead>
                       <tbody>
                         {units.map((u: any) => (
-                          <tr key={u.code}>
+                          <tr key={u.code} style={u.grade === '—' ? { background: 'rgba(244,135,113,0.08)' } : undefined}>
                             <td><InlineCode>{u.code}</InlineCode></td>
                             <td>{u.name}</td>
                             <td>{u.grade}</td>
@@ -550,8 +676,9 @@ export default function DashboardPage() {
               <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Required units from the Course and Major are still outstanding.</div>
             </div>
           </div>
-        </div>
-      )}
+          </div>
+        );
+      })()}
 
       {/* ── Export Modal ─────────────────────────────────────────────────── */}
       {showExportModal && dashboardData && scrapedStudent && (() => {

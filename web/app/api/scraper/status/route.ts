@@ -7,6 +7,7 @@ export async function GET() {
     status: scraperStore.status,
     studentId: scraperStore.studentId,
     enrollmentMode: scraperStore.enrollmentMode,
+    enrollmentText: scraperStore.enrollmentText,
     result: scraperStore.result,
     error: scraperStore.error,
   });

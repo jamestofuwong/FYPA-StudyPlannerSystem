@@ -71,6 +71,8 @@ export type StepResult = {
   scrapeResult?: ScrapeResult;
   loginDetected?: boolean;
   studentName?: string;
+  enrollmentOptions?: { text: string }[];
+  selectedEnrollment?: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -140,7 +142,7 @@ type GridDataResult = {
 export async function runScraperStep(
   stepId: ScraperStepId,
   adapter: WebviewAdapter,
-  opts?: { studentId?: string; enrollmentMode?: 'latest' | 'earliest' | 'mpu' }
+  opts?: { studentId?: string; enrollmentMode?: 'latest' | 'earliest' | 'mpu' | 'by-text'; enrollmentText?: string }
 ): Promise<StepResult> {
   const logs: string[] = [];
 
@@ -220,12 +222,19 @@ export async function runScraperStep(
 
   } else if (stepId === "select-dropdown") {
     logs.push("→ Selecting best enrollment option");
-    const data = await adapter.executeJavaScript<SelectResult>(FIND_AND_SELECT_JS(opts?.enrollmentMode ?? 'latest'));
+    const data = await adapter.executeJavaScript<SelectResult>(
+      FIND_AND_SELECT_JS(opts?.enrollmentMode ?? 'latest', opts?.enrollmentText)
+    );
     if (data.clicked && data.selectedOption) {
       logs.push(`✓ Selected: ${data.selectedOption.text}`);
     } else {
       logs.push(`⚠ ${data.error ?? "No option selected"}`);
     }
+    return {
+      logs,
+      enrollmentOptions: (data.allOptions ?? []).map((o) => ({ text: o.text })),
+      selectedEnrollment: data.selectedOption?.text ?? undefined,
+    };
 
   } else if (stepId === "scrape-program-data") {
     logs.push("→ Waiting for Current Program section to appear");
@@ -275,7 +284,7 @@ export async function runScraperStep(
 
 export async function runAllSteps(
   adapter: WebviewAdapter,
-  opts?: { studentId?: string; enrollmentMode?: 'latest' | 'earliest' | 'mpu' }
+  opts?: { studentId?: string; enrollmentMode?: 'latest' | 'earliest' | 'mpu' | 'by-text'; enrollmentText?: string }
 ): Promise<StepResult> {
   const allStepIds: ScraperStepId[] = [
     "go-degree",
