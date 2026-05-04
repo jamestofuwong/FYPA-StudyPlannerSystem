@@ -257,3 +257,60 @@
 .addSemesterSection {
   margin: 12px 0;
 }
+
+/* Planner Header */
+.summaryGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.summaryItem {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--panel-border);
+  border-radius: 4px;
+  background: var(--surface-bg);
+}
+
+.summaryLabel {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-muted);
+}
+
+.summaryValue {
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.summaryEditRow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.editSeparator {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.editUnit {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.editInput[type="number"]::-webkit-outer-spin-button,
+.editInput[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.summaryEditRow .editInput {
+  width: 35px;
+  text-align: center;
+}

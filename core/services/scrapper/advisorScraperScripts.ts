@@ -642,10 +642,11 @@ export const CLICK_DROPDOWN_JS = `
   })()
 `;
 
-export function FIND_AND_SELECT_JS(mode: 'latest' | 'earliest' | 'mpu' = 'latest'): string {
+export function FIND_AND_SELECT_JS(mode: 'latest' | 'earliest' | 'mpu' | 'by-text' = 'latest', targetText?: string): string {
   return `
   (async () => {
     const mode = ${JSON.stringify(mode)};
+    const targetText = ${JSON.stringify(targetText ?? null)};
     const norm = (t) => (t ?? "").replace(/\\s+/g, " ").trim();
     const isVisible = (el) => {
       try {
@@ -733,7 +734,9 @@ export function FIND_AND_SELECT_JS(mode: 'latest' | 'earliest' | 'mpu' = 'latest
     const extractCode = (text) => { const m = text.match(/\\(([^)]+)\\)\\s*$/); return m ? m[1] : null; };
 
     let best = null;
-    if (mode === 'mpu') {
+    if (mode === 'by-text' && targetText) {
+      best = allOptions.find(o => o.text === targetText) ?? allOptions.find(o => o.text.includes(targetText)) ?? null;
+    } else if (mode === 'mpu') {
       best = allOptions.find(o => isMpu(o.text)) ?? null;
     } else {
       const filtered = allOptions.filter(o => !isMpu(o.text));
@@ -909,7 +912,7 @@ export const EXTRACT_GRID_JS = `
     const courseData = [];
     for (let i = startIdx; i < rows.length; i++) {
       const cells = rows[i].querySelectorAll('td');
-      if (cells.length < 7) continue;
+      if (cells.length < 8) continue;
 
       const getCellText = (cell) => {
         const div = cell.querySelector('div');
@@ -919,11 +922,12 @@ export const EXTRACT_GRID_JS = `
       courseData.push({
         courseId:    getCellText(cells[0]),
         courseTitle: getCellText(cells[1]),
-        credits:     getCellText(cells[2]),
-        earned:      getCellText(cells[3]),
-        status:      getCellText(cells[4]),
-        grade:       getCellText(cells[5]),
-        term:        getCellText(cells[6]),
+        level:       getCellText(cells[2]),
+        credits:     getCellText(cells[3]),
+        earned:      getCellText(cells[4]),
+        status:      getCellText(cells[5]),
+        grade:       getCellText(cells[6]),
+        term:        getCellText(cells[7]),
       });
     }
 

@@ -1,11 +1,11 @@
-"""
-Planner structure service used by the app's PDF import API.
+﻿"""
+Planner import orchestration and JSON structuring.
 
-Pipeline:
-  1. plannerPdfExtractor.py -> raw text + unit extraction
-  2. Deterministic assembly into the app planner JSON schema
-  3. Optional LLM cross-check patch via Ollama
-  4. Validation + confidence/report packaging
+This module is the subprocess entrypoint used by plannerImportService.ts. It
+combines deterministic PDF extraction, optional local Ollama cross-checking,
+normalisation, validation, and report packaging. Stdout is reserved for the
+single JSON payload expected by the app; diagnostics should go to stderr or the
+report object.
 """
 
 import argparse
@@ -28,7 +28,7 @@ from plannerPdfExtractor import (
     _get_row_colour,
 )
 
-OLLAMA_URL = "http://localhost:11434/api/generate"
+DEFAULT_OLLAMA_BASE_URL = "http://127.0.0.1:11434"
 DEFAULT_MODEL_NAME = "deepseek-r1:1.5b"
 DEFAULT_LLM_RETRIES = 2
 UNIT_CODE_RE = re.compile(r"\b[A-Z]{3}\d{3,5}@?#?\b")
@@ -41,6 +41,19 @@ _LAST_RAW_EVIDENCE = ""
 # ---------------------------
 # Ollama call
 # ---------------------------
+# Resolves the local Ollama generate endpoint used by optional AI review.
+def get_ollama_generate_url():
+    configured_url = (
+        os.environ.get("STUDY_PLANNER_OLLAMA_URL")
+        or os.environ.get("OLLAMA_BASE_URL")
+        or DEFAULT_OLLAMA_BASE_URL
+    ).strip().rstrip("/")
+    if configured_url.endswith("/api/generate"):
+        return configured_url
+    return configured_url + "/api/generate"
+
+
+# Calls ollama for optional LLM-assisted review.
 def call_ollama(prompt, model_name):
     payload = {
         "model": model_name,
@@ -49,15 +62,16 @@ def call_ollama(prompt, model_name):
         "options": {"temperature": 0.0, "num_predict": 5000},
     }
     try:
-        resp = requests.post(OLLAMA_URL, json=payload, timeout=300)
+        resp = requests.post(get_ollama_generate_url(), json=payload, timeout=300)
         resp.raise_for_status()
         return resp.json().get("response", "").strip()
     except requests.exceptions.ConnectionError:
-        raise RuntimeError("Cannot connect to Ollama. Run: ollama serve")
+        raise RuntimeError("Cannot connect to the local Ollama runtime.")
     except requests.exceptions.Timeout:
         raise RuntimeError("Ollama request timed out.")
 
 
+# Calls ollama with retries for optional LLM-assisted review.
 def call_ollama_with_retries(prompt, model_name, retries=DEFAULT_LLM_RETRIES):
     last_error = None
     attempts = []
@@ -74,6 +88,7 @@ def call_ollama_with_retries(prompt, model_name, retries=DEFAULT_LLM_RETRIES):
     raise error
 
 
+# Builds json repair prompt used by the planner import pipeline.
 def build_json_repair_prompt(previous_response):
     return f"""Return valid JSON only.
 Do not explain anything.
@@ -118,6 +133,7 @@ Previous response:
 """
 
 
+# Parses or repair llm json into a normalised planner value.
 def parse_or_repair_llm_json(response, model_name):
     try:
         return extract_json(response), []
@@ -136,11 +152,8 @@ def parse_or_repair_llm_json(response, model_name):
 # ---------------------------
 # Parse WIL unit name/prereq
 # ---------------------------
+# Splits WIL unit names and prerequisites that are merged in the PDF text.
 def parse_wil_unit(u):
-    """
-    WIL units have their name and prerequisites mixed in the name field.
-    Split them: first bullet is the name, remaining bullets are prerequisites.
-    """
     raw = u.get('unit_name', u.get('name')) or ''
     # Split on ' - ' bullets
     parts = [p.strip() for p in re.split(r'\s*-\s+', raw) if p.strip()]
@@ -158,6 +171,7 @@ def parse_wil_unit(u):
     return name, prereq_str
 
 
+# Normalises prereq text into the import pipeline format.
 def normalise_prereq_text(text):
     if text is None:
         return None
@@ -167,6 +181,7 @@ def normalise_prereq_text(text):
     return text
 
 
+# Helper for coerce int in the planner import pipeline.
 def coerce_int(value):
     if isinstance(value, int):
         return value
@@ -180,6 +195,7 @@ def coerce_int(value):
     return None
 
 
+# Normalises offered in into the import pipeline format.
 def normalise_offered_in(value):
     if value is None:
         return None
@@ -212,6 +228,7 @@ def normalise_offered_in(value):
     return None
 
 
+# Helper for output category in the planner import pipeline.
 def output_category(category):
     if category == "major":
         return "major_core"
@@ -221,8 +238,8 @@ def output_category(category):
 # ---------------------------
 # Deterministic assembly into target JSON schema
 # ---------------------------
+# Builds one unit object in the app import JSON schema.
 def unit_obj(u):
-    """Build a unit dict in the target schema."""
     obj = {
         "year_level":   coerce_int(u.get("year_level")),
         "semester":     coerce_int(u.get("semester")),
@@ -235,6 +252,7 @@ def unit_obj(u):
     return obj
 
 
+# Helper for assemble json in the planner import pipeline.
 def assemble_json(file_name, metadata, requirements, units, elective_sections):
     # Build requirements entry with count + cp
     def req_entry(key):
@@ -300,6 +318,7 @@ def assemble_json(file_name, metadata, requirements, units, elective_sections):
     }
 
 
+# Helper for planner sem to db sem in the planner import pipeline.
 def _planner_sem_to_db_sem(planner_sem, season_label=None):
     if season_label:
         label = str(season_label).lower()
@@ -313,6 +332,7 @@ def _planner_sem_to_db_sem(planner_sem, season_label=None):
     return 1 if sem % 2 == 1 else 2
 
 
+# Helper for planner sem to year in the planner import pipeline.
 def _planner_sem_to_year(planner_sem):
     sem = coerce_int(planner_sem)
     if sem is None:
@@ -320,11 +340,13 @@ def _planner_sem_to_year(planner_sem):
     return (sem + 1) // 2
 
 
+# Cleans evidence line before planner data is structured.
 def _clean_evidence_line(line):
     line = re.sub(r"\s+", " ", str(line)).strip()
-    return line.replace("â€™", "'").replace("Ã¢â‚¬â„¢", "'")
+    return line.replace("Ã¢â‚¬â„¢", "'").replace("ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢", "'")
 
 
+# Helper for is useful evidence line in the planner import pipeline.
 def _is_useful_evidence_line(line):
     if not line:
         return False
@@ -351,6 +373,7 @@ def _is_useful_evidence_line(line):
     return any(re.search(pattern, line, re.IGNORECASE) for pattern in useful_patterns)
 
 
+# Extracts page lines for the planner import pipeline.
 def _extract_page_lines(pdf_path):
     pages = []
     with pdfplumber.open(pdf_path) as pdf:
@@ -361,6 +384,7 @@ def _extract_page_lines(pdf_path):
     return pages
 
 
+# Helper for row cells text in the planner import pipeline.
 def _row_cells_text(row_cells):
     parts = []
     for cell in row_cells:
@@ -370,6 +394,7 @@ def _row_cells_text(row_cells):
     return " | ".join(parts)
 
 
+# Extracts page line records for the planner import pipeline.
 def _extract_page_line_records(page):
     words = page.extract_words(x_tolerance=2, y_tolerance=3, keep_blank_chars=False) or []
     grouped = {}
@@ -388,40 +413,44 @@ def _extract_page_line_records(page):
     return records
 
 
+# Normalises evidence row text into the import pipeline format.
 def _normalise_evidence_row_text(text):
     text = _clean_evidence_line(text).replace(" | ", " ")
     return re.sub(r"\s+", " ", text).strip()
 
 
+# Helper for looks like note line in the planner import pipeline.
 def _looks_like_note_line(line):
     text = _clean_evidence_line(line)
     if not text:
         return False
     return bool(
-        re.match(r"^[*#†]\s*", text) or
+        re.match(r"^[*#â€ ]\s*", text) or
         re.search(r"\bnotes?\b", text, re.IGNORECASE) or
         re.search(r"\bhonours merit units?\b", text, re.IGNORECASE)
     )
 
 
+# Extracts note entries for the planner import pipeline.
 def _extract_note_entries(page_lines):
     notes = []
     for line in page_lines:
         text = _clean_evidence_line(line)
         if not _looks_like_note_line(text):
             continue
-        symbol_match = re.match(r"^([*#†])\s*(.*)$", text)
+        symbol_match = re.match(r"^([*#â€ ])\s*(.*)$", text)
         if symbol_match:
             notes.append((symbol_match.group(1), _clean_evidence_line(symbol_match.group(2) or text)))
             continue
-        for symbol in ("*", "#", "†"):
+        for symbol in ("*", "#", "â€ "):
             if symbol in text:
                 notes.append((symbol, text))
-        if not any(symbol in text for symbol in ("*", "#", "†")):
+        if not any(symbol in text for symbol in ("*", "#", "â€ ")):
             notes.append(("general", text))
     return notes
 
 
+# Helper for line is row continuation in the planner import pipeline.
 def _line_is_row_continuation(line):
     text = _clean_evidence_line(line)
     if not text:
@@ -442,6 +471,7 @@ def _line_is_row_continuation(line):
     )
 
 
+# Collects row context from lines from extracted planner data.
 def _collect_row_context_from_lines(line_records, row_bbox, row_code, row_text):
     if not line_records:
         return [], None
@@ -490,6 +520,7 @@ def _collect_row_context_from_lines(line_records, row_bbox, row_code, row_text):
     return context_lines, _normalise_evidence_row_text(merged_text)
 
 
+# Helper for row category for evidence in the planner import pipeline.
 def _row_category_for_evidence(page, row_bbox, legend):
     if not row_bbox:
         return None
@@ -500,6 +531,7 @@ def _row_category_for_evidence(page, row_bbox, legend):
         return None
 
 
+# Extracts useful raw evidence lines basic for the planner import pipeline.
 def _extract_useful_raw_evidence_lines_basic(pdf_path, max_lines_per_page=120):
     blocks = []
     page_text_lines = _extract_page_lines(pdf_path)
@@ -614,6 +646,7 @@ def _extract_useful_raw_evidence_lines_basic(pdf_path, max_lines_per_page=120):
     return "\n".join(blocks)
 
 
+# Extracts useful raw evidence lines enhanced for the planner import pipeline.
 def _extract_useful_raw_evidence_lines_enhanced(pdf_path, max_lines_per_page=120):
     blocks = []
     page_text_lines = _extract_page_lines(pdf_path)
@@ -776,12 +809,14 @@ def _extract_useful_raw_evidence_lines_enhanced(pdf_path, max_lines_per_page=120
     return "\n".join(blocks)
 
 
+# Extracts useful raw evidence lines for the planner import pipeline.
 def extract_useful_raw_evidence_lines(pdf_path, max_lines_per_page=120, enhanced=False):
     if enhanced:
         return _extract_useful_raw_evidence_lines_enhanced(pdf_path, max_lines_per_page=max_lines_per_page)
     return _extract_useful_raw_evidence_lines_basic(pdf_path, max_lines_per_page=max_lines_per_page)
 
 
+# Builds improved crosscheck prompt used by the planner import pipeline.
 def build_improved_crosscheck_prompt(file_name, base_data, raw_lines, model_name=""):
     global _LAST_RAW_EVIDENCE
     _LAST_RAW_EVIDENCE = raw_lines or ""
@@ -920,6 +955,7 @@ RAW EVIDENCE:
 """
 
 
+# Applies crosscheck patch to the structured planner data.
 def apply_crosscheck_patch(base_data, patch_data, file_name):
     data = json.loads(json.dumps(base_data))
     if not isinstance(patch_data, dict):
@@ -1084,7 +1120,6 @@ def apply_crosscheck_patch(base_data, patch_data, file_name):
 
             continue
 
-        # New unit add
         if action != "add":
             continue
 
@@ -1106,11 +1141,12 @@ def apply_crosscheck_patch(base_data, patch_data, file_name):
     return normalise_llm_output(data, file_name)
 
 
+# Cleans unit name before planner data is structured.
 def clean_unit_name(name):
     if not name:
         return name
     name = re.sub(r'\s+[A-Z]{3}\d{3,5}[@#]?\s*', ' ', str(name))
-    name = name.replace('@', '').replace('#', '').replace('†', '').replace('*', '')
+    name = name.replace('@', '').replace('#', '').replace('â€ ', '').replace('*', '')
     if name.endswith(' Nil'):
         name = name[:-4]
     name = re.sub(r'\b(\w+)(?:\s+\1)+\b', r'\1', name)
@@ -1123,18 +1159,21 @@ def clean_unit_name(name):
     return re.sub(r'\s+', ' ', name).strip()
 
 
+# Helper for name compare key in the planner import pipeline.
 def _name_compare_key(text):
     value = clean_unit_name(text or "")
     value = re.sub(r"\s+", " ", str(value)).strip()
     return value.lower()
 
 
+# Helper for symbol cleanup only in the planner import pipeline.
 def _symbol_cleanup_only(old_name, new_name):
-    old_clean = re.sub(r"[@#*†]", "", str(old_name or ""))
-    new_clean = re.sub(r"[@#*†]", "", str(new_name or ""))
+    old_clean = re.sub(r"[@#*â€ ]", "", str(old_name or ""))
+    new_clean = re.sub(r"[@#*â€ ]", "", str(new_name or ""))
     return re.sub(r"\s+", " ", old_clean).strip().lower() == re.sub(r"\s+", " ", new_clean).strip().lower()
 
 
+# Helper for duplicate phrase cleanup only in the planner import pipeline.
 def _duplicate_phrase_cleanup_only(old_name, new_name):
     old = re.sub(r"\s+", " ", str(old_name or "")).strip()
     new = re.sub(r"\s+", " ", str(new_name or "")).strip()
@@ -1146,6 +1185,7 @@ def _duplicate_phrase_cleanup_only(old_name, new_name):
     return old_deduped.lower() == new.lower()
 
 
+# Helper for strip name bleed from prereq in the planner import pipeline.
 def _strip_name_bleed_from_prereq(prereq, unit_name):
     if not prereq or not unit_name:
         return prereq
@@ -1162,6 +1202,7 @@ def _strip_name_bleed_from_prereq(prereq, unit_name):
     return re.sub(r"\s+", " ", cleaned).strip()
 
 
+# Helper for dedupe repeated prereq segments in the planner import pipeline.
 def _dedupe_repeated_prereq_segments(prereq):
     text = re.sub(r"\s+", " ", str(prereq)).strip()
     exact_dup = re.match(r"^(.+?)\s+\1$", text, flags=re.IGNORECASE)
@@ -1175,10 +1216,12 @@ def _dedupe_repeated_prereq_segments(prereq):
     return text
 
 
+# Helper for prereq codes in the planner import pipeline.
 def _prereq_codes(text):
     return [match.rstrip("@#") for match in re.findall(r"\b[A-Z]{3}\d{3,5}@?#?\b", str(text or ""))]
 
 
+# Helper for unique preserve order in the planner import pipeline.
 def _unique_preserve_order(items):
     output = []
     seen = set()
@@ -1190,10 +1233,12 @@ def _unique_preserve_order(items):
     return output
 
 
+# Helper for has trailing connector in the planner import pipeline.
 def _has_trailing_connector(text):
     return bool(re.search(r"(?:\bOR\b|\bAND\b|&|/|,)\s*$", str(text or "").strip(), re.IGNORECASE))
 
 
+# Helper for strip trailing offered marker in the planner import pipeline.
 def _strip_trailing_offered_marker(text):
     value = re.sub(r"\s+", " ", str(text or "")).strip()
     value = re.sub(
@@ -1205,6 +1250,7 @@ def _strip_trailing_offered_marker(text):
     return re.sub(r"\s+", " ", value).strip()
 
 
+# Helper for is code connector only prereq in the planner import pipeline.
 def _is_code_connector_only_prereq(text):
     cleaned = str(text or "").replace("*", " ")
     cleaned = re.sub(r"\b(?:OR|AND|Co-req:)\b", " ", cleaned, flags=re.IGNORECASE)
@@ -1214,6 +1260,7 @@ def _is_code_connector_only_prereq(text):
     return cleaned == ""
 
 
+# Helper for choose code connector in the planner import pipeline.
 def _choose_code_connector(codes, text):
     sample = str(text or "")
     if re.search(r"(?:\bOR\b|/)", sample, re.IGNORECASE):
@@ -1225,6 +1272,7 @@ def _choose_code_connector(codes, text):
     return " OR " if len(codes) > 1 else " "
 
 
+# Helper for rebuild code connector prereq in the planner import pipeline.
 def _rebuild_code_connector_prereq(text):
     original = re.sub(r"\s+", " ", str(text or "")).strip()
     if not original:
@@ -1243,6 +1291,7 @@ def _rebuild_code_connector_prereq(text):
     return re.sub(r"\s+", " ", cleaned).strip()
 
 
+# Helper for should rebuild code connector prereq in the planner import pipeline.
 def _should_rebuild_code_connector_prereq(text):
     value = re.sub(r"\s+", " ", str(text or "")).strip()
     if not value:
@@ -1259,6 +1308,7 @@ def _should_rebuild_code_connector_prereq(text):
     return False
 
 
+# Parses row evidence into a normalised planner value.
 def _parse_row_evidence(raw_evidence):
     rows = []
     for idx, line in enumerate((raw_evidence or "").splitlines()):
@@ -1278,6 +1328,7 @@ def _parse_row_evidence(raw_evidence):
     return rows
 
 
+# Extracts prereq candidate from row evidence for the planner import pipeline.
 def _extract_prereq_candidate_from_row_evidence(code, raw_evidence):
     rows = _parse_row_evidence(raw_evidence)
     code = str(code or "").rstrip("@#").upper()
@@ -1318,6 +1369,7 @@ def _extract_prereq_candidate_from_row_evidence(code, raw_evidence):
     return None
 
 
+# Helper for is safe existing prereq upgrade in the planner import pipeline.
 def _is_safe_existing_prereq_upgrade(old_prereq, new_prereq, unit_code, raw_evidence=None):
     if not old_prereq or not new_prereq:
         return False
@@ -1368,6 +1420,7 @@ def _is_safe_existing_prereq_upgrade(old_prereq, new_prereq, unit_code, raw_evid
     return False
 
 
+# Helper for prereq quality metrics in the planner import pipeline.
 def _prereq_quality_metrics(text):
     value = re.sub(r"\s+", " ", str(text or "")).strip()
     codes = _prereq_codes(value)
@@ -1385,6 +1438,7 @@ def _prereq_quality_metrics(text):
     }
 
 
+# Helper for prefer cleaner prerequisite in the planner import pipeline.
 def _prefer_cleaner_prerequisite(current_prereq, candidate_prereq):
     if not candidate_prereq:
         return current_prereq
@@ -1423,6 +1477,7 @@ def _prefer_cleaner_prerequisite(current_prereq, candidate_prereq):
     return candidate["text"] if candidate["text"] == current["text"] else current_prereq
 
 
+# Helper for is bad unit name in the planner import pipeline.
 def _is_bad_unit_name(text):
     if not text:
         return False
@@ -1441,6 +1496,7 @@ def _is_bad_unit_name(text):
     return False
 
 
+# Helper for is worse unit name in the planner import pipeline.
 def _is_worse_unit_name(old_name, new_name):
     if not old_name or not new_name:
         return False
@@ -1474,6 +1530,7 @@ def _is_worse_unit_name(old_name, new_name):
     return False
 
 
+# Helper for looks like truncated prereq in the planner import pipeline.
 def _looks_like_truncated_prereq(old_prereq, new_prereq):
     if not old_prereq or not new_prereq:
         return False
@@ -1500,6 +1557,7 @@ def _looks_like_truncated_prereq(old_prereq, new_prereq):
     return False
 
 
+# Normalises prerequisite into the import pipeline format.
 def normalize_prerequisite(prereq, unit_name=None, unit_code=None, raw_evidence=None):
     if not prereq:
         return prereq
@@ -1516,12 +1574,14 @@ def normalize_prerequisite(prereq, unit_name=None, unit_code=None, raw_evidence=
     return prereq or None
 
 
+# Helper for looks like double degree in the planner import pipeline.
 def _looks_like_double_degree(course_information):
     course = str(course_information.get("course") or "")
     major = str(course_information.get("major") or "")
     return course.count("Bachelor of") >= 2 or " / " in course or major.lower().count("major") >= 2
 
 
+# Helper for is project like core candidate in the planner import pipeline.
 def _is_project_like_core_candidate(unit):
     name = str(unit.get("unit_name", "") or "")
     lowered = name.lower()
@@ -1538,6 +1598,7 @@ def _is_project_like_core_candidate(unit):
     )
 
 
+# Applies enhanced crosscheck patch to the structured planner data.
 def apply_enhanced_crosscheck_patch(base_data, patch_data, file_name):
     data = apply_crosscheck_patch(base_data, patch_data, file_name)
     rejection_log = data.setdefault("_llm_rejections", [])
@@ -1613,6 +1674,7 @@ def apply_enhanced_crosscheck_patch(base_data, patch_data, file_name):
     return data
 
 
+# Normalises unit into the import pipeline format.
 def _normalise_unit(u):
     if not isinstance(u, dict):
         return None
@@ -1665,6 +1727,7 @@ def _normalise_unit(u):
     }
 
 
+# Normalises llm output into the import pipeline format.
 def normalise_llm_output(data, file_name):
     if not isinstance(data, dict):
         data = {}
@@ -1809,6 +1872,7 @@ def normalise_llm_output(data, file_name):
     return data
 
 
+# Builds unit count snapshot information for planner import comparisons.
 def unit_count_snapshot(data):
     categories = data.get("categories", {})
     elective_groups = categories.get("elective_groups", {})
@@ -1822,6 +1886,7 @@ def unit_count_snapshot(data):
     }
 
 
+# Helper for group units in the planner import pipeline.
 def _group_units(data, group_name):
     categories = data.get("categories", {})
     if group_name == "prescribed_elective":
@@ -1831,6 +1896,7 @@ def _group_units(data, group_name):
     return categories.get(group_name, [])
 
 
+# Builds unit index information for planner import comparisons.
 def _unit_index(units):
     index = {}
     for unit in units if isinstance(units, list) else []:
@@ -1841,6 +1907,7 @@ def _unit_index(units):
     return index
 
 
+# Builds unit index by code information for planner import comparisons.
 def _unit_index_by_code(units):
     index = {}
     for unit in units if isinstance(units, list) else []:
@@ -1850,6 +1917,7 @@ def _unit_index_by_code(units):
     return index
 
 
+# Normalises normalised text into the import pipeline format.
 def _normalised_text(value):
     if value is None:
         return None
@@ -1857,22 +1925,24 @@ def _normalised_text(value):
     return text or None
 
 
+# Helper for value loss in the planner import pipeline.
 def _value_loss(base_value, llm_value):
     base_norm = _normalised_text(base_value)
     llm_norm = _normalised_text(llm_value)
     return base_norm is not None and llm_norm is None
 
 
+# Helper for allowed existing semester change in the planner import pipeline.
 def _allowed_existing_semester_change(base_unit, llm_unit, course_information):
     return False
 
 
+# Helper for should accept llm output in the planner import pipeline.
 def should_accept_llm_output(base_data, llm_data):
     def allowed_project_promotions():
         base_core = _unit_index_by_code(_group_units(base_data, "core_units"))
         base_major = _unit_index_by_code(_group_units(base_data, "major_units"))
         llm_core = _unit_index_by_code(_group_units(llm_data, "core_units"))
-        llm_major = _unit_index_by_code(_group_units(llm_data, "major_units"))
 
         ci = llm_data.get('course_information', {})
         reqs = ci.get('requirements', {}) if isinstance(ci, dict) else {}
@@ -1976,6 +2046,7 @@ def should_accept_llm_output(base_data, llm_data):
 # ---------------------------
 # Parse JSON from LLM response
 # ---------------------------
+# Extracts valid JSON from an LLM response that may include extra text.
 def extract_json(text):
     cleaned = re.sub(r"```(?:json)?", "", text).strip().rstrip("`").strip()
     if cleaned == "[]":
@@ -1997,6 +2068,7 @@ def extract_json(text):
 # ---------------------------
 # Validate and normalise
 # ---------------------------
+# Validates and repairs the structured planner shape before reporting.
 def validate_and_normalise(data, silent=False):
     errors = []
 
@@ -2039,6 +2111,7 @@ def validate_and_normalise(data, silent=False):
     return data
 
 
+# Collects validation issues from extracted planner data.
 def collect_validation_issues(data):
     issues = []
     ci = data.get("course_information", {})
@@ -2067,6 +2140,56 @@ def collect_validation_issues(data):
     return issues
 
 
+# Formats validation issue for user for app-facing output.
+def format_validation_issue_for_user(issue):
+    text = _normalise_text(issue)
+    lowered = text.lower()
+    issue_map = {
+        "core_units is empty": "Core unit is missing.",
+        "major_units is empty": "Major unit is missing.",
+        "mpu_group is empty": "MPU unit is missing.",
+        "wil_group is empty": "WIL unit is missing.",
+        "elective_groups is missing or invalid": "Elective group information is missing.",
+        "elective_groups.elective is missing": "Elective unit is missing.",
+        "elective_groups.prescribed_elective is missing": "Prescribed elective unit is missing.",
+        "wil expected but wil_group is empty": "WIL unit is missing.",
+    }
+    if lowered in issue_map:
+        return issue_map[lowered]
+
+    metadata_match = re.match(r"missing course_information\.(.+)$", lowered)
+    if metadata_match:
+        return metadata_match.group(1).replace("_", " ") + " is missing."
+
+    requirement_match = re.match(r"missing requirements\.(.+)$", lowered)
+    if requirement_match:
+        return requirement_match.group(1).replace("_", " ") + " requirement is missing."
+
+    return (
+        text
+        .replace("course_information.", "")
+        .replace("requirements.", "")
+        .replace("elective_groups.", "")
+        .replace("core_units", "core unit")
+        .replace("major_units", "major unit")
+        .replace("mpu_group", "MPU unit")
+        .replace("wil_group", "WIL unit")
+        .replace("prescribed_elective", "prescribed elective")
+        .replace("_", " ")
+    )
+
+
+# Formats validation issues for user for app-facing output.
+def format_validation_issues_for_user(issues):
+    formatted = []
+    for issue in issues or []:
+        readable = format_validation_issue_for_user(issue)
+        if readable and readable not in formatted:
+            formatted.append(readable)
+    return formatted
+
+
+# Helper for clamp score in the planner import pipeline.
 def _clamp_score(value):
     try:
         value = float(value)
@@ -2075,10 +2198,12 @@ def _clamp_score(value):
     return max(0.0, min(1.0, value))
 
 
+# Normalises text into the import pipeline format.
 def _normalise_text(value):
     return re.sub(r"\s+", " ", str(value or "")).strip()
 
 
+# Helper for major expected in the planner import pipeline.
 def _major_expected(data):
     ci = data.get("course_information", {})
     req_major = ci.get("requirements", {}).get("major", {})
@@ -2091,6 +2216,7 @@ def _major_expected(data):
     )
 
 
+# Helper for wil expected in the planner import pipeline.
 def _wil_expected(raw_evidence, data):
     text = _normalise_text(raw_evidence).lower()
     if re.search(
@@ -2108,6 +2234,7 @@ def _wil_expected(raw_evidence, data):
     )
 
 
+# Helper for requirement expected in the planner import pipeline.
 def _requirement_expected(req_entry, unit_count, raw_evidence, label_patterns):
     if not isinstance(req_entry, dict):
         req_entry = {}
@@ -2119,6 +2246,7 @@ def _requirement_expected(req_entry, unit_count, raw_evidence, label_patterns):
     return any(re.search(pattern, text, re.IGNORECASE) for pattern in label_patterns)
 
 
+# Helper for iter all units in the planner import pipeline.
 def _iter_all_units(data):
     categories = data.get("categories", {})
     elective_groups = categories.get("elective_groups", {})
@@ -2132,6 +2260,7 @@ def _iter_all_units(data):
     )
 
 
+# Helper for count mismatch score in the planner import pipeline.
 def _count_mismatch_score(expected, actual, tolerance=0):
     if expected is None:
         return None
@@ -2144,6 +2273,7 @@ def _count_mismatch_score(expected, actual, tolerance=0):
     return _clamp_score(1.0 - (effective_diff / max(expected, 1)))
 
 
+# Helper for issue severity in the planner import pipeline.
 def _issue_severity(issue):
     text = _normalise_text(issue).lower()
     if not text:
@@ -2175,6 +2305,7 @@ def _issue_severity(issue):
     return "info"
 
 
+# Helper for has optional elective pool in the planner import pipeline.
 def _has_optional_elective_pool(data, raw_evidence):
     text = _normalise_text(raw_evidence)
     if re.search(r"\banother elective\b|\belective list\b|\brecommended\b|\boptional\b", text, re.IGNORECASE):
@@ -2190,11 +2321,12 @@ def _has_optional_elective_pool(data, raw_evidence):
     return False
 
 
+# Helper for looks like low quality name in the planner import pipeline.
 def _looks_like_low_quality_name(name):
     text = _normalise_text(name)
     if not text:
         return True
-    if re.fullmatch(r"[*#†\s]+", text):
+    if re.fullmatch(r"[*#â€ \s]+", text):
         return True
     if re.search(r"\b(?:Nil|credit points?|Please refer to Elective List)\b", text, re.IGNORECASE):
         return True
@@ -2207,6 +2339,7 @@ def _looks_like_low_quality_name(name):
     return False
 
 
+# Helper for field quality penalties in the planner import pipeline.
 def _field_quality_penalties(unit):
     penalties = []
     name = unit.get("unit_name")
@@ -2230,6 +2363,7 @@ def _field_quality_penalties(unit):
     return penalties
 
 
+# Calculates confidence for the import report.
 def calculate_confidence(structured_json, raw_evidence=None, validation_issues=None):
     data = structured_json or {}
     ci = data.get("course_information", {})
@@ -2428,16 +2562,8 @@ def calculate_confidence(structured_json, raw_evidence=None, validation_issues=N
     if wil_missing and "WIL expected but wil_group is empty" not in seen_issues:
         seen_issues.append("WIL expected but wil_group is empty")
 
-    if overall_score >= 0.95:
-        level = "high"
-    elif overall_score >= 0.8:
-        level = "medium"
-    else:
-        level = "low"
-
     return {
         "overall_score": round(overall_score, 2),
-        "level": level,
         "manual_review_required": manual_review_required,
         "signals": {
             "metadata_score": round(metadata_score, 2),
@@ -2450,33 +2576,26 @@ def calculate_confidence(structured_json, raw_evidence=None, validation_issues=N
     }
 
 
+# Determines processing outcome for the import report.
 def determine_processing_outcome(categories, llm_used, llm_applied, llm_error, validation_issues):
-    core_count = len(categories.get("core_units", []))
-    major_count = len(categories.get("major_units", []))
     if validation_issues:
         return {
             "status": "manual_review_required",
-            "confidence": "low",
             "reason": "; ".join(validation_issues),
         }
     if llm_error and not llm_applied:
         return {
             "status": "deterministic_ok",
-            "confidence": "high" if core_count and major_count else "medium",
-            "reason": "Deterministic output passed validation; LLM unavailable or rejected",
         }
     if llm_used and llm_applied:
         return {
             "status": "llm_fallback_used",
-            "confidence": "high",
-            "reason": "LLM corrections were applied and validated",
         }
     return {
         "status": "deterministic_ok",
-        "confidence": "high" if core_count and major_count else "medium",
-        "reason": "Deterministic output passed validation",
     }
 
+# Applies wil text override to the structured planner data.
 def apply_wil_text_override(data):
     categories = data.setdefault("categories", {})
     elective_groups = categories.setdefault("elective_groups", {})
@@ -2571,6 +2690,7 @@ def apply_wil_text_override(data):
 
     return data
 
+# Helper for process planner pdf in the planner import pipeline.
 def process_planner_pdf(
     pdf_path,
     model_name=DEFAULT_MODEL_NAME,
@@ -2578,11 +2698,21 @@ def process_planner_pdf(
     llm_retries=DEFAULT_LLM_RETRIES,
     enhanced_evidence=False,
 ):
+    """
+    End-to-end planner import pipeline.
+
+    1. Run deterministic extraction from the PDF.
+    2. Optionally ask local Ollama for a conservative patch.
+    3. Accept the LLM patch only if it does not lose or degrade data.
+    4. Normalise, validate, and package the app JSON stdout contract.
+    """
     if not os.path.exists(pdf_path):
         raise FileNotFoundError("file not found: " + pdf_path)
 
     base_name = os.path.splitext(os.path.basename(pdf_path))[0]
 
+    # Deterministic baseline. This always runs and is the fallback when LLM is
+    # disabled, unavailable, or rejected by the safety checks.
     raw_text = extract_text_from_pdf(pdf_path)
     cleaned_text = clean_text(raw_text)
     metadata = extract_metadata(cleaned_text)
@@ -2601,6 +2731,8 @@ def process_planner_pdf(
     if use_llm:
         llm_used = True
         try:
+            # The LLM receives compact evidence plus the deterministic JSON and
+            # must return a patch. This keeps model output bounded and reviewable.
             raw_evidence = extract_useful_raw_evidence_lines(
                 pdf_path,
                 max_lines_per_page=200,
@@ -2631,27 +2763,35 @@ def process_planner_pdf(
             llm_error = str(exc)
             llm_attempts = getattr(exc, "attempts", llm_attempts)
 
+    # Final cleanup runs for both deterministic and LLM paths so downstream code
+    # receives one stable schema shape.
     structured = normalise_llm_output(structured, base_name)
     structured = apply_wil_text_override(structured)
     structured = validate_and_normalise(structured, silent=True)
     validation_issues = collect_validation_issues(structured)
-    if not raw_evidence:
+    # Confidence is only returned when AI review is enabled; the UI hides the
+    # confidence panel for deterministic-only imports.
+    confidence = None
+    if use_llm and not raw_evidence:
         raw_evidence = extract_useful_raw_evidence_lines(
             pdf_path,
             max_lines_per_page=200,
             enhanced=False,
         )
-    confidence = calculate_confidence(
-        structured,
-        raw_evidence=raw_evidence,
-        validation_issues=validation_issues,
-    )
+    if use_llm:
+        confidence = calculate_confidence(
+            structured,
+            raw_evidence=raw_evidence,
+            validation_issues=validation_issues,
+        )
+    # Keep raw issues for scoring, but expose readable messages to the UI.
+    report_validation_issues = format_validation_issues_for_user(validation_issues)
     outcome = determine_processing_outcome(
         structured.get("categories", {}),
         llm_used=llm_used,
         llm_applied=llm_applied,
         llm_error=llm_error,
-        validation_issues=validation_issues,
+        validation_issues=report_validation_issues,
     )
 
     report = {
@@ -2666,11 +2806,12 @@ def process_planner_pdf(
         "llm_applied": llm_applied,
         "llm_error": llm_error,
         "llm_attempts": llm_attempts,
-        "validation_issues": validation_issues,
+        "validation_issues": report_validation_issues,
         "outcome": outcome,
         "unit_counts": unit_count_snapshot(structured),
-        "confidence": confidence,
     }
+    if confidence is not None:
+        report["confidence"] = confidence
 
     return structured, report
 

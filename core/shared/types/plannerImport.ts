@@ -54,13 +54,11 @@ export type PlannerImportReport = {
   validation_issues: string[];
   outcome: {
     status: string;
-    confidence: string;
-    reason: string;
+    reason?: string;
   };
   unit_counts: Record<string, number>;
   confidence?: {
     overall_score: number;
-    level: string;
     manual_review_required: boolean;
     signals: Record<string, number>;
     issues: string[];

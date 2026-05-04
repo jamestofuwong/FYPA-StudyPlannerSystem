@@ -21,6 +21,7 @@ export type Cgpa = number;
 export type ScrapedCourseListItem = {
   courseId: ScrapedCourseId;
   courseTitle: string;
+  level: string;
   credits: CreditCount;
   creditsEarned: CreditCount;
   status: ScrapedCourseStatus;
@@ -45,4 +46,7 @@ export type ScrapedStudent = {
   areasOfStudy?: string[];
 
   courseList: ScrapedCourseListItem[];
+
+  enrollmentOptions?: { text: string }[];
+  selectedEnrollment?: string;
 };

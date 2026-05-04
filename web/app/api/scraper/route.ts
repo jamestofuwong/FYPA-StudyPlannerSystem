@@ -10,6 +10,7 @@ function mapToScrapedStudent(result: ScrapeResult & { scraped: true }): ScrapedS
   const courseList: ScrapedCourseListItem[] = (result.gridRows ?? []).map((row) => ({
     courseId: row.courseId,
     courseTitle: row.courseTitle,
+    level: row.level ?? '',
     credits: parseFloat(row.credits) || 0,
     creditsEarned: parseFloat(row.earned) || 0,
     status: row.status,
@@ -30,6 +31,8 @@ function mapToScrapedStudent(result: ScrapeResult & { scraped: true }): ScrapedS
     scheduledCredits: parseFloat(d.creditsCurrentScheduled ?? "") || 0,
     areasOfStudy: d.areasOfStudies ? [d.areasOfStudies] : undefined,
     courseList,
+    enrollmentOptions: result.enrollmentOptions,
+    selectedEnrollment: result.selectedEnrollment,
   };
 }
 

@@ -9,15 +9,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  const { studentId, enrollmentMode } = body as { studentId?: string; enrollmentMode?: string };
+  const { studentId, enrollmentMode, enrollmentText } = body as { studentId?: string; enrollmentMode?: string; enrollmentText?: string };
   if (!studentId || typeof studentId !== 'string') {
     return NextResponse.json({ error: 'studentId is required' }, { status: 400 });
   }
 
   scraperStore.status = 'pending';
   scraperStore.studentId = studentId;
-  scraperStore.enrollmentMode =
-    enrollmentMode === 'earliest' || enrollmentMode === 'mpu' ? enrollmentMode : 'latest';
+  if (enrollmentMode === 'by-text' && enrollmentText) {
+    scraperStore.enrollmentMode = 'by-text';
+    scraperStore.enrollmentText = enrollmentText;
+  } else {
+    scraperStore.enrollmentMode =
+      enrollmentMode === 'earliest' || enrollmentMode === 'mpu' ? enrollmentMode : 'latest';
+    scraperStore.enrollmentText = null;
+  }
   scraperStore.result = null;
   scraperStore.error = null;
 

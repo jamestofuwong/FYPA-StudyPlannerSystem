@@ -57,12 +57,17 @@ export default function DashboardPage() {
   const [studentIdInput, setStudentIdInput] = useState('');
   const [scrapedStudent, setScrapedStudent] = useState<{ student: ScrapedStudent; studentId: string } | null>(null);
   const [studentLoaded, setStudentLoaded] = useState(false);
-  const [openYears, setOpenYears] = useState<Set<number>>(new Set([1, 2, 3]));
+  const [openYears, setOpenYears] = useState<Set<string>>(new Set());
   const [dashboardData, setDashboardData] = useState<any>(null);
   const [internalLoading, setInternalLoading] = useState(false);
   const [scraperApiStatus, setScraperApiStatus] = useState<string>('idle');
   const [showExportModal, setShowExportModal] = useState(false);
   const [enrollmentMode, setEnrollmentMode] = useState<'latest' | 'earliest' | 'mpu'>('latest');
+  const [selectedPlannerIdx, setSelectedPlannerIdx] = useState(0); // -1 = manual planner active
+  const [manualPlanner, setManualPlanner] = useState<any>(null);
+  const [showPlannerPicker, setShowPlannerPicker] = useState(false);
+  const [plannerPickerSearch, setPlannerPickerSearch] = useState('');
+  const [allPlanners, setAllPlanners] = useState<any[] | null>(null);
   const [suggestions, setSuggestions] = useState<{ text: string; id: string; name: string }[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedStudentName, setSelectedStudentName] = useState('');
@@ -96,6 +101,14 @@ export default function DashboardPage() {
     return () => globalThis.clearInterval(id);
   }, []);
 
+  // When the selected planner changes, open all year-semester groups
+  useEffect(() => {
+    const planner = selectedPlannerIdx === -1 ? manualPlanner : dashboardData?.planners?.[selectedPlannerIdx];
+    if (!planner?.units) return;
+    const keys = new Set<string>(planner.units.map((u: any) => `${u.year_level}-${u.semester}`));
+    setOpenYears(keys);
+  }, [selectedPlannerIdx, dashboardData, manualPlanner]);
+
   const loading = internalLoading;
   const isInitializing = scraperApiStatus === 'initializing';
   const isScraping = scraperApiStatus === 'scraping';
@@ -125,9 +138,10 @@ export default function DashboardPage() {
   };
 
   // Database Fetcher — called after scraping completes with the mapped student data.
-  const fetchDashboardData = async (studentId: string, student: ScrapedStudent) => {
+  const fetchDashboardData = async (studentId: string, student: ScrapedStudent, mpuCourseList: any[] = []) => {
     try {
-      const completedUnits = student.courseList.map((c) => c.courseId);
+      const mpuCompleted = mpuCourseList.filter((c) => c.grade === 'COMP').map((c) => c.courseId);
+      const completedUnits = [...new Set([...student.courseList.map((c) => c.courseId), ...mpuCompleted])];
 
       // Parse year and semester from the raw portal date string (e.g. "02/2024", "Feb 2024")
       const enrollStr = student.enrollmentDate ?? '';
@@ -160,23 +174,27 @@ export default function DashboardPage() {
         return;
       }
 
-      // 2. Fetch the top-ranked planner template from DB
-      const plannerId = matchData.data.rankedPlanners[0]?.plannerID;
-      if (!plannerId) {
+      // 2. Fetch the top-3 ranked planner templates from DB in parallel
+      const top3 = matchData.data.rankedPlanners.slice(0, 3);
+      if (top3.length === 0) {
         showToast("No matching planner found for this student.", "error");
         return;
       }
-      const plannerRes = await fetch(`/api/planners/${plannerId}`);
-      const plannerData = await plannerRes.json();
+      const plannerResponses = await Promise.all(
+        top3.map((r: any) => fetch(`/api/planners/${r.plannerID}`))
+      );
+      const plannerDataArr = await Promise.all(plannerResponses.map((r) => r.json()));
 
-      if (plannerRes.ok) {
+      if (plannerResponses[0].ok) {
         const data = {
           match: matchData.data,
-          planner: plannerData,
+          planners: plannerDataArr,
           completedCodes: completedUnits,
           intakeYear,
           student,
           studentId,
+          enrollmentMode,
+          mpuCourseList,
         };
         setDashboardData(data);
         setStudentLoaded(true);
@@ -192,32 +210,102 @@ export default function DashboardPage() {
   };
 
   // Unit Filtering Logic
-  const getUnitsByYear = (yearLevel: number) => {
-    if (!dashboardData?.planner?.units) return [];
+  const getUnitsByYearSem = (yearLevel: number, semester: number) => {
+    const planner = selectedPlannerIdx === -1 ? manualPlanner : dashboardData?.planners?.[selectedPlannerIdx];
+    if (!planner?.units) return [];
 
-    return dashboardData.planner.units
-      .filter((u: any) => u.year_level === yearLevel && u.unit !== null)
-      .map((u: any) => {
-        const isDone = dashboardData.completedCodes.includes(u.unit.unit_code);
-        return {
-          code: u.unit.unit_code,
-          name: u.unit.unit_name,
-          grade: isDone ? 'A' : '—',
-          sem: u.semester,
-          year: (dashboardData.intakeYear ?? new Date().getFullYear()) + (u.year_level - 1),
-          type: u.category.replace('_', ' '),
-          typeClass: u.category === 'core' ? 'badgeRed' : 'badgePurple',
-          status: isDone ? '✓' : '—',
-          statusColor: isDone ? 'var(--accent-green)' : 'var(--text-muted)',
-          missing: !isDone
-        };
-      });
+    const courseList: any[] = scrapedStudent?.student?.courseList ?? [];
+    const mpuCourseList: any[] = dashboardData.mpuCourseList ?? [];
+
+    const gradeMap  = new Map<string, string>(courseList.map((c) => [c.courseId, c.grade]));
+    const statusMap = new Map<string, string>(courseList.map((c) => [c.courseId, c.status]));
+    const termMap   = new Map<string, string>(courseList.map((c) => [c.courseId, c.term]));
+
+    const mpuGradeMap  = new Map<string, string>(mpuCourseList.map((c) => [c.courseId, c.grade]));
+    const mpuStatusMap = new Map<string, string>(mpuCourseList.map((c) => [c.courseId, c.status]));
+    const mpuTermMap   = new Map<string, string>(mpuCourseList.map((c) => [c.courseId, c.term]));
+
+    return planner.units
+      .filter((u: any) => u.year_level === yearLevel && u.semester === semester && u.unit !== null)
+      .map((u: any) => ({
+        code: u.unit.unit_code,
+        name: u.unit.unit_name,
+        grade:  gradeMap.get(u.unit.unit_code)  ?? mpuGradeMap.get(u.unit.unit_code)  ?? '—',
+        term:   termMap.get(u.unit.unit_code)   ?? mpuTermMap.get(u.unit.unit_code)   ?? '—',
+        type: u.category.replace('_', ' '),
+        typeClass: u.category === 'core' ? 'badgeRed' : 'badgePurple',
+        status: statusMap.get(u.unit.unit_code) ?? mpuStatusMap.get(u.unit.unit_code) ?? '—',
+      }));
   };
 
-  const toggleYear = (year: number) => {
+  // Scrapes the MPU enrollment for a student if it exists and the current enrollment is not MPU.
+  // Returns the MPU courseList so it can be used to supplement completedCodes for matching.
+  const fetchMpuCourseList = async (id: string, mainStudent: ScrapedStudent): Promise<any[]> => {
+    const isAlreadyMpu = (mainStudent.selectedEnrollment ?? '').includes('Mata Pelajaran Umum');
+    if (isAlreadyMpu) return [];
+    const mpuOption = mainStudent.enrollmentOptions?.find((o) => o.text.includes('Mata Pelajaran Umum'));
+    if (!mpuOption) return [];
+    const startRes = await fetch('/api/scraper/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ studentId: id, enrollmentMode: 'by-text', enrollmentText: mpuOption.text }),
+    }).catch(() => null);
+    if (!startRes?.ok) return [];
+    const mpuStudent = await pollScraperResult();
+    return mpuStudent?.courseList ?? [];
+  };
+
+  const handleSwitchEnrollment = (enrollmentText: string) => {
+    const id = studentIdInput.trim();
+    if (!id) return;
+    setSuggestions([]);
+    setShowSuggestions(false);
+    setSelectedStudentName('');
+    setStudentLoaded(false);
+    setScrapedStudent(null);
+    setDashboardData(null);
+    setScraperApiStatus('idle');
+    setSelectedPlannerIdx(0);
+    setManualPlanner(null);
+    setShowPlannerPicker(false);
+    setInternalLoading(true);
+    fetch('/api/scraper/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ studentId: id, enrollmentMode: 'by-text', enrollmentText }),
+    }).then(async (startRes) => {
+      if (!startRes.ok) { showToast('Failed to queue scrape.', 'error'); setInternalLoading(false); return; }
+      const scraped = await pollScraperResult();
+      if (!scraped) { setInternalLoading(false); return; }
+      setScrapedStudent({ student: scraped, studentId: id });
+      const mpuCourseList = await fetchMpuCourseList(id, scraped);
+      await fetchDashboardData(id, scraped, mpuCourseList);
+      setInternalLoading(false);
+    }).catch(() => { showToast('Failed to fetch data.', 'error'); setInternalLoading(false); });
+  };
+
+  const openPlannerPicker = async () => {
+    setShowPlannerPicker((v) => !v);
+    if (!allPlanners) {
+      const res = await fetch('/api/planners').catch(() => null);
+      if (res?.ok) setAllPlanners(await res.json());
+    }
+  };
+
+  const selectManualPlanner = async (plannerId: string) => {
+    const res = await fetch(`/api/planners/${plannerId}`).catch(() => null);
+    if (!res?.ok) { showToast('Failed to fetch planner.', 'error'); return; }
+    const data = await res.json();
+    setManualPlanner(data);
+    setSelectedPlannerIdx(-1);
+    setShowPlannerPicker(false);
+    setPlannerPickerSearch('');
+  };
+
+  const toggleYearSem = (key: string) => {
     setOpenYears((prev) => {
       const next = new Set(prev);
-      if (next.has(year)) next.delete(year); else next.add(year);
+      if (next.has(key)) next.delete(key); else next.add(key);
       return next;
     });
   };
@@ -255,6 +343,9 @@ export default function DashboardPage() {
     setScrapedStudent(null);
     setDashboardData(null);
     setScraperApiStatus('idle');
+    setSelectedPlannerIdx(0);
+    setManualPlanner(null);
+    setShowPlannerPicker(false);
     setInternalLoading(true);
     try {
       // 1. Queue the student ID for the scraper bot via API
@@ -272,8 +363,10 @@ export default function DashboardPage() {
       if (!student) return;
       // 3. Show identity card immediately — matching is still running
       setScrapedStudent({ student, studentId: id });
-      // 4. Fetch matching + planner data
-      await fetchDashboardData(id, student);
+      // 4. Scrape MPU enrollment to supplement completedCodes for matching
+      const mpuCourseList = await fetchMpuCourseList(id, student);
+      // 5. Fetch matching + planner data
+      await fetchDashboardData(id, student, mpuCourseList);
     } finally {
       setInternalLoading(false);
     }
@@ -285,6 +378,8 @@ export default function DashboardPage() {
     setScrapedStudent(null);
     setDashboardData(null);
     setScraperApiStatus('idle');
+    setManualPlanner(null);
+    setShowPlannerPicker(false);
     try { sessionStorage.removeItem('dashboardSession'); } catch {}
     showToast('Student data cleared.', 'info');
   };
@@ -398,6 +493,9 @@ export default function DashboardPage() {
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 14, fontWeight: 600 }}>{s?.studentName || scrapedStudent.studentId || '—'}</div>
               </div>
+              {dashboardData && (
+                <button className={styles.btnSecondary} onClick={() => setShowExportModal(true)}>Export</button>
+              )}
               <button className={styles.btnDanger} onClick={handleClear}>✕ Clear</button>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '6px 16px' }}>
@@ -408,6 +506,33 @@ export default function DashboardPage() {
                 </div>
               ))}
             </div>
+            {(() => {
+              const options = scrapedStudent?.student?.enrollmentOptions;
+              if (!options || options.length === 0) return null;
+              const current = scrapedStudent?.student?.selectedEnrollment;
+              return (
+                <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--panel-border)', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>Enrolment</span>
+                  {options.map((opt) => {
+                    const active = opt.text === current;
+                    return (
+                      <button
+                        key={opt.text}
+                        onClick={() => !active && handleSwitchEnrollment(opt.text)}
+                        disabled={loading}
+                        style={{
+                          fontSize: 11, padding: '2px 10px', borderRadius: 12, cursor: active ? 'default' : 'pointer',
+                          border: active ? '1px solid var(--accent-blue)' : '1px solid var(--panel-border)',
+                          background: active ? 'var(--active-bg, rgba(111,163,200,0.15))' : 'transparent',
+                          color: active ? 'var(--accent-blue)' : 'var(--text-muted)',
+                          fontWeight: active ? 600 : 400,
+                        }}
+                      >{opt.text}</button>
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </div>
         );
       })()}
@@ -421,50 +546,305 @@ export default function DashboardPage() {
       )}
 
       {/* ── Dashboard Content ────────────────────────────────────────────── */}
-      {!loading && studentLoaded && dashboardData && (
-        <div>
+      {!loading && studentLoaded && dashboardData && (() => {
+        const isMpu = (scrapedStudent?.student?.selectedEnrollment ?? '').includes('Mata Pelajaran Umum');
 
-          {/* Primary Major Progress */}
-          <div style={{ background: 'var(--card-bg)', border: '1px solid var(--panel-border)', borderRadius: 4, padding: '14px 16px', marginBottom: 10 }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 2 }}>{dashboardData.planner.course.name}</div>
-                <div style={{ fontSize: 18, fontWeight: 700 }}>{dashboardData.planner.major?.name ?? dashboardData.match.primaryMajor?.majorName ?? '—'}</div>
+        if (isMpu) {
+          const courseList: any[] = scrapedStudent?.student?.courseList ?? [];
+          return (
+            <div>
+              <div className={styles.sectionTitle}>Course List</div>
+              <div style={{ overflowX: 'auto', border: '1px solid var(--panel-border)', borderRadius: 4 }}>
+                <table className={styles.table} style={{ tableLayout: 'fixed', width: '100%' }}>
+                  <colgroup>
+                    <col style={{ width: 110 }} />
+                    <col style={{ width: 'auto' }} />
+                    <col style={{ width: 60 }} />
+                    <col style={{ width: 70 }} />
+                    <col style={{ width: 70 }} />
+                    <col style={{ width: 110 }} />
+                    <col style={{ width: 70 }} />
+                    <col style={{ width: 110 }} />
+                  </colgroup>
+                  <thead>
+                    <tr><th>Course ID</th><th>Course Title</th><th>Level</th><th>Credits</th><th>Earned</th><th>Status</th><th>Grade</th><th>Term</th></tr>
+                  </thead>
+                  <tbody>
+                    {courseList.map((c: any, i: number) => (
+                      <tr key={c.courseId ?? i}>
+                        <td><InlineCode>{c.courseId}</InlineCode></td>
+                        <td>{c.courseTitle}</td>
+                        <td>{c.level ?? '—'}</td>
+                        <td>{c.credits}</td>
+                        <td>{c.creditsEarned}</td>
+                        <td>{c.status}</td>
+                        <td>{c.grade}</td>
+                        <td>{c.term}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-              <button className={styles.btnSecondary} onClick={() => setShowExportModal(true)}>Export</button>
             </div>
-            <ProgressBar pct={dashboardData.match.primaryMajor.matchPct} color="var(--accent-blue)" />
-            <div style={{ fontSize: 12, marginTop: 8 }}>Match Percentage: <strong>{dashboardData.match.primaryMajor.matchPct}%</strong></div>
+          );
+        }
+
+        return (
+          <div>
+
+          {/* Ranked Planners selector */}
+          <div className={styles.sectionTitle}>Ranked Planners</div>
+          {dashboardData.match.rankedPlanners.slice(0, 3).map((ranked: any, idx: number) => {
+            const planner = dashboardData.planners[idx];
+            const isSelected = selectedPlannerIdx === idx;
+            const rankColor = idx === 0 ? 'var(--accent-blue)' : idx === 1 ? 'var(--accent-yellow)' : 'var(--accent-orange)';
+            return (
+              <div
+                key={ranked.plannerID}
+                onClick={() => setSelectedPlannerIdx(idx)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 12,
+                  padding: '10px 14px',
+                  background: isSelected ? 'var(--active-bg)' : 'var(--card-bg)',
+                  border: `1px solid ${isSelected ? 'var(--active-highlight)' : 'var(--panel-border)'}`,
+                  borderRadius: 4, marginBottom: 6, cursor: 'pointer', transition: 'all 0.1s',
+                }}
+              >
+                <div style={{ fontSize: 11, fontWeight: 700, color: rankColor, fontFamily: 'var(--font-mono)', width: 20, flexShrink: 0 }}>#{idx + 1}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600 }}>{ranked.majorName || '—'}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                    {[
+                      planner?.course?.name,
+                      planner?.intake_year,
+                      planner?.intake_month != null
+                        ? new Date(2000, planner.intake_month - 1).toLocaleString('default', { month: 'long' })
+                        : null,
+                    ].filter(Boolean).join(' · ')}
+                  </div>
+                </div>
+                <div style={{ width: 120, flexShrink: 0 }}>
+                  <ProgressBar pct={ranked.matchPct} color={rankColor} />
+                </div>
+                <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: rankColor, width: 38, textAlign: 'right', flexShrink: 0 }}>
+                  {ranked.matchPct}%
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Manual planner row */}
+          {manualPlanner && (() => {
+            const isSelected = selectedPlannerIdx === -1;
+            const label = [manualPlanner.major?.name, manualPlanner.course?.name, manualPlanner.intake_year,
+              manualPlanner.intake_month != null
+                ? new Date(2000, manualPlanner.intake_month - 1).toLocaleString('default', { month: 'long' })
+                : null,
+            ].filter(Boolean).join(' · ');
+            return (
+              <div
+                onClick={() => setSelectedPlannerIdx(-1)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px',
+                  background: isSelected ? 'var(--active-bg)' : 'var(--card-bg)',
+                  border: `1px solid ${isSelected ? 'var(--active-highlight)' : 'var(--panel-border)'}`,
+                  borderRadius: 4, marginBottom: 6, cursor: 'pointer', transition: 'all 0.1s',
+                }}
+              >
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent-purple)', fontFamily: 'var(--font-mono)', width: 20, flexShrink: 0 }}>M</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600 }}>{manualPlanner.major?.name ?? manualPlanner.course?.name ?? '—'}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{label}</div>
+                </div>
+                <button
+                  className={styles.btnDanger}
+                  style={{ fontSize: 11, padding: '2px 8px' }}
+                  onClick={(e) => { e.stopPropagation(); setManualPlanner(null); if (selectedPlannerIdx === -1) setSelectedPlannerIdx(0); }}
+                >✕</button>
+              </div>
+            );
+          })()}
+
+          {/* Planner picker */}
+          <div style={{ marginBottom: 12 }}>
+            <button
+              className={styles.btnSecondary}
+              style={{ fontSize: 11, width: '100%' }}
+              onClick={openPlannerPicker}
+            >
+              {showPlannerPicker ? '▲ Close planner search' : '▼ Match against a different planner'}
+            </button>
+            {showPlannerPicker && (
+              <div style={{ marginTop: 6, border: '1px solid var(--panel-border)', borderRadius: 4, overflow: 'hidden' }}>
+                <div style={{ padding: '6px 8px', background: 'var(--surface-bg)', borderBottom: '1px solid var(--panel-border)' }}>
+                  <input
+                    autoFocus
+                    className={styles.formInput}
+                    style={{ width: '100%', fontSize: 12 }}
+                    placeholder="Search by course, major, or year..."
+                    value={plannerPickerSearch}
+                    onChange={(e) => setPlannerPickerSearch(e.target.value)}
+                  />
+                </div>
+                <div style={{ maxHeight: 220, overflowY: 'auto' }}>
+                  {allPlanners === null ? (
+                    <div style={{ padding: '12px 14px', fontSize: 12, color: 'var(--text-muted)' }}>Loading...</div>
+                  ) : (() => {
+                    const q = plannerPickerSearch.toLowerCase();
+                    const filtered = allPlanners.filter((p) =>
+                      !q ||
+                      p.course?.name?.toLowerCase().includes(q) ||
+                      p.major?.name?.toLowerCase().includes(q) ||
+                      String(p.intake_year).includes(q)
+                    );
+                    if (filtered.length === 0) return (
+                      <div style={{ padding: '12px 14px', fontSize: 12, color: 'var(--text-muted)' }}>No planners found.</div>
+                    );
+                    return filtered.map((p: any) => (
+                      <div
+                        key={p.id}
+                        onClick={() => selectManualPlanner(p.id)}
+                        style={{
+                          padding: '8px 12px', fontSize: 12, cursor: 'pointer',
+                          borderBottom: '1px solid var(--panel-border)',
+                          background: manualPlanner?.id === p.id ? 'var(--active-bg)' : undefined,
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--card-hover)')}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = manualPlanner?.id === p.id ? 'var(--active-bg)' : '')}
+                      >
+                        <div style={{ fontWeight: 600 }}>{p.major?.name ?? p.course?.name ?? '—'}</div>
+                        <div style={{ color: 'var(--text-muted)', fontSize: 11 }}>
+                          {[p.course?.name, p.intake_year,
+                            p.intake_month != null
+                              ? new Date(2000, p.intake_month - 1).toLocaleString('default', { month: 'long' })
+                              : null,
+                            p._count?.units != null ? `${p._count.units} units` : null,
+                          ].filter(Boolean).join(' · ')}
+                        </div>
+                      </div>
+                    ));
+                  })()}
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Dynamic Year Tables */}
-          {[1, 2, 3].map((year) => {
-            const units = getUnitsByYear(year);
-            const open = openYears.has(year);
-            const completedCount = units.filter((u: any) => u.status === '✓').length;
+          {/* Fast Analytics */}
+          <div className={styles.sectionTitle}>Analytics</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
 
+            {/* Not Yet Taken */}
+            {(() => {
+              const activePlanner = selectedPlannerIdx === -1 ? manualPlanner : dashboardData?.planners?.[selectedPlannerIdx];
+              const completedSet = new Set<string>(dashboardData.completedCodes ?? []);
+              const notTaken = (activePlanner?.units ?? [])
+                .filter((u: any) => u.unit !== null && !completedSet.has(u.unit.unit_code))
+                .map((u: any) => ({ code: u.unit.unit_code, name: u.unit.unit_name, category: u.category }));
+              const coreCount = notTaken.filter((u: any) => u.category === 'core').length;
+              const electiveCount = notTaken.filter((u: any) => u.category !== 'core').length;
+              return (
+                <div style={{ background: 'var(--card-bg)', border: '1px solid var(--panel-border)', borderRadius: 4, padding: '12px 14px' }}>
+                  <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Not Yet Taken</div>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 8 }}>
+                    <span style={{ fontSize: 20, fontWeight: 700 }}>{notTaken.length}</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Core: {coreCount} · Elective: {electiveCount}</span>
+                  </div>
+                  <div style={{ maxHeight: 120, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    {notTaken.length === 0 ? (
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>All planner units taken.</div>
+                    ) : notTaken.map((u: any) => (
+                      <div key={u.code} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
+                        <InlineCode>{u.code}</InlineCode>
+                        <span style={{ color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{u.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Currently Enrolled */}
+            {(() => {
+              const courseList: any[] = scrapedStudent?.student?.courseList ?? [];
+              const mpuCourseList: any[] = dashboardData.mpuCourseList ?? [];
+              const seen = new Set<string>();
+              const currentlyEnrolled = [...courseList, ...mpuCourseList].filter((c) => {
+                if (c.status !== 'Current' || seen.has(c.courseId)) return false;
+                seen.add(c.courseId);
+                return true;
+              });
+              const totalCredits = currentlyEnrolled.reduce((sum: number, c: any) => sum + (c.credits || 0), 0);
+              return (
+                <div style={{ background: 'var(--card-bg)', border: '1px solid var(--panel-border)', borderRadius: 4, padding: '12px 14px' }}>
+                  <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Currently Enrolled</div>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 8 }}>
+                    <span style={{ fontSize: 20, fontWeight: 700 }}>{currentlyEnrolled.length}</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{totalCredits} credits this term</span>
+                  </div>
+                  <div style={{ maxHeight: 120, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    {currentlyEnrolled.length === 0 ? (
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>No units currently enrolled.</div>
+                    ) : currentlyEnrolled.map((c: any) => (
+                      <div key={c.courseId} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
+                        <InlineCode>{c.courseId}</InlineCode>
+                        <span style={{ color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{c.courseTitle}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
+
+          </div>
+
+          {/* Dynamic Year-Semester Tables */}
+          {(() => {
+            const activePlanner = selectedPlannerIdx === -1 ? manualPlanner : dashboardData.planners?.[selectedPlannerIdx];
+            const plannerUnits = activePlanner?.units ?? [];
+            const groups = [...new Set<string>(
+              plannerUnits.map((u: any) => `${u.year_level}-${u.semester}`)
+            )].sort();
+            return groups;
+          })().map((key) => {
+            const [yearStr, semStr] = key.split('-');
+            const year = parseInt(yearStr);
+            const sem  = parseInt(semStr);
+            const units = getUnitsByYearSem(year, sem);
+            const open  = openYears.has(key);
             return (
-              <div key={year} style={{ marginBottom: 8, border: '1px solid var(--panel-border)', borderRadius: 4, overflow: 'hidden' }}>
-                <div onClick={() => toggleYear(year)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'var(--surface-bg)', cursor: 'pointer' }}>
+              <div key={key} style={{ marginBottom: 8, border: '1px solid var(--panel-border)', borderRadius: 4, overflow: 'hidden' }}>
+                <div onClick={() => toggleYearSem(key)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'var(--surface-bg)', cursor: 'pointer' }}>
                   <span style={{ transition: '0.15s', transform: open ? 'rotate(0deg)' : 'rotate(-90deg)' }}>▾</span>
-                  <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--accent-blue)' }}>YEAR {year}</span>
-                  <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 8 }}>{completedCount} of {units.length} units completed</span>
+                  <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--accent-blue)' }}>YEAR {year} · SEM {sem}</span>
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 8 }}>{units.length} units</span>
                 </div>
                 {open && (
                   <div style={{ overflowX: 'auto' }}>
-                    <table className={styles.table}>
+                    <table className={styles.table} style={{ tableLayout: 'fixed', width: '100%' }}>
+                      <colgroup>
+                        <col style={{ width: 110 }} />
+                        <col style={{ width: 'auto' }} />
+                        <col style={{ width: 70 }} />
+                        <col style={{ width: 130 }} />
+                        <col style={{ width: 120 }} />
+                        <col style={{ width: 110 }} />
+                      </colgroup>
                       <thead>
-                        <tr><th>Unit Code</th><th>Unit Name</th><th>Grade</th><th>Sem</th><th>Type</th><th>Status</th></tr>
+                        <tr><th>Unit Code</th><th>Unit Name</th><th>Grade</th><th>Term</th><th>Type</th><th>Status</th></tr>
                       </thead>
                       <tbody>
                         {units.map((u: any) => (
-                          <tr key={u.code}>
-                            <td><InlineCode red={u.missing}>{u.code}</InlineCode></td>
+                          <tr key={u.code} style={
+                            u.status === 'Current' ? { background: 'rgba(111,191,115,0.12)' } :
+                            (!u.grade || u.grade === '—') ? { background: 'rgba(244,135,113,0.08)' } :
+                            undefined
+                          }>
+                            <td><InlineCode>{u.code}</InlineCode></td>
                             <td>{u.name}</td>
                             <td>{u.grade}</td>
-                            <td>Sem {u.sem}</td>
+                            <td>{u.term}</td>
                             <td><Badge label={u.type} cls={u.typeClass as BadgeClass} /></td>
-                            <td style={{ color: u.statusColor }}>{u.status}</td>
+                            <td>{u.status}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -492,19 +872,21 @@ export default function DashboardPage() {
               <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Required units from the Course and Major are still outstanding.</div>
             </div>
           </div>
-        </div>
-      )}
+          </div>
+        );
+      })()}
 
       {/* ── Export Modal ─────────────────────────────────────────────────── */}
       {showExportModal && dashboardData && scrapedStudent && (() => {
+        const selectedPlanner = dashboardData.planners[selectedPlannerIdx];
         const exportInput: Omit<ExportInput, 'options'> = {
           studentId: scrapedStudent.studentId,
           student: scrapedStudent.student,
           match: dashboardData.match,
           planner: {
-            course: dashboardData.planner.course,
-            major: dashboardData.planner.major ?? null,
-            units: dashboardData.planner.units,
+            course: selectedPlanner.course,
+            major: selectedPlanner.major ?? null,
+            units: selectedPlanner.units,
           },
           completedCodes: dashboardData.completedCodes,
           intakeYear: dashboardData.intakeYear,

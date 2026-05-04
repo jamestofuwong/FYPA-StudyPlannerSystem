@@ -1,4 +1,4 @@
--- -- Seed file 03: Courses and Majors
+-- Seed file 03: Courses and Majors
 
 
 -- ======================================================================

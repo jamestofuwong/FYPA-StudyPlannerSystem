@@ -81,7 +81,7 @@ export type ScraperContextValue = {
   execNextStep: () => void;
   execAll: () => void;
   handleClearSession: () => void;
-  scrapeStudent: (id: string, enrollmentMode?: 'latest' | 'earliest' | 'mpu') => void;
+  scrapeStudent: (id: string, enrollmentMode?: 'latest' | 'earliest' | 'mpu' | 'by-text', enrollmentText?: string) => void;
   registerWebviewSlot: (el: HTMLDivElement | null) => void;
   fetchStudentSuggestions: (query: string) => Promise<{ text: string; id: string; name: string }[]>;
 };
@@ -399,7 +399,7 @@ export function ScraperProvider({ children }: { children: ReactNode }) {
   }, [getAdapter, studentId, addLogs, setPhase, refreshUrl]);
 
   // scrapeStudent — delegates to core orchestrator, then reports result via API.
-  const scrapeStudent = useCallback(async (id: string, enrollmentMode: 'latest' | 'earliest' | 'mpu' = 'latest') => {
+  const scrapeStudent = useCallback(async (id: string, enrollmentMode: 'latest' | 'earliest' | 'mpu' | 'by-text' = 'latest', enrollmentText?: string) => {
     const adapter = getAdapter();
     if (!adapter) return;
     setStudentId(id);
@@ -411,7 +411,7 @@ export function ScraperProvider({ children }: { children: ReactNode }) {
       onLog: addLogs,
       onBotStep: setBotStep,
       onScrapeResult: setScrapeResult,
-    });
+    }, enrollmentText);
 
     if (result.loginDetected) {
       setShowBrowser(true);
@@ -527,11 +527,11 @@ export function ScraperProvider({ children }: { children: ReactNode }) {
       if (phaseRef.current !== 'ready') return;
       const res = await fetch('/api/scraper/status').catch(() => null);
       if (!res?.ok) return;
-      const data: { status: string; studentId: string | null; enrollmentMode?: string } = await res.json();
+      const data: { status: string; studentId: string | null; enrollmentMode?: string; enrollmentText?: string } = await res.json();
       if (data.status === 'pending' && data.studentId) {
         const sid = data.studentId;
-        const mode: 'latest' | 'earliest' | 'mpu' =
-          data.enrollmentMode === 'earliest' || data.enrollmentMode === 'mpu'
+        const mode: 'latest' | 'earliest' | 'mpu' | 'by-text' =
+          data.enrollmentMode === 'earliest' || data.enrollmentMode === 'mpu' || data.enrollmentMode === 'by-text'
             ? data.enrollmentMode
             : 'latest';
         await fetch('/api/scraper/status', {
@@ -539,7 +539,7 @@ export function ScraperProvider({ children }: { children: ReactNode }) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ status: 'scraping' }),
         }).catch(() => {});
-        void scrapeStudent(sid, mode);
+        void scrapeStudent(sid, mode, data.enrollmentText);
       }
     }, 1000);
 
@@ -597,7 +597,7 @@ export function ScraperProvider({ children }: { children: ReactNode }) {
         execStep:         (id) => { void execStep(id); },
         execNextStep:     ()   => { void execNextStep(); },
         execAll:          ()   => { void execAll(); },
-        scrapeStudent:    (id) => { void scrapeStudent(id); },
+        scrapeStudent:    (id, mode, text) => { void scrapeStudent(id, mode, text); },
         handleClearSession,
         registerWebviewSlot,
         fetchStudentSuggestions,

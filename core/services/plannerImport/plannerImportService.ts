@@ -4,6 +4,9 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import type { PlannerImportResult } from "../../shared/types/plannerImport";
 
+
+const LOCAL_OLLAMA_BASE_URL = "http://127.0.0.1:11434";
+
 export type ExtractPlannerOptions = {
   filename?: string;
   useLlm?: boolean;
@@ -13,20 +16,10 @@ export type ExtractPlannerOptions = {
 
 type PythonCommand = {
   executable: string;
-  /** Args that precede the temp PDF path (empty when using a compiled binary). */
   prefixArgs: string[];
 };
 
-/**
- * Resolves how to invoke the planner import script.
- *
- * - Packaged Electron app: `process.resourcesPath` is set by Electron.
- *   The compiled binary is bundled there via extraResources in electron-builder.
- *   We spawn it directly — no Python runtime required on the user's machine.
- *
- * - Development / standalone Next.js: fall back to python3 (or PYTHON_EXECUTABLE)
- *   and the raw .py script.
- */
+// Resolve whether the app should call the packaged extractor binary or the local Python script.
 function resolvePythonCommand(): PythonCommand {
   if ((process as NodeJS.Process & { resourcesPath?: string }).resourcesPath) {
     const ext = process.platform === "win32" ? ".exe" : "";
@@ -43,12 +36,14 @@ function resolvePythonCommand(): PythonCommand {
   return { executable, prefixArgs: [scriptPath] };
 }
 
+// Sanitise the uploaded filename before writing it into the temporary import directory.
 function sanitiseFilename(filename: string): string {
   const base = path.basename(filename || "planner.pdf");
   const cleaned = base.replace(/[^a-zA-Z0-9._-]/g, "_");
   return cleaned.toLowerCase().endsWith(".pdf") ? cleaned : `${cleaned}.pdf`;
 }
 
+// Parse and validate the extractor stdout so API callers always receive the app JSON contract.
 function parsePlannerImportResult(stdout: string): PlannerImportResult {
   const trimmed = stdout.trim();
   if (!trimmed) {
@@ -65,6 +60,7 @@ function parsePlannerImportResult(stdout: string): PlannerImportResult {
   return parsed;
 }
 
+// Persist the uploaded PDF temporarily, run the Python extraction pipeline, and return structured planner data.
 export async function extractPlannerFromPdf(
   pdfBuffer: Buffer,
   options: ExtractPlannerOptions = {}
@@ -84,6 +80,13 @@ export async function extractPlannerFromPdf(
     const result = await new Promise<PlannerImportResult>((resolve, reject) => {
       const child = spawn(executable, args, {
         cwd: process.cwd(),
+        env: {
+          ...process.env,
+          // Force the extractor to call the app-managed local Ollama runtime.
+          // A caller can still override this for diagnostics with STUDY_PLANNER_OLLAMA_URL.
+          STUDY_PLANNER_OLLAMA_URL:
+            process.env.STUDY_PLANNER_OLLAMA_URL?.trim() || LOCAL_OLLAMA_BASE_URL,
+        },
         stdio: ["ignore", "pipe", "pipe"],
       });
 

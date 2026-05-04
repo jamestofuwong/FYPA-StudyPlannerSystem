@@ -1,4 +1,4 @@
--- -- Seed file 04: Planner Templates + Template Units
+-- Seed file 04: Planner Templates + Template Units
 
 -- core, major_core, prescribed_elective, elective, wil, mpu     
 
@@ -2424,3 +2424,21 @@ BEGIN
     ]::SMALLINT[]);
 END;
 $$;
+
+-- ======================================================================================================================
+-- Set requirement counts and credit points
+-- ======================================================================================================================
+-- (2022-2024): 8 core / 8 major / 8 elective
+UPDATE planner_templates 
+SET core_count = 8, core_cp = 100,
+    major_count = 8, major_cp = 100,
+    elective_count = 8, elective_cp = 100
+WHERE intake_year BETWEEN 2022 AND 2024;
+
+-- (2025-2026): 8 core / 8 major / 6 elective + 1 WIL
+UPDATE planner_templates 
+SET core_count = 8, core_cp = 100,
+    major_count = 8, major_cp = 100,
+    elective_count = 6, elective_cp = 75,
+    wil_count = 1, wil_cp = 25
+WHERE intake_year IN (2025, 2026);

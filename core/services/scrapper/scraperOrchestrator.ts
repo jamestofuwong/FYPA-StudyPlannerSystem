@@ -101,19 +101,24 @@ export async function runAutoRun(
 export async function runStudentScrape(
   adapter: WebviewAdapter,
   studentId: string,
-  enrollmentMode: 'latest' | 'earliest' | 'mpu',
+  enrollmentMode: 'latest' | 'earliest' | 'mpu' | 'by-text',
   callbacks: OrchestratorCallbacks,
+  enrollmentText?: string,
 ): Promise<StudentScrapeResult> {
   const { onLog, onBotStep, onScrapeResult } = callbacks;
   let finalResult: ScrapeResult | null = null;
   let studentName: string | undefined;
+  let enrollmentOptions: { text: string }[] | undefined;
+  let selectedEnrollment: string | undefined;
 
   try {
     for (const stepId of STUDENT_STEPS) {
       onBotStep(SCRAPER_STEPS.find((s) => s.id === stepId)?.label ?? stepId);
-      const result = await runScraperStep(stepId, adapter, { studentId, enrollmentMode });
+      const result = await runScraperStep(stepId, adapter, { studentId, enrollmentMode, enrollmentText });
       onLog(result.logs);
       if (result.studentName) studentName = result.studentName;
+      if (result.enrollmentOptions) enrollmentOptions = result.enrollmentOptions;
+      if (result.selectedEnrollment) selectedEnrollment = result.selectedEnrollment;
       if (result.scrapeResult) {
         finalResult = result.scrapeResult;
         onScrapeResult?.(result.scrapeResult);
@@ -126,9 +131,14 @@ export async function runStudentScrape(
     return { finalResult, loginDetected: false, error };
   }
 
-  // Attach the name captured from the dropdown into the final scrape result.
-  if (finalResult?.scraped && studentName) {
-    finalResult = { ...finalResult, studentName };
+  // Attach name + enrollment options into the final scrape result.
+  if (finalResult?.scraped) {
+    finalResult = {
+      ...finalResult,
+      ...(studentName ? { studentName } : {}),
+      ...(enrollmentOptions ? { enrollmentOptions } : {}),
+      ...(selectedEnrollment ? { selectedEnrollment } : {}),
+    };
   }
 
   return { finalResult, loginDetected: false };

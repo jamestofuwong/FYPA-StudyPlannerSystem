@@ -2,9 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import styles from './page.module.css'; 
 
 export default function PlannersPage() {
+  const searchParams = useSearchParams();
   const [planners, setPlanners] = useState<any[]>([]);
   const [selectedPlanner, setSelectedPlanner] = useState<any | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -19,7 +21,11 @@ export default function PlannersPage() {
           console.log("DEBUG DATA:", data);
           setPlanners(data);
           if (data.length > 0) {
-            setSelectedPlanner(data[0]);
+            const requestedPlannerId = searchParams.get('plannerId');
+            const requestedPlanner = requestedPlannerId
+              ? data.find((planner: any) => planner.id === requestedPlannerId)
+              : null;
+            setSelectedPlanner(requestedPlanner ?? data[0]);
           }
         }
       } catch (error) {
@@ -30,7 +36,7 @@ export default function PlannersPage() {
     };
 
     fetchPlanners();
-  }, []);
+  }, [searchParams]);
 
     useEffect(() => {
         const fetchSelectedDetails = async () => {

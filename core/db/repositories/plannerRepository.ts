@@ -130,6 +130,14 @@ export async function savePlannerFromImport(planner: PlannerImportPlanner) {
         major_id: major.id,
         intake_year: course_information.intake_year ?? 2025,
         intake_month: intakeMonth,
+        core_count: course_information.requirements?.core?.count ?? null,
+        core_cp: course_information.requirements?.core?.cp ?? null,
+        major_count: course_information.requirements?.major?.count ?? null,
+        major_cp: course_information.requirements?.major?.cp ?? null,
+        elective_count: course_information.requirements?.elective?.count ?? null,
+        elective_cp: course_information.requirements?.elective?.cp ?? null,
+        wil_count: course_information.requirements?.wil?.count ?? null,
+        wil_cp: course_information.requirements?.wil?.cp ?? null,
       },
     });
 
@@ -178,10 +186,11 @@ export async function savePlannerFromImport(planner: PlannerImportPlanner) {
         const match =
           poolUnitsNormalised.find((u) => u.normCode === code) ||
           allUnitsNormalised.find((u) => u.normCode === code);
+        const safeName = (match?.unit_name || 'Unknown Unit').substring(0, 255);
         return tx.unit.upsert({
           where: { unit_code: code },
-          update: { unit_name: match?.unit_name || 'Unknown Unit' },
-          create: { unit_code: code, unit_name: match?.unit_name || 'Unknown Unit' },
+          update: { unit_name: safeName },
+          create: { unit_code: code, unit_name: safeName },
         });
       })
     );

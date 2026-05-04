@@ -1,8 +1,11 @@
-"""
-extract_pdf.py — Swinburne Course Planner extractor
+﻿"""
+Deterministic PDF extraction helpers for Swinburne study planner PDFs.
 
-Fully dynamic — no hardcoded positions or colours.
-Extracts: code, name, prerequisite, offered_in, category, is_prescribed
+This module stays intentionally independent from the LLM layer. It reads the
+PDF geometry, colour legend, text, tables, and elective sections, then returns
+raw planner facts for plannerStructureService.py to normalise into the app JSON
+contract. Keeping this part deterministic makes import behaviour easier to
+debug and lets the LLM act only as an optional cross-check/repair step.
 """
 
 import re
@@ -40,6 +43,7 @@ DEFAULT_COLOUR_LEGEND = {
     (0.698, 0.631, 0.78): 'wil',
 }
 
+# The defaults cover known Swinburne planner palettes; detected legend colours can extend or override them per document.
 DEFAULT_TAG_COLOUR_MAP = {
     (1.0, 0.0, 0.0): "CORE",
     (0.0, 0.5, 0.0): "ELECTIVE",
@@ -55,10 +59,12 @@ DEFAULT_TAG_COLOUR_MAP = {
 # ---------------------------
 # HELPERS
 # ---------------------------
+# Measures distance between two RGB colours for nearest-colour matching.
 def _colour_dist(c1, c2):
     return sum((a - b) ** 2 for a, b in zip(c1, c2)) ** 0.5
 
 
+# Converts PDF colour values into a consistent three-channel RGB tuple.
 def _normalise_rgb(colour):
     if colour is None:
         return None
@@ -77,6 +83,7 @@ def _normalise_rgb(colour):
     return None
 
 
+# Maps a raw PDF RGB value to the closest known semantic category tag.
 def colour_to_tag(colour, colour_map=None, tolerance=0.05):
     rgb = _normalise_rgb(colour)
     if rgb is None:
@@ -95,6 +102,7 @@ def colour_to_tag(colour, colour_map=None, tolerance=0.05):
     return None
 
 
+# Extracts filled rectangle geometry and colours from one PDF page.
 def extract_rectangles_from_page(page):
     rectangles = []
     for rect in page.rects:
@@ -110,6 +118,7 @@ def extract_rectangles_from_page(page):
     return rectangles
 
 
+# Checks whether a PDF word sits inside a detected rectangle.
 def _word_inside_rect(word, rect, tolerance=1.0):
     return (
         word.get("x0", 0) >= rect["x0"] - tolerance and
@@ -119,6 +128,7 @@ def _word_inside_rect(word, rect, tolerance=1.0):
     )
 
 
+# Finds the semantic background colour tag for a single extracted word.
 def find_background_for_word(word, rectangles, colour_map=None, tolerance=0.05):
     containing_rects = [rect for rect in rectangles if _word_inside_rect(word, rect)]
     if containing_rects:
@@ -133,6 +143,7 @@ def find_background_for_word(word, rectangles, colour_map=None, tolerance=0.05):
     return colour, tag
 
 
+# Extracts every PDF word with its inferred background category tag.
 def extract_words_with_background_tags(file_path, colour_map=None, tolerance=0.05):
     entries = []
     with pdfplumber.open(file_path) as pdf:
@@ -158,6 +169,7 @@ def extract_words_with_background_tags(file_path, colour_map=None, tolerance=0.0
     return entries
 
 
+# Rebuilds one tagged line from positioned PDF word entries.
 def _build_tagged_line(words, gap_threshold=3.5):
     if not words:
         return ""
@@ -190,6 +202,7 @@ def _build_tagged_line(words, gap_threshold=3.5):
     return line
 
 
+# Groups tagged word entries into line text ordered by page position.
 def build_tagged_text_from_words(word_entries, line_bucket=3):
     lines = {}
     for entry in word_entries:
@@ -205,17 +218,14 @@ def build_tagged_text_from_words(word_entries, line_bucket=3):
     return "\n".join(output)
 
 
+# Extracts colour-tagged text for developer inspection and fallback debugging.
 def extract_tagged_text_from_pdf(file_path, colour_map=None, tolerance=0.05):
     word_entries = extract_words_with_background_tags(file_path, colour_map=colour_map, tolerance=tolerance)
     return build_tagged_text_from_words(word_entries)
 
 
+# Finds the dominant background colour at a row midpoint.
 def _get_colour_at_y(page, mid_y, content_right=None):
-    """
-    Return background colour of widest rect at mid_y.
-    content_right: restrict to rects with x0 < content_right (excludes sidebar).
-    Falls back to all rects if no content rect found.
-    """
     best, best_w = None, -1
     for r in page.rects:
         if (r.get('fill') and
@@ -238,13 +248,14 @@ def _get_colour_at_y(page, mid_y, content_right=None):
     return tuple(best) if best else None
 
 
+# Gets the detected colour for a table row bounding box.
 def _get_row_colour(page, row_bbox, content_right=None):
     mid_y = (row_bbox[1] + row_bbox[3]) / 2
     return _get_colour_at_y(page, mid_y, content_right=content_right)
 
 
+# Detects the right boundary of main planner content on a page.
 def _detect_content_right(page_words, page_width):
-    """Detect right boundary of main content (left 65% only, to exclude sidebar codes)."""
     content_zone = page_width * 0.65
     max_x = 0
     for w in page_words:
@@ -256,8 +267,8 @@ def _detect_content_right(page_words, page_width):
     return (max_x + 10) if max_x > 0 else content_zone
 
 
+# Merges unit codes split across multiple PDF word tokens.
 def merge_split_codes(words):
-    """Merge split unit codes due to kerning space, e.g., 'C' + 'OS20001' -> 'COS20001'."""
     merged = []
     i = 0
     while i < len(words):
@@ -282,8 +293,8 @@ def merge_split_codes(words):
     return merged
 
 
+# Splits visually merged PDF rows into smaller word groups.
 def _split_merged_row(row_words, y_tol=8):
-    """Split tall merged PDF rows into sub-rows by y-proximity."""
     if not row_words:
         return []
     sorted_words = sorted(row_words, key=lambda w: (w['top'], w['x0']))
@@ -301,16 +312,13 @@ def _split_merged_row(row_words, y_tol=8):
     return sub_rows
 
 
+# Assigns row words to table cells using bounding boxes and x-position gaps.
 def _words_to_cells(sub_words, cell_bboxes):
-    """
-    Assign words to table cells by x-midpoint.
-    Full-width merged rows are split by word x-gap.
-    Overflow prereq words (x0>150 but no cell) get a virtual cell.
-    """
     sub_words = merge_split_codes(sub_words)
     valid_cells = [c for c in cell_bboxes if c and (c[2] - c[0]) >= 8]
 
-    # Full-width merged row: detect columns from word x-gaps
+    # Full-width merged row: some PDF tables collapse all cells into one wide
+    # bbox. Recreate code/name/prereq columns from word x-gaps.
     if len(valid_cells) == 1 and (valid_cells[0][2] - valid_cells[0][0]) > 150:
         c = valid_cells[0]
         row_x0 = c[0]
@@ -366,7 +374,7 @@ def _words_to_cells(sub_words, cell_bboxes):
     for ci, c in enumerate(cell_bboxes):
         if c is None:
             continue
-        x0, top, x1, bottom = c
+        x0, _, x1, _ = c
         if x1 - x0 < 8:
             continue
         text = re.sub(r'\s+', ' ', ' '.join(buckets[ci])).strip()
@@ -386,15 +394,14 @@ def _words_to_cells(sub_words, cell_bboxes):
 # ---------------------------
 # STEP 1: Colour legend detection
 # ---------------------------
+# Detects the planner colour legend used to classify row categories.
 def detect_colour_legend(pdf):
-    """
-    Detect category colours from "N X Units" legend text.
-    Core/Major/Elective: widest rect. WIL sidebar box: narrowest sidebar rect.
-    Also detects WIL directly from ICT-prefix unit rows.
-    """
     legend = dict(DEFAULT_COLOUR_LEGEND)
 
+    # Adds a detected legend colour unless it conflicts with an existing close match.
     def register_colour(raw_colour, label, conflict_tol=0.012):
+        # If two colours are nearly identical but imply different categories,
+        # keep the first mapping to avoid unstable classification.
         colour = _normalise_rgb(raw_colour)
         if not colour:
             return
@@ -471,6 +478,7 @@ def detect_colour_legend(pdf):
     return legend
 
 
+# Extracts nearby year and semester headers from page text lines.
 def _extract_line_headers(words):
     lines = {}
     for w in words:
@@ -527,6 +535,7 @@ def _extract_line_headers(words):
     return headers
 
 
+# Finds the closest year or semester header above a table.
 def _closest_header_value(headers, header_type, table_bbox, max_vertical_gap=80, below_tolerance=18):
     tx0, ttop, tx1, _ = table_bbox
     best_value = None
@@ -551,6 +560,7 @@ def _closest_header_value(headers, header_type, table_bbox, max_vertical_gap=80,
     return best_value
 
 
+# Splits a combined prerequisite/offered-in cell into separate values.
 def _split_prereq_and_offered(text):
     if not text:
         return None, None
@@ -578,6 +588,7 @@ def _split_prereq_and_offered(text):
     return prereq or None, offered
 
 
+# Matches a row colour against the detected planner legend.
 def match_category(colour, legend, tolerance=0.04):
     if not colour or not legend:
         return None
@@ -589,10 +600,12 @@ def match_category(colour, legend, tolerance=0.04):
     return best_label if best_dist <= tolerance else None
 
 
+# Converts a free-text title into a stable fallback unit code.
 def _slugify_unit_title(text):
     return re.sub(r'[^A-Z0-9]+', '_', re.sub(r'\s+', ' ', text.upper()).strip()).strip('_')
 
 
+# Detects whether text describes a WIL or placement-style unit.
 def _looks_like_wil_text(text):
     return bool(re.search(
         r'work-?integrated|industry\s+training|industry\s+placement|professional\s+experience|internship|wil',
@@ -601,10 +614,12 @@ def _looks_like_wil_text(text):
     ))
 
 
+# Normalises table text extracted from pdfplumber cells.
 def _normalise_table_text(text):
     return re.sub(r'\s+', ' ', (text or '').replace('|', ' ')).strip()
 
 
+# Cleans extracted unit names before they are compared or saved.
 def _clean_candidate_name(name):
     name = _normalise_table_text(name)
     name = re.sub(r'\bN[Ii][Ll]\b$', '', name).strip(' -|,')
@@ -614,6 +629,7 @@ def _clean_candidate_name(name):
     return name
 
 
+# Cleans extracted prerequisite text before it is compared or saved.
 def _clean_candidate_prereq(prereq):
     prereq = _normalise_table_text(prereq)
     prereq = prereq.strip(' -|,')
@@ -622,6 +638,7 @@ def _clean_candidate_prereq(prereq):
     return prereq or None
 
 
+# Scores candidate unit names so cleaner values can replace noisy ones.
 def _name_quality_score(name):
     name = _normalise_table_text(name)
     if not name:
@@ -638,6 +655,7 @@ def _name_quality_score(name):
     return len(name) - penalties
 
 
+# Chooses the cleaner unit name between an existing and candidate value.
 def _prefer_cleaner_name(current, candidate):
     candidate = _clean_candidate_name(candidate)
     current = _clean_candidate_name(current)
@@ -657,6 +675,7 @@ def _prefer_cleaner_name(current, candidate):
 # ---------------------------
 # STEP 2: Text + metadata + requirements
 # ---------------------------
+# Extracts plain text for metadata and requirement parsing.
 def extract_text_from_pdf(file_path):
     pages = []
     with pdfplumber.open(file_path) as pdf:
@@ -668,10 +687,12 @@ def extract_text_from_pdf(file_path):
     return "\n\n".join(pages)
 
 
+# Normalises raw PDF text line endings and excess blank lines.
 def clean_text(text):
     return re.sub(r'\n+', '\n', re.sub(r'\r', '', text)).strip()
 
 
+# Extracts course, major, intake, and intake year from planner text.
 def extract_metadata(text):
     meta = {}
     m = re.search(r'Bachelor of ([A-Za-z ]+?)\s*[–\-]\s*([A-Za-z \n]+?)\s+BA-', text)
@@ -724,16 +745,13 @@ def extract_metadata(text):
     return meta
 
 
+# Extracts requirement counts and credit points from course information text.
 def extract_requirements(text):
-    """
-    Extract unit counts and credit points from Course Information section.
-    Returns dict like:
-      { 'core': {'count': 8, 'cp': 100}, 'major': {...}, ... }
-    """
     req = {}
     lines = [re.sub(r"\s+", " ", line).strip() for line in text.splitlines()]
     lines = [line for line in lines if line]
 
+    # Reads a credit-point value from one normalised text line.
     def credit_points_in_line(line):
         m = re.search(r'(\d+(?:\.\d+)?)\s*(?:credit\s+point(?:s)?|cp)\b', line, re.IGNORECASE)
         if m:
@@ -741,6 +759,7 @@ def extract_requirements(text):
             return int(value) if value.is_integer() else value
         return None
 
+    # Finds the first credit-point value on this line or shortly after it.
     def next_credit_points(line_index):
         same_line = credit_points_in_line(lines[line_index])
         if same_line is not None:
@@ -755,17 +774,6 @@ def extract_requirements(text):
                 return found
         return None
 
-    def nearby_credit_points(line_index, max_lookahead=8):
-        found = []
-        for offset in range(0, max_lookahead + 1):
-            idx = line_index + offset
-            if idx >= len(lines):
-                break
-            value = credit_points_in_line(lines[idx])
-            if value is not None:
-                found.append(value)
-        return found
-
     requirement_boundary_re = re.compile(
         r'^(?:Year\s+(?:One|Two|Three|Four|Five|\d+)|'
         r'Semester\s+\d+|Winter\s+Term|Summer\s+Term|'
@@ -774,6 +782,7 @@ def extract_requirements(text):
         re.IGNORECASE
     )
 
+    # Finds the nearest valid credit-point value around a requirement line.
     def nearest_credit_points(line_index, look_back=6, look_ahead=8, upper_bound=50):
         best = None
         for idx in range(max(0, line_index - look_back), min(len(lines), line_index + look_ahead + 1)):
@@ -789,6 +798,7 @@ def extract_requirements(text):
                 best = candidate
         return best[1] if best else None
 
+    # Finds credit points inside the current requirement block only.
     def next_credit_points_in_requirement_block(line_index, max_lookahead=8, upper_bound=50):
         found = []
         for offset in range(0, max_lookahead + 1):
@@ -858,6 +868,7 @@ def extract_requirements(text):
 # ---------------------------
 # STEP 3: Unit extraction
 # ---------------------------
+# Converts one visual table row into a structured unit candidate.
 def _process_row_cells(cells, page, row_bbox, legend, has_offered,
                        units, seen, current_section,
                        sub_mid_y=None, content_right=None):
@@ -1079,6 +1090,7 @@ def _process_row_cells(cells, page, row_bbox, legend, has_offered,
     return True
 
 
+# Extracts all planner units with year, semester, and section context.
 def extract_units_with_structure(pdf_path):
     units = []
     seen = set()
@@ -1095,9 +1107,11 @@ def extract_units_with_structure(pdf_path):
         'MPU2132': 'Malay Language Communication 1 (International Students Only)',
     }
 
+    # Finds an already extracted unit by code.
     def find_unit(code):
         return next((u for u in units if u.get('code') == code), None)
 
+    # Detects table rows that contain repeated headers or explanatory text.
     def row_contains_header_noise(text):
         return bool(re.search(
             r'^\|?\s*(?:Semester\s+\d+|Winter\s+Term|Summer\s+Term)|\bregistered for the\b|\bcourses will be\b|\bundertake this unit\b',
@@ -1105,6 +1119,7 @@ def extract_units_with_structure(pdf_path):
             re.IGNORECASE
         ))
 
+    # Checks whether a row has enough evidence to be treated as core.
     def row_supports_core(row_text, category):
         if category == 'core':
             return True
@@ -1150,7 +1165,6 @@ def extract_units_with_structure(pdf_path):
                         if not cells:
                             continue
 
-                        first_text = cells[0][0].strip()
                         row_text = ' '.join(t for t, _ in cells).strip()
                         sem_match = SEMESTER_ROW_RE.match(row_text)
                         if sem_match:
@@ -1401,6 +1415,7 @@ def extract_units_with_structure(pdf_path):
     return deduped
 
 
+# Public deterministic unit extraction entrypoint used by the structure service.
 def extract_units(pdf_path):
     return extract_units_with_structure(pdf_path)
 
@@ -1409,6 +1424,7 @@ def extract_units(pdf_path):
 # ---------------------------
 # STEP 4: Elective section grouping
 # ---------------------------
+# Collects elective/minor sections that appear outside the main planner table.
 def extract_elective_sections(file_path):
     sections = {}
     current  = 'Recommended Elective Units'
@@ -1478,12 +1494,14 @@ def extract_elective_sections(file_path):
     return sections
 
 
+# Formats nullable values for the developer-facing extraction preview.
 def _display_value(value):
     if value is None:
         return "null"
     return str(value)
 
 
+# Builds a plain-text preview of deterministic extraction output.
 def format_extracted_planner(pdf_path):
     raw_text = extract_text_from_pdf(pdf_path)
     cleaned_text = clean_text(raw_text)
@@ -1504,6 +1522,7 @@ def format_extracted_planner(pdf_path):
     else:
         lines.append("Intake: null, Year: null")
 
+    # Formats one requirement row for the developer preview.
     def req_line(label):
         req = requirements.get(label, {})
         return (
@@ -1531,12 +1550,14 @@ def format_extracted_planner(pdf_path):
         ("PRESCRIBED", 10),
     ]
 
+    # Creates a separator line for the developer preview table.
     def row_line(char="-"):
         return char * 210
 
+    # Formats one unit row for the developer preview table.
     def format_row(values):
         cells = []
-        for (label, width), value in zip(headers, values):
+        for (_, width), value in zip(headers, values):
             text = _display_value(value)
             if len(text) > width:
                 text = text[: width - 3] + "..."
