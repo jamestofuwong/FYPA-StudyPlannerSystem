@@ -1,4 +1,4 @@
-import styles from './CourseListTable.module.css';
+import styles from './Planner.module.css';
 import type { PlannerImportUnit } from '@core/shared/types/plannerImport';
 
 type SemesterGroup = {
@@ -180,7 +180,10 @@ export default function CourseListTable({
                                                         </td>
                                                     <td>
                                                         {editable && onUnitEdit ? (
-                                                        <div contentEditable suppressContentEditableWarning className={styles.editTextarea} onBlur={(e) => onUnitEdit((unit as any)._id, 'unit_name', e.currentTarget.textContent || '')}>{unit.unit_name || ''}</div>
+                                                        <div contentEditable suppressContentEditableWarning className={styles.editTextarea} 
+                                                        onBlur={(e) => onUnitEdit((unit as any)._id, 'unit_name', e.currentTarget.textContent || '')}>
+                                                            {unit.unit_name || ''}
+                                                        </div>
                                                         ) : (
                                                         unit.unit_name || 'Unknown Unit'
                                                         )}
@@ -341,7 +344,10 @@ export default function CourseListTable({
                                     </td>
                                     <td>
                                         {editable && onUnitEdit ? (
-                                            <div contentEditable suppressContentEditableWarning className={styles.editTextarea} onBlur={(e) => onUnitEdit((unit as any)._id, 'unit_name', e.currentTarget.textContent || '')}>{unit.unit_name || ''}</div>
+                                            <div contentEditable suppressContentEditableWarning className={styles.editTextarea} 
+                                            onBlur={(e) => onUnitEdit((unit as any)._id, 'unit_name', e.currentTarget.textContent || '')}>
+                                                {unit.unit_name || ''}
+                                            </div>
                                         ) : (
                                             unit.unit_name || 'Unknown Unit'
                                         )}

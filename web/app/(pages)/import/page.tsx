@@ -10,7 +10,8 @@ import type {
   PlannerImportUnit,
 } from '../../../../core/shared/types/plannerImport';
 
-import CourseListTable, { getSemesterOrder } from '../../../components/courselist/CourseListTable';
+import CourseListTable, { getSemesterOrder } from '../../../components/planner/CourseListTable';
+import PlannerHeader from '../../../components/planner/PlannerHeader';
 
 type ImportHistoryItem = {
   id: string;
@@ -24,12 +25,6 @@ type PlannerApiResponse = {
   planner: PlannerImportPlanner;
   report: PlannerImportReport;
 };
-
-function formatRequirement(value: { count: number | null; cp: number | null }): string {
-  const count = value.count ?? '-';
-  const cp = value.cp ?? '-';
-  return `${count} units / ${cp} cp`;
-}
 
 function formatConfidenceScore(score: number | undefined): string {
   if (typeof score !== 'number' || !Number.isFinite(score)) return '-';
@@ -128,8 +123,17 @@ export default function ImportPage() {
   const [isParsing, setIsParsing] = useState(false);
   const [useLlm, setUseLlm] = useState(true);
   const [planner, setPlanner] = useState<PlannerImportPlanner | null>(null);
+  
+  const [plannerInfo, setPlannerInfo] = useState({course: '',major: '',intake: '',intakeYear: '',});
+  const [plannerRequirements, setPlannerRequirements] = useState({
+    core: { count: null as number | null, cp: null as number | null },
+    majorReq: { count: null as number | null, cp: null as number | null },
+    elective: { count: null as number | null, cp: null as number | null },
+    wil: { count: null as number | null, cp: null as number | null },
+  });
   const [editableUnits, setEditableUnits] = useState<PlannerImportUnit[]>([]);
   const unitCounterRef = useRef(0);
+  
   const [report, setReport] = useState<PlannerImportReport | null>(null);
   const [history, setHistory] = useState<ImportHistoryItem[]>([]);
   const [ollamaStatus, setOllamaStatus] = useState<OllamaStatus>({
@@ -207,12 +211,26 @@ export default function ImportPage() {
 
   // Sync editable units when planner data changes
   useEffect(() => {
-    if (planner) {
-      const units = flattenUnits(planner);
-      const unitsWithId = units.map((u, i) => ({ ...u, _id: `unit-${i}` } as PlannerImportUnit & { _id: string }));
-      setEditableUnits(unitsWithId);
-    }
-  }, [planner]);
+  if (planner) {
+    const units = flattenUnits(planner);
+    const unitsWithId = units.map((u, i) => ({ ...u, _id: `unit-${i}` } as PlannerImportUnit & { _id: string }));
+    setEditableUnits(unitsWithId);
+    
+    setPlannerInfo({
+      course: planner.course_information.course || '',
+      major: planner.course_information.major || '',
+      intake: planner.course_information.intake || '',
+      intakeYear: String(planner.course_information.intake_year || ''),
+    });
+    
+    setPlannerRequirements({
+      core: planner.course_information.requirements?.core || { count: null, cp: null },
+      majorReq: planner.course_information.requirements?.major || { count: null, cp: null },
+      elective: planner.course_information.requirements?.elective || { count: null, cp: null },
+      wil: planner.course_information.requirements?.wil || { count: null, cp: null },
+    });
+  }
+}, [planner]);
 
   // Parse intake month from string
   function parseIntakeMonth(intake: string): number {
@@ -333,6 +351,17 @@ export default function ImportPage() {
   }, [editableUnits]);
 
   // Edit handler functions
+  const handlePlannerEdit = (field: string, subField?: string, value?: string | number | null) => {
+    if (subField) {
+      setPlannerRequirements(prev => ({
+        ...prev,
+        [field]: { ...prev[field as keyof typeof prev], [subField]: value },
+      }));
+    } else {
+      setPlannerInfo(prev => ({ ...prev, [field]: value ?? '' }));
+    }
+  };
+
   const handleUnitEdit = (
     id: string, 
     field: keyof PlannerImportUnit, 
@@ -504,9 +533,22 @@ export default function ImportPage() {
 
     setIsParsing(true);
     try {
-      // Create updated planner with edited units
+      // Create updated planner with edited units and planner detail
       const updatedPlanner = {
         ...planner,
+        course_information: {
+          ...planner.course_information,
+          course: plannerInfo.course || planner.course_information.course,
+          major: plannerInfo.major || planner.course_information.major,
+          intake: plannerInfo.intake || planner.course_information.intake,
+          intake_year: plannerInfo.intakeYear ? parseInt(plannerInfo.intakeYear) : planner.course_information.intake_year,
+          requirements: {
+            core: plannerRequirements.core,
+            major: plannerRequirements.majorReq,
+            elective: plannerRequirements.elective,
+            wil: plannerRequirements.wil,
+          },
+        },
         categories: {
           core_units: editableUnits.filter(u => u.category === 'core'),
           major_units: editableUnits.filter(u => u.category === 'major_core'),
@@ -723,40 +765,15 @@ export default function ImportPage() {
             <>
               <div className={styles.sectionTitle}>Extracted Summary</div>
               <div className={styles.card}>
-                <div className={styles.summaryGrid}>
-                  <div className={styles.summaryItem}>
-                    <span className={styles.summaryLabel}>Course</span>
-                    <span className={styles.summaryValue}>{summary.course}</span>
-                  </div>
-                  <div className={styles.summaryItem}>
-                    <span className={styles.summaryLabel}>Major</span>
-                    <span className={styles.summaryValue}>{summary.major}</span>
-                  </div>
-                  <div className={styles.summaryItem}>
-                    <span className={styles.summaryLabel}>Intake</span>
-                    <span className={styles.summaryValue}>{summary.intake}</span>
-                  </div>
-                  <div className={styles.summaryItem}>
-                    <span className={styles.summaryLabel}>Intake Year</span>
-                    <span className={styles.summaryValue}>{summary.intakeYear}</span>
-                  </div>
-                  <div className={styles.summaryItem}>
-                    <span className={styles.summaryLabel}>Core</span>
-                    <span className={styles.summaryValue}>{formatRequirement(summary.core)}</span>
-                  </div>
-                  <div className={styles.summaryItem}>
-                    <span className={styles.summaryLabel}>Major</span>
-                    <span className={styles.summaryValue}>{formatRequirement(summary.majorReq)}</span>
-                  </div>
-                  <div className={styles.summaryItem}>
-                    <span className={styles.summaryLabel}>Elective</span>
-                    <span className={styles.summaryValue}>{formatRequirement(summary.elective)}</span>
-                  </div>
-                  <div className={styles.summaryItem}>
-                    <span className={styles.summaryLabel}>WIL</span>
-                    <span className={styles.summaryValue}>{formatRequirement(summary.wil)}</span>
-                  </div>
-                </div>
+                <PlannerHeader
+                  course={plannerInfo.course}
+                  major={plannerInfo.major}
+                  intake={plannerInfo.intake}
+                  intakeYear={plannerInfo.intakeYear}
+                  requirements={plannerRequirements}
+                  editable={true}
+                  onEdit={handlePlannerEdit}
+                />
 
                 <div className={styles.resultSummary}>
                   <div className={styles.resultGroup}>

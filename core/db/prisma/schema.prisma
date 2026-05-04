@@ -77,6 +77,16 @@ model PlannerTemplate {
   major          Major?          @relation(fields: [major_id], references: [id])
   intake_year    Int
   intake_month   Int?
+
+  core_count     Int?
+  core_cp        Int?
+  major_count    Int?
+  major_cp       Int?
+  elective_count Int?
+  elective_cp    Int?
+  wil_count      Int?
+  wil_cp         Int?
+
   created_at     DateTime        @default(now())
   updated_at     DateTime        @updatedAt
   units          TemplateUnit[]

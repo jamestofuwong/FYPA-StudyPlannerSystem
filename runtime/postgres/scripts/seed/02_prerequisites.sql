@@ -1,4 +1,4 @@
--- -- Seed file 02: Prerequisites of the Units
+-- Seed file 02: Prerequisites of the Units
 
 -- Single prereq
 -- SELECT add_prereq_unit('', '');
