@@ -97,6 +97,14 @@ export default function DashboardPage() {
     return () => globalThis.clearInterval(id);
   }, []);
 
+  // When the selected planner changes, open all of its year levels
+  useEffect(() => {
+    const planner = dashboardData?.planners?.[selectedPlannerIdx];
+    if (!planner?.units) return;
+    const levels = new Set<number>(planner.units.map((u: any) => u.year_level as number));
+    setOpenYears(levels);
+  }, [selectedPlannerIdx, dashboardData]);
+
   const loading = internalLoading;
   const isInitializing = scraperApiStatus === 'initializing';
   const isScraping = scraperApiStatus === 'scraping';
@@ -474,7 +482,11 @@ export default function DashboardPage() {
           })}
 
           {/* Dynamic Year Tables */}
-          {[1, 2, 3].map((year) => {
+          {(() => {
+            const plannerUnits = dashboardData.planners?.[selectedPlannerIdx]?.units ?? [];
+            const yearLevels = [...new Set<number>(plannerUnits.map((u: any) => u.year_level as number))].sort((a, b) => a - b);
+            return yearLevels;
+          })().map((year) => {
             const units = getUnitsByYear(year);
             const open = openYears.has(year);
             const completedCount = units.filter((u: any) => u.status === '✓').length;
