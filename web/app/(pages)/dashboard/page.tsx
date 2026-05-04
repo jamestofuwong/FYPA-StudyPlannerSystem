@@ -63,6 +63,7 @@ export default function DashboardPage() {
   const [scraperApiStatus, setScraperApiStatus] = useState<string>('idle');
   const [showExportModal, setShowExportModal] = useState(false);
   const [enrollmentMode, setEnrollmentMode] = useState<'latest' | 'earliest' | 'mpu'>('latest');
+  const [selectedPlannerIdx, setSelectedPlannerIdx] = useState(0);
   const [suggestions, setSuggestions] = useState<{ text: string; id: string; name: string }[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedStudentName, setSelectedStudentName] = useState('');
@@ -160,19 +161,21 @@ export default function DashboardPage() {
         return;
       }
 
-      // 2. Fetch the top-ranked planner template from DB
-      const plannerId = matchData.data.rankedPlanners[0]?.plannerID;
-      if (!plannerId) {
+      // 2. Fetch the top-3 ranked planner templates from DB in parallel
+      const top3 = matchData.data.rankedPlanners.slice(0, 3);
+      if (top3.length === 0) {
         showToast("No matching planner found for this student.", "error");
         return;
       }
-      const plannerRes = await fetch(`/api/planners/${plannerId}`);
-      const plannerData = await plannerRes.json();
+      const plannerResponses = await Promise.all(
+        top3.map((r: any) => fetch(`/api/planners/${r.plannerID}`))
+      );
+      const plannerDataArr = await Promise.all(plannerResponses.map((r) => r.json()));
 
-      if (plannerRes.ok) {
+      if (plannerResponses[0].ok) {
         const data = {
           match: matchData.data,
-          planner: plannerData,
+          planners: plannerDataArr,
           completedCodes: completedUnits,
           intakeYear,
           student,
@@ -193,9 +196,10 @@ export default function DashboardPage() {
 
   // Unit Filtering Logic
   const getUnitsByYear = (yearLevel: number) => {
-    if (!dashboardData?.planner?.units) return [];
+    const planner = dashboardData?.planners?.[selectedPlannerIdx];
+    if (!planner?.units) return [];
 
-    return dashboardData.planner.units
+    return planner.units
       .filter((u: any) => u.year_level === yearLevel && u.unit !== null)
       .map((u: any) => {
         const isDone = dashboardData.completedCodes.includes(u.unit.unit_code);
@@ -255,6 +259,7 @@ export default function DashboardPage() {
     setScrapedStudent(null);
     setDashboardData(null);
     setScraperApiStatus('idle');
+    setSelectedPlannerIdx(0);
     setInternalLoading(true);
     try {
       // 1. Queue the student ID for the scraper bot via API
@@ -398,6 +403,9 @@ export default function DashboardPage() {
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 14, fontWeight: 600 }}>{s?.studentName || scrapedStudent.studentId || '—'}</div>
               </div>
+              {dashboardData && (
+                <button className={styles.btnSecondary} onClick={() => setShowExportModal(true)}>Export</button>
+              )}
               <button className={styles.btnDanger} onClick={handleClear}>✕ Clear</button>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '6px 16px' }}>
@@ -424,18 +432,46 @@ export default function DashboardPage() {
       {!loading && studentLoaded && dashboardData && (
         <div>
 
-          {/* Primary Major Progress */}
-          <div style={{ background: 'var(--card-bg)', border: '1px solid var(--panel-border)', borderRadius: 4, padding: '14px 16px', marginBottom: 10 }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 2 }}>{dashboardData.planner.course.name}</div>
-                <div style={{ fontSize: 18, fontWeight: 700 }}>{dashboardData.planner.major?.name ?? dashboardData.match.primaryMajor?.majorName ?? '—'}</div>
+          {/* Ranked Planners selector */}
+          <div className={styles.sectionTitle}>Ranked Planners</div>
+          {dashboardData.match.rankedPlanners.slice(0, 3).map((ranked: any, idx: number) => {
+            const planner = dashboardData.planners[idx];
+            const isSelected = selectedPlannerIdx === idx;
+            const rankColor = idx === 0 ? 'var(--accent-blue)' : idx === 1 ? 'var(--accent-yellow)' : 'var(--accent-orange)';
+            return (
+              <div
+                key={ranked.plannerID}
+                onClick={() => setSelectedPlannerIdx(idx)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 12,
+                  padding: '10px 14px',
+                  background: isSelected ? 'var(--active-bg)' : 'var(--card-bg)',
+                  border: `1px solid ${isSelected ? 'var(--active-highlight)' : 'var(--panel-border)'}`,
+                  borderRadius: 4, marginBottom: 6, cursor: 'pointer', transition: 'all 0.1s',
+                }}
+              >
+                <div style={{ fontSize: 11, fontWeight: 700, color: rankColor, fontFamily: 'var(--font-mono)', width: 20, flexShrink: 0 }}>#{idx + 1}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600 }}>{ranked.majorName || '—'}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                    {[
+                      planner?.course?.name,
+                      planner?.intake_year,
+                      planner?.intake_month != null
+                        ? new Date(2000, planner.intake_month - 1).toLocaleString('default', { month: 'long' })
+                        : null,
+                    ].filter(Boolean).join(' · ')}
+                  </div>
+                </div>
+                <div style={{ width: 120, flexShrink: 0 }}>
+                  <ProgressBar pct={ranked.matchPct} color={rankColor} />
+                </div>
+                <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: rankColor, width: 38, textAlign: 'right', flexShrink: 0 }}>
+                  {ranked.matchPct}%
+                </div>
               </div>
-              <button className={styles.btnSecondary} onClick={() => setShowExportModal(true)}>Export</button>
-            </div>
-            <ProgressBar pct={dashboardData.match.primaryMajor.matchPct} color="var(--accent-blue)" />
-            <div style={{ fontSize: 12, marginTop: 8 }}>Match Percentage: <strong>{dashboardData.match.primaryMajor.matchPct}%</strong></div>
-          </div>
+            );
+          })}
 
           {/* Dynamic Year Tables */}
           {[1, 2, 3].map((year) => {
@@ -497,14 +533,15 @@ export default function DashboardPage() {
 
       {/* ── Export Modal ─────────────────────────────────────────────────── */}
       {showExportModal && dashboardData && scrapedStudent && (() => {
+        const selectedPlanner = dashboardData.planners[selectedPlannerIdx];
         const exportInput: Omit<ExportInput, 'options'> = {
           studentId: scrapedStudent.studentId,
           student: scrapedStudent.student,
           match: dashboardData.match,
           planner: {
-            course: dashboardData.planner.course,
-            major: dashboardData.planner.major ?? null,
-            units: dashboardData.planner.units,
+            course: selectedPlanner.course,
+            major: selectedPlanner.major ?? null,
+            units: selectedPlanner.units,
           },
           completedCodes: dashboardData.completedCodes,
           intakeYear: dashboardData.intakeYear,
