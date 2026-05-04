@@ -57,7 +57,7 @@ export default function DashboardPage() {
   const [studentIdInput, setStudentIdInput] = useState('');
   const [scrapedStudent, setScrapedStudent] = useState<{ student: ScrapedStudent; studentId: string } | null>(null);
   const [studentLoaded, setStudentLoaded] = useState(false);
-  const [openYears, setOpenYears] = useState<Set<number>>(new Set([1, 2, 3]));
+  const [openYears, setOpenYears] = useState<Set<string>>(new Set());
   const [dashboardData, setDashboardData] = useState<any>(null);
   const [internalLoading, setInternalLoading] = useState(false);
   const [scraperApiStatus, setScraperApiStatus] = useState<string>('idle');
@@ -97,12 +97,12 @@ export default function DashboardPage() {
     return () => globalThis.clearInterval(id);
   }, []);
 
-  // When the selected planner changes, open all of its year levels
+  // When the selected planner changes, open all year-semester groups
   useEffect(() => {
     const planner = dashboardData?.planners?.[selectedPlannerIdx];
     if (!planner?.units) return;
-    const levels = new Set<number>(planner.units.map((u: any) => u.year_level as number));
-    setOpenYears(levels);
+    const keys = new Set<string>(planner.units.map((u: any) => `${u.year_level}-${u.semester}`));
+    setOpenYears(keys);
   }, [selectedPlannerIdx, dashboardData]);
 
   const loading = internalLoading;
@@ -206,34 +206,28 @@ export default function DashboardPage() {
   };
 
   // Unit Filtering Logic
-  const getUnitsByYear = (yearLevel: number) => {
+  const getUnitsByYearSem = (yearLevel: number, semester: number) => {
     const planner = dashboardData?.planners?.[selectedPlannerIdx];
     if (!planner?.units) return [];
 
-    // c.grade  (cells[6]) = actual grade e.g. "HD", "D", "C", "P"
-    // c.status (cells[5]) = completion status e.g. "Completed"
-    // MPU units live in a separate enrollment — fall back to MPU course list for grade/status.
-    const gradeMap = new Map<string, string>(
-      (scrapedStudent?.student?.courseList ?? []).map((c: any) => [c.courseId, c.grade])
-    );
-    const statusMap = new Map<string, string>(
-      (scrapedStudent?.student?.courseList ?? []).map((c: any) => [c.courseId, c.status])
-    );
-    const mpuGradeMap = new Map<string, string>(
-      (dashboardData.mpuCourseList ?? []).map((c: any) => [c.courseId, c.grade])
-    );
-    const mpuStatusMap = new Map<string, string>(
-      (dashboardData.mpuCourseList ?? []).map((c: any) => [c.courseId, c.status])
-    );
+    const courseList: any[] = scrapedStudent?.student?.courseList ?? [];
+    const mpuCourseList: any[] = dashboardData.mpuCourseList ?? [];
+
+    const gradeMap  = new Map<string, string>(courseList.map((c) => [c.courseId, c.grade]));
+    const statusMap = new Map<string, string>(courseList.map((c) => [c.courseId, c.status]));
+    const termMap   = new Map<string, string>(courseList.map((c) => [c.courseId, c.term]));
+
+    const mpuGradeMap  = new Map<string, string>(mpuCourseList.map((c) => [c.courseId, c.grade]));
+    const mpuStatusMap = new Map<string, string>(mpuCourseList.map((c) => [c.courseId, c.status]));
+    const mpuTermMap   = new Map<string, string>(mpuCourseList.map((c) => [c.courseId, c.term]));
 
     return planner.units
-      .filter((u: any) => u.year_level === yearLevel && u.unit !== null)
+      .filter((u: any) => u.year_level === yearLevel && u.semester === semester && u.unit !== null)
       .map((u: any) => ({
         code: u.unit.unit_code,
         name: u.unit.unit_name,
-        grade: gradeMap.get(u.unit.unit_code) ?? mpuGradeMap.get(u.unit.unit_code) ?? '—',
-        sem: u.semester,
-        year: (dashboardData.intakeYear ?? new Date().getFullYear()) + (u.year_level - 1),
+        grade:  gradeMap.get(u.unit.unit_code)  ?? mpuGradeMap.get(u.unit.unit_code)  ?? '—',
+        term:   termMap.get(u.unit.unit_code)   ?? mpuTermMap.get(u.unit.unit_code)   ?? '—',
         type: u.category.replace('_', ' '),
         typeClass: u.category === 'core' ? 'badgeRed' : 'badgePurple',
         status: statusMap.get(u.unit.unit_code) ?? mpuStatusMap.get(u.unit.unit_code) ?? '—',
@@ -284,10 +278,10 @@ export default function DashboardPage() {
     }).catch(() => { showToast('Failed to fetch data.', 'error'); setInternalLoading(false); });
   };
 
-  const toggleYear = (year: number) => {
+  const toggleYearSem = (key: string) => {
     setOpenYears((prev) => {
       const next = new Set(prev);
-      if (next.has(year)) next.delete(year); else next.add(year);
+      if (next.has(key)) next.delete(key); else next.add(key);
       return next;
     });
   };
@@ -611,19 +605,24 @@ export default function DashboardPage() {
             );
           })}
 
-          {/* Dynamic Year Tables */}
+          {/* Dynamic Year-Semester Tables */}
           {(() => {
             const plannerUnits = dashboardData.planners?.[selectedPlannerIdx]?.units ?? [];
-            const yearLevels = [...new Set<number>(plannerUnits.map((u: any) => u.year_level as number))].sort((a, b) => a - b);
-            return yearLevels;
-          })().map((year) => {
-            const units = getUnitsByYear(year);
-            const open = openYears.has(year);
+            const groups = [...new Set<string>(
+              plannerUnits.map((u: any) => `${u.year_level}-${u.semester}`)
+            )].sort();
+            return groups;
+          })().map((key) => {
+            const [yearStr, semStr] = key.split('-');
+            const year = parseInt(yearStr);
+            const sem  = parseInt(semStr);
+            const units = getUnitsByYearSem(year, sem);
+            const open  = openYears.has(key);
             return (
-              <div key={year} style={{ marginBottom: 8, border: '1px solid var(--panel-border)', borderRadius: 4, overflow: 'hidden' }}>
-                <div onClick={() => toggleYear(year)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'var(--surface-bg)', cursor: 'pointer' }}>
+              <div key={key} style={{ marginBottom: 8, border: '1px solid var(--panel-border)', borderRadius: 4, overflow: 'hidden' }}>
+                <div onClick={() => toggleYearSem(key)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'var(--surface-bg)', cursor: 'pointer' }}>
                   <span style={{ transition: '0.15s', transform: open ? 'rotate(0deg)' : 'rotate(-90deg)' }}>▾</span>
-                  <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--accent-blue)' }}>YEAR {year}</span>
+                  <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--accent-blue)' }}>YEAR {year} · SEM {sem}</span>
                   <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 8 }}>{units.length} units</span>
                 </div>
                 {open && (
@@ -633,20 +632,24 @@ export default function DashboardPage() {
                         <col style={{ width: 110 }} />
                         <col style={{ width: 'auto' }} />
                         <col style={{ width: 70 }} />
-                        <col style={{ width: 70 }} />
-                        <col style={{ width: 200 }} />
+                        <col style={{ width: 130 }} />
+                        <col style={{ width: 120 }} />
                         <col style={{ width: 110 }} />
                       </colgroup>
                       <thead>
-                        <tr><th>Unit Code</th><th>Unit Name</th><th>Grade</th><th>Sem</th><th>Type</th><th>Status</th></tr>
+                        <tr><th>Unit Code</th><th>Unit Name</th><th>Grade</th><th>Term</th><th>Type</th><th>Status</th></tr>
                       </thead>
                       <tbody>
                         {units.map((u: any) => (
-                          <tr key={u.code} style={u.grade === '—' ? { background: 'rgba(244,135,113,0.08)' } : undefined}>
+                          <tr key={u.code} style={
+                            u.status === 'Current' ? { background: 'rgba(111,191,115,0.12)' } :
+                            (!u.grade || u.grade === '—') ? { background: 'rgba(244,135,113,0.08)' } :
+                            undefined
+                          }>
                             <td><InlineCode>{u.code}</InlineCode></td>
                             <td>{u.name}</td>
                             <td>{u.grade}</td>
-                            <td>Sem {u.sem}</td>
+                            <td>{u.term}</td>
                             <td><Badge label={u.type} cls={u.typeClass as BadgeClass} /></td>
                             <td>{u.status}</td>
                           </tr>
