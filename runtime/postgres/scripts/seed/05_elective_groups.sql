@@ -691,3 +691,37 @@ SELECT add_elective_group(
         'COS20028'
     ]
 );
+
+-- Add Big Data Analytics minor to ALL BA-CS planners that have elective groups (except Data Science)
+DO $$
+DECLARE
+    v_major_name VARCHAR;
+    v_template_id UUID;
+    v_minor_id UUID;
+    v_unit_codes VARCHAR[] := ARRAY['COS10022', 'COS10082', 'COS20083', 'COS20028'];
+    v_unit_code VARCHAR;
+    v_unit_id UUID;
+BEGIN
+    FOR v_template_id IN
+        SELECT pt.id
+        FROM planner_templates pt
+        JOIN courses c ON c.id = pt.course_id
+        LEFT JOIN majors m ON m.id = pt.major_id
+        WHERE c.code = 'BA-CS'
+          AND (m.name IS NULL OR m.name <> 'Data Science')
+          AND EXISTS(
+              SELECT 1 FROM elective_groups eg WHERE eg.planner_template_id = pt.id
+          )
+    LOOP
+        INSERT INTO minors (planner_template_id, name)
+        VALUES (v_template_id, 'Big Data Analytics')
+        RETURNING id INTO v_minor_id;
+        
+        FOREACH v_unit_code IN ARRAY v_unit_codes LOOP
+            SELECT id INTO STRICT v_unit_id FROM units WHERE unit_code = v_unit_code;
+            INSERT INTO minor_units (minor_id, unit_id)
+            VALUES (v_minor_id, v_unit_id);
+        END LOOP;
+    END LOOP;
+END;
+$$;

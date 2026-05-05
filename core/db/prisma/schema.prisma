@@ -44,6 +44,7 @@ model Unit {
   prerequisite_groups     UnitPrerequisiteGroup[]
   prerequisite_conditions UnitPrerequisiteCondition[] @relation("PrerequisiteUnit")
   elective_group_units    ElectiveGroupUnit[]
+  minor_units             MinorUnit[] 
 
   @@map("units")
 }
@@ -91,6 +92,7 @@ model PlannerTemplate {
   updated_at     DateTime        @updatedAt
   units          TemplateUnit[]
   elective_groups ElectiveGroup[]
+  minors          Minor[]   
 
   @@unique([course_id, major_id, intake_year, intake_month])
   @@map("planner_templates")
@@ -140,6 +142,29 @@ model ElectiveGroupUnit {
 
   @@id([elective_group_id, unit_id])
   @@map("elective_group_units")
+}
+
+model Minor {
+  id                  String       @id @default(uuid())
+  planner_template_id String
+  template            PlannerTemplate @relation(fields: [planner_template_id], references: [id], onDelete: Cascade)
+  name                String
+  created_at          DateTime     @default(now())
+  updated_at          DateTime     @updatedAt
+  units               MinorUnit[]
+
+  @@unique([planner_template_id, name])
+  @@map("minors")
+}
+
+model MinorUnit {
+  minor_id String
+  minor    Minor @relation(fields: [minor_id], references: [id], onDelete: Cascade)
+  unit_id  String
+  unit     Unit  @relation(fields: [unit_id], references: [id], onDelete: Cascade)
+
+  @@id([minor_id, unit_id])
+  @@map("minor_units")
 }
 
 model SystemConfig {

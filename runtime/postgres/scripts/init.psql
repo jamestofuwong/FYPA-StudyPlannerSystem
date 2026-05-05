@@ -286,7 +286,7 @@ CREATE INDEX idx_template_units_unit     ON template_units(unit_id);
 
 
 -- ===========================================================================
--- SECTION 7 — ELECTIVE GROUPS
+-- SECTION 7a — ELECTIVE GROUPS
 -- Named pools of units that satisfy a single elective slot.
 -- Implements the elective-overlap rule (REQ-DB-103).
 -- Example: "Science Elective" pool may include CHE301, PHY301, BIO301.
@@ -308,6 +308,35 @@ CREATE TABLE elective_group_units (
 
 COMMENT ON TABLE elective_groups IS
     'Named pools of acceptable units for elective slots. REQ-DB-103, REQ-FUN-603(c)';
+
+
+-- ===========================================================================
+-- SECTION 7b — MINORS
+-- Minor specialisations available within a planner template.
+-- A minor groups elective units under a named track (e.g. "Big Data Analytics").
+-- One unit can belong to multiple minors (cross-minor electives).
+-- Units remain in elective_group_units as regular electives.
+-- ===========================================================================
+
+CREATE TABLE minors (
+    id                  UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
+    planner_template_id UUID          NOT NULL
+                            REFERENCES planner_templates(id) ON DELETE CASCADE,
+    name                VARCHAR(255)  NOT NULL,
+    created_at          TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    updated_at          TIMESTAMPTZ   NOT NULL DEFAULT now(),
+
+    UNIQUE (planner_template_id, name)
+);
+
+CREATE TABLE minor_units (
+    minor_id UUID NOT NULL REFERENCES minors(id) ON DELETE CASCADE,
+    unit_id  UUID NOT NULL REFERENCES units(id)  ON DELETE CASCADE,
+    PRIMARY KEY (minor_id, unit_id)
+);
+
+COMMENT ON TABLE minor_units IS
+    'Units that belong to a minor. Units also exist in elective_group_units as regular electives.';
 
 
 -- ===========================================================================
@@ -393,6 +422,10 @@ CREATE INDEX idx_prereq_cond_unit      ON unit_prerequisite_conditions(unit_id);
 -- Elective resolution
 CREATE INDEX idx_elective_group_template     ON elective_groups(planner_template_id);
 
+-- Minor resolution
+CREATE INDEX idx_minors_planner ON minors(planner_template_id);
+CREATE INDEX idx_minor_units_unit  ON minor_units(unit_id);
+
 -- Incident log and audit log chronological queries
 CREATE INDEX idx_incident_occurred           ON security_incident_log(occurred_at DESC);
 CREATE INDEX idx_audit_performed             ON audit_log(performed_at DESC);
@@ -439,6 +472,11 @@ CREATE TRIGGER trg_elective_groups_updated_at
     BEFORE UPDATE ON elective_groups
     FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
+CREATE TRIGGER trg_minors_updated_at
+    BEFORE UPDATE ON minors
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+
 -- ===========================================================================
 -- SECTION 13 — SCHEMA VERSION TRACKING
 -- Simple migration versioning for Sprint-based change control (Section 7.1).
@@ -451,12 +489,12 @@ CREATE TABLE schema_migrations (
 );
 
 INSERT INTO schema_migrations (version, description)
-VALUES ('1.5.0', 'Restructured prerequisites into group/condition tables for AND/OR logic; updated unit_category enum; added WIL and prescribed_elective categories; semester expanded to 4 values. Sprint 1');
+VALUES ('1.6.0', 'Add minors and minor_units tables to support minor tracks within planner templates. Sprint 3');
+
 
 -- ===========================================================================
 -- SECTION 14 — helper function
 -- ===========================================================================
-
 
 -- Helper: add a simple prerequisite (one group, one condition)
 CREATE OR REPLACE FUNCTION add_prereq_unit(
