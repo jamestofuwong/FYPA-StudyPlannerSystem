@@ -104,6 +104,9 @@ export default function CourseListTable({
                     const currentOrderIndex = semesterOrder.indexOf(semester);
                     const missingBefore = missingSems.filter(s => semesterOrder.indexOf(s) < currentOrderIndex);
                     
+                    // Skip empty semesters when not editable
+                    if (!editable && isEmpty) return null;
+
                     return (
                     <div key={semester}>
                         {/* Add missing semesters before this one */}
@@ -175,7 +178,11 @@ export default function CourseListTable({
                                                             className={styles.editInput} 
                                                             />
                                                         ) : (
-                                                            <code className={styles.code}>{unit.unit_code}</code>
+                                                            unit.unit_code !== '-' ? (
+                                                                <code className={styles.code}>{unit.unit_code}</code>
+                                                            ) : (
+                                                                <span className={styles.textMuted}>-</span>
+                                                            )
                                                         )}
                                                         </td>
                                                     <td>

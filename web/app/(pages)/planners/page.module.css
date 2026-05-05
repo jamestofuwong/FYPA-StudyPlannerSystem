@@ -95,3 +95,66 @@
   justify-content: center;
   color: var(--text-muted);
 }
+
+.courseGroup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+  border-bottom: 1px solid var(--panel-border);
+  background: var(--surface-bg);
+}
+
+.courseGroup:hover {
+  background: var(--card-hover);
+}
+
+.courseArrow {
+  font-size: 10px;
+  width: 14px;
+}
+
+.courseName {
+  flex: 1;
+}
+
+.courseCount {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.yearGroup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px 8px 28px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  border-bottom: 1px solid var(--sidebar-border);
+  background: rgba(255,255,255,0.02);
+}
+
+.yearGroup:hover {
+  background: var(--card-hover);
+}
+
+.yearArrow {
+  font-size: 9px;
+  width: 12px;
+}
+
+.yearLabel {
+  flex: 1;
+  color: var(--text-primary);
+}
+
+.yearCount {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
