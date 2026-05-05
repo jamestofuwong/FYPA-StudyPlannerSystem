@@ -52,7 +52,7 @@ export function getSemesterOrder(intakeMonth: number): number[] {
   return [1, 2, 3, 4];
 }
 
-function getSemesterLabel(sem: number): string {
+export function getSemesterLabel(sem: number): string {
   switch (sem) {
     case 1: return 'Semester 1';
     case 2: return 'Semester 2';
@@ -151,7 +151,7 @@ export default function CourseListTable({
                                 </div>
                             ) : (
                                 <div className={styles.tableWrap}>
-                                    <table className={styles.table}>
+                                    <table className={`${styles.table} ${editable && onDeleteUnit ? styles.tableEditable : ''}`}>
                                         <thead>
                                         <tr>
                                             <th>UNIT CODE</th>

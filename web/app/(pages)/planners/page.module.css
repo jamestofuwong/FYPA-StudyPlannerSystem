@@ -81,88 +81,11 @@
 }
 
 .detailPanel {
-  flex: 1;
-  padding: 24px;
-  overflow-y: auto;
-  background-color: var(--panel-bg);
-}
-
-.detailHeader {
-  margin-bottom: 24px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--panel-border);
-}
-
-.detailTitle {
-  font-size: 24px;
-  color: var(--text-primary);
-  margin-bottom: 8px;
-}
-
-.detailMeta {
-  font-size: 13px;
-  color: var(--text-muted);
-  font-family: monospace;
-}
-
-.tableContainer {
-  background-color: var(--panel-bg);
-  border-radius: 6px;
-  overflow: hidden;
-  border: 1px solid var(--panel-border);
-}
-
-.table {
-  width: 100%;
-  text-align: left;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-
-.table thead {
-  background-color: var(--card-bg);
-}
-
-.table th {
-  padding: 12px 16px;
-  color: var(--accent-blue);
-  border-bottom: 1px solid var(--panel-border);
-}
-
-.table td {
-  padding: 12px 16px;
-  color: var(--text-primary);
-}
-
-.table tr {
-  border-bottom: 1px solid var(--panel-border);
-}
-
-.table tbody tr:nth-child(even) {
-  background-color: var(--row-alt);
-}
-
-.unitCode {
-  font-family: monospace;
-  color: var(--accent-orange);
-}
-
-.unitName {
-  color: var(--text-primary);
-}
-
-.categoryBadge {
-  padding: 2px 8px;
-  background-color: rgba(135, 100, 184, 0.2);
-  color: var(--accent-purple);
-  border-radius: 4px;
-  font-size: 11px;
-  text-transform: uppercase;
-}
-
-.yearSem {
-  color: var(--text-secondary);
-  font-family: monospace;
+  flex: 1 1 0;
+  min-width: 360px;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 16px 16px;
 }
 
 .emptyState {

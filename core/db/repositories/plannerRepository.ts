@@ -57,8 +57,13 @@ export async function getPlannerById(id: string) {
       course: true,
       major: true,
       units: {
+        include: {unit: true}
+      },
+      elective_groups: {      
         include: {
-          unit: true
+          units: {
+            include: { unit: true }
+          }
         }
       }
     }

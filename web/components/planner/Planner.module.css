@@ -54,7 +54,7 @@
 
 /* Table */
 .tableWrap { 
-  overflow-x: auto; 
+  overflow-x: visible;
   border: 1px solid var(--panel-border); 
   border-radius: 4px; 
   margin-bottom: 16px; 
@@ -247,8 +247,8 @@
   color: var(--accent-red);
 }
 
-.table th:last-child,
-.table td:last-child {
+.tableEditable th:last-child,
+.tableEditable td:last-child {
   width: 45px;
   padding: 4px 4px;
   text-align: center;

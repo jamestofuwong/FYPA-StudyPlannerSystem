@@ -10,7 +10,7 @@ import type {
   PlannerImportUnit,
 } from '../../../../core/shared/types/plannerImport';
 
-import CourseListTable, { getSemesterOrder } from '../../../components/planner/CourseListTable';
+import CourseListTable, { getSemesterOrder, getSemesterLabel } from '../../../components/planner/CourseListTable';
 import PlannerHeader from '../../../components/planner/PlannerHeader';
 
 type ImportHistoryItem = {
@@ -256,25 +256,6 @@ export default function ImportPage() {
     return months[firstMonth] || 0;
   }
 
-  // Get the correct label for semester values
-  function getSemesterLabel(
-    sem: number, 
-    intakeMonth: number
-  ): string {
-    switch (sem) {
-      case 1:
-        return 'Semester 1';
-      case 2:
-        return 'Semester 2';
-      case 3:
-        return 'Summer Term';
-      case 4:
-        return 'Winter Term';
-      default:
-        return `Semester ${sem}`;
-    }
-  }
-
   // Group units by year and semester
   const yearGroups = useMemo(() => {
     if (!planner) return [];
@@ -322,7 +303,7 @@ export default function ImportPage() {
   
         semesters.push({
           semester: sem,
-          label: getSemesterLabel(sem, intakeMonth),
+          label: getSemesterLabel(sem),
           list,
           isEmpty: list.length === 0
         });
