@@ -549,6 +549,15 @@ export default function ImportPage() {
       });
 
       const data = await response.json().catch(() => ({})) as { plannerId?: string; error?: string };
+      // Check for duplicate error
+      if (response.status === 409) {
+        showToast(
+          `Planner for ${plannerInfo.course} (${plannerInfo.major}) already exists`, 
+          'error',
+        );
+        return;
+      }
+
       if (!response.ok) throw new Error(data.error || 'Failed to save planner to database.');
 
       showToast('Planner saved to database successfully!', 'success');

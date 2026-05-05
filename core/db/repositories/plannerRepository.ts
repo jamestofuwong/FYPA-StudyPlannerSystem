@@ -128,6 +128,20 @@ export async function savePlannerFromImport(planner: PlannerImportPlanner) {
       create: { name: majorName, course_id: course.id },
     });
 
+    // Check for duplicate planner
+    const existingPlanner = await tx.plannerTemplate.findFirst({
+      where: {
+        course_id: course.id,
+        major_id: major.id,
+        intake_year: course_information.intake_year ?? 2025,
+        intake_month: intakeMonth,
+      },
+    });
+
+    if (existingPlanner) {
+      throw new Error('DUPLICATE_PLANNER');
+    }
+
     // Create planner tamplate
     const newPlanner = await tx.plannerTemplate.create({
       data: {
