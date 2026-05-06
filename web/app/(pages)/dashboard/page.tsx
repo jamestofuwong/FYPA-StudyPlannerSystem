@@ -74,7 +74,6 @@ export default function DashboardPage() {
   const suggestionsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showImportPanel, setShowImportPanel] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
-  const [importCourseCode, setImportCourseCode] = useState('');
   const [importIntakeYear, setImportIntakeYear] = useState(new Date().getFullYear());
   const [importIntakeSem, setImportIntakeSem] = useState<1 | 2>(1);
   const [isImported, setIsImported] = useState(false);
@@ -341,7 +340,6 @@ export default function DashboardPage() {
 
   const handleImport = async () => {
     if (!importFile) { showToast('Select an xlsx file to import.', 'error'); return; }
-    if (!importCourseCode.trim()) { showToast('Course code is required for matching.', 'error'); return; }
 
     setStudentLoaded(false);
     setScrapedStudent(null);
@@ -376,7 +374,7 @@ export default function DashboardPage() {
       const enrollmentDate = `01/${String(intakeMonth).padStart(2, '0')}/${importIntakeYear}`;
 
       const student: ScrapedStudent = {
-        course:           importCourseCode.trim().toUpperCase(),
+        course:           '',
         status:           'Active',
         cgpa:             0,
         creditsRequired:  0,
@@ -513,16 +511,6 @@ export default function DashboardPage() {
         <div style={{ border: '1px solid var(--panel-border)', borderRadius: 4, padding: '14px 16px', marginBottom: 14, background: 'var(--card-bg)' }}>
           <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 12 }}>Import Results from xlsx</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 12px', marginBottom: 10 }}>
-            <div>
-              <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Course Code <span style={{ color: 'var(--accent-red)' }}>*</span></div>
-              <input
-                className={`${styles.formInput} ${styles.formInputMono}`}
-                style={{ width: '100%' }}
-                placeholder="e.g. CS"
-                value={importCourseCode}
-                onChange={(e) => setImportCourseCode(e.target.value)}
-              />
-            </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
               <div>
                 <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Intake Year</div>
@@ -562,7 +550,7 @@ export default function DashboardPage() {
           </div>
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
             <button className={styles.btnSecondary} onClick={() => setShowImportPanel(false)}>Cancel</button>
-            <button className={styles.btnPrimary} onClick={handleImport} disabled={!importFile || !importCourseCode.trim()}>Load</button>
+            <button className={styles.btnPrimary} onClick={handleImport} disabled={!importFile}>Load</button>
           </div>
         </div>
       )}
