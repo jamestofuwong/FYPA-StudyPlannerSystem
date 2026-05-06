@@ -14,14 +14,16 @@ const ALL_SECTIONS: ExportSection[] = ['student_profile', 'major_match', 'unit_p
 interface ExportModalProps {
   exportInput: Omit<ExportInput, 'options'>;
   onClose: () => void;
+  availableSections?: ExportSection[];
 }
 
-export default function ExportModal({ exportInput, onClose }: ExportModalProps) {
+export default function ExportModal({ exportInput, onClose, availableSections }: ExportModalProps) {
   const { showToast } = useToast();
-  const [selected, setSelected] = useState<Set<ExportSection>>(new Set(ALL_SECTIONS));
+  const sections = availableSections ?? ALL_SECTIONS;
+  const [selected, setSelected] = useState<Set<ExportSection>>(new Set(sections));
   const [isExporting, setIsExporting] = useState(false);
 
-  const allSelected = selected.size === ALL_SECTIONS.length;
+  const allSelected = selected.size === sections.length;
 
   function toggleSection(section: ExportSection) {
     setSelected((prev) => {
@@ -32,7 +34,7 @@ export default function ExportModal({ exportInput, onClose }: ExportModalProps) 
   }
 
   function toggleAll() {
-    setSelected(allSelected ? new Set() : new Set(ALL_SECTIONS));
+    setSelected(allSelected ? new Set() : new Set(sections));
   }
 
   const plannerSubtext = (() => {
@@ -102,7 +104,7 @@ export default function ExportModal({ exportInput, onClose }: ExportModalProps) 
           </button>
 
           <div className={styles.sections}>
-            {ALL_SECTIONS.map((section) => (
+            {sections.map((section) => (
               <label key={section} className={styles.sectionRow} style={{ alignItems: 'flex-start' }}>
                 <input
                   type="checkbox"
