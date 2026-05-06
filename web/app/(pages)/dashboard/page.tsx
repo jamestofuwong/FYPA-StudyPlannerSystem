@@ -878,7 +878,7 @@ export default function DashboardPage() {
 
       {/* ── Export Modal ─────────────────────────────────────────────────── */}
       {showExportModal && dashboardData && scrapedStudent && (() => {
-        const selectedPlanner = dashboardData.planners[selectedPlannerIdx];
+        const selectedPlanner = selectedPlannerIdx === -1 ? manualPlanner : dashboardData.planners[selectedPlannerIdx];
         const exportInput: Omit<ExportInput, 'options'> = {
           studentId: scrapedStudent.studentId,
           student: scrapedStudent.student,
@@ -887,9 +887,11 @@ export default function DashboardPage() {
             course: selectedPlanner.course,
             major: selectedPlanner.major ?? null,
             units: selectedPlanner.units,
+            intakeMonth: selectedPlanner.intake_month ?? null,
           },
           completedCodes: dashboardData.completedCodes,
-          intakeYear: dashboardData.intakeYear,
+          intakeYear: selectedPlanner.intake_year ?? dashboardData.intakeYear,
+          mpuCourseList: dashboardData.mpuCourseList ?? [],
         };
         return <ExportModal exportInput={exportInput} onClose={() => setShowExportModal(false)} />;
       })()}

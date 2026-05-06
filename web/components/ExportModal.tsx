@@ -9,7 +9,7 @@ import {
   type ExportInput,
 } from '../../core/shared/types/export';
 
-const ALL_SECTIONS: ExportSection[] = ['student_profile', 'major_match', 'unit_plan'];
+const ALL_SECTIONS: ExportSection[] = ['student_profile', 'major_match', 'unit_plan', 'study_planner'];
 
 interface ExportModalProps {
   exportInput: Omit<ExportInput, 'options'>;
@@ -34,6 +34,20 @@ export default function ExportModal({ exportInput, onClose }: ExportModalProps) 
   function toggleAll() {
     setSelected(allSelected ? new Set() : new Set(ALL_SECTIONS));
   }
+
+  const plannerSubtext = (() => {
+    const p = exportInput.planner;
+    const parts: string[] = [];
+    if (p.course?.name) parts.push(p.course.name);
+    if (p.major?.name) parts.push(p.major.name);
+    if (exportInput.intakeYear) {
+      const monthStr = p.intakeMonth != null
+        ? new Date(2000, p.intakeMonth - 1).toLocaleString('default', { month: 'long' })
+        : null;
+      parts.push([exportInput.intakeYear, monthStr].filter(Boolean).join(' '));
+    }
+    return parts.join(' · ');
+  })();
 
   async function handleExport() {
     if (selected.size === 0) {
@@ -89,14 +103,22 @@ export default function ExportModal({ exportInput, onClose }: ExportModalProps) 
 
           <div className={styles.sections}>
             {ALL_SECTIONS.map((section) => (
-              <label key={section} className={styles.sectionRow}>
+              <label key={section} className={styles.sectionRow} style={{ alignItems: 'flex-start' }}>
                 <input
                   type="checkbox"
                   className={styles.checkbox}
+                  style={{ marginTop: 2 }}
                   checked={selected.has(section)}
                   onChange={() => toggleSection(section)}
                 />
-                <span className={styles.sectionLabel}>{EXPORT_SECTION_LABELS[section]}</span>
+                <span>
+                  <span className={styles.sectionLabel}>{EXPORT_SECTION_LABELS[section]}</span>
+                  {section === 'study_planner' && plannerSubtext && (
+                    <span style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                      {plannerSubtext}
+                    </span>
+                  )}
+                </span>
               </label>
             ))}
           </div>

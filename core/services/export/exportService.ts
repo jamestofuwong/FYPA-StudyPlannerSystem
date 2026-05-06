@@ -1,15 +1,60 @@
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx-js-style';
 import type { ExportInput, ExportSection } from '../../shared/types/export';
+
+// ---------------------------------------------------------------------------
+// Style helpers
+// ---------------------------------------------------------------------------
+
+const hex = (h: string) => ({ rgb: h });
+const thin = () => ({ style: 'thin' as const, color: hex('CCCCCC') });
+const bdr  = () => ({ top: thin(), bottom: thin(), left: thin(), right: thin() });
+
+function mkStyle(bg: string, fontOpts: Record<string, any> = {}): any {
+  return {
+    fill: { patternType: 'solid', fgColor: hex(bg) },
+    font: { name: 'Calibri', sz: 11, color: hex('1F1F1F'), ...fontOpts },
+    border: bdr(),
+    alignment: { vertical: 'center', wrapText: false },
+  };
+}
+
+const S = {
+  hdrDark:   mkStyle('1F3864', { bold: true, color: hex('FFFFFF') }),
+  hdrMed:    mkStyle('2E5FAC', { bold: true, color: hex('FFFFFF') }),
+  hdrLight:  mkStyle('D6E4F0', { bold: true }),
+  row:       mkStyle('FFFFFF'),
+  rowAlt:    mkStyle('F5F5F5'),
+  rowGreen:  mkStyle('E2EFDA'),  // Current — matches dashboard green
+  rowSalmon: mkStyle('FCE4D6'),  // Not taken / Pending — matches dashboard red tint
+};
+
+/** Apply a style to every existing cell in the given row. */
+function applyRow(ws: any, r: number, numCols: number, style: any) {
+  for (let c = 0; c < numCols; c++) {
+    const addr = XLSX.utils.encode_cell({ r, c });
+    if (ws[addr]) ws[addr].s = style;
+  }
+}
+
+/** Make col-0 cells bold (label column) for the given row indices. */
+function boldCol0(ws: any, rowIndices: number[]) {
+  for (const r of rowIndices) {
+    const addr = XLSX.utils.encode_cell({ r, c: 0 });
+    if (ws[addr]) {
+      ws[addr].s = { ...ws[addr].s, font: { ...ws[addr].s?.font, bold: true } };
+    }
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Sheet builders
 // ---------------------------------------------------------------------------
 
-function buildStudentProfileSheet(input: ExportInput): XLSX.WorkSheet {
+function buildStudentProfileSheet(input: ExportInput): any {
   const { student, studentId } = input;
+  const NUM_COLS = 2;
 
-  const rows: [string, string | number][] = [
-    ['Field', 'Value'],
+  const dataRows: [string, string | number][] = [
     ['Student Name',        student.studentName ?? '—'],
     ['Student ID',          studentId],
     ['GPA',                 student.cgpa ?? '—'],
@@ -20,64 +65,166 @@ function buildStudentProfileSheet(input: ExportInput): XLSX.WorkSheet {
     ['Credits Completed',   student.creditsCompleted ?? '—'],
   ];
 
+  const rows = [['Field', 'Value'], ...dataRows];
   const ws = XLSX.utils.aoa_to_sheet(rows);
   ws['!cols'] = [{ wch: 24 }, { wch: 30 }];
+
+  applyRow(ws, 0, NUM_COLS, S.hdrDark);
+  dataRows.forEach((_, i) => applyRow(ws, i + 1, NUM_COLS, i % 2 === 0 ? S.row : S.rowAlt));
+  boldCol0(ws, dataRows.map((_, i) => i + 1));
+
   return ws;
 }
 
-function buildMajorMatchSheet(input: ExportInput): XLSX.WorkSheet {
+function buildMajorMatchSheet(input: ExportInput): any {
   const { match, planner } = input;
   const primary = match.primaryMajor;
+  const NUM_COLS = 5;
 
-  const rows: [string, string | number][] = [
-    ['Field', 'Value'],
-    ['Course',                      planner.course.name],
-    ['Major',                       primary?.majorName ?? '—'],
-    ['Match Percentage',            primary ? `${primary.matchPct}%` : '—'],
-    ['Detection Status',            match.status],
-    ['', ''],
-    ['Category Breakdown', ''],
-    ['Core Units Matched',          primary ? `${primary.breakdown.core.matched} / ${primary.breakdown.core.required}` : '—'],
-    ['Major Core Units Matched',    primary ? `${primary.breakdown.majorCore.matched} / ${primary.breakdown.majorCore.required}` : '—'],
-    ['Prescribed Electives Matched',primary ? `${primary.breakdown.prescribed.matched} / ${primary.breakdown.prescribed.required}` : '—'],
-    ['Free Electives Matched',      primary ? `${primary.breakdown.freeElective.matched} / ${primary.breakdown.freeElective.required}` : '—'],
-    ['WIL',                         primary ? `${primary.breakdown.wil.matched} / ${primary.breakdown.wil.required}` : '—'],
-  ];
+  const rows: (string | number)[][] = [];
+  type RowStyle = 'hdrDark' | 'hdrMed' | 'hdrLight' | 'row' | 'rowAlt' | 'blank';
+  const styles: RowStyle[] = [];
+  const boldRows: number[] = [];
 
-  if (primary?.breakdown.core.missingUnits?.length) {
-    rows.push(['', '']);
-    rows.push(['Missing Core Units', primary.breakdown.core.missingUnits.join(', ')]);
+  function add(row: (string | number)[], style: RowStyle, boldLabel = false) {
+    const padded = [...row];
+    while (padded.length < NUM_COLS) padded.push('');
+    rows.push(padded);
+    styles.push(style);
+    if (boldLabel) boldRows.push(rows.length - 1);
   }
-  if (primary?.breakdown.majorCore.missingUnits?.length) {
-    rows.push(['Missing Major Core Units', primary.breakdown.majorCore.missingUnits.join(', ')]);
+
+  add(['Field', 'Value'],                                                                                                                      'hdrDark');
+  add(['Course',                       planner.course.name],                                                                                  'row',    true);
+  add(['Major',                        primary?.majorName ?? '—'],                                                                            'rowAlt', true);
+  add(['Match Percentage',             primary ? `${primary.matchPct}%` : '—'],                                                              'row',    true);
+  add(['Detection Status',             match.status],                                                                                         'rowAlt', true);
+  add([''],                                                                                                                                    'blank');
+  add(['Category Breakdown'],                                                                                                                  'hdrMed');
+  add(['Core Units Matched',           primary ? `${primary.breakdown.core.matched} / ${primary.breakdown.core.required}` : '—'],            'row',    true);
+  add(['Major Core Units Matched',     primary ? `${primary.breakdown.majorCore.matched} / ${primary.breakdown.majorCore.required}` : '—'],  'rowAlt', true);
+  add(['Prescribed Electives Matched', primary ? `${primary.breakdown.prescribed.matched} / ${primary.breakdown.prescribed.required}` : '—'], 'row',   true);
+  add(['Free Electives Matched',       primary ? `${primary.breakdown.freeElective.matched} / ${primary.breakdown.freeElective.required}` : '—'], 'rowAlt', true);
+  add(['WIL',                          primary ? `${primary.breakdown.wil.matched} / ${primary.breakdown.wil.required}` : '—'],              'row',    true);
+
+  const completedSet = new Set(input.completedCodes);
+  const notTaken = planner.units
+    .filter((u) => u.unit !== null && !completedSet.has(u.unit!.unit_code))
+    .sort((a, b) => a.year_level - b.year_level || a.semester - b.semester);
+
+  if (notTaken.length > 0) {
+    add([''], 'blank');
+    add(['Units to Be Taken'], 'hdrMed');
+    add(['Unit Code', 'Unit Name', 'Type', 'Year', 'Semester'], 'hdrLight');
+    notTaken.forEach((u, i) => {
+      const type = u.category.replace(/_/g, ' ').replace(/\b\w/g, (ch) => ch.toUpperCase());
+      add([u.unit!.unit_code, u.unit!.unit_name, type, `Year ${u.year_level}`, `Sem ${u.semester}`], i % 2 === 0 ? 'row' : 'rowAlt');
+    });
   }
 
   const ws = XLSX.utils.aoa_to_sheet(rows);
-  ws['!cols'] = [{ wch: 30 }, { wch: 40 }];
+  ws['!cols'] = [{ wch: 30 }, { wch: 36 }, { wch: 18 }, { wch: 10 }, { wch: 10 }];
+
+  const styleMap: Record<Exclude<RowStyle, 'blank'>, any> = {
+    hdrDark: S.hdrDark, hdrMed: S.hdrMed, hdrLight: S.hdrLight,
+    row: S.row, rowAlt: S.rowAlt,
+  };
+  styles.forEach((style, r) => {
+    if (style !== 'blank') applyRow(ws, r, NUM_COLS, styleMap[style]);
+  });
+  boldCol0(ws, boldRows);
+
   return ws;
 }
 
-function buildUnitPlanSheet(input: ExportInput): XLSX.WorkSheet {
-  const { planner, completedCodes, intakeYear } = input;
+function buildUnitPlanSheet(input: ExportInput): any {
+  const { planner, intakeYear, student } = input;
+  const NUM_COLS = 6;
 
-  const header = ['Unit Code', 'Unit Name', 'Year', 'Semester', 'Type', 'Status'];
-  const dataRows = planner.units
+  const statusMap    = new Map<string, string>(student.courseList.map((c) => [c.courseId, c.status]));
+  const mpuStatusMap = new Map<string, string>((input.mpuCourseList ?? []).map((c) => [c.courseId, c.status]));
+  const completedSet = new Set(input.completedCodes);
+
+  const rows: (string | number)[][] = [['Unit Code', 'Unit Name', 'Year', 'Semester', 'Type', 'Status']];
+  const rowStyles: any[] = [S.hdrDark];
+
+  planner.units
     .filter((u) => u.unit !== null)
     .sort((a, b) => a.year_level - b.year_level || a.semester - b.semester)
-    .map((u) => {
-      const completed = completedCodes.includes(u.unit!.unit_code);
-      return [
-        u.unit!.unit_code,
+    .forEach((u) => {
+      const code = u.unit!.unit_code;
+      const portalStatus = statusMap.get(code) ?? mpuStatusMap.get(code);
+      const status = portalStatus ?? '—';
+      const type = u.category.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+      rows.push([
+        code,
         u.unit!.unit_name,
         `Year ${u.year_level} (${intakeYear + u.year_level - 1})`,
         `Semester ${u.semester}`,
-        u.category.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
-        completed ? 'Completed' : 'Pending',
-      ];
+        type,
+        status,
+      ]);
+      rowStyles.push(
+        portalStatus === 'Current' ? S.rowGreen  :
+        completedSet.has(code)     ? S.row        :
+                                     S.rowSalmon
+      );
     });
 
-  const ws = XLSX.utils.aoa_to_sheet([header, ...dataRows]);
+  const ws = XLSX.utils.aoa_to_sheet(rows);
   ws['!cols'] = [{ wch: 12 }, { wch: 36 }, { wch: 16 }, { wch: 12 }, { wch: 20 }, { wch: 12 }];
+  rowStyles.forEach((style, r) => applyRow(ws, r, NUM_COLS, style));
+
+  return ws;
+}
+
+function buildStudyPlannerSheet(input: ExportInput): any {
+  const { planner, completedCodes, intakeYear, student } = input;
+  const NUM_COLS = 6;
+
+  const completedSet = new Set(completedCodes);
+  const statusMap = new Map<string, string>(student.courseList.map((c) => [c.courseId, c.status]));
+  const termMap   = new Map<string, string>(student.courseList.map((c) => [c.courseId, c.term]));
+  const gradeMap  = new Map<string, string>(student.courseList.map((c) => [c.courseId, c.grade]));
+
+  const sorted = planner.units
+    .filter((u) => u.unit !== null)
+    .sort((a, b) => a.year_level - b.year_level || a.semester - b.semester);
+
+  const rows: (string | number)[][] = [];
+  const rowStyles: any[] = [];
+  let currentGroup = '';
+
+  for (const u of sorted) {
+    const groupKey = `${u.year_level}-${u.semester}`;
+    if (groupKey !== currentGroup) {
+      currentGroup = groupKey;
+      const calYear = intakeYear + u.year_level - 1;
+      rows.push([`Year ${u.year_level} (${calYear})  ·  Semester ${u.semester}`, '', '', '', '', '']);
+      rowStyles.push(S.hdrDark);
+      rows.push(['Unit Code', 'Unit Name', 'Type', 'Status', 'Grade', 'Term']);
+      rowStyles.push(S.hdrLight);
+    }
+
+    const code = u.unit!.unit_code;
+    const portalStatus = statusMap.get(code);
+    const status = portalStatus === 'Current' ? 'Current' : completedSet.has(code) ? 'Completed' : 'Pending';
+    const grade  = gradeMap.get(code) ?? '—';
+    const term   = termMap.get(code) ?? '—';
+    const type   = u.category.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+
+    rows.push([code, u.unit!.unit_name, type, status, grade, term]);
+    rowStyles.push(
+      status === 'Current'   ? S.rowGreen  :
+      status === 'Completed' ? S.row       :
+                               S.rowSalmon
+    );
+  }
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{ wch: 12 }, { wch: 36 }, { wch: 18 }, { wch: 12 }, { wch: 10 }, { wch: 18 }];
+  rowStyles.forEach((style, r) => applyRow(ws, r, NUM_COLS, style));
+
   return ws;
 }
 
@@ -85,16 +232,18 @@ function buildUnitPlanSheet(input: ExportInput): XLSX.WorkSheet {
 // Orchestrator
 // ---------------------------------------------------------------------------
 
-const SHEET_BUILDERS: Record<ExportSection, (input: ExportInput) => XLSX.WorkSheet> = {
+const SHEET_BUILDERS: Record<ExportSection, (input: ExportInput) => any> = {
   student_profile: buildStudentProfileSheet,
   major_match:     buildMajorMatchSheet,
   unit_plan:       buildUnitPlanSheet,
+  study_planner:   buildStudyPlannerSheet,
 };
 
 const SHEET_NAMES: Record<ExportSection, string> = {
   student_profile: 'Student Profile',
   major_match:     'Major & Course Match',
   unit_plan:       'Unit Plan',
+  study_planner:   'Study Planner',
 };
 
 /**
