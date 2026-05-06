@@ -72,6 +72,12 @@ export default function DashboardPage() {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedStudentName, setSelectedStudentName] = useState('');
   const suggestionsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [showImportPanel, setShowImportPanel] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importCourseCode, setImportCourseCode] = useState('');
+  const [importIntakeYear, setImportIntakeYear] = useState(new Date().getFullYear());
+  const [importIntakeSem, setImportIntakeSem] = useState<1 | 2>(1);
+  const [isImported, setIsImported] = useState(false);
 
   // Restore persisted session on mount
   useEffect(() => {
@@ -333,6 +339,63 @@ export default function DashboardPage() {
     setShowSuggestions(false);
   };
 
+  const handleImport = async () => {
+    if (!importFile) { showToast('Select an xlsx file to import.', 'error'); return; }
+    if (!importCourseCode.trim()) { showToast('Course code is required for matching.', 'error'); return; }
+
+    setStudentLoaded(false);
+    setScrapedStudent(null);
+    setDashboardData(null);
+    setScraperApiStatus('idle');
+    setSelectedPlannerIdx(0);
+    setManualPlanner(null);
+    setShowPlannerPicker(false);
+    setShowImportPanel(false);
+    setIsImported(false);
+    setInternalLoading(true);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', importFile);
+      const res = await fetch('/api/import', { method: 'POST', body: formData });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        showToast(err.error ?? 'Failed to parse file.', 'error');
+        return;
+      }
+      const { courseList } = await res.json();
+
+      const creditsCompleted = courseList
+        .filter((c: any) => c.status === 'Complete')
+        .reduce((sum: number, c: any) => sum + (c.creditsEarned || 0), 0);
+      const scheduledCredits = courseList
+        .filter((c: any) => c.status === 'Current')
+        .reduce((sum: number, c: any) => sum + (c.credits || 0), 0);
+
+      const intakeMonth = importIntakeSem === 1 ? 2 : 8;
+      const enrollmentDate = `01/${String(intakeMonth).padStart(2, '0')}/${importIntakeYear}`;
+
+      const student: ScrapedStudent = {
+        course:           importCourseCode.trim().toUpperCase(),
+        status:           'Active',
+        cgpa:             0,
+        creditsRequired:  0,
+        creditsCompleted,
+        gradeLevel:       '',
+        enrollmentDate,
+        graduationDate:   null,
+        scheduledCredits,
+        courseList,
+      };
+
+      setIsImported(true);
+      setScrapedStudent({ student, studentId: 'imported' });
+      await fetchDashboardData('imported', student);
+    } finally {
+      setInternalLoading(false);
+    }
+  };
+
   const handleSearch = async () => {
     const id = studentIdInput.trim();
     if (!id) { showToast('Enter a Student ID.', 'error'); return; }
@@ -346,6 +409,7 @@ export default function DashboardPage() {
     setSelectedPlannerIdx(0);
     setManualPlanner(null);
     setShowPlannerPicker(false);
+    setIsImported(false);
     setInternalLoading(true);
     try {
       // 1. Queue the student ID for the scraper bot via API
@@ -380,6 +444,7 @@ export default function DashboardPage() {
     setScraperApiStatus('idle');
     setManualPlanner(null);
     setShowPlannerPicker(false);
+    setIsImported(false);
     try { sessionStorage.removeItem('dashboardSession'); } catch {}
     showToast('Student data cleared.', 'info');
   };
@@ -434,7 +499,81 @@ export default function DashboardPage() {
         <button className={styles.btnPrimary} onClick={handleSearch} disabled={isDisabled}>
           Search
         </button>
+        <button
+          className={styles.btnSecondary}
+          onClick={() => setShowImportPanel((v) => !v)}
+          disabled={loading}
+        >
+          Import
+        </button>
       </div>
+
+      {/* ── Import Panel ─────────────────────────────────────────────────── */}
+      {showImportPanel && (
+        <div style={{ border: '1px solid var(--panel-border)', borderRadius: 4, padding: '14px 16px', marginBottom: 14, background: 'var(--card-bg)' }}>
+          <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 12 }}>Import Results from xlsx</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 12px', marginBottom: 10 }}>
+            <div>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Course Code <span style={{ color: 'var(--accent-red)' }}>*</span></div>
+              <input
+                className={`${styles.formInput} ${styles.formInputMono}`}
+                style={{ width: '100%' }}
+                placeholder="e.g. CS"
+                value={importCourseCode}
+                onChange={(e) => setImportCourseCode(e.target.value)}
+              />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <div>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Intake Year</div>
+                <input
+                  className={`${styles.formInput} ${styles.formInputMono}`}
+                  style={{ width: '100%' }}
+                  type="number"
+                  min={2000}
+                  max={2100}
+                  value={importIntakeYear}
+                  onChange={(e) => setImportIntakeYear(parseInt(e.target.value) || new Date().getFullYear())}
+                />
+              </div>
+              <div>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Intake Sem</div>
+                <select
+                  className={styles.enrollSelect}
+                  style={{ width: '100%' }}
+                  value={importIntakeSem}
+                  onChange={(e) => setImportIntakeSem(parseInt(e.target.value) as 1 | 2)}
+                >
+                  <option value={1}>Sem 1</option>
+                  <option value={2}>Sem 2</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Results File (.xlsx) <span style={{ color: 'var(--accent-red)' }}>*</span></div>
+            <input
+              type="file"
+              accept=".xlsx"
+              style={{ fontSize: 12, color: 'var(--text-primary)' }}
+              onChange={(e) => setImportFile(e.target.files?.[0] ?? null)}
+            />
+            {importFile && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{importFile.name}</div>}
+          </div>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <button className={styles.btnSecondary} onClick={() => setShowImportPanel(false)}>Cancel</button>
+            <button className={styles.btnPrimary} onClick={handleImport} disabled={!importFile || !importCourseCode.trim()}>Load</button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Import action bar — shown instead of identity card for imports */}
+      {isImported && studentLoaded && dashboardData && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, marginBottom: 14 }}>
+          <button className={styles.btnSecondary} onClick={() => setShowExportModal(true)}>Export</button>
+          <button className={styles.btnDanger} onClick={handleClear}>✕ Clear</button>
+        </div>
+      )}
 
       {/* ── Loading states ─────────────────────────────────────────────── */}
       {!isLoggedIn && !isPortalLoading && (
@@ -475,8 +614,8 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* ── Identity Card — shown as soon as scraper returns ───────────── */}
-      {scrapedStudent && (() => {
+      {/* ── Identity Card — shown only for scraped (not imported) results ─ */}
+      {scrapedStudent && !isImported && (() => {
         const s = scrapedStudent.student;
         const fields: [string, string][] = [
           ['Student ID',        scrapedStudent.studentId ?? '—'],
@@ -893,7 +1032,7 @@ export default function DashboardPage() {
           intakeYear: selectedPlanner.intake_year ?? dashboardData.intakeYear,
           mpuCourseList: dashboardData.mpuCourseList ?? [],
         };
-        return <ExportModal exportInput={exportInput} onClose={() => setShowExportModal(false)} />;
+        return <ExportModal exportInput={exportInput} onClose={() => setShowExportModal(false)} availableSections={isImported ? ['major_match', 'unit_plan', 'study_planner'] : undefined} />;
       })()}
     </div>
   );
