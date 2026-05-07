@@ -21,9 +21,20 @@
 }
 
 .panels {
-  flex: 1;
-  overflow: hidden;
-  position: relative;
-  display: flex;
-  flex-direction: column;
+    flex: 1;
+    overflow-y: auto;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+}
+
+.panels::-webkit-scrollbar {
+    width: 8px;
+}
+.panels::-webkit-scrollbar-track {
+    background: transparent;
+}
+.panels::-webkit-scrollbar-thumb {
+    background-color: #334155;
+    border-radius: 4px;
 }

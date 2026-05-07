@@ -69,6 +69,11 @@ export default function Sidebar({
 
             {/* Bottom quick actions */}
             <div className={styles.sidebarActions}>
+                <button className={styles.actionItem} onClick={() => onNavigate('user-guide')}>
+                    <span className={styles.itemIcon}>📖</span>
+                    User Guide
+                </button>
+
                 <button className={styles.actionItem} onClick={() => onNavigate('settings')}>
                     <span className={styles.itemIcon}>⚙️</span>
                     Settings
