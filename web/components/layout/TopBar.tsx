@@ -13,8 +13,8 @@ export default function TopBar() {
       {/* Logo + App name */}
       <div className={styles.appName}>
         <div className={styles.logo}>S</div>
-        SUMS
-        <span className={styles.appSubtitle}>· Student Unit Management System</span>
+        SPS
+        <span className={styles.appSubtitle}>· Study Planner System</span>
       </div>
 
       {/* Menu bar */}
