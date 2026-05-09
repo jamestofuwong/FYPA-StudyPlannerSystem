@@ -121,7 +121,7 @@ export default function ImportPage() {
   const [isResizing, setIsResizing] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isParsing, setIsParsing] = useState(false);
-  const [useLlm, setUseLlm] = useState(true);
+  const [useLlm, setUseLlm] = useState(false);
   const [planner, setPlanner] = useState<PlannerImportPlanner | null>(null);
   
   const [plannerInfo, setPlannerInfo] = useState({course: '',major: '',intake: '',intakeYear: '',});
