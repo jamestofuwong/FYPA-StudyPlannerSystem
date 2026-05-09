@@ -145,8 +145,13 @@ export default function DashboardPage() {
   // Database Fetcher — called after scraping completes with the mapped student data.
   const fetchDashboardData = async (studentId: string, student: ScrapedStudent, mpuCourseList: any[] = []) => {
     try {
-      const mpuCompleted = mpuCourseList.filter((c) => c.grade === 'COMP').map((c) => c.courseId);
-      const completedUnits = [...new Set([...student.courseList.map((c) => c.courseId), ...mpuCompleted])];
+      const mpuCompleted = mpuCourseList.map((c) => c.courseId); // No filter
+      const completedUnits = [
+        ...new Set([
+          ...student.courseList.map((c) => c.courseId), // No filter
+          ...mpuCompleted
+        ])
+      ];
 
       // Parse year and semester from the raw portal date string (e.g. "02/2024", "Feb 2024")
       const enrollStr = student.enrollmentDate ?? '';
@@ -715,6 +720,12 @@ export default function DashboardPage() {
             </div>
           );
         }
+         
+        {/* --- LOGIC FOR GRADUATION CHECK --- */}
+        const matchPayload = dashboardData.match;
+        const totalCredits = matchPayload.totalCredits || 0;
+        const missingCoreCount = matchPayload.unmatchedCore?.length || 0;
+        const isGraduationReady = missingCoreCount === 0 && totalCredits >= 300;
 
         return (
           <div>
@@ -857,38 +868,59 @@ export default function DashboardPage() {
           </div>
 
           {/* Fast Analytics */}
-          <div className={styles.sectionTitle}>Analytics</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
+          <div className={styles.sectionTitle}>Analytics & Graduation Check</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 12 }}>
 
             {/* Not Yet Taken */}
             {(() => {
-              const activePlanner = selectedPlannerIdx === -1 ? manualPlanner : dashboardData?.planners?.[selectedPlannerIdx];
-              const completedSet = new Set<string>(dashboardData.completedCodes ?? []);
-              const notTaken = (activePlanner?.units ?? [])
-                .filter((u: any) => u.unit !== null && !completedSet.has(u.unit.unit_code))
-                .map((u: any) => ({ code: u.unit.unit_code, name: u.unit.unit_name, category: u.category }));
-              const coreCount = notTaken.filter((u: any) => u.category === 'core').length;
-              const electiveCount = notTaken.filter((u: any) => u.category !== 'core').length;
-              return (
-                <div style={{ background: 'var(--card-bg)', border: '1px solid var(--panel-border)', borderRadius: 4, padding: '12px 14px' }}>
-                  <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Not Yet Taken</div>
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 8 }}>
-                    <span style={{ fontSize: 20, fontWeight: 700 }}>{notTaken.length}</span>
-                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Core: {coreCount} · Elective: {electiveCount}</span>
-                  </div>
-                  <div style={{ maxHeight: 120, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 3 }}>
-                    {notTaken.length === 0 ? (
-                      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>All planner units taken.</div>
-                    ) : notTaken.map((u: any) => (
-                      <div key={u.code} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
-                        <InlineCode>{u.code}</InlineCode>
-                        <span style={{ color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{u.name}</span>
-                      </div>
-                    ))}
-                  </div>
+            const activePlanner = selectedPlannerIdx === -1 ? manualPlanner : dashboardData?.planners?.[selectedPlannerIdx];
+            
+            const allStudentUnits = [
+              ...(scrapedStudent?.student?.courseList ?? []),
+              ...(dashboardData?.mpuCourseList ?? [])
+            ];
+            
+            const doneCodes = new Set(allStudentUnits.filter(u => u.status === 'Complete').map(u => u.courseId));
+            const doingCodes = new Set(allStudentUnits.filter(u => u.status === 'Current').map(u => u.courseId));
+
+            const notTaken = (activePlanner?.units ?? [])
+              .filter((u: any) => 
+                u.unit !== null && 
+                !doneCodes.has(u.unit.unit_code) && 
+                !doingCodes.has(u.unit.unit_code)
+              )
+              .map((u: any) => ({ 
+                code: u.unit.unit_code, 
+                name: u.unit.unit_name, 
+                category: u.category,
+                offering: u.semester 
+              }));
+
+            const coreCount = notTaken.filter((u: any) => u.category === 'core').length;
+            const electiveCount = notTaken.filter((u: any) => u.category !== 'core').length;
+
+            return (
+              <div style={{ background: 'var(--card-bg)', border: '1px solid var(--panel-border)', borderRadius: 4, padding: '12px 14px' }}>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Not Yet Taken</div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 8 }}>
+                  <span style={{ fontSize: 20, fontWeight: 700 }}>{notTaken.length}</span>
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Core: {coreCount} · Elective: {electiveCount}</span>
                 </div>
-              );
-            })()}
+                <div style={{ maxHeight: 120, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 3 }}>
+                  {notTaken.length === 0 ? (
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>All planner units taken.</div>
+                  ) : notTaken.map((u: any) => (
+                    <div key={u.code} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
+                      <InlineCode red={u.category === 'core'}>{u.code}</InlineCode>
+                      <span style={{ color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                        {u.name} <span style={{ fontSize: '9px', opacity: 0.6 }}>[Sem {u.offering}]</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
 
             {/* Currently Enrolled */}
             {(() => {
@@ -922,6 +954,88 @@ export default function DashboardPage() {
               );
             })()}
 
+            {/* Graduation Status */}
+            {(() => {
+              const activePlanner = selectedPlannerIdx === -1 ? manualPlanner : dashboardData?.planners?.[selectedPlannerIdx];
+              if (!activePlanner) return null;
+
+              const transcriptCodes = new Set(
+                  [...(scrapedStudent?.student?.courseList ?? []), ...(dashboardData?.mpuCourseList ?? [])]
+                      .filter(u => u.status === 'Complete')
+                      .map(u => u.courseId?.trim().toUpperCase())
+                      .filter(Boolean)
+              );
+
+              //Count matches within the planner (Capping MPU to 1 slot)
+              let completedInPlannerCount = 0;
+              let mpuSlotFilled = false;
+              const plannerCodes = new Set((activePlanner.units ?? []).map((u: any) => u.unit?.unit_code?.trim().toUpperCase()).filter(Boolean));
+
+              plannerCodes.forEach((code: any) => {
+                  if (transcriptCodes.has(code)) {
+                      if (code.startsWith('MPU')) {
+                          if (!mpuSlotFilled) { completedInPlannerCount += 1; mpuSlotFilled = true; }
+                      } else {
+                          completedInPlannerCount += 1;
+                      }
+                  }
+              });
+
+              const matchedCP = completedInPlannerCount * 12.5;
+
+              const coreMissing = (activePlanner?.units ?? [])
+                .filter((u: any) => u.unit !== null && (u.category === 'core' || u.category === 'major_core') && !transcriptCodes.has(u.unit.unit_code?.toUpperCase()));
+
+              const prescribedMissing = (activePlanner?.units ?? [])
+                .filter((u: any) => u.unit !== null && u.category === 'prescribed_elective' && !transcriptCodes.has(u.unit.unit_code?.toUpperCase()));
+
+              const isEligible = (coreMissing.length + prescribedMissing.length === 0) && matchedCP >= 300;
+              
+              return (
+                <div style={{ background: 'var(--card-bg)', border: `1px solid ${isEligible ? 'var(--accent-green)' : 'var(--accent-purple)'}`, borderRadius: 4, padding: '12px 14px' }}>
+                  <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Graduation Check</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: isEligible ? 'var(--accent-green)' : 'var(--accent-red)', marginBottom: 8 }}>
+                    {isEligible ? '✅ ELIGIBLE' : '❌ INELIGIBLE'}
+                  </div>
+                  
+                  <div style={{ fontSize: '10px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <div>
+                          <div style={{ color: coreMissing.length === 0 ? 'var(--accent-green)' : 'inherit' }}>
+                              {coreMissing.length === 0 ? '●' : '○'} Core & Major: {coreMissing.length === 0 ? 'Fulfilled' : <span style={{ fontWeight: 600 }}>{coreMissing.length} Remaining</span>}
+                          </div>
+                          {coreMissing.length > 0 && (
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4, marginLeft: 12 }}>
+                                  {coreMissing.map((u: any) => (
+                                      <InlineCode key={u.unit?.unit_code} red={true}>{u.unit?.unit_code}</InlineCode>
+                                  ))}
+                              </div>
+                          )}
+                      </div>
+
+                      <div>
+                          <div style={{ color: prescribedMissing.length === 0 ? 'var(--accent-green)' : 'inherit' }}>
+                              {prescribedMissing.length === 0 ? '●' : '○'} Prescribed Electives: {prescribedMissing.length === 0 ? 'Fulfilled' : <span style={{ fontWeight: 600 }}>{prescribedMissing.length} Remaining</span>}
+                          </div>
+                          {prescribedMissing.length > 0 && (
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4, marginLeft: 12 }}>
+                                  {prescribedMissing.map((u: any) => (
+                                      <InlineCode key={u.unit?.unit_code} red={false}>{u.unit?.unit_code}</InlineCode>
+                                  ))}
+                              </div>
+                          )}
+                      </div>
+
+                      <div style={{ fontSize:'12px', color: matchedCP >= 300 ? 'var(--accent-green)' : 'var(--text-muted)' }}>
+                          {matchedCP >= 300 ? '●' : '○'} Credits: {matchedCP}/300 CP
+                      </div>
+                  </div>
+
+                  <div style={{ marginTop: 10 }}>
+                    <ProgressBar pct={Math.min((matchedCP / 300) * 100, 100)} color="var(--accent-purple)" />
+                  </div>
+                </div>
+              );
+          })()}
           </div>
 
           {/* Dynamic Year-Semester Tables */}
@@ -990,15 +1104,6 @@ export default function DashboardPage() {
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8 }}>Estimated Progress: 75% Match</div>
           </div>
 
-          {/* Graduation Eligibility */}
-          <div className={styles.sectionTitle} style={{ marginTop: 16 }}>Graduation Eligibility</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14, background: 'rgba(244,135,113,0.08)', border: '1px solid rgba(244,135,113,0.35)', borderRadius: 4, padding: '12px 16px' }}>
-            <div style={{ fontSize: 22 }}>⚠</div>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent-red)' }}>Not Yet Eligible for Graduation</div>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Required units from the Course and Major are still outstanding.</div>
-            </div>
-          </div>
           </div>
         );
       })()}

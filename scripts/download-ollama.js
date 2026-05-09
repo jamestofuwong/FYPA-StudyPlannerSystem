@@ -50,7 +50,7 @@ function downloadFile(url, dest) {
   console.log(`[download-ollama] Downloading to ${dest}...`);
   if (process.platform === 'win32') {
     execSync(
-      `powershell -Command "Invoke-WebRequest -Uri'${url}' -OutFile '${dest}' -UseBasicParsing`,
+      `powershell -Command "Invoke-WebRequest -Uri '${url}' -OutFile '${dest}' -UseBasicParsing`,
       { stdio: 'inherit' }
     );
   } else {

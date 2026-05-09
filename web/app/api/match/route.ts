@@ -90,9 +90,20 @@ export async function POST(request: Request) {
       config: { preferIntakeYear: false },
     });
 
+    const payload = result.payload as any;
+    const graduationCheck = {
+        isEligible: (payload.unmatchedCore?.length === 0) && (payload.totalCredits >= 300),
+        details: {
+            creditsProgress: `${payload.totalCredits} / 300`,
+            missingCount: payload.unmatchedCore?.length || 0,
+            hasFailedUnits: student.completedUnitCodes?.some((u: any) => u.grade === 'F')
+        }
+    };
+
     return NextResponse.json({
       success: true,
       data: result.payload,
+      graduationCheck,
       processingTime: result.durationMs,
     });
 
