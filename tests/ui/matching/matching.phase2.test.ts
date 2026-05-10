@@ -7,17 +7,19 @@ import {
   PlannerScoreRecord,
   StudentProfile,
   RawStudentInput,
-} from "../../core/shared/types/matching";
+} from "../../../core/shared/types/matching";
 
-import { scorePlanners, applyWILExemption } from "../../core/services/matching/scoringEngine";
-import { detectMajors, mergeSort } from "../../core/services/matching/majorDetector";
-import { buildDisplayPayload } from "../../core/services/matching/outputPackager";
+import { scorePlanners, applyWILExemption } from "../../../core/services/matching/scoringEngine";
+import { detectMajors, mergeSort } from "../../../core/services/matching/majorDetector";
+import { buildDisplayPayload } from "../../../core/services/matching/outputPackager";
 
-// ─── Team Helper Functions 
+// --- Team Helper Functions 
 function makePlanner(overrides: Partial<PlannerTemplate>): PlannerTemplate {
   return {
     plannerID: "BA-CS",
     majorName: "Data Science",
+    courseType: "degree",
+    durationSemesters: 6,
     intakeYear: 2024,
     intakeSemester: 1,
     requiredCore: ["COS10009", "COS10026"],
@@ -32,8 +34,10 @@ function makePlanner(overrides: Partial<PlannerTemplate>): PlannerTemplate {
 function makeProfile(overrides: Partial<StudentProfile> = {}): StudentProfile {
   return {
     studentID: "102785914",
+    courseType: "degree",
     intakeYear: 2024,
     intakeSemester: 1,
+    currentSemester: 1,
     completedUnits: new Set(),
     completedCore: new Set(),
     completedMajorCore: new Set(),
@@ -42,6 +46,7 @@ function makeProfile(overrides: Partial<StudentProfile> = {}): StudentProfile {
     electivesByTag: new Map(),
     hasWIL: false,
     unclassifiedUnits: [],
+    requisiteFlags: [],
     ...overrides,
   };
 }
@@ -49,8 +54,10 @@ function makeProfile(overrides: Partial<StudentProfile> = {}): StudentProfile {
 function makeRawStudent(overrides: Partial<RawStudentInput> = {}): RawStudentInput {
   return {
     studentID: "102785914",
+    courseType: "degree",
     intakeYear: 2024,
     intakeSemester: 1,
+    currentSemester: 1,
     completedUnitCodes: [],
     hasWIL: false,
     ...overrides,
@@ -61,6 +68,9 @@ function makeScoreRecord(overrides: Partial<PlannerScoreRecord> = {}): PlannerSc
   return {
     plannerID: "BA-CS",
     majorName: "Data Science",
+    courseType: "degree",
+    intakeYear: 2024,
+    intakeSemester: 1,
     matchPct: 50,
     majorCoreScore: 0.5,
     coreMatched: 1,
@@ -77,11 +87,12 @@ function makeScoreRecord(overrides: Partial<PlannerScoreRecord> = {}): PlannerSc
     missingMajorCore: [],
     missingPrescribed: [],
     missingFreeSlots: 0,
+    requisiteFlags: [],
     ...overrides,
   };
 }
 
-// ─── Main Test Suite ──────────────────────────────────────────────────────────
+// --- Main Test Suite --------------------------------------------------
 
 describe("Matching Engine Phase 2 & 3 (Jest)", () => {
   
@@ -94,7 +105,7 @@ describe("Matching Engine Phase 2 & 3 (Jest)", () => {
     jest.restoreAllMocks();
   });
 
-  // ─── MM-05: applyWILExemption ───────────────────────────────────────────────
+  // --- MM-05: applyWILExemption --------------------------------
 
   describe("MM-05 - applyWILExemption", () => {
     test("returns unchanged slot count when hasWIL is false", () => {
@@ -105,7 +116,7 @@ describe("Matching Engine Phase 2 & 3 (Jest)", () => {
     });
   });
 
-  // ─── MM-05: scorePlanners ───────────────────────────────────────────────────
+  // --- MM-05: scorePlanners --------------------------------
 
   describe("MM-05 - scorePlanners", () => {
     
@@ -155,7 +166,7 @@ describe("Matching Engine Phase 2 & 3 (Jest)", () => {
     });
   });
 
-  // ─── MM-07: Sorting & Detection (Original teammate tests) ──────────────────
+  // --- MM-07: Sorting & Detection (Original teammate tests) --------------------------------
 
   describe("MM-07 - Logic Flow", () => {
     test("mergeSort sorts descending by majorCoreScore", () => {
@@ -175,13 +186,13 @@ describe("Matching Engine Phase 2 & 3 (Jest)", () => {
     });
   });
 
-  // ─── MM-08: Output Packaging ───────────────────────────────────────────────
+  // --- MM-08: Output Packaging  --------------------------------
 
   describe("MM-08 - buildDisplayPayload", () => {
     test("payload contains correct studentID", () => {
       const record = makeScoreRecord();
       const result = { primaryMajor: record, secondMajor: null, status: "detected" as const, rankedPlanners: [record] };
-      const payload = buildDisplayPayload("102785914", result);
+      const payload = buildDisplayPayload(makeProfile({ studentID: "102785914" }), result, []);
       expect(payload.studentID).toBe("102785914");
     });
 
@@ -193,7 +204,7 @@ describe("Matching Engine Phase 2 & 3 (Jest)", () => {
         status: "detected" as const, 
         rankedPlanners: [primary] 
       };
-      const payload = buildDisplayPayload("123", detection);
+      const payload = buildDisplayPayload(makeProfile({ studentID: "123" }), detection, []);
       
       // This triggers the branch where topAlternatives returns empty
       expect(payload.topAlternatives).toHaveLength(0);
@@ -213,9 +224,10 @@ describe("Matching Engine Phase 2 & 3 (Jest)", () => {
     
     // 2. This execution hits the 'if (len === 0)' branches
     const results = scorePlanners(student, [hollowPlanner], DEFAULT_CONFIG);
-    
-    // With my suggested fix from earlier, this should be 100%
-    expect(results[0].matchPct).toBe(100);
+
+    // Empty core/majorCore score 0 (not 1.0) by design; prescribed+free with 0 slots score 1.0
+    // 0×0.40 + 0×0.30 + 1.0×0.20 + 1.0×0.05 + 0×0.05 = 0.25
+    expect(results[0].matchPct).toBe(25);
   });
 
   test("Detector Edge Cases - No Major and Empty List (Line 62+)", () => {
@@ -239,6 +251,6 @@ describe("Matching Engine Phase 2 & 3 (Jest)", () => {
     });
     
     const results = scorePlanners(makeProfile(), [hollowPlanner], DEFAULT_CONFIG);
-    expect(results[0].matchPct).toBe(100);
+    expect(results[0].matchPct).toBe(25);
   });
 });

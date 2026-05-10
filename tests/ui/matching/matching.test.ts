@@ -3,13 +3,15 @@ import { DEFAULT_CONFIG, AlgorithmConfig, UnitMasterEntry, PlannerTemplate, RawS
 import { validateConfig, ConfigValidationError } from "../../../core/services/matching/configValidator";
 import { filterPlanners, PlannerFilterError } from "../../../core/services/matching/plannerFilter";
 import { normaliseCode, normaliseUnitCodes } from "../../../core/services/matching/unitNormalizer";
-import { buildStudentProfile } from "@/core/services/matching/profileBuilder";
+import { buildStudentProfile } from "../../../core/services/matching/profileBuilder";
 
 // --- Helpers ---
 function makePlanner(overrides: Partial<PlannerTemplate>): PlannerTemplate {
   return {
     plannerID: "BA-CS",
     majorName: "Data Science",
+    courseType: "degree",
+    durationSemesters: 6,
     intakeYear: 2024,
     intakeSemester: 1,
     requiredCore: ["COS10009", "COS10026"],
@@ -28,6 +30,7 @@ function makeMasterEntry(overrides: Partial<UnitMasterEntry>): UnitMasterEntry {
     category: "core",
     creditHours: 3,
     subjectTags: [],
+    requisites: [],
     ...overrides,
   };
 }
@@ -35,8 +38,10 @@ function makeMasterEntry(overrides: Partial<UnitMasterEntry>): UnitMasterEntry {
 function makeRawStudent(overrides: Partial<RawStudentInput> = {}): RawStudentInput {
   return {
     studentID: "102785914",
+    courseType: "degree",
     intakeYear: 2024,
     intakeSemester: 1,
+    currentSemester: 1,
     completedUnitCodes: [],
     hasWIL: false,
     ...overrides,
