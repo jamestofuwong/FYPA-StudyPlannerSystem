@@ -47,10 +47,10 @@ export function runMatchingPipeline(input: MatchingServiceInput): MatchingServic
   // Merge caller config with defaults
   const config: AlgorithmConfig = { ...DEFAULT_CONFIG, ...input.config };
 
-  // Validate weight sum – reject before any execution
+  // Validate weight sum - reject before any execution
   validateConfig(config);
 
-  // Phase 1 – Planner filtering
+  // Phase 1 - Planner filtering
   const candidatePlanners = filterPlanners(
     input.planners,
     input.student.intakeYear,
@@ -58,7 +58,7 @@ export function runMatchingPipeline(input: MatchingServiceInput): MatchingServic
     config
   );
 
-  // Phase 2a – Unit normalisation + profile preparation
+  // Phase 2a - Unit normalisation + profile preparation
   const normalisedCodes = normaliseUnitCodes(input.student.completedUnitCodes);
   const profile = buildStudentProfile(
     input.student,
@@ -66,14 +66,14 @@ export function runMatchingPipeline(input: MatchingServiceInput): MatchingServic
     input.unitMasterTable
   );
 
-  // Phases 2b + 3 – WIL adjustment + per-planner scoring
+  // Phases 2b + 3 - WIL adjustment + per-planner scoring
   const scoreRecords = scorePlanners(profile, candidatePlanners, config);
 
-  // Phases 4 + 5 – Ranking + major detection
+  // Phases 4 + 5 - Ranking + major detection
   const detectionResult = detectMajors(scoreRecords, config, input.student);
 
-  // Phase 6 – Output packaging
-  const payload = buildDisplayPayload(profile.studentID, detectionResult);
+  // Phase 6 - Output packaging
+  const payload = buildDisplayPayload(profile, detectionResult, input.unitMasterTable);
 
   const durationMs = Math.round(performance.now() - start);
 

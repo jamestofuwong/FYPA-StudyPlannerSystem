@@ -120,14 +120,14 @@ function scoreSinglePlanner(
   });
 
   // Missing free slots uses the adjusted denominator
-  const missingFreeSlots = Math.max(
-    0,
-    freeElectiveSlotsAdj - freeResult.matched
-  );
+  const missingFreeSlots = Math.max(0, freeElectiveSlotsAdj - freeResult.matched);
 
   return {
     plannerID: planner.plannerID,
     majorName: planner.majorName,
+    courseType: planner.courseType,
+    intakeYear: planner.intakeYear,
+    intakeSemester: planner.intakeSemester,
     matchPct,
     majorCoreScore: majorCoreResult.score,
     coreMatched: coreResult.matched,
@@ -144,10 +144,11 @@ function scoreSinglePlanner(
     missingMajorCore,
     missingPrescribed,
     missingFreeSlots,
+    requisiteFlags: profile.requisiteFlags,
   };
 }
 
-// ====== Sub-scorers ===========================================================
+// --- Sub-scorers ------------------------------------------------
 
 interface ScoreResult {
   score: number;
@@ -155,10 +156,7 @@ interface ScoreResult {
 }
 
 /** 3a – Core score [weight: 0.40] */
-function scoreCore(
-  completedCore: Set<string>,
-  requiredCore: string[]
-): ScoreResult {
+function scoreCore(completedCore: Set<string>, requiredCore: string[]): ScoreResult {
   if (requiredCore.length === 0) {
     console.warn("[ScoringEngine] Planner has zero required core units. Core score = 0.");
     return { score: 0, matched: 0 };
@@ -168,10 +166,7 @@ function scoreCore(
 }
 
 /** 3b – Major core score [weight: 0.30] */
-function scoreMajorCore(
-  completedMajorCore: Set<string>,
-  requiredMajorCore: Set<string>
-): ScoreResult {
+function scoreMajorCore(completedMajorCore: Set<string>, requiredMajorCore: Set<string>): ScoreResult {
   if (requiredMajorCore.size === 0) {
     console.warn("[ScoringEngine] Planner has zero required major core units. Major core score = 0.");
     return { score: 0, matched: 0 };
@@ -190,7 +185,6 @@ function scorePrescribed(
   completedPrescribed: Set<string>,
   categories: PlannerTemplate["prescribedElectiveCategories"]
 ): ScoreResult & { possible: number } {
-  // No prescribed electives in this planner -> nothing to fulfill, full score.
   if (categories.length === 0) {
     return { score: 1.0, matched: 0, possible: 0 };
   }
@@ -228,13 +222,11 @@ function scoreFreeElectives(
   freeElectivePool: Set<string>,
   slotsRequired: number  // already WIL-adjusted
 ): ScoreResult {
-  // No free elective slots to fill — nothing to fulfill, full score.
+  // No free elective slots to fill - nothing to fulfill, full score.
   if (slotsRequired === 0) {
     return { score: 1.0, matched: 0 };
   }
-  const inPool = [...completedFreeElectives].filter((c) =>
-    freeElectivePool.has(c)
-  ).length;
+  const inPool = [...completedFreeElectives].filter((c) => freeElectivePool.has(c)).length;
   const matched = Math.min(inPool, slotsRequired);
   return { score: matched / slotsRequired, matched };
 }

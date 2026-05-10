@@ -27,9 +27,15 @@ function toMatchingCategory(prismaCategory: string): UnitMasterEntry['category']
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { student } = body;
+    const rawStudent = body.student;
 
-    if (!student) return NextResponse.json({ error: "Missing student data" }, { status: 400 });
+    if (!rawStudent) return NextResponse.json({ error: "Missing student data" }, { status: 400 });
+
+    const student = {
+      ...rawStudent,
+      courseType: rawStudent.courseType || "degree",
+      currentSemester: rawStudent.currentSemester || 1,
+    };
 
     const dbPlanners = await plannerRepository.getAllPlannersWithUnits();
 
@@ -53,7 +59,7 @@ export async function POST(request: Request) {
     for (const [code, entry] of masterMap) {
       const category = toMatchingCategory(entry.category);
       if (!category) continue;
-      unitMasterTable.push({ code, name: '', category, creditHours: 12.5, subjectTags: [] });
+      unitMasterTable.push({ code, name: '', category, creditHours: 12.5, subjectTags: [], requisites: [] });
     }
 
     // Map DB planners to the PlannerTemplate shape expected by the matching pipeline.

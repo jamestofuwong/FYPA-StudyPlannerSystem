@@ -44,6 +44,8 @@ function makePlanner(index: number, intakeYear: number): PlannerTemplate {
   return {
     plannerID: `planner-${index}`,
     majorName: `Major ${index}`,
+    courseType: "degree" as const,
+    durationSemesters: 6,
     intakeYear,
     intakeSemester: (index % 2) + 1 as 1 | 2,
     requiredCore,
@@ -67,7 +69,7 @@ function buildUnitMasterTable(planners: PlannerTemplate[]): UnitMasterEntry[] {
   for (const p of planners) {
     const addEntry = (code: string, category: UnitMasterEntry["category"]) => {
       if (!seen.has(code)) {
-        seen.set(code, { code, name: `Unit ${code}`, category, creditHours: 3, subjectTags: [] });
+        seen.set(code, { code, name: `Unit ${code}`, category, creditHours: 3, subjectTags: [], requisites: [] });
       }
     };
     p.requiredCore.forEach((c) => addEntry(c, "core"));
@@ -101,8 +103,10 @@ function makeStudent(targetPlanner: PlannerTemplate): RawStudentInput {
 
   return {
     studentID: "102785914",
+    courseType: "degree" as const,
     intakeYear: targetPlanner.intakeYear,
     intakeSemester: targetPlanner.intakeSemester,
+    currentSemester: 1 as const,
     completedUnitCodes,
     hasWIL: false,
   };

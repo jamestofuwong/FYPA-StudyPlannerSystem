@@ -4,6 +4,16 @@
 // ============================================================
 
 // ------------------------------------------------------------------
+// Course type - determines which planners are eligible for a student
+// ------------------------------------------------------------------
+export type CourseType =
+  | "degree"       // e.g. Bachelor of Computer Science (3 years)
+  | "diploma"      // e.g. Diploma of IT (1.5–2 years)
+  | "foundation"   // e.g. Foundation Studies (1 year)
+  | "masters"      // postgraduate coursework
+  | "other";       // catch-all for any unlisted course type
+
+// ------------------------------------------------------------------
 // Algorithm Configuration (MM-01)
 // All weights and thresholds live here – never hardcoded in logic.
 // ------------------------------------------------------------------
@@ -43,6 +53,16 @@ export const DEFAULT_CONFIG: AlgorithmConfig = {
 };
 
 // ------------------------------------------------------------------
+// Requisite types - prerequisite, concurrent, anti-requisite
+// ------------------------------------------------------------------
+export type RequisiteType = "prerequisite" | "concurrent" | "antirequisite";
+ 
+export interface Requisite {
+  type: RequisiteType;
+  unitCode: string; // the unit this requisite refers to
+}
+
+// ------------------------------------------------------------------
 // Unit Master Table entry (MM-03 / MM-04)
 // ------------------------------------------------------------------
 export type UnitCategory = "core" | "majorCore" | "prescribed" | "freeElective" | "WIL";
@@ -53,7 +73,8 @@ export interface UnitMasterEntry {
   category: UnitCategory;
   creditHours: number;
   subjectTags: string[];    // used for minor detection (Phase 7)
-  semester?: number;        // 1 or 2 – needed for WIL exemption ordering
+  offeringSemesters?: (1 | 2)[];        // which semesters this unit runs: 1 or 2 - needed for WIL exemption ordering
+  requisites: Requisite[];  // all requisite types (prerequisites, concurrent, anti-requisites); logic in profileBuilder.ts
 }
 
 // ------------------------------------------------------------------
@@ -62,17 +83,22 @@ export interface UnitMasterEntry {
 // ------------------------------------------------------------------
 export interface RawStudentInput {
   studentID: string;
+  courseType: CourseType;         // determines which planners are eligible for this student
   intakeYear: number;
   intakeSemester: 1 | 2;
+  currentSemester: 1 | 2;         // used for unit offering availability checks
   completedUnitCodes: string[];   // flat, un-normalised
   hasWIL: boolean;
+  manualOverride?: string; // if set, overrides detected major with the specified planner's major
 }
 
 // Enriched profile produced by Phase 2a (MM-04)
 export interface StudentProfile {
   studentID: string;
+  courseType: CourseType;
   intakeYear: number;
   intakeSemester: 1 | 2;
+  currentSemester: 1 | 2;
   completedUnits: Set<string>;          // all codes, normalised
   completedCore: Set<string>;
   completedMajorCore: Set<string>;
@@ -81,6 +107,15 @@ export interface StudentProfile {
   electivesByTag: Map<string, Set<string>>; // tag → unit codes
   hasWIL: boolean;
   unclassifiedUnits: string[];          // logged but excluded from scoring
+  requisiteFlags: RequisiteFlag[];      // flagged requisite violations, populated during profile building for later display 
+}
+
+// A flagged requisite issue found during profile building
+export interface RequisiteFlag {
+  unitCode: string;         // the unit being checked
+  requisiteType: RequisiteType;
+  relatedUnit: string;      // the prerequisite / concurrent / antirequisite unit
+  issue: string;            // human-readable description
 }
 
 // ------------------------------------------------------------------
@@ -95,8 +130,10 @@ export interface PrescribedElectiveCategory {
 export interface PlannerTemplate {
   plannerID: string;
   majorName: string;
+  courseType: CourseType;         // must match student courseType to be eligible
   intakeYear: number;
   intakeSemester: 1 | 2;
+  durationSemesters: number;      // e.g. 6 for 3-year degree
   requiredCore: string[];          // ordered; order matters for WIL exemption removal
   requiredMajorCore: Set<string>;
   prescribedElectiveCategories: PrescribedElectiveCategory[];
@@ -110,6 +147,9 @@ export interface PlannerTemplate {
 export interface PlannerScoreRecord {
   plannerID: string;
   majorName: string;
+  courseType: CourseType;
+  intakeYear: number;      // which version of the planner was matched
+  intakeSemester: 1 | 2;   // which version of the planner was matched
 
   matchPct: number;          // 0–100
   majorCoreScore: number;    // 0–1, used as primary ranking signal
@@ -131,6 +171,9 @@ export interface PlannerScoreRecord {
   missingMajorCore: string[];
   missingPrescribed: Array<{ categoryCode: string; unfilledSlots: number }>;
   missingFreeSlots: number;
+
+  // Requisite flags for units in this planner
+  requisiteFlags: RequisiteFlag[];
 }
 
 // ------------------------------------------------------------------
@@ -162,6 +205,11 @@ export interface CategoryBreakdown {
 
 export interface MajorDisplay {
   majorName: string;
+  courseType: CourseType;
+  plannerVersion: {
+    intakeYear: number;
+    intakeSemester: 1 | 2;
+  };
   matchPct: number;
   majorCoreScore: number;
   breakdown: {
@@ -171,16 +219,26 @@ export interface MajorDisplay {
     freeElective: CategoryBreakdown;
     wil: CategoryBreakdown;
   };
+  requisiteFlags: RequisiteFlag[]; 
 }
 
 export interface DisplayPayload {
   studentID: string;
+  courseType: CourseType;
   status: DetectionStatus;
   isOverride: boolean;
   primaryMajor: MajorDisplay | null;
   detectedPrimary?: MajorDisplay; // preserved original when override active
   secondMajor: MajorDisplay | null;
   topAlternatives: MajorDisplay[]; // top-3 for noMajorDetected
-  detectedMinors: string[];        // Phase 7 extension
+  detectedMinors: string[];        // extension
   rankedPlanners: PlannerScoreRecord[];
+  unavailableUnits: UnavailableUnit[];  // units in student's profile that are not offered in their current semester
+}
+
+// A missing unit the student cannot take in their current semester
+export interface UnavailableUnit {
+  unitCode: string;
+  unitName: string;
+  availableInSemesters: (1 | 2)[];
 }

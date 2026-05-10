@@ -11,6 +11,9 @@ import {
   DisplayPayload,
   MajorDisplay,
   PlannerScoreRecord,
+  StudentProfile,
+  UnavailableUnit,
+  UnitMasterEntry,
 } from "../../shared/types/matching";
 
 /**
@@ -20,8 +23,9 @@ import {
  * by the dashboard (REQ-FUN-606, REQ-FUN-607).
  */
 export function buildDisplayPayload(
-  studentID: string,
-  result: DetectionResult
+  profile: StudentProfile,
+  result: DetectionResult,
+  unitMasterTable: UnitMasterEntry[]
 ): DisplayPayload {
   const isOverride = result.status === "overridden";
 
@@ -44,9 +48,22 @@ export function buildDisplayPayload(
     result.status === "noMajorDetected"
       ? result.rankedPlanners.slice(0, 3).map(toMajorDisplay)
       : [];
+  
+  // Build unavailable units list from the primary major's missing units
+  const unavailableUnits = primaryMajor
+    ? buildUnavailableUnits(
+        [
+          ...result.primaryMajor!.missingCore,
+          ...result.primaryMajor!.missingMajorCore,
+        ],
+        profile.currentSemester,
+        unitMasterTable
+      )
+    : [];
 
   return {
-    studentID,
+    studentID: profile.studentID,
+    courseType: profile.courseType,
     status: result.status,
     isOverride,
     primaryMajor,
@@ -55,10 +72,11 @@ export function buildDisplayPayload(
     topAlternatives,
     detectedMinors: [], // populated by Phase 7 (MM-09)
     rankedPlanners: result.rankedPlanners,
+    unavailableUnits,
   };
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// --- Helpers ------------------------------------------------
 
 /**
  * toMajorDisplay
@@ -69,6 +87,11 @@ export function buildDisplayPayload(
 function toMajorDisplay(record: PlannerScoreRecord): MajorDisplay {
   return {
     majorName: record.majorName,
+    courseType: record.courseType,
+    plannerVersion: {
+      intakeYear: record.intakeYear,
+      intakeSemester: record.intakeSemester,
+    },
     matchPct: record.matchPct,
     majorCoreScore: record.majorCoreScore,
     breakdown: {
@@ -100,5 +123,33 @@ function toMajorDisplay(record: PlannerScoreRecord): MajorDisplay {
         required: 1,
       } satisfies CategoryBreakdown,
     },
+    requisiteFlags: record.requisiteFlags,
   };
+}
+
+/**
+ * buildUnavailableUnits
+ *
+ * Cross-references missing unit codes against the unit master table
+ * to find units that are not offered in the student's current semester.
+ * These are surfaced separately so the dashboard can warn the advisor.
+ */
+function buildUnavailableUnits(
+  missingCodes: string[],
+  currentSemester: 1 | 2,
+  unitMasterTable: UnitMasterEntry[]
+): UnavailableUnit[] {
+  const masterMap = new Map(unitMasterTable.map((u) => [u.code, u]));
+ 
+  return missingCodes
+    .map((code) => masterMap.get(code))
+    .filter((entry): entry is UnitMasterEntry =>
+      entry !== undefined &&
+      !( entry.offeringSemesters ?? [] ).includes(currentSemester)
+    )
+    .map((entry) => ({
+      unitCode: entry.code,
+      unitName: entry.name,
+      availableInSemesters: entry.offeringSemesters ?? [],
+    }));
 }

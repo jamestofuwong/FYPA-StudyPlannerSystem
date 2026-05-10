@@ -30,7 +30,7 @@ export function detectMajors(
   return assignMajors(ranked, config, student.manualOverride);
 }
 
-// ─── Phase 4 - Ranking ────────────────────────────────────────────────────────
+// --- Phase 4 - Ranking -------------------------------
 
 /**
  * mergeSort
@@ -82,7 +82,7 @@ function compare(a: PlannerScoreRecord, b: PlannerScoreRecord): number {
   return b.matchPct - a.matchPct;
 }
 
-// ─── Phase 5 - Major Detection ────────────────────────────────────────────────
+// --- Phase 5 - Major Detection -------------------------------
 
 function assignMajors(
   ranked: PlannerScoreRecord[],
@@ -95,8 +95,7 @@ function assignMajors(
       primaryMajor: null,
       secondMajor: null,
       status: "noMajorDetected",
-      rankedPlanners: [],
-      manualOverride,
+      rankedPlanners: []
     };
   }
 
@@ -110,7 +109,6 @@ function assignMajors(
       secondMajor: null,
       status: "noMajorDetected",
       rankedPlanners: ranked,
-      manualOverride,
     };
   }
 
@@ -122,8 +120,16 @@ function assignMajors(
 
   // Manual override: show override name in display but preserve algorithm result
   if (manualOverride) {
+  const overrideTarget = ranked.find((r) => r.plannerID === manualOverride);
+
+  if (!overrideTarget) {
+    console.warn(
+      `[MajorDetector] Override plannerID="${manualOverride}" not found in ranked results. ` +
+      `Falling back to algorithm result.`
+    );
+  } else {
     return {
-      primaryMajor: rank1,
+      primaryMajor: overrideTarget,
       secondMajor,
       status: "overridden",
       rankedPlanners: ranked,
@@ -131,6 +137,7 @@ function assignMajors(
       algorithmPrimary: rank1,
     };
   }
+}
 
   return {
     primaryMajor: rank1,
