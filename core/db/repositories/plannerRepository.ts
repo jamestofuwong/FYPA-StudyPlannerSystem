@@ -59,7 +59,14 @@ export async function getPlannerById(id: string) {
       units: {
         include: {unit: true}
       },
-      elective_groups: {      
+      elective_groups: {
+        include: {
+          units: {
+            include: { unit: true }
+          }
+        }
+      },
+      minors: {
         include: {
           units: {
             include: { unit: true }
