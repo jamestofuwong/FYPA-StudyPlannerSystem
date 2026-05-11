@@ -183,6 +183,12 @@ CREATE TABLE planner_templates (
                     -- e.g. 3 = March, 7 = July, 10 = October
                     -- NULL = year-level template (no month-specific variant issued)
 
+    -- Course metadata
+    course_type         VARCHAR(50)   NOT NULL DEFAULT 'bachelor',
+                        -- e.g. 'bachelor', 'diploma', 'foundation'
+    duration_semesters  SMALLINT      NOT NULL DEFAULT 6,
+                        -- e.g. 6, 8
+
     -- Requirement counts and credit points
     core_count      SMALLINT      NULL,
     core_cp         SMALLINT      NULL,

@@ -79,6 +79,9 @@ model PlannerTemplate {
   intake_year    Int
   intake_month   Int?
 
+  course_type        String      @default("bachelor")
+  duration_semesters Int         @default(6)
+
   core_count     Int?
   core_cp        Int?
   major_count    Int?

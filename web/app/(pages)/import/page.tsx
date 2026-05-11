@@ -514,6 +514,26 @@ export default function ImportPage() {
 
     setIsParsing(true);
     try {
+      // Detect course type from course name
+      const courseName = (plannerInfo.course || '').toLowerCase();
+      let courseType = 'bachelor'; // default
+      
+      if (courseName.includes('foundation')) {
+        courseType = 'foundation';
+      } else if (courseName.includes('diploma')) {
+        courseType = 'diploma';
+      } else if (courseName.includes('bachelor')) {
+        courseType = 'bachelor';
+      }
+
+      // Calculate duration from the max year_level in editable units
+    const maxYearLevel = Math.max(
+      ...editableUnits.map(u => u.year_level ? parseInt(String(u.year_level)) : 0),
+      0
+    );
+    // Default to max year_level * 2 semesters, or 8 if unknown
+    const durationSemesters = maxYearLevel > 0 ? maxYearLevel * 2 : 8;
+
       // Create updated planner with edited units and planner detail
       const updatedPlanner = {
         ...planner,
@@ -523,6 +543,8 @@ export default function ImportPage() {
           major: plannerInfo.major || planner.course_information.major,
           intake: plannerInfo.intake || planner.course_information.intake,
           intake_year: plannerInfo.intakeYear ? parseInt(plannerInfo.intakeYear) : planner.course_information.intake_year,
+          course_type: courseType,
+          duration_semesters: durationSemesters,
           requirements: {
             core: plannerRequirements.core,
             major: plannerRequirements.majorReq,

@@ -156,6 +156,8 @@ export async function savePlannerFromImport(planner: PlannerImportPlanner) {
         major_id: major.id,
         intake_year: course_information.intake_year ?? 2025,
         intake_month: intakeMonth,
+        course_type: course_information.course_type || 'bachelor',
+        duration_semesters: course_information.duration_semesters || 8,
         core_count: course_information.requirements?.core?.count ?? null,
         core_cp: course_information.requirements?.core?.cp ?? null,
         major_count: course_information.requirements?.major?.count ?? null,

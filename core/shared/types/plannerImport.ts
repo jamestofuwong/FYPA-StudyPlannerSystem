@@ -20,6 +20,8 @@ export type PlannerImportPlanner = {
     major: string;
     intake: string;
     intake_year: number | null;
+    course_type?: string;
+    duration_semesters?: number;
     requirements: {
       core: PlannerImportRequirement;
       major: PlannerImportRequirement;
