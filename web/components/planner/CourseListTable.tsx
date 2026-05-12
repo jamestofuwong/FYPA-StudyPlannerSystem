@@ -322,7 +322,7 @@ export default function CourseListTable({
                     <div className={styles.termDivider} />
                 </div>
                 <div className={styles.tableWrap}>
-                    <table className={styles.table}>
+                    <table className={`${styles.table} ${editable && onDeleteUnit ? styles.tableEditable : ''}`}>
                         <thead>
                             <tr>
                                 <th>UNIT CODE</th>
@@ -359,20 +359,7 @@ export default function CourseListTable({
                                             unit.unit_name || 'Unknown Unit'
                                         )}
                                     </td>
-                                    <td>
-                                        {editable && onUnitEdit ? (
-                                            <select value={unit.category || 'elective'} onChange={(e) => onUnitEdit((unit as any)._id, 'category', e.target.value)} className={`${styles.badge} ${styles[badgeClassForCategory(unit.category)]} ${styles.badgeSelect}`}>
-                                                <option value="core">Core</option>
-                                                <option value="major_core">Major Core</option>
-                                                <option value="mpu">MPU</option>
-                                                <option value="wil">WIL</option>
-                                                <option value="prescribed_elective">Prescribed Elective</option>
-                                                <option value="elective">Elective</option>
-                                            </select>
-                                        ) : (
-                                            <span className={`${styles.badge} ${styles[badgeClassForCategory(unit.category)]}`}>{categoryLabel(unit.category)}</span>
-                                        )}
-                                    </td>
+                                    <td><span className={`${styles.badge} ${styles.badgeGreen}`}>Elective</span></td>
                                     <td>
                                         {editable && onUnitEdit ? (
                                             <input 

@@ -4,9 +4,9 @@
 -- Scope  : Persistent storage for study planner templates ONLY.
 --          Student data is NEVER stored here (REQ-CON-105, REQ-DB-102).
 -- DBMS   : PostgreSQL (local, bundled)
--- Version: 1.5.0  |  Sprint 1 — Restructured prerequisites into group/condition 
---                    tables for AND/OR logic; updated unit_category enum; added 
---                    WIL and prescribed_elective categories; semester expanded to 4 values.
+-- Version: 1.7.0  |  Sprint 3 — Restructured requisite tables (renamed from prerequisite),
+--                    added requisite_type column (prerequisite/corequisite/antirequisite)
+--                    to unit_requisite_conditions table.
 -- =============================================================================
 
 -- ---------------------------------------------------------------------------
@@ -109,33 +109,43 @@ CREATE TABLE units (
 COMMENT ON TABLE units IS
     'Global unit catalogue. Populated from planner PDFs. REQ-DB-102.1';
 
--- Pre-requisite relationships between units (derived from planners).
+-- Requisite relationships between units (derived from planners).
 -- Uses two tables to support AND/OR logic and credit point requirements:
--- unit_prerequisite_groups — one group per OR branch
--- unit_prerequisite_conditions — all conditions within a group = AND logic
-CREATE TABLE unit_prerequisite_groups (
+-- unit_requisite_groups — one group per OR branch
+-- unit_requisite_conditions — all conditions within a group = AND logic
+CREATE TABLE unit_requisite_groups (
     id       UUID  PRIMARY KEY DEFAULT gen_random_uuid(),
     unit_id  UUID  NOT NULL REFERENCES units(id) ON DELETE CASCADE
 );
 
-COMMENT ON TABLE unit_prerequisite_groups IS
-    'Groups of prerequisites for a unit. Multiple groups = OR logic. REQ-DB-102.1, REQ-FUN-303';
+COMMENT ON TABLE unit_requisite_groups IS
+    'Groups of requisites for a unit. Multiple groups = OR logic. REQ-DB-102.1, REQ-FUN-303';
 
--- Prerequisite conditions — all conditions within a group must be met (AND logic)
-CREATE TABLE unit_prerequisite_conditions (
+-- Requisite conditions — all conditions within a group must be met (AND logic)
+CREATE TABLE unit_requisite_conditions (
     id                  UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
-    group_id            UUID         NOT NULL REFERENCES unit_prerequisite_groups(id) ON DELETE CASCADE,
-    prerequisite_type   VARCHAR(20)  NOT NULL CHECK (prerequisite_type IN ('unit', 'credit_points')),
+    group_id            UUID         NOT NULL REFERENCES unit_requisite_groups(id) ON DELETE CASCADE,
+    type                VARCHAR(20)  NOT NULL CHECK (type IN ('unit', 'credit_points')),
     unit_id             UUID         NULL REFERENCES units(id) ON DELETE CASCADE,
     credit_points       NUMERIC(5,1) NULL,
+    requisite_type      VARCHAR(20)  NULL CHECK (requisite_type IN ('prerequisite', 'corequisite', 'antirequisite')),
     CONSTRAINT valid_condition CHECK (
-        (prerequisite_type = 'unit'         AND unit_id IS NOT NULL AND credit_points IS NULL) OR
-        (prerequisite_type = 'credit_points' AND credit_points IS NOT NULL AND unit_id IS NULL)
+        (
+            type = 'unit'
+            AND unit_id IS NOT NULL
+            AND credit_points IS NULL
+            AND requisite_type IS NOT NULL
+        ) OR (
+            type = 'credit_points'
+            AND credit_points IS NOT NULL
+            AND unit_id IS NULL
+            AND requisite_type IS NULL
+        )
     )
 );
 
-COMMENT ON TABLE unit_prerequisite_conditions IS
-    'Individual conditions within a prerequisite group. All conditions in a group = AND logic. REQ-DB-102.1, REQ-FUN-303';
+COMMENT ON TABLE unit_requisite_conditions IS
+    'Individual conditions within a requisite group. All conditions in a group = AND logic. REQ-DB-102.1, REQ-FUN-303';
 
 
 -- ===========================================================================
@@ -420,10 +430,10 @@ CREATE INDEX idx_planner_course_intake       ON planner_templates(course_id, int
 -- Fast lookup of units by code (primary matching key)
 CREATE INDEX idx_units_code                  ON units(unit_code);
 
--- Prerequisite chain lookups
-CREATE INDEX idx_prereq_group_unit     ON unit_prerequisite_groups(unit_id);
-CREATE INDEX idx_prereq_cond_group     ON unit_prerequisite_conditions(group_id);
-CREATE INDEX idx_prereq_cond_unit      ON unit_prerequisite_conditions(unit_id);
+-- Requisite chain lookups
+CREATE INDEX idx_requisite_group_unit     ON unit_requisite_groups(unit_id);
+CREATE INDEX idx_requisite_cond_group     ON unit_requisite_conditions(group_id);
+CREATE INDEX idx_requisite_cond_unit      ON unit_requisite_conditions(unit_id);
 
 -- Elective resolution
 CREATE INDEX idx_elective_group_template     ON elective_groups(planner_template_id);
@@ -495,17 +505,18 @@ CREATE TABLE schema_migrations (
 );
 
 INSERT INTO schema_migrations (version, description)
-VALUES ('1.6.0', 'Add minors and minor_units tables to support minor tracks within planner templates. Sprint 3');
+VALUES ('1.7.0', 'Restructured requisite tables (renamed from prerequisite) and added requisite_type column to unit_requisite_conditions. Sprint 3');
 
 
 -- ===========================================================================
 -- SECTION 14 — helper function
 -- ===========================================================================
 
--- Helper: add a simple prerequisite (one group, one condition)
+-- Helper: add a simple requisite (one group, one condition)
 CREATE OR REPLACE FUNCTION add_prereq_unit(
     p_target  VARCHAR,
-    p_prereq  VARCHAR
+    p_prereq  VARCHAR,
+    p_requisite_type VARCHAR DEFAULT 'prerequisite'
 ) RETURNS VOID LANGUAGE plpgsql AS $$
 DECLARE
     v_target_id UUID;
@@ -515,17 +526,17 @@ BEGIN
     SELECT id INTO STRICT v_target_id FROM units WHERE unit_code = p_target;
     SELECT id INTO STRICT v_prereq_id FROM units WHERE unit_code = p_prereq;
 
-    INSERT INTO unit_prerequisite_groups (unit_id)
+    INSERT INTO unit_requisite_groups (unit_id)
     VALUES (v_target_id)
     RETURNING id INTO v_group_id;
 
-    INSERT INTO unit_prerequisite_conditions (group_id, prerequisite_type, unit_id)
-    VALUES (v_group_id, 'unit', v_prereq_id);
+    INSERT INTO unit_requisite_conditions (group_id, type, unit_id, requisite_type)
+    VALUES (v_group_id, 'unit', v_prereq_id, p_requisite_type);
 END;
 $$;
 
 
--- Helper: add a credit-point prerequisite
+-- Helper: add a credit-point requisite
 CREATE OR REPLACE FUNCTION add_prereq_credits(
     p_target        VARCHAR,
     p_credit_points NUMERIC
@@ -536,11 +547,11 @@ DECLARE
 BEGIN
     SELECT id INTO STRICT v_target_id FROM units WHERE unit_code = p_target;
 
-    INSERT INTO unit_prerequisite_groups (unit_id)
+    INSERT INTO unit_requisite_groups (unit_id)
     VALUES (v_target_id)
     RETURNING id INTO v_group_id;
 
-    INSERT INTO unit_prerequisite_conditions (group_id, prerequisite_type, credit_points)
+    INSERT INTO unit_requisite_conditions (group_id, type, credit_points)
     VALUES (v_group_id, 'credit_points', p_credit_points);
 END;
 $$;
@@ -559,14 +570,14 @@ DECLARE
 BEGIN
     SELECT id INTO STRICT v_target_id FROM units WHERE unit_code = p_target;
 
-    INSERT INTO unit_prerequisite_groups (unit_id)
+    INSERT INTO unit_requisite_groups (unit_id)
     VALUES (v_target_id)
     RETURNING id INTO v_group_id;
 
     FOREACH v_code IN ARRAY p_prereqs LOOP
         SELECT id INTO STRICT v_prereq_id FROM units WHERE unit_code = v_code;
-        INSERT INTO unit_prerequisite_conditions (group_id, prerequisite_type, unit_id)
-        VALUES (v_group_id, 'unit', v_prereq_id);
+        INSERT INTO unit_requisite_conditions (group_id, type, unit_id, requisite_type)
+        VALUES (v_group_id, 'unit', v_prereq_id, 'prerequisite');
     END LOOP;
 END;
 $$;
@@ -588,12 +599,12 @@ BEGIN
     FOREACH v_code IN ARRAY p_prereqs LOOP
         SELECT id INTO STRICT v_prereq_id FROM units WHERE unit_code = v_code;
 
-        INSERT INTO unit_prerequisite_groups (unit_id)
+        INSERT INTO unit_requisite_groups (unit_id)
         VALUES (v_target_id)
         RETURNING id INTO v_group_id;
 
-        INSERT INTO unit_prerequisite_conditions (group_id, prerequisite_type, unit_id)
-        VALUES (v_group_id, 'unit', v_prereq_id);
+        INSERT INTO unit_requisite_conditions (group_id, type, unit_id, requisite_type)
+        VALUES (v_group_id, 'unit', v_prereq_id, 'prerequisite');
     END LOOP;
 END;
 $$;
@@ -766,7 +777,7 @@ DECLARE
 BEGIN
     SELECT id INTO STRICT v_target_id FROM units WHERE unit_code = p_target;
 
-    INSERT INTO unit_prerequisite_groups (unit_id)
+    INSERT INTO unit_requisite_groups (unit_id)
     VALUES (v_target_id)
     RETURNING id INTO v_group_id;
 
@@ -777,11 +788,11 @@ BEGIN
 
         IF v_type = 'unit' THEN
             SELECT id INTO STRICT v_unit_id FROM units WHERE unit_code = v_value;
-            INSERT INTO unit_prerequisite_conditions (group_id, prerequisite_type, unit_id)
-            VALUES (v_group_id, 'unit', v_unit_id);
+            INSERT INTO unit_requisite_conditions (group_id, type, unit_id, requisite_type)
+            VALUES (v_group_id, 'unit', v_unit_id, 'prerequisite');
 
         ELSIF v_type = 'credit_points' THEN
-            INSERT INTO unit_prerequisite_conditions (group_id, prerequisite_type, credit_points)
+            INSERT INTO unit_requisite_conditions (group_id, type, credit_points)
             VALUES (v_group_id, 'credit_points', v_value::NUMERIC);
         END IF;
 
