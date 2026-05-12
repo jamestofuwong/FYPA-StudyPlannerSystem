@@ -43,6 +43,27 @@ function badgeClassForCategory(category: string | null): string {
     }
 }
 
+// Converts DB data into string
+function formatRequisites(requisites: any): string {
+    // If null return '-'
+    if (!requisites || (Array.isArray(requisites) && requisites.length === 0)) return '-';
+    
+    // If it's a string (import page fallback), return it
+    if (typeof requisites === 'string') return requisites;
+    // Map Groups (OR)
+    return requisites.map((g: any) => 
+        // Map Conditions (AND)
+        g.conditions.map((c: any) => {
+            // Format credit points
+            if (c.type === 'credit_points') return `${c.credit_points}cp`;
+            // Add prefix if co/anti, else just the unit code
+            const prefix = c.requisite_type === 'corequisite' ? 'Co: ' :
+                            c.requisite_type === 'antirequisite' ? 'Anti: ' : '';
+            return `${prefix}${c.unit?.unit_code || '?'}`;
+        }).join(' & ')
+    ).join(' / ');
+}
+
 export function getSemesterOrder(intakeMonth: number): number[] {
   if (intakeMonth >= 2 && intakeMonth <= 3) {
     return [1, 4, 2, 3];
@@ -73,7 +94,7 @@ export default function CourseListTable({
     intakeMonth = 0,
     unplacedElectives = []
 }: CourseListTableProps) {
-  
+
     const totalUnits = yearGroups.reduce((count, year) => {
         return count + year.semesters.reduce((sum, sem) => sum + sem.list.length, 0);
     }, 0);
@@ -216,7 +237,7 @@ export default function CourseListTable({
                                                             {unit.prerequisite || ''}
                                                         </div>
                                                         ) : (
-                                                        unit.prerequisite || <span className={styles.textMuted}>-</span>
+                                                            formatRequisites(unit.requisites || unit.prerequisite)
                                                         )}
                                                     </td>
                                                     <td>
@@ -364,7 +385,7 @@ export default function CourseListTable({
                                                 {unit.prerequisite || ''}
                                             </div>
                                         ) : (
-                                            unit.prerequisite || <span className={styles.textMuted}>-</span>
+                                            formatRequisites(unit.requisites || unit.prerequisite)
                                         )}
                                     </td>
                                     <td>

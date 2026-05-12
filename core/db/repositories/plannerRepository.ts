@@ -58,12 +58,36 @@ export async function getPlannerById(id: string) {
       course: true,
       major: true,
       units: {
-        include: {unit: true}
+        include: {
+          unit: {
+            include: {
+              requisite_groups:{
+                include: {
+                  conditions: {
+                    include: {unit: true,}
+                  }
+                }
+              }
+            }
+          }
+        }
       },
       elective_groups: {
         include: {
           units: {
-            include: { unit: true }
+            include: { 
+              unit: {
+                include: {
+                  requisite_groups: {
+                    include: {
+                      conditions: {
+                        include: {unit: true,}
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       },
