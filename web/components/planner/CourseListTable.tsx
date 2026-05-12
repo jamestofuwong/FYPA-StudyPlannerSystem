@@ -211,15 +211,12 @@ export default function CourseListTable({
                                                     </td>
                                                     <td>
                                                         {editable && onUnitEdit ? (
-                                                        <input 
-                                                            type="text" 
-                                                            defaultValue={unit.prerequisite || ''} 
-                                                            onBlur={(e) => onUnitEdit((unit as any)._id, 'prerequisite', e.target.value || null)}
-                                                            className={styles.editInput} 
-                                                            placeholder="-" 
-                                                            />
+                                                        <div contentEditable suppressContentEditableWarning className={styles.editTextarea} 
+                                                        onBlur={(e) => onUnitEdit((unit as any)._id, 'prerequisite', e.currentTarget.textContent || '')}>
+                                                            {unit.prerequisite || ''}
+                                                        </div>
                                                         ) : (
-                                                        unit.prerequisite ? <code className={styles.code}>{unit.prerequisite}</code> : <span className={styles.textMuted}>-</span>
+                                                        unit.prerequisite || <span className={styles.textMuted}>-</span>
                                                         )}
                                                     </td>
                                                     <td>
@@ -362,15 +359,12 @@ export default function CourseListTable({
                                     <td><span className={`${styles.badge} ${styles.badgeGreen}`}>Elective</span></td>
                                     <td>
                                         {editable && onUnitEdit ? (
-                                            <input 
-                                                type="text" 
-                                                defaultValue={unit.prerequisite || ''} 
-                                                onBlur={(e) => onUnitEdit((unit as any)._id, 'prerequisite', e.target.value || null)}
-                                                className={styles.editInput} 
-                                                placeholder="-" 
-                                            />
+                                            <div contentEditable suppressContentEditableWarning className={styles.editTextarea} 
+                                                onBlur={(e) => onUnitEdit((unit as any)._id, 'prerequisite', e.currentTarget.textContent || '')}>
+                                                {unit.prerequisite || ''}
+                                            </div>
                                         ) : (
-                                            unit.prerequisite ? <code className={styles.code}>{unit.prerequisite}</code> : <span className={styles.textMuted}>-</span>
+                                            unit.prerequisite || <span className={styles.textMuted}>-</span>
                                         )}
                                     </td>
                                     <td>

@@ -1,5 +1,6 @@
 import { prisma } from "../client";
 import type { PlannerImportPlanner } from "../../shared/types/plannerImport";
+import { parseRequisiteString } from "../utils/parse-requisite";
 
 function normaliseImportedUnitCode(value: unknown): string | null {
   if (typeof value !== "string") return null;
@@ -118,7 +119,9 @@ export async function savePlannerFromImport(planner: PlannerImportPlanner) {
 
   const intakeMonth = parseIntakeMonth(course_information.intake);
 
+  // Transaction: all or nothing
   return await prisma.$transaction(async (tx) => {
+
     // Upsert course and major (find or create)
     const [course] = await Promise.all([
       tx.course.upsert({
@@ -170,6 +173,8 @@ export async function savePlannerFromImport(planner: PlannerImportPlanner) {
     });
 
     // Split elective units into pool and slots
+    // Pool units: no year/semester
+    // Slot units: placed in a specific year/semester
     const prescribedElective = categories.elective_groups?.prescribed_elective ?? [];
     const electiveUnits = categories.elective_groups?.elective ?? [];
 
@@ -208,7 +213,7 @@ export async function savePlannerFromImport(planner: PlannerImportPlanner) {
       ]),
     ];
 
-    // Batch upsert all units
+    // Batch upsert all units into the global catelogue
     const upsertedUnits = await Promise.all(
       uniqueCodes.map((code) => {
         const match =
@@ -223,6 +228,7 @@ export async function savePlannerFromImport(planner: PlannerImportPlanner) {
       })
     );
 
+    // Build lookup map: unit_code = unit record
     const unitByCode = new Map(upsertedUnits.map((u) => [u.unit_code, u]));
 
     // Create elective group and link pool units
@@ -247,10 +253,11 @@ export async function savePlannerFromImport(planner: PlannerImportPlanner) {
     const templateUnitsToCreate = allUnitsNormalised
       .filter((u) => {
 
-        // allows empty elective slots
+        // Allows empty elective slots
         const isEmptyElectiveSlot = u.cat === 'elective' && !u.normCode;
         if (!isEmptyElectiveSlot && !u.normCode) return false; // skip bad codes
 
+        // Skip duplicate unit reference within the same planner
         if (u.normCode) {
           const unitDef = unitByCode.get(u.normCode);
           if (!unitDef || attachedUnitIds.has(unitDef.id)) return false;
@@ -267,7 +274,74 @@ export async function savePlannerFromImport(planner: PlannerImportPlanner) {
       }));
 
     await tx.templateUnit.createMany({ data: templateUnitsToCreate });
+    
+    // Insert requisites
+    // Combine placed units and pool units
+    const allUnitsForRequisites = [
+      ...allUnitsNormalised.filter(u => u.normCode),
+      ...poolUnitsNormalised,
+    ];
 
+    // Fetch existing units that are referenced in requisites but not in this import
+    const allRequisiteCodes = allUnitsForRequisites
+      .flatMap(u => {
+        const str = (u as any).prerequisite;
+        if (!str) return [];
+        return parseRequisiteString(str).flatMap(g => 
+          g.conditions.filter(c => c.type === 'unit' && c.unit_code).map(c => c.unit_code!)
+        );
+      });
+
+    const existingUnits = await tx.unit.findMany({
+      where: { unit_code: { in: allRequisiteCodes } },
+    });
+
+    // Add found units to the lookup map
+    for (const eu of existingUnits) {
+      if (!unitByCode.has(eu.unit_code)) {
+        unitByCode.set(eu.unit_code, eu);
+      }
+    }
+
+    // Process each unit's prerequisite string
+    for (const unit of allUnitsForRequisites) {
+      const prereqString = (unit as any).prerequisite;
+      if (!prereqString || prereqString.trim() === '') continue;
+
+      const targetUnit = unitByCode.get(unit.normCode!);
+      if (!targetUnit) continue;
+
+      // Skip if this unit already has requisites
+      const existingGroups = await tx.unitRequisiteGroup.count({
+        where: { unit_id: targetUnit.id },
+      });
+      if (existingGroups > 0) continue;
+
+      // Parse the string into structured groups and conditions
+      const groups = parseRequisiteString(prereqString);
+
+      // Insert groups (OR) and conditions (AND)
+      for (const group of groups) {
+        const g = await tx.unitRequisiteGroup.create({
+          data: { unit_id: targetUnit.id },
+        });
+
+        for (const cond of group.conditions) {
+          await tx.unitRequisiteCondition.create({
+            data: {
+              group_id: g.id,
+              type: cond.type,
+              unit_id: cond.type === 'unit' && cond.unit_code
+                ? unitByCode.get(cond.unit_code)?.id ?? null
+                : null,
+              credit_points: cond.type === 'credit_points' ? cond.credit_points ?? null : null,
+              requisite_type: cond.requisite_type ?? null,
+            },
+          });
+        }
+      }
+    }
+    
     return newPlanner;
   });
 }
