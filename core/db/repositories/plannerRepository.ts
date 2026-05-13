@@ -46,6 +46,13 @@ export async function getAllPlannersWithUnits() {
             include: { unit: true }
           }
         }
+      },
+      minors: {
+        include: {
+          units: {
+            include: { unit: true }
+          }
+        }
       }
     }
   });
