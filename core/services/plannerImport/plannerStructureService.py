@@ -180,6 +180,193 @@ def normalise_prereq_text(text):
     return text
 
 
+# This takes course title and returns template course_type because planner templates now store canonical course type values for persistence.
+def infer_template_course_type(course_name):
+    text = re.sub(r"\s+", " ", str(course_name or "")).strip()
+    if re.search(r"^Bachelor\b", text, re.IGNORECASE):
+        return "bachelor"
+    if re.search(r"^Diploma\b", text, re.IGNORECASE):
+        return "diploma"
+    if re.search(r"Foundation\b", text, re.IGNORECASE):
+        return "foundation"
+    return "bachelor"
+
+
+# This takes structured planner JSON and returns duration_semesters because planner template persistence needs schema-aligned duration metadata.
+def infer_template_duration_semesters(data):
+    ci = data.get("course_information", {}) if isinstance(data, dict) else {}
+    course_name = re.sub(r"\s+", " ", str(ci.get("course") or "")).strip()
+    if re.search(r"Bachelor of Engineering\s*\(Honours\)", course_name, re.IGNORECASE):
+        return 8
+
+    max_year = None
+    max_semester = None
+    categories = data.get("categories", {}) if isinstance(data, dict) else {}
+    elective_groups = categories.get("elective_groups", {}) if isinstance(categories, dict) else {}
+    minor_units = []
+    for group in categories.get("minor_groups", []) if isinstance(categories.get("minor_groups"), list) else []:
+        if isinstance(group, dict):
+            minor_units.extend(group.get("units", []))
+    all_units = (
+        categories.get("core_units", []) +
+        categories.get("major_units", []) +
+        categories.get("mpu_group", []) +
+        elective_groups.get("prescribed_elective", []) +
+        elective_groups.get("elective", []) +
+        minor_units +
+        categories.get("wil_group", [])
+    )
+    for unit in all_units:
+        year_value = coerce_int(unit.get("year_level"))
+        sem_value = coerce_int(unit.get("semester"))
+        if year_value is not None:
+            max_year = year_value if max_year is None else max(max_year, year_value)
+        if sem_value is not None:
+            max_semester = sem_value if max_semester is None else max(max_semester, sem_value)
+
+    if max_year is not None:
+        return max(2, max_year * 2)
+    if max_semester is not None:
+        return max(2, max_semester if max_semester > 4 else 6)
+    return 6
+
+
+# This takes one raw requisite note and returns schema requisite_type plus cleaned text because DB persistence now distinguishes prerequisite/corequisite/antirequisite.
+def classify_requisite_text(text):
+    value = re.sub(r"\s+", " ", str(text or "")).strip()
+    if not value or re.fullmatch(r"N[Ii][Ll]", value):
+        return None, None
+    if re.match(r"^\s*(?:Co-req:|Coreq:|Corequisite:?)\s*", value, re.IGNORECASE):
+        cleaned = re.sub(r"^\s*(?:Co-req:|Coreq:|Corequisite:?)\s*", "", value, flags=re.IGNORECASE).strip()
+        return "corequisite", cleaned or None
+    if re.match(r"^\s*(?:Anti-req:|Antireq:|Antirequisite:?)\s*", value, re.IGNORECASE):
+        cleaned = re.sub(r"^\s*(?:Anti-req:|Antireq:|Antirequisite:?)\s*", "", value, flags=re.IGNORECASE).strip()
+        return "antirequisite", cleaned or None
+    return "prerequisite", value
+
+
+# This takes raw prerequisite text and returns classified requisite fragments because one planner field can contain prerequisite, co-requisite, and anti-requisite notes together.
+def split_requisite_fragments(prerequisite_text):
+    text = normalise_prereq_text(prerequisite_text)
+    if text is None:
+        return []
+
+    fragments = []
+    parenthetical_notes = re.findall(
+        r"\(([^)]*(?:Anti-req|Antireq|Antirequisite|Co-req|Coreq|Corequisite)[^)]*)\)",
+        text,
+        flags=re.IGNORECASE,
+    )
+    for note in parenthetical_notes:
+        requisite_type, cleaned = classify_requisite_text(note)
+        if requisite_type and cleaned:
+            fragments.append({"requisite_type": requisite_type, "text": cleaned})
+
+    base_text = re.sub(
+        r"\([^)]*(?:Anti-req|Antireq|Antirequisite|Co-req|Coreq|Corequisite)[^)]*\)",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    ).strip()
+    base_text = re.sub(r"^\s*N[Ii][Ll]\b", "", base_text).strip(" -;,")
+    if base_text:
+        requisite_type, cleaned = classify_requisite_text(base_text)
+        if requisite_type and cleaned:
+            fragments.insert(0, {"requisite_type": requisite_type, "text": cleaned})
+
+    seen = set()
+    deduped = []
+    for fragment in fragments:
+        key = (fragment.get("requisite_type"), fragment.get("text"))
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(fragment)
+    return deduped
+
+
+# This takes one requisite fragment and returns DB-ready condition rows because unit requisites are stored as unit or credit_points conditions with a separate requisite_type.
+def build_requisite_conditions(fragment_text, requisite_type):
+    text = re.sub(r"\s+", " ", str(fragment_text or "")).strip()
+    if not text:
+        return []
+
+    conditions = []
+    seen_units = set()
+    for raw_code in UNIT_CODE_RE.findall(text):
+        code = re.sub(r"[@#â€ *]+$", "", raw_code).strip().upper()
+        if not code or code in seen_units:
+            continue
+        seen_units.add(code)
+        conditions.append({
+            "type": "unit",
+            "unit_code": code,
+            "credit_points": None,
+            "requisite_type": requisite_type,
+        })
+
+    seen_cp = set()
+    for cp_match in re.finditer(r"(\d+(?:\.\d+)?)\s*(?:credit\s+points?|cp|cps)\b", text, re.IGNORECASE):
+        value = float(cp_match.group(1))
+        cp_value = int(value) if value.is_integer() else value
+        if cp_value in seen_cp:
+            continue
+        seen_cp.add(cp_value)
+        conditions.append({
+            "type": "credit_points",
+            "unit_code": None,
+            "credit_points": cp_value,
+            "requisite_type": None,
+        })
+
+    return conditions
+
+
+# This takes unit dict and returns unit_requisite_groups payload because the DB save layer needs schema-aligned requisite groups without changing planner JSON shape.
+def build_unit_requisite_payload(unit_like):
+    unit_code = str(unit_like.get("unit_code") or unit_like.get("code") or "").strip().upper()
+    fragments = split_requisite_fragments(unit_like.get("prerequisite"))
+    groups = []
+    for fragment in fragments:
+        conditions = build_requisite_conditions(fragment.get("text"), fragment.get("requisite_type"))
+        if conditions:
+            groups.append({
+                "unit_code": unit_code,
+                "raw_text": fragment.get("text"),
+                "requisite_type": fragment.get("requisite_type"),
+                "conditions": conditions,
+            })
+    return groups
+
+
+# This takes structured planner JSON and returns planner-template persistence payload because the save layer now needs course_type, duration_semesters, and unit requisites in the new schema shape.
+def build_planner_template_db_payload(data):
+    ci = data.get("course_information", {}) if isinstance(data, dict) else {}
+    requirements = ci.get("requirements", {}) if isinstance(ci, dict) else {}
+    payload = {
+        "planner_template": {
+            "course": ci.get("course"),
+            "major": ci.get("major"),
+            "intake": ci.get("intake"),
+            "intake_year": coerce_int(ci.get("intake_year")),
+            "course_type": infer_template_course_type(ci.get("course")),
+            "duration_semesters": infer_template_duration_semesters(data),
+            "core_count": coerce_int((requirements.get("core") or {}).get("count")) if isinstance(requirements, dict) else None,
+            "core_cp": (requirements.get("core") or {}).get("cp") if isinstance(requirements, dict) else None,
+            "major_count": coerce_int((requirements.get("major") or {}).get("count")) if isinstance(requirements, dict) else None,
+            "major_cp": (requirements.get("major") or {}).get("cp") if isinstance(requirements, dict) else None,
+            "elective_count": coerce_int((requirements.get("elective") or {}).get("count")) if isinstance(requirements, dict) else None,
+            "elective_cp": (requirements.get("elective") or {}).get("cp") if isinstance(requirements, dict) else None,
+            "wil_count": coerce_int((requirements.get("wil") or {}).get("count")) if isinstance(requirements, dict) else None,
+            "wil_cp": (requirements.get("wil") or {}).get("cp") if isinstance(requirements, dict) else None,
+        },
+        "unit_requisite_groups": [],
+    }
+    for unit in _iter_all_units(data):
+        payload["unit_requisite_groups"].extend(build_unit_requisite_payload(unit))
+    return payload
+
+
 # This takes numeric-like value and returns int or None because extracted values can arrive as strings, blanks, or placeholders.
 def coerce_int(value):
     if isinstance(value, int):
@@ -251,11 +438,13 @@ def unit_obj(u):
     return obj
 
 
-# This takes minor/elective unit-like dict and returns compact minor unit dict because minor groups store only fields needed for option lists.
+# This takes minor/elective unit-like dict and returns compact minor unit dict because minor groups are stored separately from the main planner timeline.
 def minor_unit_obj(unit_like):
     unit = {
         "unit_code": str(unit_like.get("unit_code") or unit_like.get("code") or "").strip().upper(),
         "unit_name": clean_unit_name(unit_like.get("unit_name") or unit_like.get("name") or ""),
+        "prerequisite": None,
+        "offered_in": normalise_offered_in(unit_like.get("offered_in")),
     }
     prereq = normalise_prereq_text(unit_like.get("prerequisite"))
     if isinstance(prereq, str):
@@ -264,8 +453,7 @@ def minor_unit_obj(unit_like):
         prereq = re.sub(r'\bSemester\s+\d+\s+only\b.*$', '', prereq, flags=re.IGNORECASE).strip()
         if re.match(r'^N[Ii][Ll]$', prereq):
             prereq = None
-    if prereq is not None:
-        unit["prerequisite"] = prereq
+    unit["prerequisite"] = prereq
     return unit
 
 
@@ -319,9 +507,15 @@ def build_minor_groups(units, section_groups):
             source = unit_lookup.get(code, {})
             merged = {
                 "unit_code": code,
+                "code": code,
                 "unit_name": (
                     entry.get("unit_name")
                     if isinstance(entry, dict) and entry.get("unit_name")
+                    else source.get("name")
+                ),
+                "name": (
+                    entry.get("name")
+                    if isinstance(entry, dict) and entry.get("name")
                     else source.get("name")
                 ),
                 "prerequisite": (
@@ -331,8 +525,18 @@ def build_minor_groups(units, section_groups):
                 ),
                 "offered_in": (
                     entry.get("offered_in")
-                    if isinstance(entry, dict)
+                    if isinstance(entry, dict) and entry.get("offered_in") is not None
                     else source.get("offered_in")
+                ),
+                "year_level": (
+                    entry.get("year_level")
+                    if isinstance(entry, dict)
+                    else None
+                ),
+                "semester": (
+                    entry.get("semester")
+                    if isinstance(entry, dict)
+                    else None
                 ),
             }
             unit = minor_unit_obj(merged)
@@ -2085,11 +2289,12 @@ def normalise_llm_output(data, file_name):
         units_list = normalise_unit_list(group.get("units", []))
         cleaned_units = []
         for unit in units_list:
-            cleaned = {"unit_code": unit.get("unit_code"), "unit_name": unit.get("unit_name")}
-            if unit.get("prerequisite") is not None:
-                cleaned["prerequisite"] = unit.get("prerequisite")
-            if unit.get("offered_in") is not None:
-                cleaned["offered_in"] = unit.get("offered_in")
+            cleaned = {
+                "unit_code": unit.get("unit_code"),
+                "unit_name": unit.get("unit_name"),
+                "prerequisite": unit.get("prerequisite"),
+                "offered_in": unit.get("offered_in"),
+            }
             if cleaned.get("unit_code") and cleaned.get("unit_name"):
                 cleaned_units.append(cleaned)
         if minor_name:
@@ -2804,8 +3009,16 @@ def calculate_confidence(structured_json, raw_evidence=None, validation_issues=N
     if wil_missing and "WIL expected but wil_group is empty" not in seen_issues:
         seen_issues.append("WIL expected but wil_group is empty")
 
+    if overall_score >= 0.95:
+        level = "high"
+    elif overall_score >= 0.8:
+        level = "medium"
+    else:
+        level = "low"
+
     return {
         "overall_score": round(overall_score, 2),
+        "level": level,
         "manual_review_required": manual_review_required,
         "signals": {
             "metadata_score": round(metadata_score, 2),
@@ -3057,6 +3270,7 @@ def process_planner_pdf(
     structured = apply_wil_text_override(structured)
     structured = validate_and_normalise(structured, silent=True)
     validation_issues = collect_validation_issues(structured)
+    db_payload = build_planner_template_db_payload(structured)
     # Confidence is only returned when AI review is enabled; the UI hides the
     # confidence panel for deterministic-only imports.
     confidence = None
@@ -3097,6 +3311,7 @@ def process_planner_pdf(
         "validation_issues": report_validation_issues,
         "outcome": outcome,
         "unit_counts": unit_count_snapshot(structured),
+        "db_payload": db_payload,
     }
     if confidence is not None:
         report["confidence"] = confidence
