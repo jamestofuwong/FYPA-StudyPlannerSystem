@@ -213,6 +213,11 @@
   background: var(--surface-bg);
 }
 
+.editTextarea:empty::before {
+  content: '-';
+  color: var(--text-muted);
+}
+
 .addUnitBtn {
   width: 100%;
   padding: 6px;

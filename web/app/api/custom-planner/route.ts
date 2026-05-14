@@ -4,25 +4,38 @@ import { prisma } from '../../../../core/db/client';
 import {
   buildCustomPlan,
   type SchedulableUnit,
+  type RequisiteCondition,
 } from '../../../../core/services/scheduling/customPlannerScheduler';
 
-/** Convert a raw unit + its prerequisite groups into a SchedulableUnit. */
+/** Convert a raw unit + its requisite groups into a SchedulableUnit. */
 function toSchedulable(
-  unit: { unit_code: string; unit_name: string; offered_in: number | null; prerequisite_groups: any[] },
+  unit: { unit_code: string; unit_name: string; offered_in: number | null; requisite_groups: any[] },
   category: string
 ): SchedulableUnit {
-  const prereqGroups: string[][] = (unit.prerequisite_groups ?? [])
+  const requisiteGroups: RequisiteCondition[][] = (unit.requisite_groups ?? [])
     .map((group: any) =>
       group.conditions
-        .filter((c: any) => c.prerequisite_type === 'prerequisite' && c.unit !== null)
-        .map((c: any) => c.unit!.unit_code.toUpperCase())
+        .map((c: any): RequisiteCondition | null => {
+          if (c.type === 'credit_points') {
+            return { type: 'credit_points', creditPoints: Number(c.credit_points) };
+          }
+          if (c.type === 'unit' && c.unit !== null) {
+            return {
+              type: 'unit',
+              requisiteType: (c.requisite_type ?? 'prerequisite') as 'prerequisite' | 'corequisite' | 'antirequisite',
+              unitCode: c.unit.unit_code.toUpperCase(),
+            };
+          }
+          return null;
+        })
+        .filter((c: RequisiteCondition | null): c is RequisiteCondition => c !== null)
     )
-    .filter((g: string[]) => g.length > 0);
+    .filter((g: RequisiteCondition[]) => g.length > 0);
 
   const offeringSemesters: (1 | 2)[] =
     unit.offered_in === 1 ? [1] : unit.offered_in === 2 ? [2] : [];
 
-  return { code: unit.unit_code, name: unit.unit_name, category, offeringSemesters, prerequisiteGroups: prereqGroups };
+  return { code: unit.unit_code, name: unit.unit_name, category, offeringSemesters, requisiteGroups };
 }
 
 export async function POST(req: NextRequest) {
@@ -38,7 +51,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid request parameters' }, { status: 400 });
     }
 
-    // Fetch planner with full unit + prerequisite data in a single query
+    // Fetch planner with full unit + requisite data in a single query
     const planner = await prisma.plannerTemplate.findUnique({
       where: { id: plannerId },
       include: {
@@ -46,7 +59,7 @@ export async function POST(req: NextRequest) {
           include: {
             unit: {
               include: {
-                prerequisite_groups: {
+                requisite_groups: {
                   include: { conditions: { include: { unit: true } } },
                 },
               },
@@ -70,9 +83,6 @@ export async function POST(req: NextRequest) {
       .map((tu) => toSchedulable(tu.unit!, String(tu.category)));
 
     // ── Minor injection ────────────────────────────────────────────────────
-    // For each opted-in minor, fetch its units and add any the student
-    // still needs (not completed and not already in the pool) as elective-
-    // category units. The scheduler handles them identically to all others.
     const minorIds: string[] = Array.isArray(injectedMinorIds) ? injectedMinorIds : [];
     if (minorIds.length > 0) {
       const minors = await prisma.minor.findMany({
@@ -82,7 +92,7 @@ export async function POST(req: NextRequest) {
             include: {
               unit: {
                 include: {
-                  prerequisite_groups: {
+                  requisite_groups: {
                     include: { conditions: { include: { unit: true } } },
                   },
                 },
@@ -92,7 +102,6 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      // Track codes already in the pool so we don't add duplicates
       const poolCodes = new Set([
         ...normalizedCompleted,
         ...remainingUnits.map((u) => u.code.toUpperCase()),
@@ -101,7 +110,7 @@ export async function POST(req: NextRequest) {
       for (const minor of minors) {
         for (const mu of minor.units) {
           const code = mu.unit.unit_code.toUpperCase();
-          if (poolCodes.has(code)) continue; // already done or queued
+          if (poolCodes.has(code)) continue;
           remainingUnits.push(toSchedulable(mu.unit, 'minor'));
           poolCodes.add(code);
         }

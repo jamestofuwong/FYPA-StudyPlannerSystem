@@ -9,7 +9,15 @@ export type PlannerImportUnit = {
   category: string | null;
   unit_code: string;
   unit_name: string;
-  prerequisite: string | null;
+  prerequisite: string | null;                // import page
+  requisites?: {                              // viewer page
+    conditions: {
+      type: 'unit' | 'credit_points';
+      unit?: { unit_code: string } | null;
+      credit_points?: number | null;
+      requisite_type?: string | null;
+    }[];
+  }[] | null;
   offered_in: number | null;
 };
 

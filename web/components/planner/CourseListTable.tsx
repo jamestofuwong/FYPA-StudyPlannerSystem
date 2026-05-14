@@ -43,6 +43,27 @@ function badgeClassForCategory(category: string | null): string {
     }
 }
 
+// Converts DB data into string
+function formatRequisites(requisites: any): string {
+    // If null return '-'
+    if (!requisites || (Array.isArray(requisites) && requisites.length === 0)) return '-';
+    
+    // If it's a string (import page fallback), return it
+    if (typeof requisites === 'string') return requisites;
+    // Map Groups (OR)
+    return requisites.map((g: any) => 
+        // Map Conditions (AND)
+        g.conditions.map((c: any) => {
+            // Format credit points
+            if (c.type === 'credit_points') return `${c.credit_points}cp`;
+            // Add prefix if co/anti, else just the unit code
+            const prefix = c.requisite_type === 'corequisite' ? 'Co: ' :
+                            c.requisite_type === 'antirequisite' ? 'Anti: ' : '';
+            return `${prefix}${c.unit?.unit_code || '?'}`;
+        }).join(' & ')
+    ).join(' / ');
+}
+
 export function getSemesterOrder(intakeMonth: number): number[] {
   if (intakeMonth >= 2 && intakeMonth <= 3) {
     return [1, 4, 2, 3];
@@ -73,7 +94,7 @@ export default function CourseListTable({
     intakeMonth = 0,
     unplacedElectives = []
 }: CourseListTableProps) {
-  
+
     const totalUnits = yearGroups.reduce((count, year) => {
         return count + year.semesters.reduce((sum, sem) => sum + sem.list.length, 0);
     }, 0);
@@ -211,15 +232,12 @@ export default function CourseListTable({
                                                     </td>
                                                     <td>
                                                         {editable && onUnitEdit ? (
-                                                        <input 
-                                                            type="text" 
-                                                            defaultValue={unit.prerequisite || ''} 
-                                                            onBlur={(e) => onUnitEdit((unit as any)._id, 'prerequisite', e.target.value || null)}
-                                                            className={styles.editInput} 
-                                                            placeholder="-" 
-                                                            />
+                                                        <div contentEditable suppressContentEditableWarning className={styles.editTextarea} 
+                                                        onBlur={(e) => onUnitEdit((unit as any)._id, 'prerequisite', e.currentTarget.textContent || '')}>
+                                                            {unit.prerequisite || ''}
+                                                        </div>
                                                         ) : (
-                                                        unit.prerequisite ? <code className={styles.code}>{unit.prerequisite}</code> : <span className={styles.textMuted}>-</span>
+                                                            formatRequisites(unit.requisites || unit.prerequisite)
                                                         )}
                                                     </td>
                                                     <td>
@@ -322,7 +340,7 @@ export default function CourseListTable({
                     <div className={styles.termDivider} />
                 </div>
                 <div className={styles.tableWrap}>
-                    <table className={styles.table}>
+                    <table className={`${styles.table} ${editable && onDeleteUnit ? styles.tableEditable : ''}`}>
                         <thead>
                             <tr>
                                 <th>UNIT CODE</th>
@@ -359,31 +377,15 @@ export default function CourseListTable({
                                             unit.unit_name || 'Unknown Unit'
                                         )}
                                     </td>
+                                    <td><span className={`${styles.badge} ${styles.badgeGreen}`}>Elective</span></td>
                                     <td>
                                         {editable && onUnitEdit ? (
-                                            <select value={unit.category || 'elective'} onChange={(e) => onUnitEdit((unit as any)._id, 'category', e.target.value)} className={`${styles.badge} ${styles[badgeClassForCategory(unit.category)]} ${styles.badgeSelect}`}>
-                                                <option value="core">Core</option>
-                                                <option value="major_core">Major Core</option>
-                                                <option value="mpu">MPU</option>
-                                                <option value="wil">WIL</option>
-                                                <option value="prescribed_elective">Prescribed Elective</option>
-                                                <option value="elective">Elective</option>
-                                            </select>
+                                            <div contentEditable suppressContentEditableWarning className={styles.editTextarea} 
+                                                onBlur={(e) => onUnitEdit((unit as any)._id, 'prerequisite', e.currentTarget.textContent || '')}>
+                                                {unit.prerequisite || ''}
+                                            </div>
                                         ) : (
-                                            <span className={`${styles.badge} ${styles[badgeClassForCategory(unit.category)]}`}>{categoryLabel(unit.category)}</span>
-                                        )}
-                                    </td>
-                                    <td>
-                                        {editable && onUnitEdit ? (
-                                            <input 
-                                                type="text" 
-                                                defaultValue={unit.prerequisite || ''} 
-                                                onBlur={(e) => onUnitEdit((unit as any)._id, 'prerequisite', e.target.value || null)}
-                                                className={styles.editInput} 
-                                                placeholder="-" 
-                                            />
-                                        ) : (
-                                            unit.prerequisite ? <code className={styles.code}>{unit.prerequisite}</code> : <span className={styles.textMuted}>-</span>
+                                            formatRequisites(unit.requisites || unit.prerequisite)
                                         )}
                                     </td>
                                     <td>

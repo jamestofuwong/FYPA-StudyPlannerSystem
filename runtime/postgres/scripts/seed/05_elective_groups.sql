@@ -710,7 +710,8 @@ BEGIN
         WHERE c.code = 'BA-CS'
           AND (m.name IS NULL OR m.name <> 'Data Science')
           AND EXISTS(
-              SELECT 1 FROM elective_groups eg WHERE eg.planner_template_id = pt.id
+              SELECT 1 FROM template_units tu
+              WHERE tu.planner_template_id = pt.id AND tu.category = 'elective'
           )
     LOOP
         INSERT INTO minors (planner_template_id, name)

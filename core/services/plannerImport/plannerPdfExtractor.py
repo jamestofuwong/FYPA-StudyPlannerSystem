@@ -856,6 +856,8 @@ def _canonical_mpu_name(code, source_text=''):
 # This takes extracted prerequisite candidate and returns nullable prerequisite because nil/noise should become None in the app schema.
 def _clean_candidate_prereq(prereq):
     prereq = _normalise_table_text(prereq)
+    if re.match(r'^N[Ii][Ll]\s*(?:\((?:Anti|Co)-req:\s*[^)]+\)|\([^)]*(?:Anti|Co)-req:[^)]*\))', prereq, re.IGNORECASE):
+        return prereq
     if re.match(r'^N[Ii][Ll]\b', prereq):
         return None
     if re.match(r'^\s*Concurrent\b', prereq, re.IGNORECASE):
@@ -1630,6 +1632,13 @@ def extract_requirements(text):
             return int(value) if value.is_integer() else value
         return None
 
+    # This takes one line plus start position and returns cP after that point because WIL labels can share a row with the previous unit CP.
+    def credit_points_after_pos(line, start_pos):
+        if start_pos is None:
+            return None
+        fragment = str(line or '')[start_pos:]
+        return credit_points_in_line(fragment)
+
     # This takes requirement line index and returns nearby credit-point value because PDFs often wrap count and CP text onto adjacent lines.
     def next_credit_points(line_index):
         same_line = credit_points_in_line(lines[line_index])
@@ -1701,6 +1710,29 @@ def extract_requirements(text):
             return found[0][1]
         return None
 
+    # This takes one requirement line index and label end position and returns cP after the matched label because merged rows should not borrow CP from preceding unit text.
+    def following_credit_points_in_requirement_block(line_index, start_pos=None, max_lookahead=8, upper_bound=50):
+        found = []
+        for offset in range(0, max_lookahead + 1):
+            idx = line_index + offset
+            if idx >= len(lines):
+                break
+            if offset > 0 and requirement_boundary_re.search(lines[idx]):
+                break
+            if offset == 0:
+                value = credit_points_after_pos(lines[idx], start_pos)
+            else:
+                value = credit_points_in_line(lines[idx])
+            if value is None:
+                continue
+            if upper_bound is not None and (not isinstance(value, (int, float)) or value > upper_bound):
+                continue
+            found.append((offset, value))
+        if found:
+            found.sort(key=lambda item: item[0])
+            return found[0][1]
+        return None
+
     patterns = [
         ("core", re.compile(r'(?<!\d)(\d+)\s+Core\s+Units\b', re.IGNORECASE)),
         ("major", re.compile(r'(?<!\d)(\d+)\s+[A-Za-z][A-Za-z&/() \-]*\s+(?:Major|Discipline)\s+Units\b', re.IGNORECASE)),
@@ -1715,11 +1747,16 @@ def extract_requirements(text):
                 continue
             cp = next_credit_points(idx)
             if key == "wil":
-                block_cp = next_credit_points_in_requirement_block(idx, max_lookahead=8, upper_bound=50)
+                block_cp = following_credit_points_in_requirement_block(
+                    idx,
+                    start_pos=m.end(),
+                    max_lookahead=8,
+                    upper_bound=50,
+                )
                 if block_cp is not None:
                     cp = block_cp
                 else:
-                    nearest_cp = nearest_credit_points(idx, look_back=2, look_ahead=8, upper_bound=50)
+                    nearest_cp = nearest_credit_points(idx, look_back=0, look_ahead=8, upper_bound=50)
                     if nearest_cp is not None:
                         cp = nearest_cp
             req[key] = {
@@ -2525,7 +2562,7 @@ def extract_units_with_structure(pdf_path):
         ctx_year, ctx_semester = _extract_header_context_for_code(planner_text, u.get('code'))
         has_prescribed_marker = _has_prescribed_marker_near_code(planner_text, u.get('code'))
         in_catalog_elective_section = _appears_in_catalog_elective_section(planner_text, u.get('code'))
-        if isinstance(u.get('prerequisite'), str) and re.search(r'\bN[Ii][Ll]\b', u['prerequisite'].strip()):
+        if isinstance(u.get('prerequisite'), str) and re.match(r'^\s*N[Ii][Ll]\s*$', u['prerequisite'].strip()):
             u['prerequisite'] = None
         if isinstance(u.get('prerequisite'), str):
             u['prerequisite'] = re.sub(
@@ -3040,6 +3077,7 @@ def _section_unit_entry_from_row_text(row_text, code):
     code = _strip_unit_markers(code)
     unit_name = None
     prerequisite = None
+    offered_in = None
 
     prereq_match = re.match(
         rf'^{re.escape(code)}(?:{UNIT_MARKER_RE})?\s+(.*?)\s*\(pre-req:\s*(.*?)\)\s*$',
@@ -3048,12 +3086,14 @@ def _section_unit_entry_from_row_text(row_text, code):
     )
     if prereq_match:
         unit_name = _clean_candidate_name(prereq_match.group(1))
-        prerequisite = _clean_candidate_prereq(prereq_match.group(2))
+        prerequisite, offered_in = _split_prereq_and_offered(prereq_match.group(2))
+        prerequisite = _clean_candidate_prereq(prerequisite)
     else:
         parsed_code, parsed_name, parsed_prereq = _parse_compact_code_row(row_text)
         if parsed_code == code:
             unit_name = _clean_candidate_name(parsed_name)
-            prerequisite = _clean_candidate_prereq(parsed_prereq)
+            prerequisite, offered_in = _split_prereq_and_offered(parsed_prereq)
+            prerequisite = _clean_candidate_prereq(prerequisite)
         else:
             trimmed = re.sub(rf'^\s*{re.escape(code)}(?:{UNIT_MARKER_RE})?\s*', '', row_text, flags=re.IGNORECASE).strip()
             unit_name = _clean_candidate_name(trimmed)
@@ -3063,7 +3103,7 @@ def _section_unit_entry_from_row_text(row_text, code):
         "unit_code": code,
         "unit_name": unit_name,
         "prerequisite": prerequisite,
-        "offered_in": None,
+        "offered_in": offered_in,
     }
 
 
@@ -3083,6 +3123,7 @@ def extract_elective_sections(file_path):
 
         for page in pdf.pages:
             page_words  = page.extract_words(x_tolerance=3, y_tolerance=3)
+            headers = _extract_line_headers(page_words)
             right_bound = _detect_content_right(page_words, page.width)
             page_text_all = ' '.join(w['text'] for w in sorted(page_words, key=lambda x: (x['top'], x['x0'])))
             minor_listing_mode = _has_minor_listing_context(page_text_all)
@@ -3136,6 +3177,8 @@ def extract_elective_sections(file_path):
 
                         row_text = ' '.join(t for t, _ in cells if t.strip())
                         entry = _section_unit_entry_from_row_text(row_text, code)
+                        row_year = _closest_header_value(headers, 'year', row_obj.bbox, max_vertical_gap=180)
+                        row_semester = _closest_header_value(headers, 'semester', row_obj.bbox, max_vertical_gap=180)
                         colour = (_get_colour_at_y(page, sub_mid_y, content_right=right)
                                   if sub_mid_y else
                                   _get_row_colour(page, row_obj.bbox, content_right=right))

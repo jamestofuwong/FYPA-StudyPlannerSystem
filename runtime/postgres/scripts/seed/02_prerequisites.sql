@@ -30,12 +30,22 @@ SELECT add_prereq_unit('TNE30012', 'TNE20002');
 
 
 
+-- Corequisites
+SELECT add_prereq_unit('COS10011', 'COS10009', 'corequisite');
+SELECT add_prereq_unit('COS10004', 'COS10009', 'corequisite');
+
+
+
+-- Antirequisites
+SELECT add_prereq_unit('COS10026', 'COS10011', 'antirequisite');
+
+
+
 -- Credit point threshold
 -- SELECT add_prereq_credits('', );
 SELECT add_prereq_credits('COS20019', 50);
 SELECT add_prereq_credits('COS40005', 175);
 
-SELECT add_prereq_credits('ICT30005', 150);
 SELECT add_prereq_credits('ICT30005', 200);
 
 
