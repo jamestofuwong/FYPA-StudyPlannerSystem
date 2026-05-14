@@ -1,23 +1,20 @@
 // @ts-nocheck
-import { GET, POST } from '@/web/app/api/courses/route';
-import * as courseRepository from '@/core/db/repositories/courseRepository';
+import { GET, POST } from '@/app/api/courses/route';
+import * as courseRepository from '@core/db/repositories/courseRepository';
 import { NextResponse } from 'next/server';
 
 // 1. Mock the repository so we don't touch the real database
-jest.mock('@/core/db/repositories/courseRepository');
+jest.mock('@core/db/repositories/courseRepository');
 
 describe('Courses API Endpoint (UIT-03)', () => {
   
   test('GET should return 200 and a list of courses', async () => {
-    // Arrange: Tell the mock what to return
     const mockCourses = [{ id: '123', name: 'Computer Science', code: 'BCS' }];
     (courseRepository.getAllCourses as jest.Mock).mockResolvedValue(mockCourses);
 
-    // Act: Call the GET function directly
     const response = await GET();
     const data = await response.json();
 
-    // Assert
     expect(response.status).toBe(200);
     expect(data).toEqual(mockCourses);
   });
@@ -33,7 +30,6 @@ describe('Courses API Endpoint (UIT-03)', () => {
   });
 
   test('GET: should return 500 when database crashes (Negative Test)', async () => {
-  // 1. Force the mock to throw an error
   (courseRepository.getAllCourses as jest.Mock).mockRejectedValue(new Error("Database connection lost"));
 
   const response = await GET();

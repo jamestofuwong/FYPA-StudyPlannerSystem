@@ -9,14 +9,14 @@ const customJestConfig = {
   setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
   testEnvironment: 'node',
   moduleNameMapper: {
-    '^@/core/(.*)$': '<rootDir>/core/$1',
-    '^@/shared/(.*)$': '<rootDir>/core/shared/$1',
+  '^@core/(.*)$': '<rootDir>/core/$1',
+  '^@shared/(.*)$': '<rootDir>/core/shared/$1',
+  '\\.module\\.css$': 'identity-obj-proxy',
+  '\\.(css|less|sass|scss)$': '<rootDir>/__mocks__/styleMock.js',
+  '^@/(.*)$': '<rootDir>/web/$1', 
     
-    '\\.module\\.css$': 'identity-obj-proxy',
-    '\\.(css|less|sass|scss)$': '<rootDir>/__mocks__/styleMock.js',
-    '^@/(.*)$': '<rootDir>/$1',
   },
-  preset: 'ts-jest',
+  // preset: 'ts-jest',
 }
 
 module.exports = createJestConfig(customJestConfig)

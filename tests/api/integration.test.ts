@@ -1,9 +1,8 @@
 // @ts-nocheck
-import { POST } from '@/web/app/api/planners/route';
-import * as plannerService from '@/core/services/plannerImport/plannerImportService';
+import { POST } from '@/app/api/planners/route';
+import * as plannerService from '@core/services/plannerImport/plannerImportService';
 
-// We mock the service BUT we test that the API correctly calls it and returns the result
-jest.mock('@/core/services/plannerImport/plannerImportService');
+jest.mock('@core/services/plannerImport/plannerImportService');
 
 describe('End-to-End Workflow (UIT-05)', () => {
   test('User uploads PDF -> Service Processes -> API returns 200', async () => {

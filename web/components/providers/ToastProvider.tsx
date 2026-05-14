@@ -69,6 +69,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         {toasts.map((toast) => (
           <div
             key={toast.id}
+            role="alert"
+            aria-live="assertive"
             style={{
               background: 'var(--card-bg)',
               border: `1px solid var(--panel-border)`,

@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { extractPlannerFromPdf } from '@/core/services/plannerImport/plannerImportService';
+import { extractPlannerFromPdf } from '@core/services/plannerImport/plannerImportService';
 import { spawn } from 'node:child_process';
 
 jest.mock('node:child_process', () => ({
@@ -13,12 +13,12 @@ jest.mock('node:child_process', () => ({
 describe('Service Edge Cases', () => {
   test('Hits LLM and Model branches (Lines 56, 59, 62)', async () => {
     const options = { useLlm: false, model: 'gpt-4', llmRetries: 3 };
-    // This will trigger the code that pushes these into the 'args' array
+    // trigger the code that pushes these into the 'args' array
     try { await extractPlannerFromPdf(Buffer.from(''), options); } catch(e) {}
   });
 
   test('Hits Error Parsing (Lines 31, 36, 39)', async () => {
-    // The mock above returns {"error": "..."}, which hits Line 36
+    // Line 36
     await expect(extractPlannerFromPdf(Buffer.from(''))).rejects.toThrow();
   });
 });
@@ -41,7 +41,7 @@ describe('Final Coverage Booster (The 80% Push)', () => {
       on: (evt, cb) => evt === 'close' && cb(0)
     });
     // This hits the bad payload branch (Line 38)
-    // AND the finally block (Line 100) because the function finishes its attempt
+    // and the finally block (Line 100) because the function finishes its attempt
     await expect(extractPlannerFromPdf(Buffer.from(''))).rejects.toThrow("unexpected payload shape");
   });
 });

@@ -16,7 +16,9 @@
     "types": ["node"],
     "baseUrl": ".",
     "paths": {
-      "@/*": ["*"]
+      "@/*": ["web/*"],
+      "@core/*": ["core/*"],
+      "@shared/*": ["core/shared/*"]
     }
   },
   "include": [
@@ -26,7 +28,9 @@
     "core/**/*.tsx",
     "core/**/*.d.ts",
     "scripts/**/*.ts",
-    "scripts/**/*.tsx"
+    "scripts/**/*.tsx",
+    "tests/**/*.ts",    
+    "tests/**/*.tsx"
 , "tests/matching/matching.phase2test.ts", "tests/matching/matching.test.ts"  ],
   "exclude": [
     "node_modules",

@@ -1,11 +1,11 @@
 /** @jest-environment node */
 // @ts-nocheck
-import { POST } from '@/web/app/api/scraper/route';
+import { POST } from '@/app/api/scraper/route';
 import { NextRequest } from 'next/server';
 
 describe('Scraper API Endpoint', () => {
   
-  // 1. SUCCESS PATH
+  // SUCCESS PATH
   test('POST: should return 200 and map data correctly for a successful scrape', async () => {
     const mockResult = {
       scraped: true,
@@ -26,16 +26,16 @@ describe('Scraper API Endpoint', () => {
     expect(data.courseList[0].courseId).toBe('COS101');
   });
 
-  // 2. COVERAGE BOOSTER: Missing Optional Fields (Covers Line 20, 22, 26, 29)
+  // COVERAGE BOOSTER: Missing Optional Fields (Covers Line 20, 22, 26, 29)
   test('POST: should use fallbacks (0 or "") when portal data is missing fields', async () => {
     const incompleteResult = {
       scraped: true,
       data: { 
-        program: null, // Triggers fallback to ""
-        enrollmentCumGPA: "", // Triggers fallback to 0
-        creditsRequiredFromEnrolment: "invalid-number" // Triggers fallback to 0
+        program: null, 
+        enrollmentCumGPA: "", 
+        creditsRequiredFromEnrolment: "invalid-number" 
       },
-      gridRows: [] // Empty list
+      gridRows: []
     };
 
     const req = new NextRequest('http://localhost/api/scraper', {
@@ -47,11 +47,11 @@ describe('Scraper API Endpoint', () => {
     const data = await response.json();
 
     expect(response.status).toBe(200);
-    expect(data.cgpa).toBe(0); // Proves fallback worked
-    expect(data.course).toBe(""); // Proves fallback worked
+    expect(data.cgpa).toBe(0); 
+    expect(data.course).toBe(""); 
   });
 
-  // 3. PORTAL FAILURE PATH
+  // PORTAL FAILURE PATH
   test('POST: should return 422 when the portal scraper fails', async () => {
     const mockFail = { scraped: false, error: 'Portal maintenance' };
     const req = new NextRequest('http://localhost/api/scraper', { 
@@ -66,7 +66,7 @@ describe('Scraper API Endpoint', () => {
     expect(data.error).toBe('Portal maintenance');
   });
 
-  // 4. NEGATIVE PATHS: Malformed Payload
+  //NEGATIVE PATHS: Malformed Payload
   describe("Scraper API - Malformed Payload (Line 39, 45)", () => {
     test("POST: should return 400 if JSON body is invalid", async () => {
       const req = new NextRequest('http://localhost/api/scraper', {

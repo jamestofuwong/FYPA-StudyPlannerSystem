@@ -1,3 +1,4 @@
+import/page.tsx
 'use client';
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ChangeEvent, type DragEvent, type PointerEvent as ReactPointerEvent } from 'react';

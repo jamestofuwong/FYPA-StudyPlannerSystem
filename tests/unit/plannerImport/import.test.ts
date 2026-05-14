@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { extractPlannerFromPdf } from '@/core/services/plannerImport/plannerImportService';
+import { extractPlannerFromPdf } from '@core/services/plannerImport/plannerImportService';
 import { spawn } from 'node:child_process';
 
 jest.mock('node:child_process');

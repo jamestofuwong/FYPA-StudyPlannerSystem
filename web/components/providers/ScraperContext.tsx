@@ -200,7 +200,21 @@ export function ScraperProvider({ children }: { children: ReactNode }) {
   // Detect runtime
   useEffect(() => {
     const w = globalThis as any;
-    setRuntime(w?.native?.versions?.electron ? 'electron' : 'web');
+    
+    // Guard clause for setup
+    if (w?.native?.ipcRenderer) {
+      const handleNativeEvent = (_event: any, data: any) => {
+        console.log('Received native IPC:', data);
+      };
+
+      w.native.ipcRenderer.on('native-event', handleNativeEvent);
+
+      return () => {
+        if (w?.native?.ipcRenderer) {
+          w.native.ipcRenderer.removeListener('native-event', handleNativeEvent);
+        }
+      };
+    }
   }, []);
 
   const isElectron = runtime === 'electron';
@@ -259,7 +273,9 @@ export function ScraperProvider({ children }: { children: ReactNode }) {
   }, [setPhase]);
 
   useEffect(() => {
-    const wv = webviewRef.current;
+    const wv =
+      (typeof window !== 'undefined' && (window as any).__scraperTestWebview) ??
+      webviewRef.current;
     if (!wv) return;
 
     const exitLoginMode = (url: string) => {
@@ -325,6 +341,10 @@ export function ScraperProvider({ children }: { children: ReactNode }) {
   // ---------------------------------------------------------------------------
 
   const getAdapter = useCallback((): WebviewAdapter | null => {
+    // Testability seam: allow Jest to inject a fake adapter
+    if (typeof window !== 'undefined' && (window as any).__scraperTestAdapter) {
+      return (window as any).__scraperTestAdapter;
+    }
     const wv = webviewRef.current;
     if (!wv) return null;
     return new WebviewAdapterImpl(wv);

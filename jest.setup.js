@@ -19,7 +19,13 @@ try {
   global.Headers = global.Headers || class {};
 }
 
-// Fix for encoding issues (usually required by Next.js Response parsing)
 const { TextEncoder, TextDecoder } = require('util');
 global.TextEncoder = TextEncoder;
 global.TextDecoder = TextDecoder;
+
+global.fetch = jest.fn(() =>
+  Promise.resolve({
+    json: () => Promise.resolve({}),
+    ok: true,
+  })
+);

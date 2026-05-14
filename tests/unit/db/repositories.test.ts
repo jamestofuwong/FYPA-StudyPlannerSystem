@@ -1,10 +1,10 @@
 // @ts-nocheck
-import * as courseRepo from '@/core/db/repositories/courseRepository';
-import * as majorRepo from '@/core/db/repositories/majorRepository';
-import { prisma } from '@/core/db/client';
+import * as courseRepo from '@core/db/repositories/courseRepository';
+import * as majorRepo from '@core/db/repositories/majorRepository';
+import { prisma } from '@core/db/client';
 
 // Single, consistent mock for the entire DB client
-jest.mock('@/core/db/client', () => ({
+jest.mock('@core/db/client', () => ({
   prisma: {
     course: { 
       findMany: jest.fn(), 

@@ -1,6 +1,6 @@
 // @ts-nocheck
 // Change the import to '* as service' so you can use 'service.runScraperStep'
-import * as service from '@/core/services/scrapper/advisorScraperService';
+import * as service from '@core/services/scrapper/advisorScraperService';
 
 describe('Scraper Service - Branch Coverage', () => {
   const mockAdapter = (success: boolean) => ({
@@ -49,11 +49,11 @@ describe('Scraper Service - Branch Coverage', () => {
   test('Covers Sanitize and Login detection logic', () => {
     service.isMicrosoftLoginUrl("https://login.microsoftonline.com");
     service.sanitizeUrl("  'http://test.com'  ");
-    service.sanitizeUrl(""); // Triggers empty return branch
+    service.sanitizeUrl(""); 
   });
 
   test("Scraper Service - Loop and Sanitize (Lines 259-291)", async () => {
-    // 1. Trigger runAllSteps loop (Line 259+)
+    // Trigger runAllSteps loop (Line 259+)
     const mockAdapter = {
       loadURL: jest.fn(),
       getURL: jest.fn().mockReturnValue("https://portal.com"),
@@ -61,8 +61,8 @@ describe('Scraper Service - Branch Coverage', () => {
     };
     await service.runAllSteps(mockAdapter, { studentId: "123" });
 
-    // 2. Trigger sanitizeUrl branches (Line 17+)
-    service.sanitizeUrl(" 'http://valid.com' "); // Trim quotes branch
-    service.sanitizeUrl("invalid-url");           // Null branch
+    // Trigger sanitizeUrl branches (Line 17+)
+    service.sanitizeUrl(" 'http://valid.com' ");
+    service.sanitizeUrl("invalid-url");       
   });
 });

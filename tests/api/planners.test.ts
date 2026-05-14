@@ -1,10 +1,10 @@
 // @ts-nocheck
-import { POST, GET } from '@/web/app/api/planners/route';
-import * as plannerService from '@/core/services/plannerImport/plannerImportService';
-import * as plannerRepo from '@/core/db/repositories/plannerRepository';
+import { POST, GET } from '@/app/api/planners/route';
+import * as plannerService from '@core/services/plannerImport/plannerImportService';
+import * as plannerRepo from '@core/db/repositories/plannerRepository';
 
-jest.mock('@/core/services/plannerImport/plannerImportService');
-jest.mock('@/core/db/repositories/plannerRepository', () => ({
+jest.mock('@core/services/plannerImport/plannerImportService');
+jest.mock('@core/db/repositories/plannerRepository', () => ({
   createPlanner: jest.fn(),
   getAllPlanners: jest.fn()
 }));
@@ -23,11 +23,11 @@ describe('Planners API', () => {
   });
 
   test('POST: parseBoolean helper logic (Covers Lines 11-18)', async () => {
-    // We test 'true', 'false', and 'invalid' to hit all branches of parseBoolean
+    //test 'true', 'false', and 'invalid' to hit all branches of parseBoolean
     const scenarios = [
       { val: 'true', expected: true },
       { val: 'off', expected: false },
-      { val: 'maybe', expected: false } // fallback
+      { val: 'maybe', expected: false }
     ];
 
     for (const s of scenarios) {

@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import * as majorRepository from "../../../../../core/db/repositories/majorRepository";
+import * as majorRepository from "@core/db/repositories/majorRepository";
 
 export async function GET(
   req: NextRequest,
