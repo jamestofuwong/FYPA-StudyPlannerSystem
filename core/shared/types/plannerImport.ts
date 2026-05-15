@@ -19,6 +19,7 @@ export type PlannerImportUnit = {
     }[];
   }[] | null;
   offered_in: number | null;
+  minor_name?: string | null;
 };
 
 export type PlannerImportPlanner = {
@@ -45,6 +46,10 @@ export type PlannerImportPlanner = {
       prescribed_elective: PlannerImportUnit[];
       elective: PlannerImportUnit[];
     };
+    minor_groups?: {
+      minor_name: string;
+      units: PlannerImportUnit[];
+    }[];
     wil_group: PlannerImportUnit[];
   };
 };

@@ -101,7 +101,21 @@ export async function getPlannerById(id: string) {
       minors: {
         include: {
           units: {
-            include: { unit: true }
+            include: { 
+              unit: {
+                include: {
+                  requisite_groups: {
+                    include: {
+                      conditions: {
+                        include: {
+                          unit: true,
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -149,11 +163,14 @@ export async function savePlannerFromImport(planner: PlannerImportPlanner) {
   }
 
   const intakeMonth = parseIntakeMonth(course_information.intake);
-
   // Transaction: all or nothing
   return await prisma.$transaction(async (tx) => {
 
-    // Upsert course and major (find or create)
+
+    // ===================================================================================================
+    // Section 1: Upsert Course & Major
+    // ===================================================================================================
+    // Upsert Course
     const [course] = await Promise.all([
       tx.course.upsert({
         where: { name: courseName },
@@ -169,6 +186,10 @@ export async function savePlannerFromImport(planner: PlannerImportPlanner) {
       create: { name: majorName, course_id: course.id },
     });
 
+
+    // ===================================================================================================
+    // Section 2: Check Duplicate & Create Planner Template
+    // ===================================================================================================
     // Check for duplicate planner
     const existingPlanner = await tx.plannerTemplate.findFirst({
       where: {
@@ -203,7 +224,10 @@ export async function savePlannerFromImport(planner: PlannerImportPlanner) {
       },
     });
 
-    // Split elective units into pool and slots
+
+    // ===================================================================================================
+    // Section 3: Split Elective Units (Pool units / Slot units)
+    // ===================================================================================================
     // Pool units: no year/semester
     // Slot units: placed in a specific year/semester
     const prescribedElective = categories.elective_groups?.prescribed_elective ?? [];
@@ -216,7 +240,10 @@ export async function savePlannerFromImport(planner: PlannerImportPlanner) {
       (u) => u.year_level != null && u.semester != null
     );
 
-    // Collect all placed units from all categories
+
+    // ===================================================================================================
+    // Section 4: Collect All Placed Units
+    // ===================================================================================================
     const allUnits: Array<{ unit_code: string; unit_name: string; cat: string; year_level: any; semester: any }> = [
       ...categories.core_units?.map((u: any) => ({ ...u, cat: 'core' })) ?? [],
       ...categories.major_units?.map((u: any) => ({ ...u, cat: 'major_core' })) ?? [],
@@ -226,7 +253,10 @@ export async function savePlannerFromImport(planner: PlannerImportPlanner) {
       ...electiveSlots.map((u: any) => ({ ...u, cat: 'elective' })),
     ];
 
-    // Normalize unit code
+
+    // ===================================================================================================
+    // Section 5: Normaalise Unit Codes & Upsert Into Global Catelogue
+    // ===================================================================================================
     const poolUnitsNormalised = electivePoolUnits
       .map((u) => ({ ...u, normCode: normaliseImportedUnitCode(u.unit_code) }))
       .filter((u) => u.normCode);
@@ -262,7 +292,10 @@ export async function savePlannerFromImport(planner: PlannerImportPlanner) {
     // Build lookup map: unit_code = unit record
     const unitByCode = new Map(upsertedUnits.map((u) => [u.unit_code, u]));
 
-    // Create elective group and link pool units
+
+    // ===================================================================================================
+    // Section 6: Create Elective Group & Link Pool Units
+    // ===================================================================================================
     if (poolUnitsNormalised.length > 0) {
       const electiveGroup = await tx.electiveGroup.create({
         data: { planner_template_id: newPlanner.id },
@@ -279,7 +312,10 @@ export async function savePlannerFromImport(planner: PlannerImportPlanner) {
       );
     }
 
-    // Create template units (placed units + empty elective slots)
+
+    // ===================================================================================================
+    // Section 7: Create Template Untis (Placed Units + Slots)
+    // ===================================================================================================
     const attachedUnitIds = new Set<string>();
     const templateUnitsToCreate = allUnitsNormalised
       .filter((u) => {
@@ -305,8 +341,42 @@ export async function savePlannerFromImport(planner: PlannerImportPlanner) {
       }));
 
     await tx.templateUnit.createMany({ data: templateUnitsToCreate });
-    
-    // Insert requisites
+
+
+    // ===================================================================================================
+    // Section 8: Save Minors
+    // ===================================================================================================
+    const minorGroups = categories.minor_groups ?? [];
+    if (minorGroups.length > 0) {
+      for (const minorGroup of minorGroups) {
+        const minor = await tx.minor.create({
+          data: {
+            planner_template_id: newPlanner.id,
+            name: minorGroup.minor_name,
+          },
+        });
+
+        for (const unit of minorGroup.units) {
+          const normCode = normaliseImportedUnitCode(unit.unit_code);
+          if (!normCode) continue;
+          
+          const unitDef = unitByCode.get(normCode);
+          if (unitDef) {
+            await tx.minorUnit.create({
+              data: {
+                minor_id: minor.id,
+                unit_id: unitDef.id,
+              },
+            });
+          }
+        }
+      }
+    }
+
+
+    // ===================================================================================================
+    // Section 9: Insert Requisites
+    // ===================================================================================================
     // Combine placed units and pool units
     const allUnitsForRequisites = [
       ...allUnitsNormalised.filter(u => u.normCode),

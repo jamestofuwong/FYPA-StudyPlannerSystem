@@ -1,4 +1,6 @@
-/* Section title */
+/* ================================================================================================================== */
+/* SECTION TITLES */
+/* ================================================================================================================== */
 .sectionTitle {
   font-size: 11px;
   font-weight: 600;
@@ -17,7 +19,10 @@
   background: var(--panel-border);
 }
 
+
+/* ================================================================================================================== */
 /* Badges */
+/* ================================================================================================================== */
 .badge { 
   display: inline-block; 
   padding: 2px 7px; 
@@ -33,7 +38,6 @@
 .badgeOrange { background: rgba(206,145,120,0.2); color: var(--accent-orange); border: 1px solid rgba(206,145,120,0.3); }
 .badgeRed    { background: rgba(244,135,113,0.2); color: var(--accent-red);    border: 1px solid rgba(244,135,113,0.3); }
 .badgePurple { background: rgba(180,130,220,0.2); color: var(--accent-purple);  border: 1px solid rgba(180,130,220,0.3); }
-
 .badgeSelect {
   appearance: none;
   -webkit-appearance: none;
@@ -43,7 +47,6 @@
   word-wrap: break-word;
   width: 82px;
 }
-
 .badgeSelect option {
   background: var(--card-bg);
   color: var(--text-primary);
@@ -52,7 +55,10 @@
   padding: 4px 8px;
 }
 
-/* Table */
+
+/* ================================================================================================================== */
+/* Tables */
+/* ================================================================================================================== */
 .tableWrap { 
   overflow-x: visible;
   border: 1px solid var(--panel-border); 
@@ -98,7 +104,20 @@
   color: var(--text-primary);
 
 }
+.tableEditable th:last-child,
+.tableEditable td:last-child {
+  width: 45px;
+  padding: 4px 4px;
+  text-align: center;
+}
+.addSemesterSection {
+  margin: 12px 0;
+}
 
+
+/* ================================================================================================================== */
+/* Code */
+/* ================================================================================================================== */
 .code { 
   font-family: var(--font-mono); 
   background: var(--surface-bg); 
@@ -108,18 +127,20 @@
   color: var(--accent-orange); 
 }
 
+
+
+/* ================================================================================================================== */
 /* Course List */
+/* ================================================================================================================== */
 .termGroup {
   margin-bottom: 20px;
 }
-
 .termHeading {
   display: flex;
   align-items: center;
   gap: 8px;
   margin-bottom: 6px;
 }
-
 .termLabel {
   font-size: 10px;
   font-weight: 600;
@@ -129,7 +150,6 @@
   font-family: var(--font-mono);
   white-space: nowrap;
 }
-
 .termLabelEmpty {
   font-size: 10px;
   font-weight: 600;
@@ -139,13 +159,11 @@
   font-family: var(--font-mono);
   white-space: nowrap;
 }
-
 .termDivider {
   flex: 1;
   height: 1px;
   background: var(--panel-border);
 }
-
 .termEmpty {
   border: 1px dashed var(--panel-border);
   border-radius: 4px;
@@ -155,11 +173,36 @@
   font-family: var(--font-mono);
 }
 
+
+/* ================================================================================================================== */
+/* Text */
+/* ================================================================================================================== */
 .textMuted {
   color: var(--text-muted);
 }
 
+
+/* ================================================================================================================== */
+/* Minor Label */
+/* ================================================================================================================== */
+.minorLabel {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--accent-blue);
+  font-family: var(--font-mono);
+  white-space: normal;
+  word-break: break-word;
+  outline: none;
+  cursor: text;
+}
+
+
+
+/* ================================================================================================================== */
 /* Edit Inputs */
+/* ================================================================================================================== */
 .editInput {
   width: 100%;
   background: transparent;
@@ -174,11 +217,9 @@
   white-space: normal;
   word-wrap: break-word;
 }
-
 .editInput:hover {
   border-color: var(--panel-border);
 }
-
 .editInput:focus {
   border-color: var(--active-highlight);
   background: var(--surface-bg);
@@ -186,7 +227,6 @@
 .editInput::placeholder {
   color: var(--text-muted);
 }
-
 .editTextarea {
   width: 100%;
   background: transparent;
@@ -203,21 +243,22 @@
   white-space: pre-wrap;
   word-wrap: break-word;
 }
-
 .editTextarea:hover {
   border-color: var(--panel-border);
 }
-
 .editTextarea:focus {
   border-color: var(--active-highlight);
   background: var(--surface-bg);
 }
-
 .editTextarea:empty::before {
   content: '-';
   color: var(--text-muted);
 }
 
+
+/* ================================================================================================================== */
+/* Buttons */
+/* ================================================================================================================== */
 .addUnitBtn {
   width: 100%;
   padding: 6px;
@@ -229,13 +270,11 @@
   border-radius: 4px;
   transition: all 0.15s;
 }
-
 .addUnitBtn:hover {
   border-color: var(--accent-blue);
   color: var(--accent-blue);
   background: rgba(0,122,204,0.05);
 }
-
 .deleteBtn {
   background: transparent;
   border: 1px solid rgba(244,135,113,0.3);
@@ -246,31 +285,21 @@
   border-radius: 3px;
   transition: all 0.15s;
 }
-
 .deleteBtn:hover {
   background: rgba(244,135,113,0.2);
   color: var(--accent-red);
 }
 
-.tableEditable th:last-child,
-.tableEditable td:last-child {
-  width: 45px;
-  padding: 4px 4px;
-  text-align: center;
-}
 
-.addSemesterSection {
-  margin: 12px 0;
-}
-
+/* ================================================================================================================== */
 /* Planner Header */
+/* ================================================================================================================== */
 .summaryGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 16px;
 }
-
 .summaryItem {
   display: flex;
   flex-direction: column;
@@ -280,41 +309,34 @@
   border-radius: 4px;
   background: var(--panel-bg);
 }
-
 .summaryLabel {
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.8px;
   color: var(--text-muted);
 }
-
 .summaryValue {
   font-size: 12px;
   color: var(--text-primary);
 }
-
 .summaryEditRow {
   display: flex;
   align-items: center;
   gap: 4px;
 }
-
 .editSeparator {
   font-size: 12px;
   color: var(--text-muted);
 }
-
 .editUnit {
   font-size: 11px;
   color: var(--text-muted);
 }
-
 .editInput[type="number"]::-webkit-outer-spin-button,
 .editInput[type="number"]::-webkit-inner-spin-button {
   -webkit-appearance: none;
   margin: 0;
 }
-
 .summaryEditRow .editInput {
   width: 35px;
   text-align: center;

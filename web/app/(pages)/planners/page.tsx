@@ -116,6 +116,23 @@ export default function PlannersPage() {
     Object.keys(groupedPlanners).sort(),
   [groupedPlanners]);
 
+  const minorUnits = useMemo(() => {
+    if (!selectedPlanner?.minors) return [];
+    return selectedPlanner.minors.flatMap((minor: any) =>
+      (minor.units || []).map((mu: any) => ({
+        unit_code: mu.unit?.unit_code || '',
+        unit_name: mu.unit?.unit_name || '',
+        category: 'elective',
+        prerequisite: null,
+        requisites: mu.unit?.requisite_groups || null,
+        offered_in: mu.unit?.offered_in,
+        year_level: null,
+        semester: null,
+        minor_name: minor.name,
+      }))
+    );
+  }, [selectedPlanner]);
+
   // ==================================================================================================================
   // EVENT HANDLERS & HELPER FUNCTIONS
   // ==================================================================================================================
@@ -342,6 +359,7 @@ export default function PlannersPage() {
               yearGroups={yearGroups}
               editable={false}
               unplacedElectives={unplacedElectives}
+              minorUnits={minorUnits}
               emptyMessage="No units attached to this planner template."
             />
           </div>

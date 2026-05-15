@@ -1,4 +1,3 @@
-import/page.tsx
 'use client';
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ChangeEvent, type DragEvent, type PointerEvent as ReactPointerEvent } from 'react';
@@ -93,12 +92,22 @@ function flattenUnits(planner: PlannerImportPlanner | null): PlannerImportUnit[]
   if (!planner) return [];
   const c = planner.categories ?? {};
   const eg = c.elective_groups ?? {};
+  const minorUnits = (c.minor_groups ?? []).flatMap(minor => 
+    minor.units.map(unit => ({ 
+      ...unit, 
+      category: 'elective',
+      minor_name: minor.minor_name,
+      year_level: null, 
+      semester: null 
+    }))
+  );
   return [
     ...(c.core_units ?? []),
     ...(c.major_units ?? []),
     ...(c.mpu_group ?? []),
     ...(eg.prescribed_elective ?? []),
     ...(eg.elective ?? []),
+    ...minorUnits,
     ...(c.wil_group ?? []),
   ];
 }
@@ -327,9 +336,16 @@ export default function ImportPage() {
     return result;
   }, [editableUnits, planner]);
 
+  // Filter minor units
+  const minorUnits = useMemo(() => {
+    return editableUnits.filter(u => u.minor_name != null);
+  }, [editableUnits]);
+
   // Filter unplaced electives
   const unplacedElectives = useMemo(() => {
-    return editableUnits.filter(u => u.year_level == null || u.semester == null);
+    return editableUnits.filter(u => 
+      (u.year_level == null || u.semester == null) && u.minor_name == null
+    );
   }, [editableUnits]);
 
   // Edit handler functions
@@ -356,16 +372,17 @@ export default function ImportPage() {
     );
   };
 
-  const handleAddUnit = (year: number, semester: number) => {
+  const handleAddUnit = (year: number, semester: number, type: 'core' | 'elective' | 'minor' = 'core', minorName?: string) => {
     unitCounterRef.current += 1;
     const newUnit = {
       unit_code: `NEW${Math.floor(1000 + Math.random() * 9000)}`,
       unit_name: '',
-      category: 'core' as const,
+      category: type === 'core' ? 'core' : 'elective',
       prerequisite: null,
       offered_in: null,
-      year_level: year,
-      semester: semester,
+      year_level: year || null,
+      semester: semester || null,
+      minor_name: minorName || null,
       _id: `new-${unitCounterRef.current}`,
     } as PlannerImportUnit & { _id: string };
     setEditableUnits(prev => [...prev, newUnit]);
@@ -562,6 +579,18 @@ export default function ImportPage() {
             prescribed_elective: editableUnits.filter(u => u.category === 'prescribed_elective'),
             elective: editableUnits.filter(u => u.category === 'elective'),
           },
+          minor_groups: (() => {
+            const grouped: Record<string, PlannerImportUnit[]> = {};
+            editableUnits.filter(u => u.minor_name).forEach(u => {
+              const name = u.minor_name!;
+              if (!grouped[name]) grouped[name] = [];
+              grouped[name].push(u);
+            });
+            return Object.entries(grouped).map(([minor_name, units]) => ({
+              minor_name,
+              units: units.map(({ minor_name, ...unit }) => unit), // strip minor_name from units
+            }));
+          })(),
         },
       };
 
@@ -864,6 +893,7 @@ export default function ImportPage() {
               onDeleteUnit={handleDeleteUnit}
               intakeMonth={parseIntakeMonth(planner?.course_information?.intake || '')}
               unplacedElectives={unplacedElectives}
+              minorUnits={minorUnits}
               emptyMessage="No units were extracted from this planner."
             />
           )}
