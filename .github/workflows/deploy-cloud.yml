@@ -1,14 +1,7 @@
 name: Deploy Cloud App
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'cloud/**'
-      - 'core/**'
-      - 'docker-compose.yml'
-      - 'docker-compose.prod.yml'
-      - '.github/workflows/deploy-cloud.yml'
+  workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
