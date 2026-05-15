@@ -1,0 +1,41 @@
+// Cloud-only tables — used exclusively by the cloud Next.js admin app.
+// The local Electron app never queries these models and init.psql never
+// creates these tables, so they are effectively invisible to the local app.
+// Edit base.prisma for tables shared between both apps.
+
+model PortalPlannerEntry {
+  id                  String   @id @default(uuid())
+  year                String
+  unit_code           String
+  course_name         String
+  intake_month        String   @default("")
+  program_level       String?
+  pdf_url             String
+  last_updated        String?
+  last_updated_iso    String?
+  first_seen_at       DateTime @default(now())
+  last_synced_at      DateTime @updatedAt
+  planner_template_id String?
+
+  @@unique([unit_code, year, intake_month])
+  @@map("portal_planner_entries")
+}
+
+model SyncRun {
+  id                 String    @id @default(uuid())
+  triggered_at       DateTime  @default(now())
+  completed_at       DateTime?
+  status             String    @default("running")
+  action             String    @default("check")
+  trigger_source     String    @default("manual")
+  planners_scanned   Int       @default(0)
+  planners_new       Int       @default(0)
+  planners_updated   Int       @default(0)
+  planners_unchanged Int       @default(0)
+  planners_failed    Int       @default(0)
+  duration_ms        Int?
+  error_message      String?
+  logs               String[]
+
+  @@map("sync_runs")
+}

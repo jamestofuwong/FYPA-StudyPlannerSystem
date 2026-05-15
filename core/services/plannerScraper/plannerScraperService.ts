@@ -311,24 +311,30 @@ export async function runStep(
 
 /**
  * Compares freshly scraped entries against records already in the database.
- * Matching is done by pdfUrl (stable identifier). Returns three buckets:
- *   new       — URL not in DB
- *   updated   — URL in DB but lastUpdated string differs
- *   unchanged — URL in DB and lastUpdated matches
+ *
+ * Identity key: unitCode + year + intakeMonth (composite — a programme can
+ * have multiple intakes per year, each producing its own planner).
+ *
+ * Returns three buckets:
+ *   new       — composite key not in DB
+ *   updated   — key exists but lastUpdated string differs
+ *   unchanged — key exists and lastUpdated matches
  */
 export function diffEntries(
   scraped: PlannerIndexEntry[],
   stored: StoredPlannerRecord[],
 ): PlannerDiff {
-  const storedMap = new Map(stored.map(r => [r.pdfUrl, r.lastUpdated]));
+  const storedMap = new Map(
+    stored.map(r => [makeKey(r.unitCode, r.year, r.intakeMonth), r.lastUpdated]),
+  );
 
   const newEntries: PlannerIndexEntry[] = [];
   const updatedEntries: PlannerIndexEntry[] = [];
   const unchangedEntries: PlannerIndexEntry[] = [];
 
   for (const entry of scraped) {
-    if (!entry.pdfUrl) continue; // Skip entries with no URL
-    const storedDate = storedMap.get(entry.pdfUrl);
+    const key = makeKey(entry.unitCode, entry.year, entry.intakeMonth);
+    const storedDate = storedMap.get(key);
     if (storedDate === undefined) {
       newEntries.push(entry);
     } else if (storedDate !== entry.lastUpdated) {
@@ -339,6 +345,10 @@ export function diffEntries(
   }
 
   return { newEntries, updatedEntries, unchangedEntries };
+}
+
+function makeKey(unitCode: string, year: string, intakeMonth: string): string {
+  return `${unitCode}|${year}|${intakeMonth}`;
 }
 
 // ---------------------------------------------------------------------------

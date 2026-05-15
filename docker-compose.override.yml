@@ -1,0 +1,43 @@
+# Local development overrides — applied automatically alongside docker-compose.yml
+# Run: docker compose up --build
+#
+# Key differences from production:
+#   - Uses the 'dev' Dockerfile stage for cloud (next dev, not next start)
+#   - cloud/ and core/ source are mounted from the host for hot reload
+#   - pdf-parser source is mounted so parser changes don't need a rebuild
+#   - node_modules kept in a named volume (not overwritten by the mount)
+#   - DB port exposed to host so you can inspect with TablePlus etc.
+
+services:
+  db:
+    ports:
+      - "5434:5432"   # Host port 5434 — avoids clashing with local app's embedded Postgres on 5433
+
+  pdf-parser:
+    # Mount source so edits to plannerStructureService.py take effect on reload
+    volumes:
+      - ./core/services/plannerImport:/app/core/services/plannerImport
+      - ./runtime/pdf-parser/main.py:/app/main.py
+    # --reload watches /app so Python file changes restart uvicorn automatically
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001", "--reload", "--reload-dir", "/app"]
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+
+  cloud:
+    build:
+      context: .
+      dockerfile: cloud/Dockerfile
+      target: dev     # Use the dev stage, not the full production build
+    volumes:
+      - ./cloud:/app/cloud
+      - ./core:/app/core
+      - cloud_node_modules:/app/cloud/node_modules
+    environment:
+      SCRAPER_SIMULATE: "false"
+      WATCHPACK_POLLING: "true"
+      CHOKIDAR_USEPOLLING: "true"
+      NODE_ENV: development
+      PLANNER_PARSER_URL: http://pdf-parser:8001
+
+volumes:
+  cloud_node_modules:

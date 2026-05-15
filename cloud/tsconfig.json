@@ -8,9 +8,8 @@
     ],
     "baseUrl": ".",
     "paths": {
-      "@cloud/*": [
-        "./*"
-      ]
+      "@cloud/*": ["./*"],
+      "@core/*": ["../core/*"]
     },
     "allowJs": false,
     "skipLibCheck": true,
@@ -36,6 +35,7 @@
     "components/**/*.ts",
     "components/**/*.tsx",
     "lib/**/*.ts",
+    "../core/**/*.ts",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],

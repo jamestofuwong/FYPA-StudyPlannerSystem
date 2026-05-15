@@ -60,9 +60,12 @@ export async function createPuppeteerAdapter(opts: {
   executablePath?: string; // Override Chrome path (e.g. for puppeteer-core)
   userAgent?: string;
 } = {}): Promise<BrowserAdapter> {
-  // Dynamic import — avoids hard compile-time dep when mocking
+  // Dynamic import — avoids hard compile-time dep when mocking.
+  // webpackIgnore/turbopackIgnore prevents Turbopack from statically tracing
+  // this import; puppeteer is declared in serverExternalPackages so it is
+  // required at runtime from cloud/node_modules rather than bundled.
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const puppeteer = await import('puppeteer');
+  const puppeteer = await import(/* webpackIgnore: true */ 'puppeteer');
 
   const launchOpts: Record<string, unknown> = {
     headless: opts.headless ?? true,

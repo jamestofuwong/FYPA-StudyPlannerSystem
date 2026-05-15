@@ -1,17 +1,40 @@
 'use client';
 
-import { MOCK_PARSE_HISTORY, type ParseRun } from '../../lib/mock-data';
+import { useEffect, useState } from 'react';
 import RunLogs from '../../components/RunLogs';
 
-const STATUS_CONFIG: Record<ParseRun['status'], { dot: string; label: string; color: string; bg: string }> = {
+interface SyncRun {
+  id: string;
+  triggered_at: string;
+  completed_at: string | null;
+  status: string;
+  action: string;
+  trigger_source: string;
+  planners_scanned: number;
+  planners_new: number;
+  planners_updated: number;
+  planners_unchanged: number;
+  planners_failed: number;
+  duration_ms: number | null;
+  error_message: string | null;
+  logs: string[];
+}
+
+const STATUS_CONFIG: Record<string, { dot: string; label: string; color: string; bg: string }> = {
   success: { dot: '#15803D', label: 'Success', color: 'var(--green)',  bg: 'var(--green-light)' },
   failed:  { dot: '#DC2626', label: 'Failed',  color: 'var(--red)',    bg: 'var(--red-light)' },
   partial: { dot: '#D97706', label: 'Partial', color: 'var(--yellow)', bg: 'var(--yellow-light)' },
   running: { dot: '#2563EB', label: 'Running', color: 'var(--blue)',   bg: 'var(--blue-light)' },
 };
 
-function RunStatusBadge({ status }: { status: ParseRun['status'] }) {
-  const s = STATUS_CONFIG[status];
+const ACTION_LABEL: Record<string, string> = {
+  check:  'Check',
+  sync:   'Sync',
+  resync: 'Force Resync',
+};
+
+function RunStatusBadge({ status }: { status: string }) {
+  const s = STATUS_CONFIG[status] ?? STATUS_CONFIG.running;
   return (
     <span style={{
       display: 'inline-flex', alignItems: 'center', gap: 6,
@@ -33,33 +56,45 @@ function formatDuration(ms: number | null) {
 }
 
 function formatDateTime(iso: string) {
-  const d = new Date(iso);
-  return d.toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return new Date(iso).toLocaleString('en-GB', {
+    day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  });
 }
 
 export default function HistoryPage() {
-  const successCount = MOCK_PARSE_HISTORY.filter(r => r.status === 'success').length;
-  const totalNew = MOCK_PARSE_HISTORY.reduce((s, r) => s + r.plannersNew, 0);
-  const totalUpdated = MOCK_PARSE_HISTORY.reduce((s, r) => s + r.plannersUpdated, 0);
+  const [runs, setRuns] = useState<SyncRun[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch('/api/history')
+      .then(r => r.json())
+      .then((data: SyncRun[]) => { setRuns(data); setLoading(false); })
+      .catch(() => { setError('Failed to load run history from database.'); setLoading(false); });
+  }, []);
+
+  const successCount = runs.filter(r => r.status === 'success').length;
+  const totalNew = runs.reduce((s, r) => s + r.planners_new, 0);
+  const totalUpdated = runs.reduce((s, r) => s + r.planners_updated, 0);
 
   return (
     <div style={{ padding: '28px 32px' }}>
       {/* Page header */}
       <div style={{ marginBottom: 24 }}>
         <h1 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4, letterSpacing: '-0.01em' }}>
-          Parse History
+          Sync History
         </h1>
         <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>
-          Automated daily runs that check the portal for new or updated planners.
+          All scraper runs triggered manually or by the scheduler.
         </p>
       </div>
 
       {/* Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 200px))', gap: 12, marginBottom: 24 }}>
         {[
-          { label: 'Total Runs', value: MOCK_PARSE_HISTORY.length, note: `${successCount} successful` },
-          { label: 'New Planners', value: totalNew, note: 'across all runs' },
-          { label: 'Planners Updated', value: totalUpdated, note: 'content changes detected' },
+          { label: 'Total Runs', value: loading ? '—' : runs.length, note: loading ? '' : `${successCount} successful` },
+          { label: 'New Planners', value: loading ? '—' : totalNew, note: 'across all runs' },
+          { label: 'Planners Updated', value: loading ? '—' : totalUpdated, note: 'content changes detected' },
         ].map(({ label, value, note }) => (
           <div key={label} style={{
             background: 'var(--surface)',
@@ -74,90 +109,116 @@ export default function HistoryPage() {
         ))}
       </div>
 
+      {loading && (
+        <div style={{ padding: '48px 24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
+          Loading history…
+        </div>
+      )}
+
+      {error && (
+        <div style={{ padding: '48px 24px', textAlign: 'center', color: 'var(--red)', fontSize: 13 }}>{error}</div>
+      )}
+
+      {!loading && !error && runs.length === 0 && (
+        <div style={{
+          background: 'var(--surface)', border: '1px solid var(--border)',
+          borderRadius: 'var(--radius)', padding: '56px 24px', textAlign: 'center',
+        }}>
+          <div style={{ fontSize: 28, marginBottom: 10 }}>🗂️</div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 6 }}>No runs yet</div>
+          <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+            Trigger a scraper action from the Planner Scraper page to record your first run.
+          </div>
+        </div>
+      )}
+
       {/* Run list */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {MOCK_PARSE_HISTORY.map((run) => (
-          <div key={run.id} style={{
-            background: 'var(--surface)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius)',
-            overflow: 'hidden',
-          }}>
-            {/* Left accent stripe by status */}
-            <div style={{
-              display: 'flex',
-              borderLeft: `4px solid ${STATUS_CONFIG[run.status].dot}`,
-            }}>
-              <div style={{ flex: 1 }}>
-                {/* Run row */}
-                <div style={{
-                  padding: '14px 20px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 16,
-                  flexWrap: 'wrap',
-                }}>
-                  <RunStatusBadge status={run.status} />
+      {!loading && !error && runs.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {runs.map((run) => {
+            const statusCfg = STATUS_CONFIG[run.status] ?? STATUS_CONFIG.running;
+            return (
+              <div key={run.id} style={{
+                background: 'var(--surface)',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius)',
+                overflow: 'hidden',
+              }}>
+                <div style={{ display: 'flex', borderLeft: `4px solid ${statusCfg.dot}` }}>
+                  <div style={{ flex: 1 }}>
+                    {/* Run row */}
+                    <div style={{
+                      padding: '14px 20px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 16,
+                      flexWrap: 'wrap',
+                    }}>
+                      <RunStatusBadge status={run.status} />
 
-                  <div style={{ flex: 1, minWidth: 160 }}>
-                    <div style={{ fontWeight: 500, fontSize: 13, marginBottom: 2 }}>
-                      {formatDateTime(run.triggeredAt)}
-                    </div>
-                    <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>{run.source}</div>
-                  </div>
-
-                  {/* Stats row */}
-                  <div style={{ display: 'flex', gap: 20, flexShrink: 0 }}>
-                    {[
-                      { label: 'Scanned', value: run.plannersScanned, color: undefined },
-                      { label: 'New', value: run.plannersNew, color: run.plannersNew > 0 ? 'var(--green)' : undefined },
-                      { label: 'Updated', value: run.plannersUpdated, color: run.plannersUpdated > 0 ? 'var(--orange)' : undefined },
-                      { label: 'Unchanged', value: run.plannersUnchanged, color: undefined },
-                    ].map(({ label, value, color }) => (
-                      <div key={label} style={{ textAlign: 'center' }}>
-                        <div style={{ fontSize: 15, fontWeight: 700, color: color ?? 'var(--text-primary)', lineHeight: 1 }}>{value}</div>
-                        <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</div>
+                      <div style={{ flex: 1, minWidth: 160 }}>
+                        <div style={{ fontWeight: 500, fontSize: 13, marginBottom: 2 }}>
+                          {formatDateTime(run.triggered_at)}
+                        </div>
+                        <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>
+                          {ACTION_LABEL[run.action] ?? run.action} · {run.trigger_source}
+                        </div>
                       </div>
-                    ))}
-                  </div>
 
-                  <div style={{
-                    fontSize: 12,
-                    color: 'var(--text-muted)',
-                    flexShrink: 0,
-                    fontFamily: 'monospace',
-                    background: 'var(--gray-light)',
-                    padding: '3px 8px',
-                    borderRadius: 'var(--radius-sm)',
-                  }}>
-                    {formatDuration(run.durationMs)}
+                      {/* Stats row */}
+                      <div style={{ display: 'flex', gap: 20, flexShrink: 0 }}>
+                        {[
+                          { label: 'Scanned',   value: run.planners_scanned,   color: undefined },
+                          { label: 'New',       value: run.planners_new,       color: run.planners_new > 0 ? 'var(--green)' : undefined },
+                          { label: 'Updated',   value: run.planners_updated,   color: run.planners_updated > 0 ? 'var(--orange)' : undefined },
+                          { label: 'Unchanged', value: run.planners_unchanged, color: undefined },
+                          { label: 'Failed',    value: run.planners_failed,    color: run.planners_failed > 0 ? 'var(--red)' : undefined },
+                        ].map(({ label, value, color }) => (
+                          <div key={label} style={{ textAlign: 'center' }}>
+                            <div style={{ fontSize: 15, fontWeight: 700, color: color ?? 'var(--text-primary)', lineHeight: 1 }}>{value}</div>
+                            <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div style={{
+                        fontSize: 12,
+                        color: 'var(--text-muted)',
+                        flexShrink: 0,
+                        fontFamily: 'monospace',
+                        background: 'var(--gray-light)',
+                        padding: '3px 8px',
+                        borderRadius: 'var(--radius-sm)',
+                      }}>
+                        {formatDuration(run.duration_ms)}
+                      </div>
+                    </div>
+
+                    {/* Error bar */}
+                    {run.error_message && (
+                      <div style={{
+                        padding: '8px 20px',
+                        background: 'var(--red-light)',
+                        borderTop: '1px solid var(--red-border)',
+                        fontSize: 12,
+                        color: 'var(--red)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                      }}>
+                        <WarningIcon />
+                        {run.error_message}
+                      </div>
+                    )}
+
+                    <RunLogs logs={run.logs} />
                   </div>
                 </div>
-
-                {/* Error bar */}
-                {run.errorMessage && (
-                  <div style={{
-                    padding: '8px 20px',
-                    background: 'var(--red-light)',
-                    borderTop: '1px solid var(--red-border)',
-                    fontSize: 12,
-                    color: 'var(--red)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6,
-                  }}>
-                    <WarningIcon />
-                    {run.errorMessage}
-                  </div>
-                )}
-
-                {/* Logs */}
-                <RunLogs logs={run.logs} />
               </div>
-            </div>
-          </div>
-        ))}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

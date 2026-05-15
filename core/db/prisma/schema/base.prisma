@@ -1,6 +1,10 @@
+// Shared schema — used by both the local Electron app and the cloud app.
+// Edit this file to change any table that both apps share.
+// For cloud-only tables, see cloud.prisma in this same folder.
+
 generator client {
   provider = "prisma-client-js"
-  output   = "../../../node_modules/@local/prisma-client"
+  output   = "../../../../node_modules/@local/prisma-client"
 }
 
 datasource db {
@@ -71,16 +75,16 @@ model UnitPrerequisiteCondition {
 }
 
 model PlannerTemplate {
-  id             String          @id @default(uuid())
+  id             String  @id @default(uuid())
   course_id      String
-  course         Course          @relation(fields: [course_id], references: [id])
+  course         Course  @relation(fields: [course_id], references: [id])
   major_id       String?
-  major          Major?          @relation(fields: [major_id], references: [id])
+  major          Major?  @relation(fields: [major_id], references: [id])
   intake_year    Int
   intake_month   Int?
 
-  course_type        String      @default("bachelor")
-  duration_semesters Int         @default(6)
+  course_type        String @default("bachelor")
+  duration_semesters Int    @default(6)
 
   core_count     Int?
   core_cp        Int?
@@ -91,11 +95,11 @@ model PlannerTemplate {
   wil_count      Int?
   wil_cp         Int?
 
-  created_at     DateTime        @default(now())
-  updated_at     DateTime        @updatedAt
-  units          TemplateUnit[]
+  created_at      DateTime        @default(now())
+  updated_at      DateTime        @updatedAt
+  units           TemplateUnit[]
   elective_groups ElectiveGroup[]
-  minors          Minor[]   
+  minors          Minor[]
 
   @@unique([course_id, major_id, intake_year, intake_month])
   @@map("planner_templates")
@@ -127,11 +131,11 @@ model TemplateUnit {
 }
 
 model ElectiveGroup {
-  id                  String               @id @default(uuid())
+  id                  String              @id @default(uuid())
   planner_template_id String
-  template            PlannerTemplate      @relation(fields: [planner_template_id], references: [id])
-  created_at          DateTime             @default(now())
-  updated_at          DateTime             @updatedAt
+  template            PlannerTemplate     @relation(fields: [planner_template_id], references: [id])
+  created_at          DateTime            @default(now())
+  updated_at          DateTime            @updatedAt
   units               ElectiveGroupUnit[]
 
   @@map("elective_groups")
@@ -148,12 +152,12 @@ model ElectiveGroupUnit {
 }
 
 model Minor {
-  id                  String       @id @default(uuid())
+  id                  String          @id @default(uuid())
   planner_template_id String
   template            PlannerTemplate @relation(fields: [planner_template_id], references: [id], onDelete: Cascade)
   name                String
-  created_at          DateTime     @default(now())
-  updated_at          DateTime     @updatedAt
+  created_at          DateTime        @default(now())
+  updated_at          DateTime        @updatedAt
   units               MinorUnit[]
 
   @@unique([planner_template_id, name])
@@ -162,9 +166,9 @@ model Minor {
 
 model MinorUnit {
   minor_id String
-  minor    Minor @relation(fields: [minor_id], references: [id], onDelete: Cascade)
+  minor    Minor  @relation(fields: [minor_id], references: [id], onDelete: Cascade)
   unit_id  String
-  unit     Unit  @relation(fields: [unit_id], references: [id], onDelete: Cascade)
+  unit     Unit   @relation(fields: [unit_id], references: [id], onDelete: Cascade)
 
   @@id([minor_id, unit_id])
   @@map("minor_units")
@@ -210,9 +214,9 @@ model AuditLog {
 }
 
 model SchemaMigration {
-  version    String   @id
+  version     String   @id
   description String?
-  applied_at DateTime @default(now())
+  applied_at  DateTime @default(now())
 
   @@map("schema_migrations")
 }

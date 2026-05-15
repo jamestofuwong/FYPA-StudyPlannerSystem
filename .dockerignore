@@ -1,0 +1,33 @@
+# Dependencies
+node_modules
+cloud/node_modules
+web/node_modules
+core/node_modules
+
+# Next.js build output
+cloud/.next
+web/.next
+
+# Local env files
+.env
+.env.local
+cloud/.env
+web/.env
+
+# Electron build artifacts
+dist/
+release/
+build/
+resources/python/
+resources/ollama/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Misc
+.DS_Store
+*.log
+temporary/
+tests/

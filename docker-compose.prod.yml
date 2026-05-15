@@ -1,0 +1,14 @@
+# Production overrides — used on the VPS
+# Run: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Differences from base:
+#   - Uses pre-built image from GitHub Container Registry
+#   - Real Puppeteer scraper (SCRAPER_SIMULATE=false)
+#   - DB not exposed to host
+
+services:
+  cloud:
+    image: ghcr.io/${GITHUB_REPO:-your-org/fypa-cloud}:${IMAGE_TAG:-latest}
+    build: !reset null   # Don't build locally — use the pulled image
+    environment:
+      SCRAPER_SIMULATE: "false"

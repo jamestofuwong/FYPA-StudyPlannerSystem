@@ -46,7 +46,9 @@ export interface ScrapeIndexResult {
 
 /** Represents an entry already stored in the database */
 export interface StoredPlannerRecord {
-  pdfUrl: string;
+  unitCode: string;
+  year: string;
+  intakeMonth: string;
   lastUpdated: string;
 }
 
