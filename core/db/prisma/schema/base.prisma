@@ -45,33 +45,34 @@ model Unit {
   created_at              DateTime                    @default(now())
   updated_at              DateTime                    @updatedAt
   templates               TemplateUnit[]
-  prerequisite_groups     UnitPrerequisiteGroup[]
-  prerequisite_conditions UnitPrerequisiteCondition[] @relation("PrerequisiteUnit")
+  requisite_groups        UnitRequisiteGroup[]
+  requisite_conditions    UnitRequisiteCondition[] @relation("RequisiteUnit")
   elective_group_units    ElectiveGroupUnit[]
   minor_units             MinorUnit[] 
 
   @@map("units")
 }
 
-model UnitPrerequisiteGroup {
+model UnitRequisiteGroup {
   id         String                      @id @default(uuid())
   unit_id    String
   unit       Unit                        @relation(fields: [unit_id], references: [id], onDelete: Cascade)
-  conditions UnitPrerequisiteCondition[]
+  conditions UnitRequisiteCondition[]
 
-  @@map("unit_prerequisite_groups")
+  @@map("unit_requisite_groups")
 }
 
-model UnitPrerequisiteCondition {
+model UnitRequisiteCondition {
   id                String                @id @default(uuid())
   group_id          String
-  group             UnitPrerequisiteGroup @relation(fields: [group_id], references: [id], onDelete: Cascade)
-  prerequisite_type String
+  group             UnitRequisiteGroup @relation(fields: [group_id], references: [id], onDelete: Cascade)
+  type              String
   unit_id           String?
-  unit              Unit?                 @relation("PrerequisiteUnit", fields: [unit_id], references: [id], onDelete: Cascade)
+  unit              Unit?                 @relation("RequisiteUnit", fields: [unit_id], references: [id], onDelete: Cascade)
   credit_points     Decimal?
+  requisite_type    String?
 
-  @@map("unit_prerequisite_conditions")
+  @@map("unit_requisite_conditions")
 }
 
 model PlannerTemplate {
