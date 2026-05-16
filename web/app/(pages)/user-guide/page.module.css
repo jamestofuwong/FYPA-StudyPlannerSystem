@@ -1,427 +1,233 @@
-/* =========================================
-
-USER GUIDE - BASE LAYOUT
-
-========================================= */
-
 .container {
-
     padding: 2rem;
-
     max-width: 1100px;
-
     margin: 0 auto;
-
-    color: #e2e8f0; /* slate-200 */
-
+    color: var(--text-primary);
 }
-
 
 
 .header {
-
-    border-bottom: 1px solid #334155; /* slate-700 */
-
+    border-bottom: 1px solid var(--panel-border);
     padding-bottom: 1.5rem;
-
     margin-bottom: 2.5rem;
-
 }
-
 
 
 .title {
-
     font-size: 2.25rem;
-
     font-weight: 900;
-
     display: flex;
-
     align-items: center;
-
     gap: 0.75rem;
-
 }
-
 
 
 .subtitle {
-
-    color: #94a3b8; /* slate-400 */
-
+    color: var(--text-muted);
     margin-top: 0.5rem;
-
     font-size: 1.125rem;
-
 }
-
 
 
 .divider {
-
-    border-top: 1px solid #334155;
-
+    border-top: 1px solid var(--panel-border);
     margin: 3.5rem 0;
-
 }
 
 
 
-/* =========================================
-
-FEATURE CARDS (Top Section)
-
-========================================= */
-
+/* FEATURE CARDS (Top Section) */
 .grid {
-
     display: grid;
-
     grid-template-columns: 1fr;
-
     gap: 1.5rem;
-
 }
-
 
 
 @media (min-width: 768px) {
-
     .grid {
-
         grid-template-columns: repeat(2, 1fr);
-
     }
-
 }
-
 
 
 .card {
-
-    background-color: rgba(30, 41, 59, 0.4); /* slate-800/40 */
-
+    background-color: color-mix(in srgb, var(--panel-bg) 86%, transparent);
     padding: 1.5rem;
-
     border-radius: 1rem;
-
-    border: 1px solid #334155;
-
+    border: 1px solid var(--panel-border);
     transition: border-color 0.2s ease;
-
 }
-
 
 
 .card:hover {
-
-    border-color: rgba(59, 130, 246, 0.5); /* blue-500/50 */
-
+    border-color: color-mix(in srgb, var(--active-highlight) 55%, var(--panel-border));
 }
-
 
 
 .cardHeader {
-
     font-size: 1.25rem;
-
     font-weight: 700;
-
     display: flex;
-
     align-items: center;
-
     gap: 0.5rem;
-
     margin-bottom: 1rem;
-
 }
-
 
 
 /* Specific Feature Colors */
-
-.authHeader { color: #60a5fa; } /* blue-400 */
-
-.scrapeHeader { color: #c084fc; } /* purple-400 */
-
-.detectHeader { color: #facc15; } /* yellow-400 */
-
-.aiHeader { color: #f87171; } /* red-400 */
-
+.authHeader { color: var(--accent-blue); }
+.scrapeHeader { color: var(--accent-purple); }
+.detectHeader { color: var(--accent-yellow); }
+.aiHeader { color: var(--accent-red); }
 
 
 .cardContent {
-
     font-size: 0.875rem;
-
     line-height: 1.625;
-
-    color: #cbd5e1; /* slate-300 */
-
+    color: var(--text-primary);
 }
 
-
-
-/* =========================================
-
-LIST ITEMS (Navigating UI & Workflow)
-
-========================================= */
+/* LIST ITEMS (Navigating UI & Workflow) */
 
 .section {
-
     margin-bottom: 3rem;
-
 }
 
 
 
 .sectionTitle {
-
     font-size: 1.5rem;
-
     font-weight: 700;
-
-    color: #e2e8f0;
-
+    color: var(--text-primary);
     display: flex;
-
     align-items: center;
-
     gap: 0.75rem;
-
     margin-bottom: 1.5rem;
-
 }
-
 
 
 .list {
-
     display: flex;
-
     flex-direction: column;
-
     gap: 1rem;
-
 }
-
 
 
 .listItem {
-
-    background-color: rgba(30, 41, 59, 0.2);
-
-    border: 1px solid #334155;
-
+    background-color: color-mix(in srgb, var(--card-bg) 72%, transparent);
+    border: 1px solid var(--panel-border);
     border-radius: 0.75rem;
-
     padding: 1.25rem;
-
     display: flex;
-
     gap: 1rem;
-
     align-items: flex-start;
-
     transition: background-color 0.2s;
-
 }
-
 
 
 .listItem:hover {
-
-    background-color: rgba(30, 41, 59, 0.5);
-
+    background-color: var(--card-hover);
 }
-
 
 
 .stepNumber {
-
-    background-color: #3b82f6; /* blue-500 */
-
-    color: white;
-
+    background-color: var(--active-highlight);
+    color: #ffffff;
     font-weight: bold;
-
     width: 28px;
-
     height: 28px;
-
     display: flex;
-
     align-items: center;
-
     justify-content: center;
-
     border-radius: 50%;
-
     flex-shrink: 0;
-
     font-size: 0.875rem;
-
 }
-
 
 
 .iconWrapper {
-
-    color: #60a5fa;
-
+    color: var(--accent-blue);
     flex-shrink: 0;
-
     margin-top: 0.1rem;
-
 }
-
 
 
 .itemContent h4 {
-
-    color: #f8fafc; /* slate-50 */
-
+    color: var(--text-primary);
     margin: 0 0 0.25rem 0;
-
     font-size: 1.05rem;
-
     font-weight: 600;
-
 }
-
 
 
 .itemContent p {
-
-    color: #94a3b8; /* slate-400 */
-
+    color: var(--text-muted);
     font-size: 0.9rem;
-
     line-height: 1.5;
-
     margin: 0;
-
 }
 
 
-
-/* =========================================
-
-PRO TIPS SECTION
-
-========================================= */
-
+/* PRO TIPS SECTION */
 .proTipGrid {
-
     display: grid;
-
     grid-template-columns: 1fr;
-
     gap: 1rem;
-
 }
-
 
 
 @media (min-width: 768px) {
-
     .proTipGrid {
-
         grid-template-columns: repeat(2, 1fr);
-
     }
-
 }
-
 
 
 .proTipCard {
-
-    background-color: rgba(234, 179, 8, 0.1); /* yellow tint */
-
-    border: 1px solid rgba(234, 179, 8, 0.3);
-
+    background-color: color-mix(in srgb, var(--accent-yellow) 10%, var(--panel-bg));
+    border: 1px solid color-mix(in srgb, var(--accent-yellow) 32%, var(--panel-border));
     padding: 1.25rem;
-
     border-radius: 0.75rem;
-
     display: flex;
-
     gap: 0.75rem;
-
     align-items: flex-start;
-
 }
-
 
 
 .proTipIcon {
-
-    color: #facc15; /* yellow-400 */
-
+    color: var(--accent-yellow);
     flex-shrink: 0;
-
 }
-
 
 
 .proTipContent p {
-
     margin: 0;
-
     font-size: 0.875rem;
-
-    color: #cbd5e1;
-
+    color: var(--text-primary);
     line-height: 1.5;
-
 }
-
 
 
 .proTipContent strong {
-
-    color: #fde047; /* yellow-300 */
-
+    color: var(--accent-yellow);
 }
 
 
-
-/* =========================================
-
-FOOTER (System Note)
-
-========================================= */
-
+/* FOOTER (System Note) */
 .footer {
-
     margin-top: 2.5rem;
-
-    background-color: rgba(30, 58, 138, 0.2); /* blue-900/20 */
-
-    border: 1px solid rgba(59, 130, 246, 0.3);
-
+    background-color: color-mix(in srgb, var(--accent-blue) 12%, var(--panel-bg));
+    border: 1px solid color-mix(in srgb, var(--accent-blue) 30%, var(--panel-border));
     padding: 1rem;
-
     border-radius: 0.5rem;
-
 }
-
 
 
 .footerText {
-
     font-size: 0.75rem;
-
-    color: #93c5fd; /* blue-300 */
-
+    color: var(--accent-blue);
     display: flex;
-
     align-items: center;
-
     gap: 0.5rem;
-
 }
