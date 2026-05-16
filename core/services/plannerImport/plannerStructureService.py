@@ -231,115 +231,11 @@ def infer_template_duration_semesters(data):
     return 6
 
 
-# This takes one raw requisite note and returns schema requisite_type plus cleaned text because DB persistence now distinguishes prerequisite/corequisite/antirequisite.
-def classify_requisite_text(text):
-    value = re.sub(r"\s+", " ", str(text or "")).strip()
-    if not value or re.fullmatch(r"N[Ii][Ll]", value):
-        return None, None
-    if re.match(r"^\s*(?:Co-req:|Coreq:|Corequisite:?)\s*", value, re.IGNORECASE):
-        cleaned = re.sub(r"^\s*(?:Co-req:|Coreq:|Corequisite:?)\s*", "", value, flags=re.IGNORECASE).strip()
-        return "corequisite", cleaned or None
-    if re.match(r"^\s*(?:Anti-req:|Antireq:|Antirequisite:?)\s*", value, re.IGNORECASE):
-        cleaned = re.sub(r"^\s*(?:Anti-req:|Antireq:|Antirequisite:?)\s*", "", value, flags=re.IGNORECASE).strip()
-        return "antirequisite", cleaned or None
-    return "prerequisite", value
 
 
-# This takes raw prerequisite text and returns classified requisite fragments because one planner field can contain prerequisite, co-requisite, and anti-requisite notes together.
-def split_requisite_fragments(prerequisite_text):
-    text = normalise_prereq_text(prerequisite_text)
-    if text is None:
-        return []
-
-    fragments = []
-    parenthetical_notes = re.findall(
-        r"\(([^)]*(?:Anti-req|Antireq|Antirequisite|Co-req|Coreq|Corequisite)[^)]*)\)",
-        text,
-        flags=re.IGNORECASE,
-    )
-    for note in parenthetical_notes:
-        requisite_type, cleaned = classify_requisite_text(note)
-        if requisite_type and cleaned:
-            fragments.append({"requisite_type": requisite_type, "text": cleaned})
-
-    base_text = re.sub(
-        r"\([^)]*(?:Anti-req|Antireq|Antirequisite|Co-req|Coreq|Corequisite)[^)]*\)",
-        "",
-        text,
-        flags=re.IGNORECASE,
-    ).strip()
-    base_text = re.sub(r"^\s*N[Ii][Ll]\b", "", base_text).strip(" -;,")
-    if base_text:
-        requisite_type, cleaned = classify_requisite_text(base_text)
-        if requisite_type and cleaned:
-            fragments.insert(0, {"requisite_type": requisite_type, "text": cleaned})
-
-    seen = set()
-    deduped = []
-    for fragment in fragments:
-        key = (fragment.get("requisite_type"), fragment.get("text"))
-        if key in seen:
-            continue
-        seen.add(key)
-        deduped.append(fragment)
-    return deduped
 
 
-# This takes one requisite fragment and returns DB-ready condition rows because unit requisites are stored as unit or credit_points conditions with a separate requisite_type.
-def build_requisite_conditions(fragment_text, requisite_type):
-    text = re.sub(r"\s+", " ", str(fragment_text or "")).strip()
-    if not text:
-        return []
-
-    conditions = []
-    seen_units = set()
-    for raw_code in UNIT_CODE_RE.findall(text):
-        code = re.sub(r"[@#â€ *]+$", "", raw_code).strip().upper()
-        if not code or code in seen_units:
-            continue
-        seen_units.add(code)
-        conditions.append({
-            "type": "unit",
-            "unit_code": code,
-            "credit_points": None,
-            "requisite_type": requisite_type,
-        })
-
-    seen_cp = set()
-    for cp_match in re.finditer(r"(\d+(?:\.\d+)?)\s*(?:credit\s+points?|cp|cps)\b", text, re.IGNORECASE):
-        value = float(cp_match.group(1))
-        cp_value = int(value) if value.is_integer() else value
-        if cp_value in seen_cp:
-            continue
-        seen_cp.add(cp_value)
-        conditions.append({
-            "type": "credit_points",
-            "unit_code": None,
-            "credit_points": cp_value,
-            "requisite_type": None,
-        })
-
-    return conditions
-
-
-# This takes unit dict and returns unit_requisite_groups payload because the DB save layer needs schema-aligned requisite groups without changing planner JSON shape.
-def build_unit_requisite_payload(unit_like):
-    unit_code = str(unit_like.get("unit_code") or unit_like.get("code") or "").strip().upper()
-    fragments = split_requisite_fragments(unit_like.get("prerequisite"))
-    groups = []
-    for fragment in fragments:
-        conditions = build_requisite_conditions(fragment.get("text"), fragment.get("requisite_type"))
-        if conditions:
-            groups.append({
-                "unit_code": unit_code,
-                "raw_text": fragment.get("text"),
-                "requisite_type": fragment.get("requisite_type"),
-                "conditions": conditions,
-            })
-    return groups
-
-
-# This takes structured planner JSON and returns planner-template persistence payload because the save layer now needs course_type, duration_semesters, and unit requisites in the new schema shape.
+# This takes structured planner JSON and returns planner-template persistence metadata because requisite groups are intentionally deferred until the database save layer runs after user review.
 def build_planner_template_db_payload(data):
     ci = data.get("course_information", {}) if isinstance(data, dict) else {}
     requirements = ci.get("requirements", {}) if isinstance(ci, dict) else {}
@@ -362,8 +258,6 @@ def build_planner_template_db_payload(data):
         },
         "unit_requisite_groups": [],
     }
-    for unit in _iter_all_units(data):
-        payload["unit_requisite_groups"].extend(build_unit_requisite_payload(unit))
     return payload
 
 
