@@ -1,21 +1,8 @@
-import { NextResponse } from "next/server";
-import * as unitRepository from "../../../../core/db/repositories/unitRepository";
-
-export async function GET() {
-  try {
-    const units = await unitRepository.getAllUnits();
-    return NextResponse.json(units, { status: 200 });
-  } catch {
-    return NextResponse.json({ error: "Failed to fetch units" }, { status: 500 });
-  }
-}
+import { NextResponse } from 'next/server';
+import { upsertUnits } from '../../../../core/db/repositories/unitRepository';
 
 export async function POST(req: Request) {
-  try {
-    const body = await req.json();
-    const newUnit = await unitRepository.createUnit(body);
-    return NextResponse.json(newUnit, { status: 201 });
-  } catch {
-    return NextResponse.json({ error: "Server error creating unit" }, { status: 500 });
-  }
+  const { units } = await req.json();
+  await upsertUnits(units);
+  return NextResponse.json({ success: true });
 }

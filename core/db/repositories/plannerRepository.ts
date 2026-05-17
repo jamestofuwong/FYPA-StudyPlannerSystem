@@ -503,14 +503,27 @@ export async function savePlannerFromImport(planner: PlannerImportPlanner) {
       // Insert new requisites
       const groups = parseRequisiteString(prereqString);
       for (const group of groups) {
+
+        // Create prerequisite group (OR logic)
         const g = await tx.unitRequisiteGroup.create({ data: { unit_id: targetUnit.id } });
+        
+        // Create conditions within group (AND logic)
         for (const cond of group.conditions) {
+          
+          // Skip unit-type conditions referencing unknown unit codes
+          if (cond.type === 'unit' && cond.unit_code) {
+            if (!unitByCode.has(cond.unit_code)) {
+              continue;
+            }
+          }
+
           await tx.unitRequisiteCondition.create({
             data: {
               group_id: g.id,
               type: cond.type,
               unit_id: cond.type === 'unit' && cond.unit_code
-                ? unitByCode.get(cond.unit_code)?.id ?? null : null,
+                ? unitByCode.get(cond.unit_code)?.id ?? null
+                : null,
               credit_points: cond.type === 'credit_points' ? cond.credit_points ?? null : null,
               requisite_type: cond.requisite_type ?? null,
             },

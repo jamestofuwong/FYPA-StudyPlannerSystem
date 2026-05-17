@@ -112,6 +112,12 @@ function flattenUnits(planner: PlannerImportPlanner | null): PlannerImportUnit[]
   ];
 }
 
+// Helper: extract unit codes
+function extractReqUnitCodes(prereq: string): string[] {
+  const matches = prereq.match(/[A-Z]{2,4}\d{4,5}/g);
+  return matches || [];
+}
+
 type OllamaStatus = {
   ollama: 'unknown' | 'available' | 'unavailable';
   model: 'unknown' | 'ready' | 'pulling' | 'unavailable';
@@ -124,6 +130,9 @@ export default function ImportPage() {
   const { showToast } = useToast();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const splitScreenRef = useRef<HTMLDivElement | null>(null);
+
+  const unitCounterRef = useRef(0);
+  const isProcessingReq = useRef(false);
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
@@ -142,7 +151,8 @@ export default function ImportPage() {
     wil: { count: null as number | null, cp: null as number | null },
   });
   const [editableUnits, setEditableUnits] = useState<PlannerImportUnit[]>([]);
-  const unitCounterRef = useRef(0);
+  const [missingReqUnits, setMissingReqUnits] = useState<{ code: string; name: string }[]>([]);
+  const [showReqModal, setShowReqModal] = useState(false);
   
   const [report, setReport] = useState<PlannerImportReport | null>(null);
   const [history, setHistory] = useState<ImportHistoryItem[]>([]);
@@ -527,8 +537,60 @@ export default function ImportPage() {
     showToast('Import session cleared.', 'info');
   };
 
-  const handleSaveToDatabase = async () => {
+  const handleSaveToDatabase = async (skipCheck = false) => {
     if (!planner) return;
+
+    // Only run the check if not skipped
+    if (!skipCheck) {
+      const allKnownCodes = new Set(editableUnits.map(u => u.unit_code).filter(Boolean));
+      const potentialUnknowns = new Set<string>();
+
+      // Scan main units' prerequisites
+      editableUnits.forEach(unit => {
+        if (unit.prerequisite) {
+          const codes = extractReqUnitCodes(unit.prerequisite);
+          codes.forEach(code => {
+            if (!allKnownCodes.has(code)) potentialUnknowns.add(code);
+          });
+        }
+      });
+
+      // Scan minor units' prerequisites
+      minorUnits.forEach(unit => {
+        if (unit.prerequisite) {
+          const codes = extractReqUnitCodes(unit.prerequisite);
+          codes.forEach(code => {
+            if (!allKnownCodes.has(code)) potentialUnknowns.add(code);
+          });
+        }
+      });
+
+      // Verify against database
+      let unknownCodes = new Set<string>();
+      if (potentialUnknowns.size > 0 && !isProcessingReq.current) {
+        try {
+          const res = await fetch('/api/units/check', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ codes: Array.from(potentialUnknowns) }),
+          });
+          const { existingCodes } = await res.json();
+          unknownCodes = new Set(
+            Array.from(potentialUnknowns).filter(code => !existingCodes.includes(code))
+          );
+        } catch {
+          unknownCodes = potentialUnknowns;
+        }
+      }
+
+      // Show modal if truly unknown codes found
+      if (unknownCodes.size > 0) {
+        setMissingReqUnits(Array.from(unknownCodes).map(code => ({ code, name: '' })));
+        setShowReqModal(true);
+        isProcessingReq.current = true;
+        return;
+      }
+    }
 
     setIsParsing(true);
     try {
@@ -617,6 +679,42 @@ export default function ImportPage() {
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Save failed', 'error');
     } finally {
+      setIsParsing(false);
+    }
+  };
+
+  const handleReqModalConfirm = () => {
+    const newUnits = missingReqUnits
+      .filter(u => u.name.trim())
+      .map(u => ({
+        unit_code: u.code,
+        unit_name: u.name.trim(),
+      }));
+    
+    setShowReqModal(false);
+    isProcessingReq.current = false;
+    
+    if (newUnits.length > 0) {
+      // Send new units to be created in the catalogue only, then save planner
+      saveWithNewReqUnits(newUnits);
+    } else {
+      handleSaveToDatabase(true);
+    }
+  };
+
+  const saveWithNewReqUnits = async (newReqUnits: { unit_code: string; unit_name: string }[]) => {
+    try {
+      // Create the new units in the catalogue
+      await fetch('/api/units', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ units: newReqUnits }),
+      });
+      
+      // Then save the planner normally
+      await handleSaveToDatabase(true);
+    } catch (error) {
+      showToast('Failed to save new units', 'error');
       setIsParsing(false);
     }
   };
@@ -730,7 +828,7 @@ export default function ImportPage() {
               </button>
               <button
                 className={styles.btnSuccess}
-                onClick={handleSaveToDatabase}
+                onClick={() => handleSaveToDatabase()}
                 disabled={isParsing || !planner}
               >
                 {isParsing && planner ? 'Saving...' : 'Confirm & Save'}
@@ -921,6 +1019,48 @@ export default function ImportPage() {
           )}
         </div>
       </div>
+
+
+      {/* Missing Requisite Units Modal */}
+      {showReqModal && (
+        <div 
+          className={styles.reqModalOverlay}
+          onClick={() => { setShowReqModal(false); isProcessingReq.current = false; }}
+        >
+          <div className={styles.reqModal} onClick={(e) => e.stopPropagation()}>
+            <h3 className={styles.reqModalTitle}>New Requisite Units Detected</h3>
+            <p className={styles.reqModalDesc}>
+              These unit codes are referenced in requisites but don't exist yet. Please provide names.
+            </p>
+
+            {missingReqUnits.map((unit, i) => (
+              <div key={unit.code} className={styles.reqModalRow}>
+                <code className={styles.reqModalCode}>{unit.code}</code>
+                <input
+                  type="text"
+                  placeholder="Enter unit name..."
+                  className={styles.reqModalInput}
+                  value={unit.name}
+                  onChange={(e) => {
+                    const newList = [...missingReqUnits];
+                    newList[i] = { ...newList[i], name: e.target.value };
+                    setMissingReqUnits(newList);
+                  }}
+                />
+              </div>
+            ))}
+
+            <div className={styles.reqModalActions}>
+              <button className={styles.reqModalBtnBack} onClick={() => { setShowReqModal(false); isProcessingReq.current = false; }}>
+                Back
+              </button>
+              <button className={styles.reqModalBtnSave} onClick={handleReqModalConfirm}>
+                Save & Continue
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -806,3 +806,97 @@
   font-size: 12px;
   color: var(--text-muted);
 }
+
+/* ===== Requisite Modal ===== */
+.reqModalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  backdrop-filter: blur(2px);
+}
+
+.reqModal {
+  background: var(--surface-card, #1e1e1e);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 12px;
+  padding: 24px 28px;
+  max-width: 520px;
+  width: 90%;
+  max-height: 80vh;
+  overflow: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+}
+
+.reqModalTitle {
+  margin: 0 0 8px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary, #fff);
+}
+
+.reqModalDesc {
+  margin: 0 0 16px;
+  font-size: 12px;
+  color: var(--text-muted, #aaa);
+}
+
+.reqModalRow {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.reqModalCode {
+  font-family: var(--font-mono);
+  background: var(--surface-bg, #252525);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--accent-orange);
+  min-width: 90px;
+  text-align: center;
+}
+
+.reqModalInput {
+  flex: 1;
+  background: var(--surface-bg, #252525);
+  border: 1px solid var(--panel-border, #444);
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--text-primary, #fff);
+  outline: none;
+}
+
+.reqModalActions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
+.reqModalBtnBack {
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: 1px solid var(--panel-border, #444);
+  background: transparent;
+  color: var(--text-secondary, #aaa);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.reqModalBtnSave {
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: none;
+  background: var(--accent-blue, #569cd6);
+  color: white;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+}
