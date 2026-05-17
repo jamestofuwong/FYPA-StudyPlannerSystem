@@ -21,3 +21,39 @@ export async function upsertUnits(units: { unit_code: string; unit_name: string 
     )
   );
 }
+
+export async function getAllUnits() {
+  return await prisma.unit.findMany();
+}
+
+export async function getUnitById(id: string) {
+  return await prisma.unit.findUnique({
+    where: { id },
+    include: {
+      requisite_groups: {
+        include: {
+          conditions: true
+        }
+      }
+    }
+  });
+}
+
+export async function createUnit(data: any) {
+  return await prisma.unit.create({
+    data
+  });
+}
+
+export async function updateUnit(id: string, data: any) {
+  return await prisma.unit.update({
+    where: { id },
+    data
+  });
+}
+
+export async function deleteUnit(id: string) {
+  return await prisma.unit.delete({
+    where: { id }
+  });
+}
