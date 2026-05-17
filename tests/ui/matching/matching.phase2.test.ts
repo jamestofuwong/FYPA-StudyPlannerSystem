@@ -164,6 +164,29 @@ describe("Matching Engine Phase 2 & 3 (Jest)", () => {
       const [result] = scorePlanners(edgeProfile, [edgePlanner], DEFAULT_CONFIG);
       expect(result.matchPct).toBe(100);
     });
+
+    test("missingPrescribed reflects perCategory matched/slots correctly across multiple categories", () => {
+      // CAT-A: 3 units in pool, 2 slots - student completes 1 -> 1 unfilled
+      // CAT-B: 2 units in pool, 2 slots - student completes both -> 0 unfilled
+      const planner = makePlanner({
+        prescribedElectiveCategories: [
+          { categoryCode: "CAT-A", pool: new Set(["PA1", "PA2", "PA3"]), slots: 2 },
+          { categoryCode: "CAT-B", pool: new Set(["PB1", "PB2"]),        slots: 2 },
+        ],
+      });
+
+      const profile = makeProfile({
+        completedPrescribed: new Set(["PA1", "PB1", "PB2"]),
+      });
+
+      const [result] = scorePlanners(profile, [planner], DEFAULT_CONFIG);
+
+      const catA = result.missingPrescribed.find((c) => c.categoryCode === "CAT-A");
+      const catB = result.missingPrescribed.find((c) => c.categoryCode === "CAT-B");
+
+      expect(catA?.unfilledSlots).toBe(1); // 1 matched of 2 slots
+      expect(catB?.unfilledSlots).toBe(0); // 2 matched of 2 slots
+    });
   });
 
   // --- MM-07: Sorting & Detection (Original teammate tests) --------------------------------

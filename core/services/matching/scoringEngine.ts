@@ -108,16 +108,10 @@ function scoreSinglePlanner(
     (code) => !profile.completedMajorCore.has(code)
   );
 
-  const missingPrescribed = planner.prescribedElectiveCategories.map((cat) => {
-    const matched = Math.min(
-      [...profile.completedPrescribed].filter((c) => cat.pool.has(c)).length,
-      cat.slots
-    );
-    return {
-      categoryCode: cat.categoryCode,
-      unfilledSlots: Math.max(0, cat.slots - matched),
-    };
-  });
+  const missingPrescribed = prescribedResult.perCategory.map(({ categoryCode, matched, slots }) => ({
+    categoryCode,
+    unfilledSlots: Math.max(0, slots - matched),
+  }));
 
   // Missing free slots uses the adjusted denominator
   const missingFreeSlots = Math.max(0, freeElectiveSlotsAdj - freeResult.matched);
@@ -155,6 +149,12 @@ interface ScoreResult {
   matched: number;
 }
 
+interface PrescribedCategoryResult {
+  categoryCode: string;
+  matched: number;
+  slots: number;
+}
+
 /** 3a – Core score [weight: 0.40] */
 function scoreCore(completedCore: Set<string>, requiredCore: string[]): ScoreResult {
   if (requiredCore.length === 0) {
@@ -184,31 +184,37 @@ function scoreMajorCore(completedMajorCore: Set<string>, requiredMajorCore: Set<
 function scorePrescribed(
   completedPrescribed: Set<string>,
   categories: PlannerTemplate["prescribedElectiveCategories"]
-): ScoreResult & { possible: number } {
+): ScoreResult & { possible: number; perCategory: PrescribedCategoryResult[] } {
   if (categories.length === 0) {
-    return { score: 1.0, matched: 0, possible: 0 };
+    return { score: 1.0, matched: 0, possible: 0, perCategory: [] };
   }
 
   let totalMatched = 0;
   let totalPossible = 0;
+  const perCategory: PrescribedCategoryResult[] = [];
 
   for (const cat of categories) {
-    const matchedInCat = [...completedPrescribed].filter((c) =>
-      cat.pool.has(c)
-    ).length;
-    totalMatched += Math.min(matchedInCat, cat.slots);
+    // Iterate pool (bounded by planner design) and check completedPrescribed O(1) per unit.
+    // Avoids spreading the student's full completedPrescribed set once per category.
+    const matchedInCat = Math.min(
+      [...cat.pool].filter((c) => completedPrescribed.has(c)).length,
+      cat.slots
+    );
+    totalMatched += matchedInCat;
     totalPossible += cat.slots;
+    perCategory.push({ categoryCode: cat.categoryCode, matched: matchedInCat, slots: cat.slots });
   }
 
   // All categories have 0 slots -> treat same as no prescribed electives.
   if (totalPossible === 0) {
-    return { score: 1.0, matched: 0, possible: 0 };
+    return { score: 1.0, matched: 0, possible: 0, perCategory };
   }
 
   return {
     score: totalMatched / totalPossible,
     matched: totalMatched,
     possible: totalPossible,
+    perCategory,
   };
 }
 
@@ -226,7 +232,8 @@ function scoreFreeElectives(
   if (slotsRequired === 0) {
     return { score: 1.0, matched: 0 };
   }
-  const inPool = [...completedFreeElectives].filter((c) => freeElectivePool.has(c)).length;
+  // Iterate pool (bounded by planner) and check completedFreeElectives O(1) per unit.
+  const inPool = [...freeElectivePool].filter((c) => completedFreeElectives.has(c)).length;
   const matched = Math.min(inPool, slotsRequired);
   return { score: matched / slotsRequired, matched };
 }
