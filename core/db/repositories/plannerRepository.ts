@@ -255,7 +255,7 @@ export async function savePlannerFromImport(planner: PlannerImportPlanner) {
 
 
     // ===================================================================================================
-    // Section 5: Normaalise Unit Codes & Upsert Into Global Catelogue
+    // Section 5: Normalise Unit Codes & Upsert Into Global Catelogue
     // ===================================================================================================
     const poolUnitsNormalised = electivePoolUnits
       .map((u) => ({ ...u, normCode: normaliseImportedUnitCode(u.unit_code) }))
@@ -274,17 +274,53 @@ export async function savePlannerFromImport(planner: PlannerImportPlanner) {
       ]),
     ];
 
-    // Batch upsert all units into the global catelogue
+    const currentYear = course_information.intake_year ?? 0;
+
+    // Batch upsert all units into the global catalogue
     const upsertedUnits = await Promise.all(
-      uniqueCodes.map((code) => {
+      uniqueCodes.map(async (code) => {
         const match =
           poolUnitsNormalised.find((u) => u.normCode === code) ||
           allUnitsNormalised.find((u) => u.normCode === code);
         const safeName = (match?.unit_name || 'Unknown Unit').substring(0, 255);
-        return tx.unit.upsert({
-          where: { unit_code: code },
-          update: { unit_name: safeName },
-          create: { unit_code: code, unit_name: safeName },
+
+        // Check if unit already exists
+        const existingUnit = await tx.unit.findUnique({ where: { unit_code: code } });
+
+        if (existingUnit) {
+          // Find the latest planner that references this unit (by year then month)
+          const latestPlannerWithUnit = await tx.plannerTemplate.findFirst({
+            where: {
+              units: { some: { unit_id: existingUnit.id } },
+            },
+            orderBy: [
+              { intake_year: 'desc' },
+              { intake_month: 'desc' },
+            ],
+            select: { intake_year: true, intake_month: true },
+          });
+
+          const latestYear = latestPlannerWithUnit?.intake_year ?? 0;
+          const latestMonth = latestPlannerWithUnit?.intake_month ?? 0;
+          const currentMonth = intakeMonth ?? 0;
+
+          // Only update if current import is newer or same
+          const isNewer = currentYear > latestYear || 
+            (currentYear === latestYear && currentMonth >= latestMonth);
+
+          if (isNewer) {
+            return tx.unit.update({
+              where: { unit_code: code },
+              data: { unit_name: safeName },
+            });
+          }
+
+          return existingUnit;
+        }
+
+        // Create new unit
+        return tx.unit.create({
+          data: { unit_code: code, unit_name: safeName },
         });
       })
     );
@@ -377,13 +413,59 @@ export async function savePlannerFromImport(planner: PlannerImportPlanner) {
     // ===================================================================================================
     // Section 9: Insert Requisites
     // ===================================================================================================
+    // Build lookup: unit -> latest planner year/month
+    const allUnitIds = [...unitByCode.values()].map(u => u.id);
+
+    const latestPlannerLookup = new Map<string, { year: number; month: number }>();
+
+    // Get the latest planner year/month for all units at once
+    const latestTemplateUnits = await tx.templateUnit.findMany({
+      where: { 
+        unit_id: { in: allUnitIds, not: null },
+      },
+      select: {
+        unit_id: true,
+        template: { select: { intake_year: true, intake_month: true } },
+      },
+      orderBy: [
+        { template: { intake_year: 'desc' } },
+        { template: { intake_month: 'desc' } },
+      ],
+    });
+
+    // Build lookup (keep only the latest per unit)
+    for (const tu of latestTemplateUnits) {
+      if (tu.unit_id && !latestPlannerLookup.has(tu.unit_id)) {
+        latestPlannerLookup.set(tu.unit_id, {
+          year: tu.template.intake_year,
+          month: tu.template.intake_month ?? 0,
+        });
+      }
+    }
+
+    // Batch check which units have existing requisites
+    const existingRequisiteUnits = await tx.unitRequisiteGroup.findMany({
+      where: { unit_id: { in: allUnitIds } },
+      select: { unit_id: true },
+    });
+    const unitsWithRequisites = new Set(existingRequisiteUnits.map(r => r.unit_id));
+
+    // Helper: Check new import
+    function isNewerImport(unitId: string): boolean {
+      const latest = latestPlannerLookup.get(unitId);
+      if (!latest) return true; // No existing planner, safe to insert
+      const currentMonth = intakeMonth ?? 0;
+      return currentYear > latest.year || 
+        (currentYear === latest.year && currentMonth >= latest.month);
+    }
+
     // Combine placed units and pool units
     const allUnitsForRequisites = [
       ...allUnitsNormalised.filter(u => u.normCode),
       ...poolUnitsNormalised,
     ];
 
-    // Fetch existing units that are referenced in requisites but not in this import
+    // Fetch referenced prerequisite units
     const allRequisiteCodes = allUnitsForRequisites
       .flatMap(u => {
         const str = (u as any).prerequisite;
@@ -396,45 +478,42 @@ export async function savePlannerFromImport(planner: PlannerImportPlanner) {
     const existingUnits = await tx.unit.findMany({
       where: { unit_code: { in: allRequisiteCodes } },
     });
-
-    // Add found units to the lookup map
     for (const eu of existingUnits) {
-      if (!unitByCode.has(eu.unit_code)) {
-        unitByCode.set(eu.unit_code, eu);
-      }
+      if (!unitByCode.has(eu.unit_code)) unitByCode.set(eu.unit_code, eu);
     }
 
-    // Process each unit's prerequisite string
+    // Process units with prerequisites
     for (const unit of allUnitsForRequisites) {
       const prereqString = (unit as any).prerequisite;
-      if (!prereqString || prereqString.trim() === '') continue;
-
       const targetUnit = unitByCode.get(unit.normCode!);
       if (!targetUnit) continue;
 
-      // Skip if this unit already has requisites
-      const existingGroups = await tx.unitRequisiteGroup.count({
-        where: { unit_id: targetUnit.id },
-      });
-      if (existingGroups > 0) continue;
+      // Skip if older
+      if (!isNewerImport(targetUnit.id)) continue;
 
-      // Parse the string into structured groups and conditions
-      const groups = parseRequisiteString(prereqString);
-
-      // Insert groups (OR) and conditions (AND)
-      for (const group of groups) {
-        const g = await tx.unitRequisiteGroup.create({
-          data: { unit_id: targetUnit.id },
+      // Delete old requisites if they exist
+      if (unitsWithRequisites.has(targetUnit.id)) {
+        await tx.unitRequisiteCondition.deleteMany({
+          where: { group: { unit_id: targetUnit.id } },
         });
+        await tx.unitRequisiteGroup.deleteMany({
+          where: { unit_id: targetUnit.id },
+        });
+      }
 
+      if (!prereqString || prereqString.trim() === '') continue;
+
+      // Insert new requisites
+      const groups = parseRequisiteString(prereqString);
+      for (const group of groups) {
+        const g = await tx.unitRequisiteGroup.create({ data: { unit_id: targetUnit.id } });
         for (const cond of group.conditions) {
           await tx.unitRequisiteCondition.create({
             data: {
               group_id: g.id,
               type: cond.type,
               unit_id: cond.type === 'unit' && cond.unit_code
-                ? unitByCode.get(cond.unit_code)?.id ?? null
-                : null,
+                ? unitByCode.get(cond.unit_code)?.id ?? null : null,
               credit_points: cond.type === 'credit_points' ? cond.credit_points ?? null : null,
               requisite_type: cond.requisite_type ?? null,
             },
@@ -442,15 +521,53 @@ export async function savePlannerFromImport(planner: PlannerImportPlanner) {
         }
       }
     }
-    
+
+    // Clean up requisites for units without prerequisites
+    const allUnitCodes = [
+      ...allUnitsNormalised.filter(u => u.normCode).map(u => u.normCode!),
+      ...poolUnitsNormalised.map(u => u.normCode!),
+    ];
+
+    for (const code of allUnitCodes) {
+      const targetUnit = unitByCode.get(code);
+      if (!targetUnit) continue;
+
+      const hasPrereqInImport = allUnitsForRequisites.some(
+        u => u.normCode === code && (u as any).prerequisite?.trim()
+      );
+      if (hasPrereqInImport) continue;
+
+      if (!unitsWithRequisites.has(targetUnit.id)) continue;
+      if (!isNewerImport(targetUnit.id)) continue;
+
+      await tx.unitRequisiteCondition.deleteMany({
+        where: { group: { unit_id: targetUnit.id } },
+      });
+      await tx.unitRequisiteGroup.deleteMany({
+        where: { unit_id: targetUnit.id },
+      });
+    }
     return newPlanner;
   });
 }
 
+
+// ===================================================================================================
+// Helper Function
+// ===================================================================================================
 function parseIntakeMonth(intake: string): number | null {
   const lower = intake?.toLowerCase().trim() || '';
   if (!lower) return null;
 
+  // Handle semester format: "Semester 1", "Semester 2"
+  const semMatch = lower.match(/semester\s*(\d)/i);
+  if (semMatch) {
+    const sem = parseInt(semMatch[1]);
+    // Semester 1 = Feb/Mar intake, Semester 2 = Aug/Sep intake
+    return sem === 1 ? 2 : sem === 2 ? 8 : null;
+  }
+
+  // Handle month format: "Feb/Mar", "September"
   const firstMonth = lower.split('/')[0].trim();
   const months: Record<string, number> = {
     january: 1, jan: 1,
