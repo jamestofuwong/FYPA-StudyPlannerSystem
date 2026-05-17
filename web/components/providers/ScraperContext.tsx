@@ -200,6 +200,7 @@ export function ScraperProvider({ children }: { children: ReactNode }) {
   // Detect runtime
   useEffect(() => {
     const w = globalThis as any;
+    setRuntime(w?.native?.versions?.electron ? 'electron' : 'web');
     
     // Guard clause for setup
     if (w?.native?.ipcRenderer) {
