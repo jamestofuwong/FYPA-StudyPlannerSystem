@@ -27,10 +27,20 @@ export function parseRequisiteString(input: string | null): ParsedGroup[] {
         .replace(/PRE-REQUISITES|PRE-REQUISITE|PRE-REQ/g, 'prerequisite')
         .replace(/CREDIT\s+POINTS?/g, 'cp') 
         .replace(/CREDIT\s+POINT?/g, 'cp') 
-        .replace(/:/g, '')  
+        .replace(/:/g, '')
+        .replace(/[()]/g, '') 
         .replace(/\s+OR\s+/g, ' / ')
         .replace(/\s+AND\s+/g, ' & ')
         .replace(/\n/g, ' ');
+
+    // Skip "Nil" or "NIL"
+    if (normalized === 'NIL' || normalized.startsWith('NIL ')) {
+        // But check if there's more after "Nil" 
+        const afterNil = normalized.replace(/^NIL\s*/i, '').trim();
+        if (!afterNil) return [];
+        // Parse the rest
+        return parseRequisiteString(afterNil);
+    }
 
     const groups: ParsedGroup[] = [];
 
