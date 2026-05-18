@@ -9,7 +9,9 @@ model PortalPlannerEntry {
   unit_code           String
   course_name         String
   intake_month        String   @default("")
+  major_name          String   @default("")
   program_level       String?
+  status              String   @default("draft")
   pdf_url             String
   last_updated        String?
   last_updated_iso    String?
@@ -22,20 +24,23 @@ model PortalPlannerEntry {
 }
 
 model SyncRun {
-  id                 String    @id @default(uuid())
-  triggered_at       DateTime  @default(now())
-  completed_at       DateTime?
-  status             String    @default("running")
-  action             String    @default("check")
-  trigger_source     String    @default("manual")
-  planners_scanned   Int       @default(0)
-  planners_new       Int       @default(0)
-  planners_updated   Int       @default(0)
-  planners_unchanged Int       @default(0)
-  planners_failed    Int       @default(0)
-  duration_ms        Int?
-  error_message      String?
-  logs               String[]
+  id                    String    @id @default(uuid())
+  triggered_at          DateTime  @default(now())
+  completed_at          DateTime?
+  status                String    @default("running")
+  action                String    @default("check")
+  trigger_source        String    @default("manual")
+  planners_scanned      Int       @default(0)
+  planners_new          Int       @default(0)
+  planners_updated      Int       @default(0)
+  planners_unchanged    Int       @default(0)
+  planners_db_saved     Int       @default(0)
+  planners_db_failed    Int       @default(0)
+  planners_parse_ok     Int       @default(0)
+  planners_parse_failed Int       @default(0)
+  duration_ms           Int?
+  error_message         String?
+  logs                  String[]
 
   @@map("sync_runs")
 }

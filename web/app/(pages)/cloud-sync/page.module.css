@@ -1,0 +1,323 @@
+.panel {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+  background: var(--main-bg);
+  height: 100%;
+}
+
+/* ── Header ────────────────────────────────────── */
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.headerLeft h1 {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 4px;
+}
+
+.headerLeft p {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.connectionBadge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--card-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 4px;
+  padding: 5px 10px;
+  flex-shrink: 0;
+  font-family: monospace;
+}
+
+.connectionDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ── Section title ─────────────────────────────── */
+.sectionTitle {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sectionTitle::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--panel-border);
+}
+
+/* ── Toolbar ───────────────────────────────────── */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.toolbarLeft {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.searchInput {
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--panel-border);
+  border-radius: 3px;
+  background: var(--card-bg);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: var(--font-sans);
+  width: 220px;
+}
+.searchInput:focus {
+  outline: none;
+  border-color: var(--active-highlight);
+}
+
+.filterBtn {
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--panel-border);
+  border-radius: 3px;
+  background: var(--card-bg);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  transition: border-color 0.15s, color 0.15s;
+}
+.filterBtn:hover,
+.filterBtnActive {
+  border-color: var(--active-highlight);
+  color: var(--text-primary);
+}
+
+.pullBtn {
+  height: 28px;
+  padding: 0 14px;
+  background: var(--accent-blue, #2563EB);
+  color: #fff;
+  border: none;
+  border-radius: 3px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: opacity 0.15s;
+  flex-shrink: 0;
+}
+.pullBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.refreshBtn {
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--panel-border);
+  border-radius: 3px;
+  background: var(--card-bg);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.refreshBtn:hover { border-color: var(--active-highlight); }
+
+/* ── Year group ────────────────────────────────── */
+.yearGroup {
+  margin-bottom: 14px;
+}
+
+.yearLabel {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+  padding-left: 2px;
+}
+
+/* ── Planner row ───────────────────────────────── */
+.plannerRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  background: var(--card-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 3px;
+  margin-bottom: 4px;
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
+}
+.plannerRow:hover {
+  border-color: var(--active-highlight);
+  background: var(--active-bg);
+}
+.plannerRowSelected {
+  border-color: var(--active-highlight);
+  background: var(--active-bg);
+}
+.plannerRowDisabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.plannerRowDisabled:hover {
+  border-color: var(--panel-border);
+  background: var(--card-bg);
+}
+
+.rowCheckbox {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+  accent-color: var(--accent-blue, #2563EB);
+}
+
+.rowInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.rowTitle {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rowMeta {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.metaDot {
+  color: var(--panel-border);
+}
+
+/* ── Pills ─────────────────────────────────────── */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 20px;
+  flex-shrink: 0;
+}
+
+.pillParsed   { background: var(--green-tint, #dcfce7); color: var(--accent-green, #16a34a); }
+.pillUnparsed { background: var(--surface-bg);          color: var(--text-muted); }
+.pillImported { background: var(--surface-bg);          color: var(--text-muted); }
+.pillAvailable{ background: var(--blue-tint, #dbeafe);  color: var(--accent-blue, #2563EB); }
+.pillPulled   { background: var(--green-tint, #dcfce7); color: var(--accent-green, #16a34a); }
+.pillDuplicate{ background: var(--surface-bg);          color: var(--text-muted); }
+.pillFailed   { background: var(--red-tint, #fee2e2);   color: var(--accent-red, #dc2626); }
+
+/* ── State messages ────────────────────────────── */
+.stateBox {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  background: var(--card-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 4px;
+  text-align: center;
+  gap: 8px;
+}
+
+.stateIcon {
+  font-size: 28px;
+  margin-bottom: 4px;
+}
+
+.stateTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.stateDesc {
+  font-size: 12px;
+  color: var(--text-muted);
+  max-width: 380px;
+}
+
+.stateCode {
+  font-size: 11px;
+  font-family: monospace;
+  color: var(--text-muted);
+  background: var(--surface-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 3px;
+  padding: 4px 10px;
+  margin-top: 4px;
+}
+
+/* ── Pull results banner ───────────────────────── */
+.resultsBanner {
+  background: var(--card-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 4px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+}
+
+.resultsSummary {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 12px;
+}
+
+.resultStat {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.resultStatVal {
+  font-weight: 700;
+  font-size: 14px;
+}

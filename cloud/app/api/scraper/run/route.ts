@@ -32,6 +32,26 @@ import { db } from '../../../../lib/db';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+// Maps the portal's programLevel string to the course_type stored in the DB.
+function programLevelToCourseType(programLevel: string | null | undefined): string {
+  const level = (programLevel ?? '').toLowerCase();
+  if (level.includes('postgraduate') || level.includes('master')) return 'postgraduate';
+  if (level.includes('foundation')) return 'foundation';
+  if (level.includes('diploma')) return 'diploma';
+  return 'bachelor';
+}
+
+// Sensible semester-count defaults when the PDF parser cannot extract duration.
+function defaultDuration(courseType: string): number {
+  const map: Record<string, number> = {
+    foundation: 2,
+    diploma: 4,
+    bachelor: 6,
+    postgraduate: 4,
+  };
+  return map[courseType] ?? 6;
+}
+
 // ---------------------------------------------------------------------------
 // Internal result shape — normalised from both real and simulated runs
 // ---------------------------------------------------------------------------
@@ -67,6 +87,8 @@ function sseChunk(event: SseEvent): Uint8Array {
 export async function POST(req: NextRequest) {
   const action = new URL(req.url).searchParams.get('action') ?? 'check';
   const simulate = process.env.SCRAPER_SIMULATE === 'true';
+  const body = await req.json().catch(() => ({}));
+  const selectedEntries: PlannerIndexEntry[] | null = body.selectedEntries ?? null;
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -124,7 +146,16 @@ export async function POST(req: NextRequest) {
       try {
         let result: RunResult;
 
-        if (simulate) {
+        // For selective sync: skip re-scraping, use the entries passed from the frontend
+        if (action === 'sync' && selectedEntries && selectedEntries.length > 0) {
+          sendLog([`→ Selective sync: ${selectedEntries.length} planner(s) chosen by user`]);
+          result = {
+            totalScraped: selectedEntries.length,
+            diff: { newEntries: selectedEntries, updatedEntries: [], unchangedEntries: [] },
+            unchangedCount: 0,
+            failedCount: 0,
+          };
+        } else if (simulate) {
           result = await runSimulation(action, send, sendLog);
         } else {
           result = await runReal(action, storedRecords, callbacks);
@@ -137,9 +168,12 @@ export async function POST(req: NextRequest) {
         // -----------------------------------------------------------------------
         // Upsert portal planner entry metadata — only on sync, not check.
         // -----------------------------------------------------------------------
+        let dbSaved = 0;
+        let dbFailed = 0;
+
         if (toUpsert.length > 0) {
-          try {
-            for (const entry of toUpsert) {
+          for (const entry of toUpsert) {
+            try {
               await db.portalPlannerEntry.upsert({
                 where: {
                   unit_code_year_intake_month: {
@@ -153,6 +187,7 @@ export async function POST(req: NextRequest) {
                   unit_code: entry.unitCode,
                   course_name: entry.courseName,
                   intake_month: entry.intakeMonth ?? '',
+                  major_name: entry.majorName ?? '',
                   program_level: entry.programLevel ?? null,
                   pdf_url: entry.pdfUrl,
                   last_updated: entry.lastUpdated ?? null,
@@ -160,15 +195,20 @@ export async function POST(req: NextRequest) {
                 },
                 update: {
                   course_name: entry.courseName,
+                  intake_month: entry.intakeMonth ?? '',
+                  major_name: entry.majorName ?? '',
                   program_level: entry.programLevel ?? null,
                   pdf_url: entry.pdfUrl,
                   last_updated: entry.lastUpdated ?? null,
                   last_updated_iso: entry.lastUpdatedISO ?? null,
                 },
               });
+              dbSaved++;
+            } catch (dbErr) {
+              console.error('[scraper/run] Failed to upsert entry:', entry.unitCode, dbErr);
+              sendLog([`  ✗ ${entry.unitCode}: failed to save portal entry to database`]);
+              dbFailed++;
             }
-          } catch (dbErr) {
-            console.error('[scraper/run] Failed to upsert PortalPlannerEntries:', dbErr);
           }
         }
 
@@ -176,7 +216,7 @@ export async function POST(req: NextRequest) {
         // PDF parsing — download + parse each PDF + save to PlannerTemplate tables.
         // Only on real sync (not check, not simulation).
         // -----------------------------------------------------------------------
-        let parsed = 0;
+        let parsedOk = 0;
         let parseFailed = 0;
 
         if (action === 'sync' && !simulate && toUpsert.length > 0) {
@@ -213,8 +253,26 @@ export async function POST(req: NextRequest) {
 
               const importResult = await parseRes.json() as import('@core/shared/types/plannerImport').PlannerImportResult;
 
+              // Enrich the parsed planner with authoritative metadata from the
+              // portal entry. The PDF parser may miss intake month, course type,
+              // and duration; the portal index always has them.
+              const courseType = programLevelToCourseType(entry.programLevel);
+              const enrichedPlanner = {
+                ...importResult.planner,
+                course_information: {
+                  ...importResult.planner.course_information,
+                  course_code: entry.unitCode,
+                  intake: entry.intakeMonth || importResult.planner.course_information.intake,
+                  intake_year: parseInt(entry.year, 10) || importResult.planner.course_information.intake_year,
+                  course_type: courseType,
+                  duration_semesters:
+                    importResult.planner.course_information.duration_semesters ||
+                    defaultDuration(courseType),
+                },
+              };
+
               // Persist the parsed planner structure to DB
-              const template = await savePlannerFromImport(importResult.planner);
+              const template = await savePlannerFromImport(enrichedPlanner);
 
               // Link the portal entry back to the parsed template
               await db.portalPlannerEntry.update({
@@ -229,7 +287,7 @@ export async function POST(req: NextRequest) {
               });
 
               sendLog([`  ✓ ${entry.unitCode}: parsed and saved`]);
-              parsed++;
+              parsedOk++;
             } catch (err: unknown) {
               const msg = err instanceof Error ? err.message : String(err);
               if (msg === 'DUPLICATE_PLANNER') {
@@ -243,7 +301,7 @@ export async function POST(req: NextRequest) {
           }
 
           send({ type: 'progress', current: toUpsert.length, total: toUpsert.length, description: 'Done' });
-          sendLog([`✓ PDF parsing complete — ${parsed} parsed, ${parseFailed} failed`]);
+          sendLog([`✓ PDF parsing complete — ${parsedOk} parsed, ${parseFailed} failed`]);
         }
 
         // -----------------------------------------------------------------------
@@ -254,14 +312,17 @@ export async function POST(req: NextRequest) {
             await db.syncRun.update({
               where: { id: runId },
               data: {
-                status: (result.errorMessage || parseFailed > 0) ? 'partial' : 'success',
+                status: (result.errorMessage || dbFailed > 0 || parseFailed > 0) ? 'partial' : 'success',
                 completed_at: new Date(),
                 duration_ms: Date.now() - startTime,
                 planners_scanned: result.totalScraped,
                 planners_new: result.diff.newEntries.length,
                 planners_updated: result.diff.updatedEntries.length,
                 planners_unchanged: result.unchangedCount,
-                planners_failed: result.failedCount + parseFailed,
+                planners_db_saved: dbSaved,
+                planners_db_failed: dbFailed,
+                planners_parse_ok: parsedOk,
+                planners_parse_failed: parseFailed,
                 error_message: result.errorMessage ?? null,
                 logs: allLogs,
               },
@@ -278,7 +339,9 @@ export async function POST(req: NextRequest) {
           data: {
             totalScraped: result.totalScraped,
             diff: result.diff,
-            parsed,
+            dbSaved,
+            dbFailed,
+            parsedOk,
             parseFailed,
           },
         });
@@ -358,13 +421,13 @@ async function runReal(
 const MOCK_NEW_ENTRIES: PlannerIndexEntry[] = [
   {
     year: '2025', unitCode: 'CT000-3-3', courseName: 'Bachelor of Computer Science (Hons)',
-    intakeMonth: 'March intake', programLevel: 'Undergraduate',
+    majorName: '', intakeMonth: 'March intake', programLevel: 'Undergraduate',
     pdfUrl: 'https://www.swinburne.edu.my/planners/ct000-2025-march.pdf',
     lastUpdated: '10 April 2025', lastUpdatedISO: '2025-04-10',
   },
   {
     year: '2025', unitCode: 'IT000-3-3', courseName: 'Bachelor of Information Technology (Hons)',
-    intakeMonth: 'July intake', programLevel: 'Undergraduate',
+    majorName: '', intakeMonth: 'July intake', programLevel: 'Undergraduate',
     pdfUrl: 'https://www.swinburne.edu.my/planners/it000-2025-july.pdf',
     lastUpdated: '10 April 2025', lastUpdatedISO: '2025-04-10',
   },
@@ -373,7 +436,7 @@ const MOCK_NEW_ENTRIES: PlannerIndexEntry[] = [
 const MOCK_UPDATED_ENTRIES: PlannerIndexEntry[] = [
   {
     year: '2024', unitCode: 'BM000-3-3', courseName: 'Bachelor of Business Management (Hons)',
-    intakeMonth: 'March intake', programLevel: 'Undergraduate',
+    majorName: '', intakeMonth: 'March intake', programLevel: 'Undergraduate',
     pdfUrl: 'https://www.swinburne.edu.my/planners/bm000-2024-march.pdf',
     lastUpdated: '2 April 2025', lastUpdatedISO: '2025-04-02',
   },

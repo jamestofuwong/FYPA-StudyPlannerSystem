@@ -9,12 +9,15 @@ interface PortalPlannerEntry {
   unit_code: string;
   course_name: string;
   intake_month: string;
+  major_name: string;
   program_level: string | null;
+  status: string;
   pdf_url: string;
   last_updated: string | null;
   last_updated_iso: string | null;
   first_seen_at: string;
   last_synced_at: string;
+  planner_template_id: string | null;
 }
 
 // year → programLevel → entries
@@ -39,10 +42,6 @@ function formatDate(iso: string) {
   });
 }
 
-/**
- * Fuzzy match: returns true if every character in `query` appears in `target`
- * in order (case-insensitive). Falls back to simple substring for short queries.
- */
 function fuzzyMatch(target: string, query: string): boolean {
   if (!query) return true;
   const t = target.toLowerCase();
@@ -59,13 +58,39 @@ function fuzzyMatch(target: string, query: string): boolean {
 
 function matchesSearch(entry: PortalPlannerEntry, query: string): boolean {
   if (!query.trim()) return true;
+  return fuzzyMatch(entry.course_name, query) || fuzzyMatch(entry.unit_code, query);
+}
+
+// ---------------------------------------------------------------------------
+// Status badge
+// ---------------------------------------------------------------------------
+
+const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
+  draft:    { label: 'Draft',    color: '#92400E', bg: '#FEF3C7' },
+  active:   { label: 'Active',   color: '#065F46', bg: '#D1FAE5' },
+  archived: { label: 'Archived', color: '#374151', bg: '#F3F4F6' },
+};
+
+function StatusBadge({ status }: { status: string }) {
+  const cfg = STATUS_CONFIG[status] ?? { label: status, color: '#6B7280', bg: '#F3F4F6' };
   return (
-    fuzzyMatch(entry.course_name, query) ||
-    fuzzyMatch(entry.unit_code, query)
+    <span style={{
+      fontSize: 10,
+      fontWeight: 700,
+      color: cfg.color,
+      background: cfg.bg,
+      padding: '2px 7px',
+      borderRadius: 20,
+      textTransform: 'uppercase',
+      letterSpacing: '0.05em',
+      whiteSpace: 'nowrap',
+    }}>
+      {cfg.label}
+    </span>
   );
 }
 
-const TABLE_HEADERS = ['Course', 'Unit Code', 'Intake', 'Last Updated', 'First Seen', ''];
+const TABLE_HEADERS = ['Course', 'Unit Code', 'Intake', 'Status', 'Last Updated', 'First Seen', ''];
 
 // ---------------------------------------------------------------------------
 // Sub-components
@@ -111,6 +136,77 @@ function FilterSelect({
 }
 
 // ---------------------------------------------------------------------------
+// Status tab bar
+// ---------------------------------------------------------------------------
+
+type StatusFilter = 'all' | 'draft' | 'active' | 'archived';
+
+function StatusTabs({
+  entries, value, onChange,
+}: {
+  entries: PortalPlannerEntry[];
+  value: StatusFilter;
+  onChange: (v: StatusFilter) => void;
+}) {
+  const counts = useMemo(() => ({
+    all:      entries.length,
+    draft:    entries.filter(e => e.status === 'draft').length,
+    active:   entries.filter(e => e.status === 'active').length,
+    archived: entries.filter(e => e.status === 'archived').length,
+  }), [entries]);
+
+  const tabs: Array<{ id: StatusFilter; label: string }> = [
+    { id: 'all',      label: 'All' },
+    { id: 'active',   label: 'Active' },
+    { id: 'draft',    label: 'Draft' },
+    { id: 'archived', label: 'Archived' },
+  ];
+
+  return (
+    <div style={{ display: 'flex', gap: 2, marginBottom: 20 }}>
+      {tabs.map(tab => {
+        const active = value === tab.id;
+        const cfg = STATUS_CONFIG[tab.id];
+        return (
+          <button
+            key={tab.id}
+            onClick={() => onChange(tab.id)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '6px 14px',
+              fontSize: 13,
+              fontWeight: active ? 600 : 400,
+              color: active ? 'var(--orange)' : 'var(--text-secondary)',
+              background: active ? 'rgba(234, 88, 12, 0.06)' : 'transparent',
+              border: '1px solid',
+              borderColor: active ? 'var(--orange)' : 'var(--border)',
+              borderRadius: 'var(--radius-sm)',
+              cursor: 'pointer',
+            }}
+          >
+            {tab.label}
+            <span style={{
+              fontSize: 11,
+              fontWeight: 600,
+              color: active ? 'var(--orange)' : (cfg ? cfg.color : 'var(--text-muted)'),
+              background: active ? 'rgba(234, 88, 12, 0.12)' : (cfg ? cfg.bg : '#F3F4F6'),
+              padding: '1px 6px',
+              borderRadius: 10,
+              minWidth: 18,
+              textAlign: 'center',
+            }}>
+              {counts[tab.id]}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main page
 // ---------------------------------------------------------------------------
 
@@ -123,9 +219,11 @@ export default function PlannersPage() {
   const [search, setSearch] = useState('');
   const [yearFilter, setYearFilter] = useState('');
   const [intakeFilter, setIntakeFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
 
   useEffect(() => {
-    fetch('/api/planners')
+    // ?all=true — cloud UI sees all statuses
+    fetch('/api/planners?all=true')
       .then(r => r.json())
       .then((data: PortalPlannerEntry[]) => { setEntries(data); setLoading(false); })
       .catch(() => { setError('Failed to load planners from database.'); setLoading(false); });
@@ -144,12 +242,13 @@ export default function PlannersPage() {
   // Apply search + filters
   const filtered = useMemo(() => {
     return entries.filter(e => {
+      if (statusFilter !== 'all' && e.status !== statusFilter) return false;
       if (yearFilter && e.year !== yearFilter) return false;
       if (intakeFilter && e.intake_month !== intakeFilter) return false;
       if (!matchesSearch(e, search)) return false;
       return true;
     });
-  }, [entries, search, yearFilter, intakeFilter]);
+  }, [entries, search, yearFilter, intakeFilter, statusFilter]);
 
   const hasActiveFilter = search.trim() || yearFilter || intakeFilter;
 
@@ -189,6 +288,11 @@ export default function PlannersPage() {
           </div>
         ))}
       </div>
+
+      {/* Status tabs */}
+      {!loading && !error && entries.length > 0 && (
+        <StatusTabs entries={entries} value={statusFilter} onChange={setStatusFilter} />
+      )}
 
       {/* Search + Filters */}
       {!loading && !error && entries.length > 0 && (
@@ -410,6 +514,11 @@ export default function PlannersPage() {
                               <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', maxWidth: 300 }}>
                                 <HighlightedText text={entry.course_name} query={search} />
                               </div>
+                              {entry.major_name && (
+                                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                                  {entry.major_name}
+                                </div>
+                              )}
                             </td>
                             <td style={{ padding: '10px 16px' }}>
                               <code style={{ fontSize: 12, color: 'var(--text-secondary)', background: 'var(--gray-light)', padding: '2px 6px', borderRadius: 4 }}>
@@ -418,6 +527,9 @@ export default function PlannersPage() {
                             </td>
                             <td style={{ padding: '10px 16px', fontSize: 12, color: 'var(--text-secondary)' }}>
                               {entry.intake_month || '—'}
+                            </td>
+                            <td style={{ padding: '10px 16px' }}>
+                              <StatusBadge status={entry.status} />
                             </td>
                             <td style={{ padding: '10px 16px', fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                               {entry.last_updated || '—'}
@@ -461,7 +573,6 @@ export default function PlannersPage() {
 function HighlightedText({ text, query }: { text: string; query: string }) {
   if (!query.trim()) return <>{text}</>;
 
-  // Build an array of { char, matched } by walking the fuzzy match
   const q = query.toLowerCase().trim();
   const result: { char: string; matched: boolean }[] = [];
   let qi = 0;

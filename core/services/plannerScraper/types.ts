@@ -19,6 +19,7 @@ export interface PlannerIndexEntry {
   year: string;          // e.g. "2025"
   unitCode: string;      // e.g. "CT000-3-3"
   courseName: string;    // e.g. "Bachelor of Computer Science (Hons)"
+  majorName: string;     // e.g. "Data Science" — scraped from a second <em> tag, empty string if absent
   intakeMonth: string;   // e.g. "March intake"
   programLevel: string;  // e.g. "Undergraduate"
   pdfUrl: string;        // Absolute URL to PDF

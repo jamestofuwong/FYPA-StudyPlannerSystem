@@ -2,6 +2,7 @@
 
 import { use, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -13,7 +14,9 @@ interface PortalPlannerEntry {
   unit_code: string;
   course_name: string;
   intake_month: string;
+  major_name: string;
   program_level: string | null;
+  status: string;
   pdf_url: string;
   last_updated: string | null;
   last_updated_iso: string | null;
@@ -198,11 +201,184 @@ function RequirementPill({ label, count, cp }: { label: string; count: number | 
 }
 
 // ---------------------------------------------------------------------------
+// Status badge + control panel
+// ---------------------------------------------------------------------------
+
+const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; border: string }> = {
+  draft:    { label: 'Draft',    color: '#92400E', bg: '#FEF3C7', border: '#FCD34D' },
+  active:   { label: 'Active',   color: '#065F46', bg: '#D1FAE5', border: '#6EE7B7' },
+  archived: { label: 'Archived', color: '#374151', bg: '#F3F4F6', border: '#D1D5DB' },
+};
+
+function StatusBadge({ status }: { status: string }) {
+  const cfg = STATUS_CONFIG[status] ?? { label: status, color: '#6B7280', bg: '#F3F4F6', border: '#D1D5DB' };
+  return (
+    <span style={{
+      fontSize: 11,
+      fontWeight: 700,
+      color: cfg.color,
+      background: cfg.bg,
+      border: `1px solid ${cfg.border}`,
+      padding: '3px 10px',
+      borderRadius: 20,
+      textTransform: 'uppercase',
+      letterSpacing: '0.05em',
+    }}>
+      {cfg.label}
+    </span>
+  );
+}
+
+function StatusPanel({
+  entry,
+  onStatusChange,
+}: {
+  entry: PortalPlannerEntry;
+  onStatusChange: (newStatus: string) => void;
+}) {
+  const [updating, setUpdating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const isParsed = Boolean(entry.planner_template_id);
+
+  async function transition(newStatus: string) {
+    setUpdating(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/planners/${entry.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError((body as { error?: string }).error ?? 'Failed to update status.');
+        return;
+      }
+      onStatusChange(newStatus);
+    } catch {
+      setError('Network error — could not update status.');
+    } finally {
+      setUpdating(false);
+    }
+  }
+
+  const descriptions: Record<string, string> = {
+    draft:    'Not visible to the local app. Review the parsed data, then approve to make it available.',
+    active:   'Visible to the local app. Students can pull this planner via Cloud Sync.',
+    archived: 'Hidden from the local app. Can be re-activated at any time.',
+  };
+
+  return (
+    <div style={{
+      background: 'var(--surface)',
+      border: '1px solid var(--border)',
+      borderRadius: 'var(--radius)',
+      padding: '16px 20px',
+      marginBottom: 20,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+        <div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+            Planner Status
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <StatusBadge status={entry.status} />
+            <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+              {descriptions[entry.status]}
+            </span>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+          {/* draft → active */}
+          {entry.status === 'draft' && (
+            <button
+              onClick={() => transition('active')}
+              disabled={updating || !isParsed}
+              title={!isParsed ? 'Planner must be parsed before it can be approved' : undefined}
+              style={{
+                padding: '7px 16px',
+                fontSize: 13,
+                fontWeight: 600,
+                color: '#fff',
+                background: isParsed ? '#059669' : '#A3A3A3',
+                border: 'none',
+                borderRadius: 'var(--radius-sm)',
+                cursor: isParsed && !updating ? 'pointer' : 'not-allowed',
+                opacity: updating ? 0.7 : 1,
+              }}
+            >
+              {updating ? 'Updating…' : 'Approve → Active'}
+            </button>
+          )}
+
+          {/* active → archived */}
+          {entry.status === 'active' && (
+            <button
+              onClick={() => transition('archived')}
+              disabled={updating}
+              style={{
+                padding: '7px 16px',
+                fontSize: 13,
+                fontWeight: 600,
+                color: 'var(--text-secondary)',
+                background: 'var(--surface-raised)',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)',
+                cursor: updating ? 'not-allowed' : 'pointer',
+                opacity: updating ? 0.7 : 1,
+              }}
+            >
+              {updating ? 'Updating…' : 'Archive'}
+            </button>
+          )}
+
+          {/* archived → active */}
+          {entry.status === 'archived' && (
+            <button
+              onClick={() => transition('active')}
+              disabled={updating}
+              style={{
+                padding: '7px 16px',
+                fontSize: 13,
+                fontWeight: 600,
+                color: '#fff',
+                background: '#059669',
+                border: 'none',
+                borderRadius: 'var(--radius-sm)',
+                cursor: updating ? 'not-allowed' : 'pointer',
+                opacity: updating ? 0.7 : 1,
+              }}
+            >
+              {updating ? 'Updating…' : 'Re-activate'}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {error && (
+        <div style={{ marginTop: 10, fontSize: 12, color: 'var(--red)', padding: '6px 10px', background: 'rgba(220,38,38,0.06)', borderRadius: 'var(--radius-sm)' }}>
+          {error}
+        </div>
+      )}
+
+      {entry.status === 'draft' && !isParsed && (
+        <div style={{ marginTop: 10, fontSize: 12, color: '#92400E', padding: '6px 10px', background: '#FEF3C7', borderRadius: 'var(--radius-sm)' }}>
+          This planner has not been parsed yet. Run a Sync from the Planner Scraper to parse it before approving.
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main page
 // ---------------------------------------------------------------------------
 
 export default function PlannerDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const router = useRouter();
   const [data, setData] = useState<ApiResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -218,6 +394,14 @@ export default function PlannerDetailPage({ params }: { params: Promise<{ id: st
       })
       .catch(() => { setNotFound(true); setLoading(false); });
   }, [id]);
+
+  function handleStatusChange(newStatus: string) {
+    if (data) {
+      setData({ ...data, entry: { ...data.entry, status: newStatus } });
+      // Refresh router so the planners list is up-to-date if user navigates back
+      router.refresh();
+    }
+  }
 
   if (loading) {
     return (
@@ -243,6 +427,7 @@ export default function PlannerDetailPage({ params }: { params: Promise<{ id: st
     ['Unit Code', entry.unit_code],
     ['Year', entry.year],
     ['Intake', entry.intake_month || '—'],
+    ['Major', entry.major_name || '—'],
     ['Program Level', entry.program_level || '—'],
     ['Last Updated', entry.last_updated || '—'],
     ['First Seen', formatDate(entry.first_seen_at)],
@@ -259,6 +444,9 @@ export default function PlannerDetailPage({ params }: { params: Promise<{ id: st
         <ChevronIcon />
         <span style={{ color: 'var(--text-muted)' }}>{entry.unit_code}</span>
       </div>
+
+      {/* Status control panel */}
+      <StatusPanel entry={entry} onStatusChange={handleStatusChange} />
 
       {/* Hero card */}
       <div style={{
@@ -278,8 +466,8 @@ export default function PlannerDetailPage({ params }: { params: Promise<{ id: st
                 </h1>
                 {template && (
                   <span style={{
-                    fontSize: 11, fontWeight: 600, color: 'var(--green)',
-                    background: 'var(--green-light)', padding: '2px 8px',
+                    fontSize: 11, fontWeight: 600, color: '#0369A1',
+                    background: '#E0F2FE', padding: '2px 8px',
                     borderRadius: 20, flexShrink: 0,
                   }}>
                     Parsed

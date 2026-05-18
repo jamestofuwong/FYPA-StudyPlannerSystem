@@ -125,8 +125,12 @@ export const SCRAPE_PLANNER_INDEX_JS = /* js */ `
         const unitCode = norm(tds[0].querySelector('p')?.textContent);
 
         // td[1]: course name (in curly/straight quotes) + intake (em)
+        // Some rows have two <em> tags: one for the major specialisation and
+        // one for the intake month. e.g.:
+        //   <p>"Diploma of IT"<em>Data Science</em><em>March intake</em></p>
+        // We identify the intake em by checking for month keywords or "intake".
         const courseP = tds[1].querySelector('p');
-        // Extract only the direct text nodes, not the em child
+        // Extract only the direct text nodes, not any em children
         let courseRaw = '';
         if (courseP) {
           for (const node of Array.from(courseP.childNodes)) {
@@ -137,7 +141,49 @@ export const SCRAPE_PLANNER_INDEX_JS = /* js */ `
         }
         // Strip any surrounding quotation marks (", ", ", ')
         const courseName = norm(courseRaw).replace(/^["""'']+|["""'']+$/g, '');
-        const intakeMonth = norm(courseP?.querySelector('em')?.textContent);
+
+        // Identify intake month and major from <em> elements.
+        // Three portal row formats observed:
+        //   (A) Single <em>March intake</em>
+        //   (B) Two <em>: <em>Data Science</em><em>March intake</em>
+        //   (C) Single <em> with <br>: <em>Data Science<br>March intake</em>
+        const monthKeywords = [
+          'january','february','march','april','may','june','july','august',
+          'september','october','november','december','intake',
+          'jan','feb','mar','apr','jun','jul','aug','sep','oct','nov','dec',
+        ];
+        const isIntakeText = (t) => monthKeywords.some(k => t.toLowerCase().includes(k));
+
+        // Extract text segments from an <em>, splitting on <br> into separate parts.
+        const emSegments = (em) => {
+          const parts = [];
+          let current = '';
+          for (const node of Array.from(em.childNodes)) {
+            if (node.nodeName === 'BR') {
+              const t = norm(current);
+              if (t) parts.push(t);
+              current = '';
+            } else {
+              current += node.textContent;
+            }
+          }
+          const t = norm(current);
+          if (t) parts.push(t);
+          return parts;
+        };
+
+        const ems = Array.from(courseP?.querySelectorAll('em') ?? []);
+        let intakeMonth = '';
+        let majorName = '';
+
+        // Collect all text segments across all ems, preserving per-em <br> splits
+        const allSegments = ems.flatMap(em => emSegments(em));
+
+        const intakeParts = allSegments.filter(s => isIntakeText(s));
+        const majorParts  = allSegments.filter(s => !isIntakeText(s));
+
+        intakeMonth = intakeParts.join(' / ');
+        majorName   = majorParts.join(', ');
 
         // td[2]: program level
         const programLevel = norm(tds[2].querySelector('p')?.textContent);
@@ -159,6 +205,7 @@ export const SCRAPE_PLANNER_INDEX_JS = /* js */ `
           year,
           unitCode,
           courseName,
+          majorName,
           intakeMonth,
           programLevel,
           pdfUrl,

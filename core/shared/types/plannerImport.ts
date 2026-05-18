@@ -26,6 +26,7 @@ export type PlannerImportPlanner = {
   file_name: string;
   course_information: {
     course: string;
+    course_code?: string;          // short portal code e.g. "CT000-3-3"; used as Course.code when present
     major: string;
     intake: string;
     intake_year: number | null;

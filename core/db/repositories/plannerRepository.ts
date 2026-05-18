@@ -1,5 +1,5 @@
 import { prisma } from "../client";
-import type { PlannerImportPlanner } from "../../shared/types/plannerImport";
+import type { PlannerImportPlanner, PlannerImportUnit } from "../../shared/types/plannerImport";
 import { parseRequisiteString } from "../utils/parse-requisite";
 
 function normaliseImportedUnitCode(value: unknown): string | null {
@@ -163,6 +163,7 @@ export async function savePlannerFromImport(planner: PlannerImportPlanner) {
   }
 
   const intakeMonth = parseIntakeMonth(course_information.intake);
+  const courseCode = course_information.course_code?.trim() || courseName;
   // Transaction: all or nothing
   return await prisma.$transaction(async (tx) => {
 
@@ -175,7 +176,7 @@ export async function savePlannerFromImport(planner: PlannerImportPlanner) {
       tx.course.upsert({
         where: { name: courseName },
         update: {},
-        create: { code: courseName, name: courseName },
+        create: { code: courseCode, name: courseName },
       }),
     ]);
 
@@ -561,6 +562,216 @@ export async function savePlannerFromImport(planner: PlannerImportPlanner) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Export a stored PlannerTemplate back to PlannerImportPlanner format
+// so the local app can pull planners from the cloud and save them locally.
+// ---------------------------------------------------------------------------
+
+export async function exportPlannerAsImport(templateId: string): Promise<PlannerImportPlanner | null> {
+  const template = await getPlannerById(templateId);
+  if (!template) return null;
+
+  function templateUnitToImport(tu: typeof template.units[number]): PlannerImportUnit {
+    return {
+      unit_code: tu.unit?.unit_code ?? '-',
+      unit_name: tu.unit?.unit_name ?? 'Unknown Unit',
+      year_level: tu.year_level,
+      semester: tu.semester,
+      category: tu.category,
+      prerequisite: null,
+      offered_in: tu.unit?.offered_in ?? null,
+      requisites: tu.unit?.requisite_groups?.map((g: any) => ({
+        conditions: g.conditions.map((c: any) => ({
+          type: c.type,
+          unit: c.unit ? { unit_code: c.unit.unit_code } : null,
+          credit_points: c.credit_points != null ? Number(c.credit_points) : null,
+          requisite_type: c.requisite_type ?? null,
+        })),
+      })) ?? null,
+    };
+  }
+
+  const byCategory = (cat: string) =>
+    template.units.filter((tu) => tu.category === cat).map(templateUnitToImport);
+
+  // Elective pool units live in ElectiveGroup, not TemplateUnit
+  const poolUnits: PlannerImportUnit[] = template.elective_groups.flatMap((eg: any) =>
+    eg.units.map((egu: any) => ({
+      unit_code: egu.unit?.unit_code ?? '-',
+      unit_name: egu.unit?.unit_name ?? 'Unknown Unit',
+      year_level: null,
+      semester: null,
+      category: 'elective',
+      prerequisite: null,
+      offered_in: egu.unit?.offered_in ?? null,
+      requisites: egu.unit?.requisite_groups?.map((g: any) => ({
+        conditions: g.conditions.map((c: any) => ({
+          type: c.type,
+          unit: c.unit ? { unit_code: c.unit.unit_code } : null,
+          credit_points: c.credit_points != null ? Number(c.credit_points) : null,
+          requisite_type: c.requisite_type ?? null,
+        })),
+      })) ?? null,
+    }))
+  );
+
+  return {
+    file_name: `${template.course.name} - ${template.major?.name ?? 'General'} ${template.intake_year}.pdf`,
+    course_information: {
+      course: template.course.name,
+      major: template.major?.name ?? 'General Program',
+      intake: intakeMonthToString(template.intake_month),
+      intake_year: template.intake_year,
+      course_type: template.course_type,
+      duration_semesters: template.duration_semesters,
+      requirements: {
+        core:     { count: template.core_count,     cp: template.core_cp },
+        major:    { count: template.major_count,    cp: template.major_cp },
+        elective: { count: template.elective_count, cp: template.elective_cp },
+        wil:      { count: template.wil_count,      cp: template.wil_cp },
+      },
+    },
+    categories: {
+      core_units:  byCategory('core'),
+      major_units: byCategory('major_core'),
+      mpu_group:   byCategory('mpu'),
+      wil_group:   byCategory('wil'),
+      elective_groups: {
+        prescribed_elective: byCategory('prescribed_elective'),
+        // placed elective slots + pool units combined
+        elective: [...byCategory('elective'), ...poolUnits],
+      },
+      minor_groups: template.minors.map((minor: any) => ({
+        minor_name: minor.name,
+        units: minor.units.map((mu: any) => ({
+          unit_code: mu.unit.unit_code,
+          unit_name: mu.unit.unit_name,
+          year_level: null,
+          semester: null,
+          category: null,
+          prerequisite: null,
+          offered_in: mu.unit.offered_in ?? null,
+        })),
+      })),
+    },
+  };
+}
+
+function intakeMonthToString(month: number | null): string {
+  if (!month) return '';
+  const names: Record<number, string> = {
+    1: 'January', 2: 'February', 3: 'March',    4: 'April',
+    5: 'May',     6: 'June',     7: 'July',      8: 'August',
+    9: 'September', 10: 'October', 11: 'November', 12: 'December',
+  };
+  return names[month] ?? '';
+}
+
+// ---------------------------------------------------------------------------
+// Export a stored PlannerTemplate back to PlannerImportPlanner format
+// so the local app can pull planners from the cloud and save them locally.
+// ---------------------------------------------------------------------------
+
+export async function exportPlannerAsImport(templateId: string): Promise<PlannerImportPlanner | null> {
+  const template = await getPlannerById(templateId);
+  if (!template) return null;
+
+  function templateUnitToImport(tu: typeof template.units[number]): PlannerImportUnit {
+    return {
+      unit_code: tu.unit?.unit_code ?? '-',
+      unit_name: tu.unit?.unit_name ?? 'Unknown Unit',
+      year_level: tu.year_level,
+      semester: tu.semester,
+      category: tu.category,
+      prerequisite: null,
+      offered_in: tu.unit?.offered_in ?? null,
+      requisites: tu.unit?.requisite_groups?.map((g: any) => ({
+        conditions: g.conditions.map((c: any) => ({
+          type: c.type,
+          unit: c.unit ? { unit_code: c.unit.unit_code } : null,
+          credit_points: c.credit_points != null ? Number(c.credit_points) : null,
+          requisite_type: c.requisite_type ?? null,
+        })),
+      })) ?? null,
+    };
+  }
+
+  const byCategory = (cat: string) =>
+    template.units.filter((tu) => tu.category === cat).map(templateUnitToImport);
+
+  // Elective pool units live in ElectiveGroup, not TemplateUnit
+  const poolUnits: PlannerImportUnit[] = template.elective_groups.flatMap((eg: any) =>
+    eg.units.map((egu: any) => ({
+      unit_code: egu.unit?.unit_code ?? '-',
+      unit_name: egu.unit?.unit_name ?? 'Unknown Unit',
+      year_level: null,
+      semester: null,
+      category: 'elective',
+      prerequisite: null,
+      offered_in: egu.unit?.offered_in ?? null,
+      requisites: egu.unit?.requisite_groups?.map((g: any) => ({
+        conditions: g.conditions.map((c: any) => ({
+          type: c.type,
+          unit: c.unit ? { unit_code: c.unit.unit_code } : null,
+          credit_points: c.credit_points != null ? Number(c.credit_points) : null,
+          requisite_type: c.requisite_type ?? null,
+        })),
+      })) ?? null,
+    }))
+  );
+
+  return {
+    file_name: `${template.course.name} - ${template.major?.name ?? 'General'} ${template.intake_year}.pdf`,
+    course_information: {
+      course: template.course.name,
+      major: template.major?.name ?? 'General Program',
+      intake: intakeMonthToString(template.intake_month),
+      intake_year: template.intake_year,
+      course_type: template.course_type,
+      duration_semesters: template.duration_semesters,
+      requirements: {
+        core:     { count: template.core_count,     cp: template.core_cp },
+        major:    { count: template.major_count,    cp: template.major_cp },
+        elective: { count: template.elective_count, cp: template.elective_cp },
+        wil:      { count: template.wil_count,      cp: template.wil_cp },
+      },
+    },
+    categories: {
+      core_units:  byCategory('core'),
+      major_units: byCategory('major_core'),
+      mpu_group:   byCategory('mpu'),
+      wil_group:   byCategory('wil'),
+      elective_groups: {
+        prescribed_elective: byCategory('prescribed_elective'),
+        // placed elective slots + pool units combined
+        elective: [...byCategory('elective'), ...poolUnits],
+      },
+      minor_groups: template.minors.map((minor: any) => ({
+        minor_name: minor.name,
+        units: minor.units.map((mu: any) => ({
+          unit_code: mu.unit.unit_code,
+          unit_name: mu.unit.unit_name,
+          year_level: null,
+          semester: null,
+          category: null,
+          prerequisite: null,
+          offered_in: mu.unit.offered_in ?? null,
+        })),
+      })),
+    },
+  };
+}
+
+function intakeMonthToString(month: number | null): string {
+  if (!month) return '';
+  const names: Record<number, string> = {
+    1: 'January', 2: 'February', 3: 'March',    4: 'April',
+    5: 'May',     6: 'June',     7: 'July',      8: 'August',
+    9: 'September', 10: 'October', 11: 'November', 12: 'December',
+  };
+  return names[month] ?? '';
+}
+
 
 // ===================================================================================================
 // Helper Function
@@ -579,20 +790,20 @@ function parseIntakeMonth(intake: string): number | null {
 
   // Handle month format: "Feb/Mar", "September"
   const firstMonth = lower.split('/')[0].trim();
-  const months: Record<string, number> = {
-    january: 1, jan: 1,
-    february: 2, feb: 2,
-    march: 3, mar: 3,
-    april: 4, apr: 4,
-    may: 5,
-    june: 6, jun: 6,
-    july: 7, jul: 7,
-    august: 8, aug: 8,
-    september: 9, sep: 9, sept: 9,
-    october: 10, oct: 10,
-    november: 11, nov: 11,
-    december: 12, dec: 12,
-  };
 
-  return months[firstMonth] ?? null;
+  // Use substring matching so formats like "March intake", "March 2026",
+  // "March/September" and plain "March" are all handled correctly.
+  const months: Array<[string, number]> = [
+    ['january', 1], ['february', 2], ['march', 3], ['april', 4],
+    ['may', 5], ['june', 6], ['july', 7], ['august', 8],
+    ['september', 9], ['october', 10], ['november', 11], ['december', 12],
+    ['jan', 1], ['feb', 2], ['mar', 3], ['apr', 4],
+    ['jun', 6], ['jul', 7], ['aug', 8], ['sep', 9], ['sept', 9],
+    ['oct', 10], ['nov', 11], ['dec', 12],
+  ];
+
+  for (const [key, val] of months) {
+    if (lower.includes(key)) return val;
+  }
+  return null;
 }

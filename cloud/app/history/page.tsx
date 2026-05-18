@@ -14,7 +14,10 @@ interface SyncRun {
   planners_new: number;
   planners_updated: number;
   planners_unchanged: number;
-  planners_failed: number;
+  planners_db_saved: number;
+  planners_db_failed: number;
+  planners_parse_ok: number;
+  planners_parse_failed: number;
   duration_ms: number | null;
   error_message: string | null;
   logs: string[];
@@ -165,14 +168,13 @@ export default function HistoryPage() {
                         </div>
                       </div>
 
-                      {/* Stats row */}
+                      {/* Scan stats — always shown */}
                       <div style={{ display: 'flex', gap: 20, flexShrink: 0 }}>
                         {[
                           { label: 'Scanned',   value: run.planners_scanned,   color: undefined },
                           { label: 'New',       value: run.planners_new,       color: run.planners_new > 0 ? 'var(--green)' : undefined },
                           { label: 'Updated',   value: run.planners_updated,   color: run.planners_updated > 0 ? 'var(--orange)' : undefined },
                           { label: 'Unchanged', value: run.planners_unchanged, color: undefined },
-                          { label: 'Failed',    value: run.planners_failed,    color: run.planners_failed > 0 ? 'var(--red)' : undefined },
                         ].map(({ label, value, color }) => (
                           <div key={label} style={{ textAlign: 'center' }}>
                             <div style={{ fontSize: 15, fontWeight: 700, color: color ?? 'var(--text-primary)', lineHeight: 1 }}>{value}</div>
@@ -193,6 +195,34 @@ export default function HistoryPage() {
                         {formatDuration(run.duration_ms)}
                       </div>
                     </div>
+
+                    {/* Sync metrics — only for sync runs */}
+                    {run.action === 'sync' && (
+                      <div style={{
+                        padding: '10px 20px',
+                        borderTop: '1px solid var(--border)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 24,
+                        background: 'var(--surface-raised)',
+                      }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', flexShrink: 0 }}>
+                          Database
+                        </span>
+                        <div style={{ display: 'flex', gap: 16 }}>
+                          <MetricPill value={run.planners_db_saved} label="saved" activeColor="var(--green)" active={run.planners_db_saved > 0} />
+                          <MetricPill value={run.planners_db_failed} label="failed" activeColor="var(--red)" active={run.planners_db_failed > 0} />
+                        </div>
+                        <div style={{ width: 1, height: 24, background: 'var(--border)', flexShrink: 0 }} />
+                        <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', flexShrink: 0 }}>
+                          Parsing
+                        </span>
+                        <div style={{ display: 'flex', gap: 16 }}>
+                          <MetricPill value={run.planners_parse_ok} label="parsed" activeColor="var(--green)" active={run.planners_parse_ok > 0} />
+                          <MetricPill value={run.planners_parse_failed} label="failed" activeColor="var(--orange)" active={run.planners_parse_failed > 0} />
+                        </div>
+                      </div>
+                    )}
 
                     {/* Error bar */}
                     {run.error_message && (
@@ -219,6 +249,15 @@ export default function HistoryPage() {
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+function MetricPill({ value, label, activeColor, active }: { value: number; label: string; activeColor: string; active: boolean }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+      <span style={{ fontSize: 13, fontWeight: 700, color: active ? activeColor : 'var(--text-muted)' }}>{value}</span>
+      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{label}</span>
     </div>
   );
 }
