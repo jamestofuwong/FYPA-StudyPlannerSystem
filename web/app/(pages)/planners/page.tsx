@@ -323,7 +323,7 @@ export default function PlannersPage() {
                             className={`${styles.listItem} ${selectedPlannerId === planner.id ? styles.listItemActive : ''}`}
                           >
                             <div className={styles.majorName}>
-                              {planner.major?.name || "General Program"}
+                              {planner.major?.name || planner.course?.name || "General Program"}
                             </div>
                             <div className={styles.itemMeta}>
                               {getIntakeLabel(planner.intake_month)} · {planner._count?.units || 0} units

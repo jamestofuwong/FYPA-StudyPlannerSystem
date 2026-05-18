@@ -31,6 +31,7 @@ export function parseRequisiteString(input: string | null): ParsedGroup[] {
         .replace(/[()]/g, '') 
         .replace(/\s+OR\s+/g, ' / ')
         .replace(/\s+AND\s+/g, ' & ')
+        .replace(/,/g, ' & ')
         .replace(/\n/g, ' ');
 
     // Skip "Nil" or "NIL"

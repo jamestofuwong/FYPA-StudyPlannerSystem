@@ -620,7 +620,7 @@ export default function ImportPage() {
         course_information: {
           ...planner.course_information,
           course: plannerInfo.course || planner.course_information.course,
-          major: plannerInfo.major || planner.course_information.major,
+          major: plannerInfo.major || null,
           intake: plannerInfo.intake || planner.course_information.intake,
           intake_year: plannerInfo.intakeYear ? parseInt(plannerInfo.intakeYear) : planner.course_information.intake_year,
           course_type: courseType,

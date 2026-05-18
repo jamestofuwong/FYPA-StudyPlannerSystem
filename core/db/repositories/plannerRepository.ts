@@ -156,14 +156,13 @@ export async function savePlannerFromImport(planner: PlannerImportPlanner) {
   // Extract and validate input data
   const { course_information, categories } = planner;
   const courseName = course_information.course?.trim();
-  const majorName = course_information.major?.trim() || "General Program";
+  const majorName = course_information.major?.trim() || null;
 
   if (!courseName) {
     throw new Error("Cannot save planner: missing course information.");
   }
 
   const intakeMonth = parseIntakeMonth(course_information.intake);
-  const courseCode = course_information.course_code?.trim() || courseName;
   // Transaction: all or nothing
   return await prisma.$transaction(async (tx) => {
 
@@ -176,16 +175,19 @@ export async function savePlannerFromImport(planner: PlannerImportPlanner) {
       tx.course.upsert({
         where: { name: courseName },
         update: {},
-        create: { code: courseCode, name: courseName },
+        create: { name: courseName },
       }),
     ]);
 
-    // Find major by course_id + name or create if new
-    const major = await tx.major.upsert({
-      where: { course_id_name: { course_id: course.id, name: majorName } },
-      update: {},
-      create: { name: majorName, course_id: course.id },
-    });
+    // Find or create major only if a major name is provided
+    let major = null;
+    if (majorName) {
+      major = await tx.major.upsert({
+        where: { course_id_name: { course_id: course.id, name: majorName } },
+        update: {},
+        create: { name: majorName, course_id: course.id },
+      });
+    }
 
 
     // ===================================================================================================
@@ -195,7 +197,7 @@ export async function savePlannerFromImport(planner: PlannerImportPlanner) {
     const existingPlanner = await tx.plannerTemplate.findFirst({
       where: {
         course_id: course.id,
-        major_id: major.id,
+        major_id: major?.id ?? null,
         intake_year: course_information.intake_year ?? 2025,
         intake_month: intakeMonth,
       },
@@ -209,7 +211,7 @@ export async function savePlannerFromImport(planner: PlannerImportPlanner) {
     const newPlanner = await tx.plannerTemplate.create({
       data: {
         course_id: course.id,
-        major_id: major.id,
+        major_id: major?.id ?? null,
         intake_year: course_information.intake_year ?? 2025,
         intake_month: intakeMonth,
         course_type: course_information.course_type || 'bachelor',
