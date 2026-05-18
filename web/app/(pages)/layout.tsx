@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import styles from './layout.module.css';
 import TopBar from '../../components/layout/TopBar';
@@ -8,6 +8,7 @@ import Sidebar from '../../components/layout/Sidebar';
 import TabBar from '../../components/layout/TabBar';
 import StatusBar from '../../components/layout/StatusBar';
 import PortalLoginModal from '../../components/layout/PortalLoginModal';
+import PrivacyNoticeModal from '../../components/privacy/PrivacyNoticeModal';
 import { ToastProvider } from '../../components/providers/ToastProvider';
 import { PortalAuthProvider } from '../../components/providers/PortalAuthContext';
 import { ScraperProvider } from '../../components/providers/ScraperContext';
@@ -20,6 +21,27 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const activePanel = useMemo(() => panelFromPathname(pathname), [pathname]);
   const [openTabs, setOpenTabs] = useState<PanelId[]>([activePanel]);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  // Privacy notice gate
+  const [privacyChecked, setPrivacyChecked] = useState(false);
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
+  const presentedAtRef = useRef<Date>(new Date());
+
+  useEffect(() => {
+    fetch('/api/privacy/status')
+      .then(r => r.json())
+      .then((data: { acknowledged: boolean }) => {
+        if (!data.acknowledged) {
+          presentedAtRef.current = new Date();
+          setShowPrivacyModal(true);
+        }
+        setPrivacyChecked(true);
+      })
+      .catch(() => {
+        // On error, allow app to proceed — don't block the user indefinitely
+        setPrivacyChecked(true);
+      });
+  }, []);
 
   useEffect(() => {
     setOpenTabs((prev) => (prev.includes(activePanel) ? prev : [...prev, activePanel]));
@@ -78,6 +100,13 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           <StatusBar activePanel={activePanel} />
         </div>
         <PortalLoginModal />
+        {/* Privacy notice — shown above everything until acknowledged */}
+        {privacyChecked && showPrivacyModal && (
+          <PrivacyNoticeModal
+            presentedAt={presentedAtRef.current}
+            onAcknowledged={() => setShowPrivacyModal(false)}
+          />
+        )}
       </ToastProvider>
       </ScraperProvider>
     </PortalAuthProvider>

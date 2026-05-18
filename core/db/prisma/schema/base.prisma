@@ -184,12 +184,13 @@ model SystemConfig {
   @@map("system_config")
 }
 
-model PrivacyAcknowledgement {
-  id              Int      @id @default(1)
-  notice_version  Int
-  acknowledged_at DateTime @default(now())
+model PrivacyEvent {
+  id             BigInt   @id @default(autoincrement())
+  event_type     String   // "presented" | "acknowledged" | "withdrawn"
+  notice_version Int
+  occurred_at    DateTime @default(now())
 
-  @@map("privacy_acknowledgement")
+  @@map("privacy_events")
 }
 
 model SecurityIncidentLog {

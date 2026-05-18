@@ -356,21 +356,23 @@ COMMENT ON TABLE minor_units IS
 
 
 -- ===========================================================================
--- SECTION 8 — PRIVACY NOTICE ACKNOWLEDGEMENT
--- Records the local acknowledgement of the privacy notice.
--- No student data stored here — only a boolean flag + version.
--- Supports REQ-PRI-103.
+-- SECTION 8 — PRIVACY EVENTS LOG
+-- Append-only log of all privacy notice lifecycle events.
+-- No student data stored here.
+-- Supports REQ-PRI-104 (presented trail), REQ-PRI-105 (consent proof),
+--           REQ-PRI-108 (6-year retention).
 -- ===========================================================================
 
-CREATE TABLE privacy_acknowledgement (
-    id               SMALLINT    PRIMARY KEY DEFAULT 1,  -- singleton row
-    notice_version   INT         NOT NULL,
-    acknowledged_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT singleton CHECK (id = 1)
+CREATE TABLE privacy_events (
+    id             BIGSERIAL    PRIMARY KEY,
+    event_type     VARCHAR(20)  NOT NULL
+                       CHECK (event_type IN ('presented', 'acknowledged', 'withdrawn')),
+    notice_version INT          NOT NULL,
+    occurred_at    TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
 
-COMMENT ON TABLE privacy_acknowledgement IS
-    'Singleton row recording local one-time privacy notice acknowledgement. REQ-PRI-103';
+COMMENT ON TABLE privacy_events IS
+    'Append-only privacy event log. Supports REQ-PRI-104, REQ-PRI-105, REQ-PRI-108';
 
 
 -- ===========================================================================
