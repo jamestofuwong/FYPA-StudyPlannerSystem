@@ -9,6 +9,7 @@ import TabBar from '../../components/layout/TabBar';
 import StatusBar from '../../components/layout/StatusBar';
 import PortalLoginModal from '../../components/layout/PortalLoginModal';
 import PrivacyNoticeModal from '../../components/privacy/PrivacyNoticeModal';
+import UpdateBanner from '../../components/layout/UpdateBanner';
 import { ToastProvider } from '../../components/providers/ToastProvider';
 import { PortalAuthProvider } from '../../components/providers/PortalAuthContext';
 import { ScraperProvider } from '../../components/providers/ScraperContext';
@@ -79,6 +80,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       <ToastProvider>
         <div className={styles.shell}>
           <TopBar />
+          <UpdateBanner />
           <div className={styles.body}>
             <Sidebar
               activePanel={activePanel}

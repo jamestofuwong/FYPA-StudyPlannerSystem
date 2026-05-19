@@ -1,14 +1,18 @@
-# Production overrides — used on the VPS
+# Production overrides — used on EC2
 # Run: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 #
 # Differences from base:
-#   - Uses pre-built image from GitHub Container Registry
+#   - Uses pre-built images from GitHub Container Registry (no local build)
 #   - Real Puppeteer scraper (SCRAPER_SIMULATE=false)
 #   - DB not exposed to host
 
 services:
+  pdf-parser:
+    image: ghcr.io/${GITHUB_REPO:-jamestofuwong/fypa-study-planner-system}/fypa-pdf-parser:${IMAGE_TAG:-latest}
+    build: null
+
   cloud:
-    image: ghcr.io/${GITHUB_REPO:-your-org/fypa-cloud}:${IMAGE_TAG:-latest}
-    build: !reset null   # Don't build locally — use the pulled image
+    image: ghcr.io/${GITHUB_REPO:-jamestofuwong/fypa-study-planner-system}/fypa-cloud:${IMAGE_TAG:-latest}
+    build: null
     environment:
       SCRAPER_SIMULATE: "false"

@@ -8,6 +8,7 @@ import {
 import fs from "fs";
 import next from "next";
 import path from "path";
+import { autoUpdater } from "electron-updater";
 import { startDatabase, stopDatabase, getDatabaseUrl } from '../runtime/postgres/db'
 import { startOllama, stopOllama } from '../runtime/ollama/ollama'
 
@@ -160,6 +161,61 @@ ipcMain.handle("get-database-url", () => {
   return getDatabaseUrl();
 });
 
+// ── Auto-updater ─────────────────────────────────────────────────────────────
+
+function setupAutoUpdater() {
+  // Only run in packaged production builds
+  if (!app.isPackaged) return;
+
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on("checking-for-update", () => {
+    sendUpdateStatus("checking");
+  });
+
+  autoUpdater.on("update-available", (info) => {
+    sendUpdateStatus("available", { version: info.version, releaseNotes: info.releaseNotes });
+  });
+
+  autoUpdater.on("update-not-available", () => {
+    sendUpdateStatus("not-available");
+  });
+
+  autoUpdater.on("download-progress", (progress) => {
+    sendUpdateStatus("downloading", { percent: Math.round(progress.percent) });
+  });
+
+  autoUpdater.on("update-downloaded", (info) => {
+    sendUpdateStatus("downloaded", { version: info.version });
+  });
+
+  autoUpdater.on("error", (err) => {
+    console.error("[Updater] Error:", err.message);
+    sendUpdateStatus("error", { message: err.message });
+  });
+
+  // Check for updates 5 seconds after startup, then every 4 hours
+  setTimeout(() => { autoUpdater.checkForUpdates().catch(console.error); }, 5_000);
+  setInterval(() => { autoUpdater.checkForUpdates().catch(console.error); }, 4 * 60 * 60 * 1_000);
+}
+
+function sendUpdateStatus(status: string, data?: Record<string, unknown>) {
+  BrowserWindow.getAllWindows().forEach((win) => {
+    win.webContents.send("updater-status", { status, ...data });
+  });
+}
+
+// IPC: renderer asks to start downloading
+ipcMain.handle("updater-download", () => {
+  autoUpdater.downloadUpdate().catch(console.error);
+});
+
+// IPC: renderer asks to quit and install
+ipcMain.handle("updater-install", () => {
+  autoUpdater.quitAndInstall();
+});
+
 nativeTheme.on("updated", () => {
   const theme = nativeTheme.shouldUseDarkColors ? "dark" : "light";
 
@@ -174,6 +230,9 @@ app.whenReady().then(async () => {
 
   // Start Ollama (non-blocking — app opens even if Ollama isn't ready yet)
   startOllama().catch((err) => console.error('[Ollama] Startup error:', err));
+
+  // Auto-updater (production only)
+  setupAutoUpdater();
 
   // Open window immediately — don't block on DB init
   const [, windowResult] = await Promise.allSettled([

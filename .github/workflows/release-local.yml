@@ -1,0 +1,62 @@
+name: Release Local App
+
+# Triggers when a version tag is pushed, e.g. git tag v1.0.0 && git push --tags
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: mac
+          - os: windows-latest
+            platform: win
+
+    runs-on: ${{ matrix.os }}
+    name: Build (${{ matrix.platform }})
+
+    steps:
+      # ── 1. Checkout ──────────────────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── 2. Node.js ───────────────────────────────────────────────────────────
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # ── 3. Install dependencies ──────────────────────────────────────────────
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      # ── 4. Download platform-specific Ollama binary ──────────────────────────
+      - name: Download Ollama binary
+        run: node scripts/download-ollama.js
+        env:
+          PLATFORM: ${{ matrix.platform }}
+
+      # ── 5. Build Python parser binary ────────────────────────────────────────
+      - name: Build Python parser binary
+        run: node scripts/build-python.js
+
+      # ── 6. Build app (Next.js + Electron) ───────────────────────────────────
+      - name: Build app
+        run: npm run build
+        env:
+          # Dummy DB URL so Prisma generate succeeds without a real DB
+          DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/placeholder
+
+      # ── 7. Package and publish to GitHub Releases ────────────────────────────
+      - name: Package and publish
+        run: npx electron-builder --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # macOS: skip code signing (set CSC_LINK + CSC_KEY_PASSWORD for signed builds)
+          CSC_IDENTITY_AUTO_DISCOVERY: false

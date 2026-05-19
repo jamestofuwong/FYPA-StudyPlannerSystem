@@ -15,3 +15,11 @@ contextBridge.exposeInMainWorld("themeAPI", {
 contextBridge.exposeInMainWorld("portalAPI", {
   clearSession: () => ipcRenderer.invoke("clear-portal-session"),
 });
+
+contextBridge.exposeInMainWorld("updaterAPI", {
+  onStatus: (callback: (payload: Record<string, unknown>) => void) => {
+    ipcRenderer.on("updater-status", (_, payload) => callback(payload));
+  },
+  download: () => ipcRenderer.invoke("updater-download"),
+  install:  () => ipcRenderer.invoke("updater-install"),
+});

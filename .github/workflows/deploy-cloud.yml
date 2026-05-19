@@ -1,15 +1,26 @@
 name: Deploy Cloud App
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'cloud/**'
+      - 'core/**'
+      - 'runtime/pdf-parser/**'
+      - 'docker-compose*.yml'
   workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository_owner }}/fypa-cloud
+  CLOUD_IMAGE:      ghcr.io/${{ github.repository }}/fypa-cloud
+  PDF_PARSER_IMAGE: ghcr.io/${{ github.repository }}/fypa-pdf-parser
 
 jobs:
+  # ---------------------------------------------------------------------------
+  # Job 1: Build and push both Docker images to GHCR
+  # ---------------------------------------------------------------------------
   build-and-push:
-    name: Build & push image
+    name: Build & push images
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -26,31 +37,40 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=sha,prefix=sha-
-            type=raw,value=latest
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build and push
+      # ── Cloud Next.js image ─────────────────────────────────────────────────
+      - name: Build and push cloud image
         uses: docker/build-push-action@v5
         with:
           context: .
           file: cloud/Dockerfile
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          tags: |
+            ${{ env.CLOUD_IMAGE }}:sha-${{ github.sha }}
+            ${{ env.CLOUD_IMAGE }}:latest
+          cache-from: type=gha,scope=cloud
+          cache-to: type=gha,scope=cloud,mode=max
 
+      # ── PDF parser sidecar image ────────────────────────────────────────────
+      - name: Build and push pdf-parser image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: runtime/pdf-parser/Dockerfile
+          push: true
+          tags: |
+            ${{ env.PDF_PARSER_IMAGE }}:sha-${{ github.sha }}
+            ${{ env.PDF_PARSER_IMAGE }}:latest
+          cache-from: type=gha,scope=pdf-parser
+          cache-to: type=gha,scope=pdf-parser,mode=max
+
+  # ---------------------------------------------------------------------------
+  # Job 2: Deploy to EC2
+  # ---------------------------------------------------------------------------
   deploy:
-    name: Deploy to VPS
+    name: Deploy to EC2
     runs-on: ubuntu-latest
     needs: build-and-push
     environment: production
@@ -59,7 +79,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Copy compose files to VPS
+      - name: Copy compose files to EC2
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.VPS_HOST }}
@@ -68,7 +88,7 @@ jobs:
           source: "docker-compose.yml,docker-compose.prod.yml"
           target: "~/fypa"
 
-      - name: Deploy on VPS
+      - name: Deploy on EC2
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_HOST }}
@@ -76,9 +96,19 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
             cd ~/fypa
-            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            # Log in to GHCR using the PAT (persists across deploys)
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            # Set image tag for this deploy
             export IMAGE_TAG=sha-${{ github.sha }}
-            export GITHUB_REPO=${{ env.IMAGE_NAME }}
+            export GITHUB_REPO=${{ github.repository }}
+
+            # Pull new images
             docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
+
+            # Start / restart services
             docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+            # Clean up old images
             docker image prune -f
