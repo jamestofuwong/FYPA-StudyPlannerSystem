@@ -395,7 +395,7 @@ async function runReal(
   callbacks: ScraperCallbacks,
 ): Promise<RunResult> {
   const { createPuppeteerAdapter, checkForUpdates } =
-    await import('@core/services/plannerScraper/index');
+    await import(/* webpackIgnore: true */ ('@core/services/plannerScraper/index' as string));
 
   const adapter = await createPuppeteerAdapter({
     headless: true,
