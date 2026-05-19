@@ -95,6 +95,12 @@ COPY --from=builder /app/cloud/.next/static     ./cloud/.next/static
 
 COPY --from=builder /app/core/db/prisma/schema ./core/db/prisma/schema
 
+# Copy Prisma CLI and client from builder so the entrypoint uses v6, not the
+# latest npx-downloaded version (v7 has a breaking change removing url= in schema)
+COPY --from=builder /app/cloud/node_modules/prisma          ./cloud/node_modules/prisma
+COPY --from=builder /app/cloud/node_modules/@prisma         ./cloud/node_modules/@prisma
+COPY --from=builder /app/cloud/node_modules/.bin/prisma     ./cloud/node_modules/.bin/prisma
+
 COPY cloud/docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x ./docker-entrypoint.sh
 
