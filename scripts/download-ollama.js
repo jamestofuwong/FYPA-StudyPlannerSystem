@@ -48,14 +48,7 @@ function httpsGetJson(url) {
 
 function downloadFile(url, dest) {
   console.log(`[download-ollama] Downloading to ${dest}...`);
-  if (process.platform === 'win32') {
-    execSync(
-      `powershell -Command "Invoke-WebRequest -Uri '${url}' -OutFile '${dest}' -UseBasicParsing`,
-      { stdio: 'inherit' }
-    );
-  } else {
-    execSync(`curl -L --progress-bar -o "${dest}" "${url}"`, { stdio: 'inherit' });
-  }
+  execSync(`curl -L --progress-bar -o "${dest}" "${url}"`, { stdio: 'inherit' });
 }
 
 function extractTgz(archive, destDir) {
