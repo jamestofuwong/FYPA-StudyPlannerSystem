@@ -65,6 +65,7 @@ export async function createPuppeteerAdapter(opts: {
   // this import; puppeteer is declared in serverExternalPackages so it is
   // required at runtime from cloud/node_modules rather than bundled.
   // eslint-disable-next-line @typescript-eslint/no-require-imports
+  // @ts-ignore — puppeteer lives in cloud/node_modules; not resolvable from repo root tsconfig
   const puppeteer = await import(/* webpackIgnore: true */ 'puppeteer');
 
   const launchOpts: Record<string, unknown> = {

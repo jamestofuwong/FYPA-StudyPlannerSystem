@@ -21,6 +21,7 @@ export function getMockStudent(): ScrapedStudent {
         creditsEarned: 12.5,
         status: "Complete",
         grade: "HD",
+        level: "1",
         term: "2024_FEB_S1"
       },
       {
@@ -30,6 +31,7 @@ export function getMockStudent(): ScrapedStudent {
         creditsEarned: 12.5,
         status: "Complete",
         grade: "HD",
+        level: "1",
         term: "2024_FEB_S1"
       },
       {
@@ -39,6 +41,7 @@ export function getMockStudent(): ScrapedStudent {
         creditsEarned: 0,
         status: "Future",
         grade: "",
+        level: "1",
         term: "2024_SEP_S2"
       }
     ]

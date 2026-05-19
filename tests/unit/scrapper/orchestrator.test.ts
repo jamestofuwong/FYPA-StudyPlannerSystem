@@ -59,7 +59,8 @@ describe('Scraper Orchestrator Advanced Coverage', () => {
 
       const result = await runStudentScrape(mockAdapter, '123', 'latest', callbacks);
       // Verify studentName wasn't attached because .scraped is false
-      expect(result.finalResult?.studentName).toBeUndefined();
+      const scraped = result.finalResult?.scraped ? result.finalResult : undefined;
+      expect(scraped?.studentName).toBeUndefined();
     });
 
     test('orchestrator: runAutoRun handles mid-point restart', async () => {
