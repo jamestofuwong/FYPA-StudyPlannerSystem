@@ -95,9 +95,11 @@ COPY --from=builder /app/cloud/.next/static     ./cloud/.next/static
 
 COPY --from=builder /app/core/db/prisma/schema ./core/db/prisma/schema
 
-# Install Prisma CLI at the pinned version globally so db push works at startup.
-# Avoids the dependency-chain issues of selectively copying from builder node_modules.
-RUN npm install -g prisma@6.19.2 --ignore-scripts
+# Install Prisma CLI at the pinned version globally (with scripts so engines are
+# downloaded at build time as root), then grant nextjs user write access in case
+# Prisma needs to re-extract engines at runtime.
+RUN npm install -g prisma@6.19.2 \
+ && chown -R nextjs:nodejs /usr/local/lib/node_modules/prisma
 
 COPY cloud/docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x ./docker-entrypoint.sh
