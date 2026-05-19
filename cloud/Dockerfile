@@ -95,11 +95,10 @@ COPY --from=builder /app/cloud/.next/static     ./cloud/.next/static
 
 COPY --from=builder /app/core/db/prisma/schema ./core/db/prisma/schema
 
-# puppeteer and core/services are marked as serverExternalPackages so Next.js
-# does not bundle them — they must be present in node_modules at runtime.
-COPY --from=builder /app/cloud/node_modules/puppeteer         ./cloud/node_modules/puppeteer
-COPY --from=builder /app/cloud/node_modules/puppeteer-core    ./cloud/node_modules/puppeteer-core
-COPY --from=builder /app/core/services                        ./core/services
+# Copy all node_modules so serverExternalPackages (puppeteer, etc.) and their
+# transitive dependencies are available at runtime in the standalone output.
+COPY --from=builder /app/cloud/node_modules ./cloud/node_modules
+COPY --from=builder /app/core/services      ./core/services
 
 # Install Prisma CLI at the pinned version globally (with scripts so engines are
 # downloaded at build time as root), then grant nextjs user write access in case
