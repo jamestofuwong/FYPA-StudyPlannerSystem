@@ -96,10 +96,11 @@ COPY --from=builder /app/cloud/.next/static     ./cloud/.next/static
 COPY --from=builder /app/core/db/prisma/schema ./core/db/prisma/schema
 
 # Copy Prisma CLI and client from builder so the entrypoint uses v6, not the
-# latest npx-downloaded version (v7 has a breaking change removing url= in schema)
+# latest npx-downloaded version (v7 has a breaking change removing url= in schema).
+# Invoke via `node prisma/build/index.js` so wasm resolves inside the package dir,
+# avoiding the .bin/prisma_schema_build_bg.wasm missing-file issue on Linux.
 COPY --from=builder /app/cloud/node_modules/prisma          ./cloud/node_modules/prisma
 COPY --from=builder /app/cloud/node_modules/@prisma         ./cloud/node_modules/@prisma
-COPY --from=builder /app/cloud/node_modules/.bin/prisma     ./cloud/node_modules/.bin/prisma
 
 COPY cloud/docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x ./docker-entrypoint.sh
