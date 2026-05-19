@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { runMatchingPipeline } from '../../../../core/services/matching/matchingService';
 import * as plannerRepository from '../../../../core/db/repositories/plannerRepository';
-import type { PlannerTemplate, UnitMasterEntry } from '../../../../core/shared/types/matching';
+import type { PlannerTemplate, UnitMasterEntry, CourseType } from '../../../../core/shared/types/matching';
 
 // Priority for resolving a unit's category when it appears in multiple planners.
 // Higher value wins.
@@ -68,6 +68,8 @@ export async function POST(request: Request) {
       majorName: p.major?.name ?? '',
       intakeYear: p.intake_year,
       intakeSemester: ((p.intake_month ?? 1) >= 7 ? 2 : 1) as 1 | 2,
+      courseType: (p.course_type as CourseType) || 'degree',
+      durationSemesters: p.duration_semesters || 8, 
       requiredCore: p.units
         .filter((u) => u.category === 'core' && u.unit)
         .map((u) => u.unit!.unit_code),

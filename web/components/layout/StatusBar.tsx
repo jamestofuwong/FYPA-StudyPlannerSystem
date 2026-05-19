@@ -10,6 +10,8 @@ const PANEL_LABELS: Record<PanelId, string> = {
     import: 'Data Import',
     planners: 'Study Planners',
     settings: 'Settings',
+    "cloud-sync": 'Cloud Sync',
+    "user-guide": 'User Guide', 
 };
 
 interface StatusBarProps {
