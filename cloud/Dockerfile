@@ -92,10 +92,10 @@ RUN addgroup --system --gid 1001 nodejs \
 
 COPY --from=builder /app/cloud/.next/standalone ./
 COPY --from=builder /app/cloud/.next/static     ./cloud/.next/static
-COPY --from=builder /app/cloud/public           ./cloud/public 2>/dev/null || true
+RUN --mount=type=bind,from=builder,source=/app/cloud/public,target=/tmp/public \
+    cp -r /tmp/public ./cloud/public 2>/dev/null || true
 
 COPY --from=builder /app/core/db/prisma/schema ./core/db/prisma/schema
-COPY --from=builder /app/cloud/node_modules/@local       ./cloud/node_modules/@local
 
 COPY cloud/docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x ./docker-entrypoint.sh
