@@ -12,8 +12,8 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  CLOUD_IMAGE:      ghcr.io/${{ github.repository }}/fypa-cloud
-  PDF_PARSER_IMAGE: ghcr.io/${{ github.repository }}/fypa-pdf-parser
+  CLOUD_IMAGE:      ghcr.io/jamestofuwong/fypa-studyplannersystem/fypa-cloud
+  PDF_PARSER_IMAGE: ghcr.io/jamestofuwong/fypa-studyplannersystem/fypa-pdf-parser
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -102,7 +102,6 @@ jobs:
 
             # Set image tag for this deploy
             export IMAGE_TAG=sha-${{ github.sha }}
-            export GITHUB_REPO=${{ github.repository }}
 
             # Pull new images
             docker compose -f docker-compose.yml -f docker-compose.prod.yml pull

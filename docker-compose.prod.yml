@@ -8,11 +8,11 @@
 
 services:
   pdf-parser:
-    image: ghcr.io/${GITHUB_REPO:-jamestofuwong/fypa-study-planner-system}/fypa-pdf-parser:${IMAGE_TAG:-latest}
+    image: ghcr.io/jamestofuwong/fypa-studyplannersystem/fypa-pdf-parser:${IMAGE_TAG:-latest}
     build: null
 
   cloud:
-    image: ghcr.io/${GITHUB_REPO:-jamestofuwong/fypa-study-planner-system}/fypa-cloud:${IMAGE_TAG:-latest}
+    image: ghcr.io/jamestofuwong/fypa-studyplannersystem/fypa-cloud:${IMAGE_TAG:-latest}
     build: null
     environment:
       SCRAPER_SIMULATE: "false"
