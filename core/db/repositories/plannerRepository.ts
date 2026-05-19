@@ -573,8 +573,10 @@ export async function exportPlannerAsImport(templateId: string): Promise<Planner
   const template = await getPlannerById(templateId);
   if (!template) return null;
 
-  function templateUnitToImport(tu: typeof template.units[number]): PlannerImportUnit {
-    return {
+  const t = template; // capture non-null reference for use in nested callbacks
+
+  const byCategory = (cat: string) =>
+    t.units.filter((tu: any) => tu.category === cat).map((tu: any): PlannerImportUnit => ({
       unit_code: tu.unit?.unit_code ?? '-',
       unit_name: tu.unit?.unit_name ?? 'Unknown Unit',
       year_level: tu.year_level,
@@ -590,14 +592,10 @@ export async function exportPlannerAsImport(templateId: string): Promise<Planner
           requisite_type: c.requisite_type ?? null,
         })),
       })) ?? null,
-    };
-  }
-
-  const byCategory = (cat: string) =>
-    template.units.filter((tu) => tu.category === cat).map(templateUnitToImport);
+    }));
 
   // Elective pool units live in ElectiveGroup, not TemplateUnit
-  const poolUnits: PlannerImportUnit[] = template.elective_groups.flatMap((eg: any) =>
+  const poolUnits: PlannerImportUnit[] = t.elective_groups.flatMap((eg: any) =>
     eg.units.map((egu: any) => ({
       unit_code: egu.unit?.unit_code ?? '-',
       unit_name: egu.unit?.unit_name ?? 'Unknown Unit',
@@ -618,19 +616,19 @@ export async function exportPlannerAsImport(templateId: string): Promise<Planner
   );
 
   return {
-    file_name: `${template.course.name} - ${template.major?.name ?? 'General'} ${template.intake_year}.pdf`,
+    file_name: `${t.course.name} - ${t.major?.name ?? 'General'} ${t.intake_year}.pdf`,
     course_information: {
-      course: template.course.name,
-      major: template.major?.name ?? 'General Program',
-      intake: intakeMonthToString(template.intake_month),
-      intake_year: template.intake_year,
-      course_type: template.course_type,
-      duration_semesters: template.duration_semesters,
+      course: t.course.name,
+      major: t.major?.name ?? 'General Program',
+      intake: intakeMonthToString(t.intake_month),
+      intake_year: t.intake_year,
+      course_type: t.course_type,
+      duration_semesters: t.duration_semesters,
       requirements: {
-        core:     { count: template.core_count,     cp: template.core_cp },
-        major:    { count: template.major_count,    cp: template.major_cp },
-        elective: { count: template.elective_count, cp: template.elective_cp },
-        wil:      { count: template.wil_count,      cp: template.wil_cp },
+        core:     { count: t.core_count,     cp: t.core_cp },
+        major:    { count: t.major_count,    cp: t.major_cp },
+        elective: { count: t.elective_count, cp: t.elective_cp },
+        wil:      { count: t.wil_count,      cp: t.wil_cp },
       },
     },
     categories: {
@@ -640,10 +638,9 @@ export async function exportPlannerAsImport(templateId: string): Promise<Planner
       wil_group:   byCategory('wil'),
       elective_groups: {
         prescribed_elective: byCategory('prescribed_elective'),
-        // placed elective slots + pool units combined
         elective: [...byCategory('elective'), ...poolUnits],
       },
-      minor_groups: template.minors.map((minor: any) => ({
+      minor_groups: t.minors.map((minor: any) => ({
         minor_name: minor.name,
         units: minor.units.map((mu: any) => ({
           unit_code: mu.unit.unit_code,
