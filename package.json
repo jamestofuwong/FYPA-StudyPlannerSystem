@@ -69,7 +69,8 @@
     "publish": {
       "provider": "github",
       "owner": "jamestofuwong",
-      "repo": "FYPA-StudyPlannerSystem"
+      "repo": "FYPA-StudyPlannerSystem",
+      "releaseType": "release"
     },
     "productName": "Study Planner System",
     "asar": false,
