@@ -101,15 +101,28 @@ function buildMajorMatchSheet(input: ExportInput): any {
   add(['Detection Status',             match.status],                                                                                         'rowAlt', true);
   add([''],                                                                                                                                    'blank');
   add(['Category Breakdown'],                                                                                                                  'hdrMed');
+  const completedSet  = new Set(input.completedCodes);
+  const statusMap     = new Map<string, string>(input.student.courseList.map((c) => [c.courseId, c.status]));
+  const mpuStatusMap  = new Map<string, string>((input.mpuCourseList ?? []).map((c) => [c.courseId, c.status]));
+
+  // Prescribed electives: count directly from planner units
+  const prescribedUnits    = planner.units.filter((u) => u.unit !== null && u.category === 'prescribed_elective');
+  const prescribedRequired = prescribedUnits.length;
+  const prescribedMatched  = prescribedUnits.filter((u) => completedSet.has(u.unit!.unit_code)).length;
+
   add(['Core Units Matched',           primary ? `${primary.breakdown.core.matched} / ${primary.breakdown.core.required}` : '—'],            'row',    true);
   add(['Major Core Units Matched',     primary ? `${primary.breakdown.majorCore.matched} / ${primary.breakdown.majorCore.required}` : '—'],  'rowAlt', true);
-  add(['Prescribed Electives Matched', primary ? `${primary.breakdown.prescribed.matched} / ${primary.breakdown.prescribed.required}` : '—'], 'row',   true);
+  add(['Prescribed Electives Matched', `${prescribedMatched} / ${prescribedRequired}`],                                                       'row',    true);
   add(['Free Electives Matched',       primary ? `${primary.breakdown.freeElective.matched} / ${primary.breakdown.freeElective.required}` : '—'], 'rowAlt', true);
   add(['WIL',                          primary ? `${primary.breakdown.wil.matched} / ${primary.breakdown.wil.required}` : '—'],              'row',    true);
 
-  const completedSet = new Set(input.completedCodes);
   const notTaken = planner.units
-    .filter((u) => u.unit !== null && !completedSet.has(u.unit!.unit_code))
+    .filter((u) => {
+      if (u.unit === null) return false;
+      const code = u.unit.unit_code;
+      const status = statusMap.get(code) ?? mpuStatusMap.get(code);
+      return !completedSet.has(code) && status !== 'Current';
+    })
     .sort((a, b) => a.year_level - b.year_level || a.semester - b.semester);
 
   if (notTaken.length > 0) {
@@ -137,42 +150,36 @@ function buildMajorMatchSheet(input: ExportInput): any {
   return ws;
 }
 
-function buildUnitPlanSheet(input: ExportInput): any {
+function buildCompletedUnitsSheet(input: ExportInput): any {
   const { planner, intakeYear, student } = input;
   const NUM_COLS = 6;
 
-  const statusMap    = new Map<string, string>(student.courseList.map((c) => [c.courseId, c.status]));
-  const mpuStatusMap = new Map<string, string>((input.mpuCourseList ?? []).map((c) => [c.courseId, c.status]));
   const completedSet = new Set(input.completedCodes);
+  const gradeMap     = new Map<string, string>(student.courseList.map((c) => [c.courseId, c.grade]));
 
-  const rows: (string | number)[][] = [['Unit Code', 'Unit Name', 'Year', 'Semester', 'Type', 'Status']];
+  const rows: (string | number)[][] = [['Unit Code', 'Unit Name', 'Year', 'Semester', 'Type', 'Grade']];
   const rowStyles: any[] = [S.hdrDark];
 
   planner.units
-    .filter((u) => u.unit !== null)
+    .filter((u) => u.unit !== null && completedSet.has(u.unit!.unit_code))
     .sort((a, b) => a.year_level - b.year_level || a.semester - b.semester)
-    .forEach((u) => {
-      const code = u.unit!.unit_code;
-      const portalStatus = statusMap.get(code) ?? mpuStatusMap.get(code);
-      const status = portalStatus ?? '—';
-      const type = u.category.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+    .forEach((u, i) => {
+      const code  = u.unit!.unit_code;
+      const type  = u.category.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+      const grade = gradeMap.get(code) ?? '—';
       rows.push([
         code,
         u.unit!.unit_name,
         `Year ${u.year_level} (${intakeYear + u.year_level - 1})`,
         `Semester ${u.semester}`,
         type,
-        status,
+        grade,
       ]);
-      rowStyles.push(
-        portalStatus === 'Current' ? S.rowGreen  :
-        completedSet.has(code)     ? S.row        :
-                                     S.rowSalmon
-      );
+      rowStyles.push(i % 2 === 0 ? S.row : S.rowAlt);
     });
 
   const ws = XLSX.utils.aoa_to_sheet(rows);
-  ws['!cols'] = [{ wch: 12 }, { wch: 36 }, { wch: 16 }, { wch: 12 }, { wch: 20 }, { wch: 12 }];
+  ws['!cols'] = [{ wch: 12 }, { wch: 36 }, { wch: 16 }, { wch: 12 }, { wch: 20 }, { wch: 10 }];
   rowStyles.forEach((style, r) => applyRow(ws, r, NUM_COLS, style));
 
   return ws;
@@ -235,14 +242,14 @@ function buildStudyPlannerSheet(input: ExportInput): any {
 const SHEET_BUILDERS: Record<ExportSection, (input: ExportInput) => any> = {
   student_profile: buildStudentProfileSheet,
   major_match:     buildMajorMatchSheet,
-  unit_plan:       buildUnitPlanSheet,
+  unit_plan:       buildCompletedUnitsSheet,
   study_planner:   buildStudyPlannerSheet,
 };
 
 const SHEET_NAMES: Record<ExportSection, string> = {
   student_profile: 'Student Profile',
   major_match:     'Major & Course Match',
-  unit_plan:       'Unit Plan',
+  unit_plan:       'Completed Units',
   study_planner:   'Study Planner',
 };
 
