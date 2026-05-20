@@ -3,8 +3,6 @@
 import styles from './TopBar.module.css';
 import { usePortalAuth } from '../providers/PortalAuthContext';
 
-const NAV_ITEMS = ['File', 'Edit', 'View', 'Tools', 'Help'];
-
 export default function TopBar() {
   const { isLoggedIn, isPortalLoading, openLoginModal, resetSession } = usePortalAuth();
 
@@ -16,15 +14,6 @@ export default function TopBar() {
         SPS
         <span className={styles.appSubtitle}>· Study Planner System</span>
       </div>
-
-      {/* Menu bar */}
-      <nav className={styles.navMenu}>
-        {NAV_ITEMS.map((item) => (
-          <button key={item} className={styles.navItem}>
-            {item}
-          </button>
-        ))}
-      </nav>
 
       <div className={styles.spacer} />
 

@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import styles from './Sidebar.module.css';
 import { NAV_SECTIONS, type PanelId } from '../../lib/navigation';
 
@@ -17,13 +16,7 @@ export default function Sidebar({
     isCollapsed,
     onToggleCollapse,
 }: SidebarProps) {
-    const [searchQuery, setSearchQuery] = useState('');
-
-    const allItems = NAV_SECTIONS.flatMap((s) => s.items).filter(
-        (item) =>
-            searchQuery === '' ||
-            item.label.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    const allItems = NAV_SECTIONS.flatMap((s) => s.items);
 
     return (
         <nav className={`${styles.sidebar} ${isCollapsed ? styles.collapsed : ''}`}>
@@ -37,17 +30,6 @@ export default function Sidebar({
                 >
                     {isCollapsed ? '›' : '‹'}
                 </button>
-            </div>
-
-            {/* Search */}
-            <div className={styles.sidebarSearch}>
-                <input
-                    type="text"
-                    className={styles.searchInput}
-                    placeholder="🔍 Search features..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                />
             </div>
 
             {/* Nav items */}

@@ -38,16 +38,10 @@ export default function StatusBar({ activePanel }: StatusBarProps) {
 
     return (
         <footer className={styles.statusbar}>
-            <div className={styles.sbItem}>
-                <span className={styles.sbDot} />
-                Connected
-            </div>
             <div className={styles.sbItem}>📋 {PANEL_LABELS[activePanel]}</div>
 
             <div className={styles.sbRight}>
-                <div className={styles.sbItem}>⚙️ Electron v28</div>
                 {time && <div className={styles.sbItem}>{time}</div>}
-                <div className={styles.sbItem}>Python OCR Engine Active</div>
             </div>
         </footer>
     );
