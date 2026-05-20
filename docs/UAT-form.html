@@ -291,41 +291,7 @@
     <p>Complete each test case, record your result and notes, then sign off at the bottom.</p>
   </div>
 
-  <!-- Tester Info -->
-  <div class="card">
-    <h2>Tester Information</h2>
-    <div class="field-row">
-      <div>
-        <label>Full Name</label>
-        <input type="text" placeholder="e.g. Jane Doe" />
-      </div>
-      <div>
-        <label>Student ID</label>
-        <input type="text" placeholder="e.g. 1234567" />
-      </div>
-    </div>
-    <div class="field-row">
-      <div>
-        <label>Date of Testing</label>
-        <input type="date" />
-      </div>
-      <div>
-        <label>Operating System</label>
-        <select>
-          <option value="">Select OS</option>
-          <option>macOS</option>
-          <option>Windows 11</option>
-          <option>Windows 10</option>
-        </select>
-      </div>
-    </div>
-    <div class="field-row single">
-      <div>
-        <label>App Version</label>
-        <input type="text" value="1.0.0" />
-      </div>
-    </div>
-  </div>
+  
 
   <!-- ===================== MODULE 1: PRIVACY ===================== -->
   <div class="module-header">
@@ -600,124 +566,9 @@
 
   </div>
 
-  <!-- ===================== MODULE 4: IMPORT ===================== -->
+  <!-- ===================== MODULE 4: EXPORT ===================== -->
   <div class="module-header">
-    Module 4: Data Import
-    <span class="badge">2 test cases</span>
-  </div>
-  <div class="module-body">
-
-    <div class="tc">
-      <div class="tc-header">
-        <div class="tc-meta">
-          <div class="tc-id">TC-IMP-001</div>
-          <div class="tc-name">PDF import</div>
-          <span class="req-tag">REQ-PRI-101</span>
-        </div>
-      </div>
-      <div class="tc-steps">
-        <strong>Steps</strong>
-        1. Navigate to Data Import<br>
-        2. Select PDF import<br>
-        3. Upload a planner PDF<br>
-        4. Wait for processing to complete
-      </div>
-      <div class="tc-expected"><strong>Expected:</strong> Planner data is extracted and shown for review</div>
-      <div class="result-row">
-        <span class="result-label">Result:</span>
-        <label class="radio-opt pass"><input type="radio" name="tc-imp-001" value="pass" /> Pass</label>
-        <label class="radio-opt fail"><input type="radio" name="tc-imp-001" value="fail" /> Fail</label>
-        <label class="radio-opt block"><input type="radio" name="tc-imp-001" value="blocked" /> Blocked</label>
-        <label class="radio-opt na"><input type="radio" name="tc-imp-001" value="na" /> N/A</label>
-      </div>
-      <span class="notes-label">Notes / Observations</span>
-      <textarea placeholder="Describe what you saw, any issues, or leave blank if none..."></textarea>
-    </div>
-
-    <div class="tc">
-      <div class="tc-header">
-        <div class="tc-meta">
-          <div class="tc-id">TC-IMP-002</div>
-          <div class="tc-name">Imported data can be reviewed before saving</div>
-        </div>
-      </div>
-      <div class="tc-steps">
-        <strong>Steps</strong>
-        1. After a PDF import completes, review the extracted data on screen
-      </div>
-      <div class="tc-expected"><strong>Expected:</strong> Units, semesters, and credits are displayed correctly before confirming</div>
-      <div class="result-row">
-        <span class="result-label">Result:</span>
-        <label class="radio-opt pass"><input type="radio" name="tc-imp-002" value="pass" /> Pass</label>
-        <label class="radio-opt fail"><input type="radio" name="tc-imp-002" value="fail" /> Fail</label>
-        <label class="radio-opt block"><input type="radio" name="tc-imp-002" value="blocked" /> Blocked</label>
-        <label class="radio-opt na"><input type="radio" name="tc-imp-002" value="na" /> N/A</label>
-      </div>
-      <span class="notes-label">Notes / Observations</span>
-      <textarea placeholder="Describe what you saw, any issues, or leave blank if none..."></textarea>
-    </div>
-
-  </div>
-
-  <!-- ===================== MODULE 5: STUDY PLAN ===================== -->
-  <div class="module-header">
-    Module 5: Study Plan
-    <span class="badge">2 test cases</span>
-  </div>
-  <div class="module-body">
-
-    <div class="tc">
-      <div class="tc-header">
-        <div class="tc-meta">
-          <div class="tc-id">TC-PLN-001</div>
-          <div class="tc-name">Study plan is generated and viewable</div>
-        </div>
-      </div>
-      <div class="tc-steps">
-        <strong>Steps</strong>
-        1. Navigate to Study Planners<br>
-        2. Select a planner
-      </div>
-      <div class="tc-expected"><strong>Expected:</strong> A semester-by-semester study plan is displayed with units assigned to each semester</div>
-      <div class="result-row">
-        <span class="result-label">Result:</span>
-        <label class="radio-opt pass"><input type="radio" name="tc-pln-001" value="pass" /> Pass</label>
-        <label class="radio-opt fail"><input type="radio" name="tc-pln-001" value="fail" /> Fail</label>
-        <label class="radio-opt block"><input type="radio" name="tc-pln-001" value="blocked" /> Blocked</label>
-        <label class="radio-opt na"><input type="radio" name="tc-pln-001" value="na" /> N/A</label>
-      </div>
-      <span class="notes-label">Notes / Observations</span>
-      <textarea placeholder="Describe what you saw, any issues, or leave blank if none..."></textarea>
-    </div>
-
-    <div class="tc">
-      <div class="tc-header">
-        <div class="tc-meta">
-          <div class="tc-id">TC-PLN-002</div>
-          <div class="tc-name">Completed units are visually distinguished</div>
-        </div>
-      </div>
-      <div class="tc-steps">
-        <strong>Steps</strong>
-        1. Review the plan layout
-      </div>
-      <div class="tc-expected"><strong>Expected:</strong> Completed, in-progress, and future units are visually distinguishable</div>
-      <div class="result-row">
-        <span class="result-label">Result:</span>
-        <label class="radio-opt pass"><input type="radio" name="tc-pln-002" value="pass" /> Pass</label>
-        <label class="radio-opt fail"><input type="radio" name="tc-pln-002" value="fail" /> Fail</label>
-        <label class="radio-opt block"><input type="radio" name="tc-pln-002" value="blocked" /> Blocked</label>
-        <label class="radio-opt na"><input type="radio" name="tc-pln-002" value="na" /> N/A</label>
-      </div>
-      <span class="notes-label">Notes / Observations</span>
-      <textarea placeholder="Describe what you saw, any issues, or leave blank if none..."></textarea>
-    </div>
-
-  </div>
-
-  <!-- ===================== MODULE 6: EXPORT ===================== -->
-  <div class="module-header">
-    Module 6: Export
+    Module 4: Export
     <span class="badge">2 test cases</span>
   </div>
   <div class="module-body">
@@ -774,9 +625,9 @@
 
   </div>
 
-  <!-- ===================== MODULE 7: CLOUD SYNC ===================== -->
+  <!-- ===================== MODULE 5: IMPORT ===================== -->
   <div class="module-header">
-    Module 7: Cloud Sync
+    Module 5: Planner Import
     <span class="badge">2 test cases</span>
   </div>
   <div class="module-body">
@@ -784,15 +635,76 @@
     <div class="tc">
       <div class="tc-header">
         <div class="tc-meta">
-          <div class="tc-id">TC-SYN-001</div>
-          <div class="tc-name">Cloud sync status is visible</div>
+          <div class="tc-id">TC-IMP-001</div>
+          <div class="tc-name">PDF import</div>
+          <span class="req-tag">REQ-PRI-101</span>
         </div>
       </div>
       <div class="tc-steps">
         <strong>Steps</strong>
-        1. Navigate to Cloud Sync
+        1. Navigate to Data Import<br>
+        2. Select PDF import<br>
+        3. Upload a planner PDF<br>
+        4. Wait for processing to complete
       </div>
-      <div class="tc-expected"><strong>Expected:</strong> Sync status (last synced time, connection status) is displayed</div>
+      <div class="tc-expected"><strong>Expected:</strong> Planner data is extracted and shown for review</div>
+      <div class="result-row">
+        <span class="result-label">Result:</span>
+        <label class="radio-opt pass"><input type="radio" name="tc-imp-001" value="pass" /> Pass</label>
+        <label class="radio-opt fail"><input type="radio" name="tc-imp-001" value="fail" /> Fail</label>
+        <label class="radio-opt block"><input type="radio" name="tc-imp-001" value="blocked" /> Blocked</label>
+        <label class="radio-opt na"><input type="radio" name="tc-imp-001" value="na" /> N/A</label>
+      </div>
+      <span class="notes-label">Notes / Observations</span>
+      <textarea placeholder="Describe what you saw, any issues, or leave blank if none..."></textarea>
+    </div>
+
+    <div class="tc">
+      <div class="tc-header">
+        <div class="tc-meta">
+          <div class="tc-id">TC-IMP-002</div>
+          <div class="tc-name">Imported data can be reviewed before saving</div>
+        </div>
+      </div>
+      <div class="tc-steps">
+        <strong>Steps</strong>
+        1. After a PDF import completes, review the extracted data on screen
+      </div>
+      <div class="tc-expected"><strong>Expected:</strong> Units, semesters, and credits are displayed correctly before confirming</div>
+      <div class="result-row">
+        <span class="result-label">Result:</span>
+        <label class="radio-opt pass"><input type="radio" name="tc-imp-002" value="pass" /> Pass</label>
+        <label class="radio-opt fail"><input type="radio" name="tc-imp-002" value="fail" /> Fail</label>
+        <label class="radio-opt block"><input type="radio" name="tc-imp-002" value="blocked" /> Blocked</label>
+        <label class="radio-opt na"><input type="radio" name="tc-imp-002" value="na" /> N/A</label>
+      </div>
+      <span class="notes-label">Notes / Observations</span>
+      <textarea placeholder="Describe what you saw, any issues, or leave blank if none..."></textarea>
+    </div>
+
+  </div>
+
+  <!-- ===================== MODULE 6: CLOUD SYNC ===================== -->
+  <div class="module-header">
+    Module 6: Cloud Sync
+    <span class="badge">3 test cases</span>
+  </div>
+  <div class="module-body">
+
+    <div class="tc">
+      <div class="tc-header">
+        <div class="tc-meta">
+          <div class="tc-id">TC-SYN-001</div>
+          <div class="tc-name">Active planner appears in Cloud Sync after refresh</div>
+        </div>
+      </div>
+      <div class="tc-steps">
+        <strong>Precondition:</strong> The cloud portal has a planner that the local app does not have. The tester (or the developer) has set that planner's status to <strong>Active</strong> on the cloud portal (https://fyp.jameswong.work).<br><br>
+        <strong>Steps</strong>
+        1. On the local app, navigate to Cloud Sync<br>
+        2. Click the Refresh button
+      </div>
+      <div class="tc-expected"><strong>Expected:</strong> The active planner from the cloud appears in the list</div>
       <div class="result-row">
         <span class="result-label">Result:</span>
         <label class="radio-opt pass"><input type="radio" name="tc-syn-001" value="pass" /> Pass</label>
@@ -808,15 +720,15 @@
       <div class="tc-header">
         <div class="tc-meta">
           <div class="tc-id">TC-SYN-002</div>
-          <div class="tc-name">Planner is accessible on cloud portal after sync</div>
+          <div class="tc-name">Planner can be selected and pulled from the cloud</div>
         </div>
       </div>
       <div class="tc-steps">
         <strong>Steps</strong>
-        1. After syncing a planner, open https://fyp.jameswong.work<br>
-        2. Navigate to Planners
+        1. In the Cloud Sync list, select the planner<br>
+        2. Click Pull (or Import)
       </div>
-      <div class="tc-expected"><strong>Expected:</strong> The synced planner appears in the portal</div>
+      <div class="tc-expected"><strong>Expected:</strong> The planner is downloaded to the local app without errors</div>
       <div class="result-row">
         <span class="result-label">Result:</span>
         <label class="radio-opt pass"><input type="radio" name="tc-syn-002" value="pass" /> Pass</label>
@@ -828,162 +740,24 @@
       <textarea placeholder="Describe what you saw, any issues, or leave blank if none..."></textarea>
     </div>
 
-  </div>
-
-  <!-- ===================== MODULE 8: SETTINGS ===================== -->
-  <div class="module-header">
-    Module 8: Settings
-    <span class="badge">1 test case</span>
-  </div>
-  <div class="module-body">
-
     <div class="tc">
       <div class="tc-header">
         <div class="tc-meta">
-          <div class="tc-id">TC-SET-001</div>
-          <div class="tc-name">Settings page is accessible and loads correctly</div>
+          <div class="tc-id">TC-SYN-003</div>
+          <div class="tc-name">Pulled planner appears on the Planners page</div>
         </div>
       </div>
       <div class="tc-steps">
         <strong>Steps</strong>
-        1. Click Settings in the navigation bar
+        1. After pulling the planner, navigate to the Planners page on the local app
       </div>
-      <div class="tc-expected"><strong>Expected:</strong> Settings page loads without errors and options are displayed</div>
+      <div class="tc-expected"><strong>Expected:</strong> The pulled planner is visible in the planner list</div>
       <div class="result-row">
         <span class="result-label">Result:</span>
-        <label class="radio-opt pass"><input type="radio" name="tc-set-001" value="pass" /> Pass</label>
-        <label class="radio-opt fail"><input type="radio" name="tc-set-001" value="fail" /> Fail</label>
-        <label class="radio-opt block"><input type="radio" name="tc-set-001" value="blocked" /> Blocked</label>
-        <label class="radio-opt na"><input type="radio" name="tc-set-001" value="na" /> N/A</label>
-      </div>
-      <span class="notes-label">Notes / Observations</span>
-      <textarea placeholder="Describe what you saw, any issues, or leave blank if none..."></textarea>
-    </div>
-
-  </div>
-
-  <!-- ===================== MODULE 9: CLOUD PORTAL ===================== -->
-  <div class="module-header">
-    Module 9: Cloud Portal (Admin)
-    <span class="badge">5 test cases</span>
-  </div>
-  <div class="module-body">
-
-    <div class="tc">
-      <div class="tc-header">
-        <div class="tc-meta">
-          <div class="tc-id">TC-CLD-001</div>
-          <div class="tc-name">Planner list loads on the portal</div>
-        </div>
-      </div>
-      <div class="tc-steps">
-        <strong>Steps</strong>
-        1. Open https://fyp.jameswong.work<br>
-        2. Navigate to Planners
-      </div>
-      <div class="tc-expected"><strong>Expected:</strong> A list of planners is shown with status indicators</div>
-      <div class="result-row">
-        <span class="result-label">Result:</span>
-        <label class="radio-opt pass"><input type="radio" name="tc-cld-001" value="pass" /> Pass</label>
-        <label class="radio-opt fail"><input type="radio" name="tc-cld-001" value="fail" /> Fail</label>
-        <label class="radio-opt block"><input type="radio" name="tc-cld-001" value="blocked" /> Blocked</label>
-        <label class="radio-opt na"><input type="radio" name="tc-cld-001" value="na" /> N/A</label>
-      </div>
-      <span class="notes-label">Notes / Observations</span>
-      <textarea placeholder="Describe what you saw, any issues, or leave blank if none..."></textarea>
-    </div>
-
-    <div class="tc">
-      <div class="tc-header">
-        <div class="tc-meta">
-          <div class="tc-id">TC-CLD-002</div>
-          <div class="tc-name">Planner can be approved</div>
-        </div>
-      </div>
-      <div class="tc-steps">
-        <strong>Steps</strong>
-        1. Click on a planner with Draft status<br>
-        2. Click Approve
-      </div>
-      <div class="tc-expected"><strong>Expected:</strong> Planner status changes to Active</div>
-      <div class="result-row">
-        <span class="result-label">Result:</span>
-        <label class="radio-opt pass"><input type="radio" name="tc-cld-002" value="pass" /> Pass</label>
-        <label class="radio-opt fail"><input type="radio" name="tc-cld-002" value="fail" /> Fail</label>
-        <label class="radio-opt block"><input type="radio" name="tc-cld-002" value="blocked" /> Blocked</label>
-        <label class="radio-opt na"><input type="radio" name="tc-cld-002" value="na" /> N/A</label>
-      </div>
-      <span class="notes-label">Notes / Observations</span>
-      <textarea placeholder="Describe what you saw, any issues, or leave blank if none..."></textarea>
-    </div>
-
-    <div class="tc">
-      <div class="tc-header">
-        <div class="tc-meta">
-          <div class="tc-id">TC-CLD-003</div>
-          <div class="tc-name">Planner can be archived</div>
-        </div>
-      </div>
-      <div class="tc-steps">
-        <strong>Steps</strong>
-        1. Click on an active planner<br>
-        2. Click Archive
-      </div>
-      <div class="tc-expected"><strong>Expected:</strong> Planner status changes to Archived</div>
-      <div class="result-row">
-        <span class="result-label">Result:</span>
-        <label class="radio-opt pass"><input type="radio" name="tc-cld-003" value="pass" /> Pass</label>
-        <label class="radio-opt fail"><input type="radio" name="tc-cld-003" value="fail" /> Fail</label>
-        <label class="radio-opt block"><input type="radio" name="tc-cld-003" value="blocked" /> Blocked</label>
-        <label class="radio-opt na"><input type="radio" name="tc-cld-003" value="na" /> N/A</label>
-      </div>
-      <span class="notes-label">Notes / Observations</span>
-      <textarea placeholder="Describe what you saw, any issues, or leave blank if none..."></textarea>
-    </div>
-
-    <div class="tc">
-      <div class="tc-header">
-        <div class="tc-meta">
-          <div class="tc-id">TC-CLD-004</div>
-          <div class="tc-name">Active planner can be exported from portal</div>
-        </div>
-      </div>
-      <div class="tc-steps">
-        <strong>Steps</strong>
-        1. Click on an active planner<br>
-        2. Click Export
-      </div>
-      <div class="tc-expected"><strong>Expected:</strong> A file is downloaded</div>
-      <div class="result-row">
-        <span class="result-label">Result:</span>
-        <label class="radio-opt pass"><input type="radio" name="tc-cld-004" value="pass" /> Pass</label>
-        <label class="radio-opt fail"><input type="radio" name="tc-cld-004" value="fail" /> Fail</label>
-        <label class="radio-opt block"><input type="radio" name="tc-cld-004" value="blocked" /> Blocked</label>
-        <label class="radio-opt na"><input type="radio" name="tc-cld-004" value="na" /> N/A</label>
-      </div>
-      <span class="notes-label">Notes / Observations</span>
-      <textarea placeholder="Describe what you saw, any issues, or leave blank if none..."></textarea>
-    </div>
-
-    <div class="tc">
-      <div class="tc-header">
-        <div class="tc-meta">
-          <div class="tc-id">TC-CLD-005</div>
-          <div class="tc-name">Draft or archived planners cannot be exported</div>
-        </div>
-      </div>
-      <div class="tc-steps">
-        <strong>Steps</strong>
-        1. Click on a Draft or Archived planner<br>
-        2. Attempt to export it
-      </div>
-      <div class="tc-expected"><strong>Expected:</strong> Export is blocked with an appropriate message</div>
-      <div class="result-row">
-        <span class="result-label">Result:</span>
-        <label class="radio-opt pass"><input type="radio" name="tc-cld-005" value="pass" /> Pass</label>
-        <label class="radio-opt fail"><input type="radio" name="tc-cld-005" value="fail" /> Fail</label>
-        <label class="radio-opt block"><input type="radio" name="tc-cld-005" value="blocked" /> Blocked</label>
-        <label class="radio-opt na"><input type="radio" name="tc-cld-005" value="na" /> N/A</label>
+        <label class="radio-opt pass"><input type="radio" name="tc-syn-003" value="pass" /> Pass</label>
+        <label class="radio-opt fail"><input type="radio" name="tc-syn-003" value="fail" /> Fail</label>
+        <label class="radio-opt block"><input type="radio" name="tc-syn-003" value="blocked" /> Blocked</label>
+        <label class="radio-opt na"><input type="radio" name="tc-syn-003" value="na" /> N/A</label>
       </div>
       <span class="notes-label">Notes / Observations</span>
       <textarea placeholder="Describe what you saw, any issues, or leave blank if none..."></textarea>
@@ -1033,7 +807,7 @@
     <table class="defect-table" id="defect-table">
       <thead>
         <tr>
-          <th style="width:80px">Test Case</th>
+          <th style="width:130px">Test Case</th>
           <th>Description of Issue</th>
           <th style="width:110px">Severity</th>
         </tr>
@@ -1062,7 +836,7 @@
     <h2>Summary</h2>
     <div class="summary-grid">
       <div class="summary-box s-total">
-        <div class="num">25</div>
+        <div class="num">—</div>
         <div class="lbl">Total Cases</div>
       </div>
       <div class="summary-box s-pass">
@@ -1135,8 +909,9 @@
       else if (v === 'blocked' || v === 'na') block++;
     });
 
-    const total = 25;
+    const total = Object.keys(groups).length;
     const rate = total > 0 ? Math.round((pass / total) * 100) : 0;
+    document.querySelector('.s-total .num').textContent = total;
 
     document.getElementById('count-pass').textContent = pass;
     document.getElementById('count-fail').textContent = fail;
@@ -1150,6 +925,7 @@
   }
 
   document.addEventListener('change', updateSummary);
+  updateSummary();
 
   // Add defect row
   function addDefectRow() {
