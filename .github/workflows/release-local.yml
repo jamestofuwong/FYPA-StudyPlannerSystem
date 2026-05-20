@@ -56,7 +56,7 @@ jobs:
       - name: Build Python parser binary
         run: node scripts/build-python.js
         env:
-          PYTHON_EXECUTABLE: core/services/plannerImport/${{ matrix.venv_bin }}/python
+          PYTHON_EXECUTABLE: ${{ github.workspace }}/core/services/plannerImport/${{ matrix.venv_bin }}/python
 
       # ── 6. Build app (Next.js + Electron) ───────────────────────────────────
       - name: Build app
