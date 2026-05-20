@@ -15,9 +15,11 @@ jobs:
           - os: macos-latest
             platform: mac
             python_exe: python3
+            venv_bin: .venv/bin
           - os: windows-latest
             platform: win
             python_exe: python
+            venv_bin: .venv/Scripts
 
     runs-on: ${{ matrix.os }}
     name: Build (${{ matrix.platform }})
@@ -46,13 +48,15 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # ── 5. Build Python parser binary ────────────────────────────────────────
-      - name: Install Python dependencies
-        run: ${{ matrix.python_exe }} -m pip install -r core/services/plannerImport/requirements.txt
+      - name: Set up Python venv and install dependencies
+        run: |
+          ${{ matrix.python_exe }} -m venv core/services/plannerImport/.venv
+          core/services/plannerImport/${{ matrix.venv_bin }}/pip install -r core/services/plannerImport/requirements.txt
 
       - name: Build Python parser binary
         run: node scripts/build-python.js
         env:
-          PYTHON_EXECUTABLE: ${{ matrix.python_exe }}
+          PYTHON_EXECUTABLE: core/services/plannerImport/${{ matrix.venv_bin }}/python
 
       # ── 6. Build app (Next.js + Electron) ───────────────────────────────────
       - name: Build app
