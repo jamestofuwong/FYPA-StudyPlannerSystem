@@ -1,0 +1,1199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>UAT Form — Study Planner System</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f4f6f9;
+      color: #1a1a2e;
+      padding: 32px 16px;
+    }
+
+    .container {
+      max-width: 860px;
+      margin: 0 auto;
+    }
+
+    /* Header */
+    .header {
+      background: #1a1a2e;
+      color: #fff;
+      border-radius: 12px;
+      padding: 32px;
+      margin-bottom: 24px;
+    }
+    .header h1 { font-size: 1.6rem; margin-bottom: 6px; }
+    .header p  { color: #a0aec0; font-size: 0.9rem; }
+
+    /* Tester info */
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 20px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    }
+    .card h2 {
+      font-size: 1rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #4a5568;
+      margin-bottom: 16px;
+    }
+    .field-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 12px;
+    }
+    .field-row.single { grid-template-columns: 1fr; }
+    label { display: block; font-size: 0.82rem; font-weight: 600; color: #4a5568; margin-bottom: 4px; }
+    input[type="text"], input[type="date"], textarea, select {
+      width: 100%;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 9px 12px;
+      font-size: 0.9rem;
+      color: #1a1a2e;
+      background: #f7fafc;
+      transition: border-color 0.15s;
+      font-family: inherit;
+    }
+    input:focus, textarea:focus, select:focus {
+      outline: none;
+      border-color: #4299e1;
+      background: #fff;
+    }
+    textarea { resize: vertical; min-height: 60px; }
+
+    /* Module section */
+    .module-header {
+      background: #1a1a2e;
+      color: #fff;
+      border-radius: 10px 10px 0 0;
+      padding: 14px 20px;
+      font-weight: 700;
+      font-size: 0.95rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .module-header .badge {
+      background: rgba(255,255,255,0.15);
+      border-radius: 20px;
+      padding: 3px 10px;
+      font-size: 0.75rem;
+    }
+    .module-body {
+      background: #fff;
+      border-radius: 0 0 10px 10px;
+      border: 1.5px solid #e2e8f0;
+      border-top: none;
+      margin-bottom: 20px;
+      overflow: hidden;
+    }
+
+    /* Test case row */
+    .tc {
+      padding: 18px 20px;
+      border-bottom: 1px solid #f0f4f8;
+    }
+    .tc:last-child { border-bottom: none; }
+    .tc-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 10px;
+      gap: 12px;
+    }
+    .tc-meta { flex: 1; }
+    .tc-id {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: #718096;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 2px;
+    }
+    .tc-name { font-weight: 600; font-size: 0.95rem; color: #1a1a2e; }
+    .req-tag {
+      font-size: 0.7rem;
+      background: #ebf4ff;
+      color: #2b6cb0;
+      border-radius: 4px;
+      padding: 2px 7px;
+      font-weight: 600;
+      white-space: nowrap;
+      margin-top: 2px;
+      display: inline-block;
+    }
+
+    .tc-steps {
+      background: #f7fafc;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 0.82rem;
+      color: #4a5568;
+      margin-bottom: 12px;
+      line-height: 1.7;
+    }
+    .tc-steps strong { color: #2d3748; display: block; margin-bottom: 4px; }
+
+    .tc-expected {
+      font-size: 0.82rem;
+      color: #4a5568;
+      margin-bottom: 12px;
+    }
+    .tc-expected strong { color: #2d3748; }
+
+    /* Result radio */
+    .result-row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+    }
+    .result-label { font-size: 0.82rem; font-weight: 600; color: #4a5568; margin-right: 4px; }
+    .radio-opt {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      cursor: pointer;
+    }
+    .radio-opt input[type="radio"] { accent-color: #4299e1; }
+    .radio-opt.pass  { color: #276749; font-weight: 600; font-size: 0.85rem; }
+    .radio-opt.fail  { color: #c53030; font-weight: 600; font-size: 0.85rem; }
+    .radio-opt.block { color: #975a16; font-weight: 600; font-size: 0.85rem; }
+    .radio-opt.na    { color: #718096; font-weight: 600; font-size: 0.85rem; }
+
+    .notes-label { font-size: 0.82rem; font-weight: 600; color: #4a5568; margin-bottom: 4px; display: block; }
+
+    /* Defect log */
+    .defect-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    .defect-table th {
+      background: #f7fafc;
+      padding: 10px 12px;
+      text-align: left;
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: #4a5568;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      border-bottom: 2px solid #e2e8f0;
+    }
+    .defect-table td { padding: 8px 12px; border-bottom: 1px solid #f0f4f8; vertical-align: top; }
+    .defect-table input, .defect-table select { font-size: 0.82rem; padding: 6px 8px; }
+    .add-row-btn {
+      margin-top: 12px;
+      background: none;
+      border: 1.5px dashed #cbd5e0;
+      border-radius: 8px;
+      padding: 8px 16px;
+      font-size: 0.82rem;
+      color: #718096;
+      cursor: pointer;
+      width: 100%;
+      transition: all 0.15s;
+    }
+    .add-row-btn:hover { border-color: #4299e1; color: #4299e1; background: #ebf4ff; }
+
+    /* Summary */
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .summary-box {
+      text-align: center;
+      border-radius: 10px;
+      padding: 16px;
+      font-weight: 700;
+    }
+    .summary-box .num { font-size: 2rem; line-height: 1; }
+    .summary-box .lbl { font-size: 0.75rem; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
+    .s-total  { background: #f7fafc; color: #2d3748; border: 1.5px solid #e2e8f0; }
+    .s-pass   { background: #f0fff4; color: #276749; border: 1.5px solid #c6f6d5; }
+    .s-fail   { background: #fff5f5; color: #c53030; border: 1.5px solid #fed7d7; }
+    .s-block  { background: #fffbeb; color: #975a16; border: 1.5px solid #fefcbf; }
+
+    .pass-rate-bar {
+      height: 12px;
+      background: #e2e8f0;
+      border-radius: 99px;
+      overflow: hidden;
+      margin-bottom: 6px;
+    }
+    .pass-rate-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #48bb78, #38a169);
+      border-radius: 99px;
+      transition: width 0.4s ease;
+    }
+    .pass-rate-label { font-size: 0.82rem; color: #4a5568; }
+    .pass-rate-label span { font-weight: 700; color: #276749; }
+
+    /* Sign-off */
+    .signoff-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    .outcome-opts { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 4px; }
+    .outcome-opt { display: flex; align-items: center; gap: 6px; font-size: 0.9rem; cursor: pointer; }
+
+    /* Print / export */
+    .actions {
+      display: flex;
+      gap: 12px;
+      margin-top: 24px;
+      justify-content: flex-end;
+    }
+    .btn {
+      padding: 10px 24px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: opacity 0.15s;
+    }
+    .btn:hover { opacity: 0.88; }
+    .btn-primary { background: #1a1a2e; color: #fff; }
+    .btn-secondary { background: #e2e8f0; color: #2d3748; }
+
+    @media print {
+      body { background: #fff; padding: 0; }
+      .actions { display: none; }
+      .btn { display: none; }
+    }
+
+    @media (max-width: 600px) {
+      .field-row, .signoff-grid { grid-template-columns: 1fr; }
+      .summary-grid { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Header -->
+  <div class="header">
+    <h1>User Acceptance Testing — Study Planner System</h1>
+    <p>Complete each test case, record your result and notes, then sign off at the bottom.</p>
+  </div>
+
+  <!-- Tester Info -->
+  <div class="card">
+    <h2>Tester Information</h2>
+    <div class="field-row">
+      <div>
+        <label>Full Name</label>
+        <input type="text" placeholder="e.g. Jane Doe" />
+      </div>
+      <div>
+        <label>Student ID</label>
+        <input type="text" placeholder="e.g. 1234567" />
+      </div>
+    </div>
+    <div class="field-row">
+      <div>
+        <label>Date of Testing</label>
+        <input type="date" />
+      </div>
+      <div>
+        <label>Operating System</label>
+        <select>
+          <option value="">Select OS</option>
+          <option>macOS</option>
+          <option>Windows 11</option>
+          <option>Windows 10</option>
+        </select>
+      </div>
+    </div>
+    <div class="field-row single">
+      <div>
+        <label>App Version</label>
+        <input type="text" value="1.0.0" />
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== MODULE 1: PRIVACY ===================== -->
+  <div class="module-header">
+    Module 1: Privacy &amp; Consent
+    <span class="badge">4 test cases</span>
+  </div>
+  <div class="module-body">
+
+    <div class="tc">
+      <div class="tc-header">
+        <div class="tc-meta">
+          <div class="tc-id">TC-PRI-001</div>
+          <div class="tc-name">Privacy notice appears on first launch</div>
+          <span class="req-tag">REQ-PRI-102</span>
+        </div>
+      </div>
+      <div class="tc-steps">
+        <strong>Steps</strong>
+        1. Launch the app for the first time (fresh install, no prior data)
+      </div>
+      <div class="tc-expected"><strong>Expected:</strong> Privacy notice modal appears before any content is accessible</div>
+      <div class="result-row">
+        <span class="result-label">Result:</span>
+        <label class="radio-opt pass"><input type="radio" name="tc-pri-001" value="pass" /> Pass</label>
+        <label class="radio-opt fail"><input type="radio" name="tc-pri-001" value="fail" /> Fail</label>
+        <label class="radio-opt block"><input type="radio" name="tc-pri-001" value="blocked" /> Blocked</label>
+        <label class="radio-opt na"><input type="radio" name="tc-pri-001" value="na" /> N/A</label>
+      </div>
+      <span class="notes-label">Notes / Observations</span>
+      <textarea placeholder="Describe what you saw, any issues, or leave blank if none..."></textarea>
+    </div>
+
+    <div class="tc">
+      <div class="tc-header">
+        <div class="tc-meta">
+          <div class="tc-id">TC-PRI-002</div>
+          <div class="tc-name">Privacy notice is bilingual</div>
+          <span class="req-tag">REQ-PRI-103</span>
+        </div>
+      </div>
+      <div class="tc-steps">
+        <strong>Steps</strong>
+        1. With the privacy modal open, read the default language (English)<br>
+        2. Click the language toggle<br>
+        3. Observe the content
+      </div>
+      <div class="tc-expected"><strong>Expected:</strong> Notice switches to Bahasa Malaysia and all content is translated</div>
+      <div class="result-row">
+        <span class="result-label">Result:</span>
+        <label class="radio-opt pass"><input type="radio" name="tc-pri-002" value="pass" /> Pass</label>
+        <label class="radio-opt fail"><input type="radio" name="tc-pri-002" value="fail" /> Fail</label>
+        <label class="radio-opt block"><input type="radio" name="tc-pri-002" value="blocked" /> Blocked</label>
+        <label class="radio-opt na"><input type="radio" name="tc-pri-002" value="na" /> N/A</label>
+      </div>
+      <span class="notes-label">Notes / Observations</span>
+      <textarea placeholder="Describe what you saw, any issues, or leave blank if none..."></textarea>
+    </div>
+
+    <div class="tc">
+      <div class="tc-header">
+        <div class="tc-meta">
+          <div class="tc-id">TC-PRI-003</div>
+          <div class="tc-name">Notice content covers required information</div>
+          <span class="req-tag">REQ-PRI-103(a)(b)(c)(d)</span>
+        </div>
+      </div>
+      <div class="tc-steps">
+        <strong>Steps</strong>
+        1. Read the notice in full<br>
+        2. Verify all of the following are present: purpose of data collection, types of data collected, user rights (access, correction, withdrawal), DPO contact details
+      </div>
+      <div class="tc-expected"><strong>Expected:</strong> All four items are clearly stated in the notice</div>
+      <div class="result-row">
+        <span class="result-label">Result:</span>
+        <label class="radio-opt pass"><input type="radio" name="tc-pri-003" value="pass" /> Pass</label>
+        <label class="radio-opt fail"><input type="radio" name="tc-pri-003" value="fail" /> Fail</label>
+        <label class="radio-opt block"><input type="radio" name="tc-pri-003" value="blocked" /> Blocked</label>
+        <label class="radio-opt na"><input type="radio" name="tc-pri-003" value="na" /> N/A</label>
+      </div>
+      <span class="notes-label">Notes / Observations</span>
+      <textarea placeholder="Describe what you saw, any issues, or leave blank if none..."></textarea>
+    </div>
+
+    <div class="tc">
+      <div class="tc-header">
+        <div class="tc-meta">
+          <div class="tc-id">TC-PRI-004</div>
+          <div class="tc-name">Scroll-to-bottom gate enforced</div>
+          <span class="req-tag">REQ-PRI-102</span>
+        </div>
+      </div>
+      <div class="tc-steps">
+        <strong>Steps</strong>
+        1. With the privacy modal open, do not scroll<br>
+        2. Attempt to click the Acknowledge button
+      </div>
+      <div class="tc-expected"><strong>Expected:</strong> Acknowledge button is disabled until the user has scrolled to the bottom</div>
+      <div class="result-row">
+        <span class="result-label">Result:</span>
+        <label class="radio-opt pass"><input type="radio" name="tc-pri-004" value="pass" /> Pass</label>
+        <label class="radio-opt fail"><input type="radio" name="tc-pri-004" value="fail" /> Fail</label>
+        <label class="radio-opt block"><input type="radio" name="tc-pri-004" value="blocked" /> Blocked</label>
+        <label class="radio-opt na"><input type="radio" name="tc-pri-004" value="na" /> N/A</label>
+      </div>
+      <span class="notes-label">Notes / Observations</span>
+      <textarea placeholder="Describe what you saw, any issues, or leave blank if none..."></textarea>
+    </div>
+
+  </div>
+
+  <!-- ===================== MODULE 2: LOGIN ===================== -->
+  <div class="module-header">
+    Module 2: Portal Login
+    <span class="badge">3 test cases</span>
+  </div>
+  <div class="module-body">
+
+    <div class="tc">
+      <div class="tc-header">
+        <div class="tc-meta">
+          <div class="tc-id">TC-LOG-001</div>
+          <div class="tc-name">Login button opens a popup window</div>
+        </div>
+      </div>
+      <div class="tc-steps">
+        <strong>Steps</strong>
+        1. Navigate to the Scraping page<br>
+        2. Click the Login button
+      </div>
+      <div class="tc-expected"><strong>Expected:</strong> A popup window appears prompting you to enter your Swinburne portal credentials</div>
+      <div class="result-row">
+        <span class="result-label">Result:</span>
+        <label class="radio-opt pass"><input type="radio" name="tc-log-001" value="pass" /> Pass</label>
+        <label class="radio-opt fail"><input type="radio" name="tc-log-001" value="fail" /> Fail</label>
+        <label class="radio-opt block"><input type="radio" name="tc-log-001" value="blocked" /> Blocked</label>
+        <label class="radio-opt na"><input type="radio" name="tc-log-001" value="na" /> N/A</label>
+      </div>
+      <span class="notes-label">Notes / Observations</span>
+      <textarea placeholder="Describe what you saw, any issues, or leave blank if none..."></textarea>
+    </div>
+
+    <div class="tc">
+      <div class="tc-header">
+        <div class="tc-meta">
+          <div class="tc-id">TC-LOG-002</div>
+          <div class="tc-name">Logging in with valid credentials succeeds</div>
+        </div>
+      </div>
+      <div class="tc-steps">
+        <strong>Steps</strong>
+        1. Click the Login button to open the popup<br>
+        2. Enter your Swinburne portal username and password<br>
+        3. Submit the login form
+      </div>
+      <div class="tc-expected"><strong>Expected:</strong> Login succeeds and the app proceeds without error</div>
+      <div class="result-row">
+        <span class="result-label">Result:</span>
+        <label class="radio-opt pass"><input type="radio" name="tc-log-002" value="pass" /> Pass</label>
+        <label class="radio-opt fail"><input type="radio" name="tc-log-002" value="fail" /> Fail</label>
+        <label class="radio-opt block"><input type="radio" name="tc-log-002" value="blocked" /> Blocked</label>
+        <label class="radio-opt na"><input type="radio" name="tc-log-002" value="na" /> N/A</label>
+      </div>
+      <span class="notes-label">Notes / Observations</span>
+      <textarea placeholder="Describe what you saw, any issues, or leave blank if none..."></textarea>
+    </div>
+
+    <div class="tc">
+      <div class="tc-header">
+        <div class="tc-meta">
+          <div class="tc-id">TC-LOG-003</div>
+          <div class="tc-name">Invalid credentials are handled gracefully</div>
+        </div>
+      </div>
+      <div class="tc-steps">
+        <strong>Steps</strong>
+        1. Click the Login button to open the popup<br>
+        2. Enter incorrect credentials<br>
+        3. Submit the login form
+      </div>
+      <div class="tc-expected"><strong>Expected:</strong> An error message is displayed; the app does not crash</div>
+      <div class="result-row">
+        <span class="result-label">Result:</span>
+        <label class="radio-opt pass"><input type="radio" name="tc-log-003" value="pass" /> Pass</label>
+        <label class="radio-opt fail"><input type="radio" name="tc-log-003" value="fail" /> Fail</label>
+        <label class="radio-opt block"><input type="radio" name="tc-log-003" value="blocked" /> Blocked</label>
+        <label class="radio-opt na"><input type="radio" name="tc-log-003" value="na" /> N/A</label>
+      </div>
+      <span class="notes-label">Notes / Observations</span>
+      <textarea placeholder="Describe what you saw, any issues, or leave blank if none..."></textarea>
+    </div>
+
+  </div>
+
+  <!-- ===================== MODULE 3: IMPORT ===================== -->
+  <div class="module-header">
+    Module 3: Data Import
+    <span class="badge">2 test cases</span>
+  </div>
+  <div class="module-body">
+
+    <div class="tc">
+      <div class="tc-header">
+        <div class="tc-meta">
+          <div class="tc-id">TC-IMP-001</div>
+          <div class="tc-name">PDF import</div>
+          <span class="req-tag">REQ-PRI-101</span>
+        </div>
+      </div>
+      <div class="tc-steps">
+        <strong>Steps</strong>
+        1. Navigate to Data Import<br>
+        2. Select PDF import<br>
+        3. Upload a planner PDF<br>
+        4. Wait for processing to complete
+      </div>
+      <div class="tc-expected"><strong>Expected:</strong> Planner data is extracted and shown for review</div>
+      <div class="result-row">
+        <span class="result-label">Result:</span>
+        <label class="radio-opt pass"><input type="radio" name="tc-imp-001" value="pass" /> Pass</label>
+        <label class="radio-opt fail"><input type="radio" name="tc-imp-001" value="fail" /> Fail</label>
+        <label class="radio-opt block"><input type="radio" name="tc-imp-001" value="blocked" /> Blocked</label>
+        <label class="radio-opt na"><input type="radio" name="tc-imp-001" value="na" /> N/A</label>
+      </div>
+      <span class="notes-label">Notes / Observations</span>
+      <textarea placeholder="Describe what you saw, any issues, or leave blank if none..."></textarea>
+    </div>
+
+    <div class="tc">
+      <div class="tc-header">
+        <div class="tc-meta">
+          <div class="tc-id">TC-IMP-002</div>
+          <div class="tc-name">Imported data can be reviewed before saving</div>
+        </div>
+      </div>
+      <div class="tc-steps">
+        <strong>Steps</strong>
+        1. After a PDF import completes, review the extracted data on screen
+      </div>
+      <div class="tc-expected"><strong>Expected:</strong> Units, semesters, and credits are displayed correctly before confirming</div>
+      <div class="result-row">
+        <span class="result-label">Result:</span>
+        <label class="radio-opt pass"><input type="radio" name="tc-imp-002" value="pass" /> Pass</label>
+        <label class="radio-opt fail"><input type="radio" name="tc-imp-002" value="fail" /> Fail</label>
+        <label class="radio-opt block"><input type="radio" name="tc-imp-002" value="blocked" /> Blocked</label>
+        <label class="radio-opt na"><input type="radio" name="tc-imp-002" value="na" /> N/A</label>
+      </div>
+      <span class="notes-label">Notes / Observations</span>
+      <textarea placeholder="Describe what you saw, any issues, or leave blank if none..."></textarea>
+    </div>
+
+  </div>
+
+  <!-- ===================== MODULE 4: STUDENT LOOKUP & RESULTS ===================== -->
+  <div class="module-header">
+    Module 4: Student Lookup &amp; Major Matching
+    <span class="badge">4 test cases</span>
+  </div>
+  <div class="module-body">
+
+    <div class="tc">
+      <div class="tc-header">
+        <div class="tc-meta">
+          <div class="tc-id">TC-SLU-001</div>
+          <div class="tc-name">Student can be searched and selected from the dropdown</div>
+        </div>
+      </div>
+      <div class="tc-steps">
+        <strong>Steps</strong>
+        1. After logging in, navigate to the Dashboard<br>
+        2. Type a student name or ID into the search field<br>
+        3. Observe the dropdown that appears<br>
+        4. Select a student from the dropdown
+      </div>
+      <div class="tc-expected"><strong>Expected:</strong> Matching students appear in the dropdown and one can be selected</div>
+      <div class="result-row">
+        <span class="result-label">Result:</span>
+        <label class="radio-opt pass"><input type="radio" name="tc-slu-001" value="pass" /> Pass</label>
+        <label class="radio-opt fail"><input type="radio" name="tc-slu-001" value="fail" /> Fail</label>
+        <label class="radio-opt block"><input type="radio" name="tc-slu-001" value="blocked" /> Blocked</label>
+        <label class="radio-opt na"><input type="radio" name="tc-slu-001" value="na" /> N/A</label>
+      </div>
+      <span class="notes-label">Notes / Observations</span>
+      <textarea placeholder="Describe what you saw, any issues, or leave blank if none..."></textarea>
+    </div>
+
+    <div class="tc">
+      <div class="tc-header">
+        <div class="tc-meta">
+          <div class="tc-id">TC-SLU-002</div>
+          <div class="tc-name">Clicking Search displays scraped portal results</div>
+        </div>
+      </div>
+      <div class="tc-steps">
+        <strong>Steps</strong>
+        1. Select a student from the dropdown<br>
+        2. Click the Search button<br>
+        3. Wait for the results to load
+      </div>
+      <div class="tc-expected"><strong>Expected:</strong> The student's academic record fetched from the portal is displayed (units, grades, credits)</div>
+      <div class="result-row">
+        <span class="result-label">Result:</span>
+        <label class="radio-opt pass"><input type="radio" name="tc-slu-002" value="pass" /> Pass</label>
+        <label class="radio-opt fail"><input type="radio" name="tc-slu-002" value="fail" /> Fail</label>
+        <label class="radio-opt block"><input type="radio" name="tc-slu-002" value="blocked" /> Blocked</label>
+        <label class="radio-opt na"><input type="radio" name="tc-slu-002" value="na" /> N/A</label>
+      </div>
+      <span class="notes-label">Notes / Observations</span>
+      <textarea placeholder="Describe what you saw, any issues, or leave blank if none..."></textarea>
+    </div>
+
+    <div class="tc">
+      <div class="tc-header">
+        <div class="tc-meta">
+          <div class="tc-id">TC-SLU-003</div>
+          <div class="tc-name">Major matching results appear after search</div>
+        </div>
+      </div>
+      <div class="tc-steps">
+        <strong>Steps</strong>
+        1. After search results load, observe the Dashboard
+      </div>
+      <div class="tc-expected"><strong>Expected:</strong> Major matching results are shown alongside the scraped data — the most likely major is highlighted</div>
+      <div class="result-row">
+        <span class="result-label">Result:</span>
+        <label class="radio-opt pass"><input type="radio" name="tc-slu-003" value="pass" /> Pass</label>
+        <label class="radio-opt fail"><input type="radio" name="tc-slu-003" value="fail" /> Fail</label>
+        <label class="radio-opt block"><input type="radio" name="tc-slu-003" value="blocked" /> Blocked</label>
+        <label class="radio-opt na"><input type="radio" name="tc-slu-003" value="na" /> N/A</label>
+      </div>
+      <span class="notes-label">Notes / Observations</span>
+      <textarea placeholder="Describe what you saw, any issues, or leave blank if none..."></textarea>
+    </div>
+
+    <div class="tc">
+      <div class="tc-header">
+        <div class="tc-meta">
+          <div class="tc-id">TC-SLU-004</div>
+          <div class="tc-name">Match confidence and alternative majors are shown</div>
+        </div>
+      </div>
+      <div class="tc-steps">
+        <strong>Steps</strong>
+        1. Observe the major matching results after a search
+      </div>
+      <div class="tc-expected"><strong>Expected:</strong> Each major shows a confidence score and multiple possible majors are listed, not just the top one</div>
+      <div class="result-row">
+        <span class="result-label">Result:</span>
+        <label class="radio-opt pass"><input type="radio" name="tc-slu-004" value="pass" /> Pass</label>
+        <label class="radio-opt fail"><input type="radio" name="tc-slu-004" value="fail" /> Fail</label>
+        <label class="radio-opt block"><input type="radio" name="tc-slu-004" value="blocked" /> Blocked</label>
+        <label class="radio-opt na"><input type="radio" name="tc-slu-004" value="na" /> N/A</label>
+      </div>
+      <span class="notes-label">Notes / Observations</span>
+      <textarea placeholder="Describe what you saw, any issues, or leave blank if none..."></textarea>
+    </div>
+
+  </div>
+
+  <!-- ===================== MODULE 5: STUDY PLAN ===================== -->
+  <div class="module-header">
+    Module 5: Study Plan
+    <span class="badge">2 test cases</span>
+  </div>
+  <div class="module-body">
+
+    <div class="tc">
+      <div class="tc-header">
+        <div class="tc-meta">
+          <div class="tc-id">TC-PLN-001</div>
+          <div class="tc-name">Study plan is generated and viewable</div>
+        </div>
+      </div>
+      <div class="tc-steps">
+        <strong>Steps</strong>
+        1. Navigate to Study Planners<br>
+        2. Select a planner
+      </div>
+      <div class="tc-expected"><strong>Expected:</strong> A semester-by-semester study plan is displayed with units assigned to each semester</div>
+      <div class="result-row">
+        <span class="result-label">Result:</span>
+        <label class="radio-opt pass"><input type="radio" name="tc-pln-001" value="pass" /> Pass</label>
+        <label class="radio-opt fail"><input type="radio" name="tc-pln-001" value="fail" /> Fail</label>
+        <label class="radio-opt block"><input type="radio" name="tc-pln-001" value="blocked" /> Blocked</label>
+        <label class="radio-opt na"><input type="radio" name="tc-pln-001" value="na" /> N/A</label>
+      </div>
+      <span class="notes-label">Notes / Observations</span>
+      <textarea placeholder="Describe what you saw, any issues, or leave blank if none..."></textarea>
+    </div>
+
+    <div class="tc">
+      <div class="tc-header">
+        <div class="tc-meta">
+          <div class="tc-id">TC-PLN-002</div>
+          <div class="tc-name">Completed units are visually distinguished</div>
+        </div>
+      </div>
+      <div class="tc-steps">
+        <strong>Steps</strong>
+        1. Review the plan layout
+      </div>
+      <div class="tc-expected"><strong>Expected:</strong> Completed, in-progress, and future units are visually distinguishable</div>
+      <div class="result-row">
+        <span class="result-label">Result:</span>
+        <label class="radio-opt pass"><input type="radio" name="tc-pln-002" value="pass" /> Pass</label>
+        <label class="radio-opt fail"><input type="radio" name="tc-pln-002" value="fail" /> Fail</label>
+        <label class="radio-opt block"><input type="radio" name="tc-pln-002" value="blocked" /> Blocked</label>
+        <label class="radio-opt na"><input type="radio" name="tc-pln-002" value="na" /> N/A</label>
+      </div>
+      <span class="notes-label">Notes / Observations</span>
+      <textarea placeholder="Describe what you saw, any issues, or leave blank if none..."></textarea>
+    </div>
+
+  </div>
+
+  <!-- ===================== MODULE 6: EXPORT ===================== -->
+  <div class="module-header">
+    Module 6: Export
+    <span class="badge">2 test cases</span>
+  </div>
+  <div class="module-body">
+
+    <div class="tc">
+      <div class="tc-header">
+        <div class="tc-meta">
+          <div class="tc-id">TC-EXP-001</div>
+          <div class="tc-name">Report can be exported</div>
+        </div>
+      </div>
+      <div class="tc-steps">
+        <strong>Steps</strong>
+        1. Open the export option from a planner<br>
+        2. Select sections to include<br>
+        3. Click Export
+      </div>
+      <div class="tc-expected"><strong>Expected:</strong> A file is downloaded to your machine</div>
+      <div class="result-row">
+        <span class="result-label">Result:</span>
+        <label class="radio-opt pass"><input type="radio" name="tc-exp-001" value="pass" /> Pass</label>
+        <label class="radio-opt fail"><input type="radio" name="tc-exp-001" value="fail" /> Fail</label>
+        <label class="radio-opt block"><input type="radio" name="tc-exp-001" value="blocked" /> Blocked</label>
+        <label class="radio-opt na"><input type="radio" name="tc-exp-001" value="na" /> N/A</label>
+      </div>
+      <span class="notes-label">Notes / Observations</span>
+      <textarea placeholder="Describe what you saw, any issues, or leave blank if none..."></textarea>
+    </div>
+
+    <div class="tc">
+      <div class="tc-header">
+        <div class="tc-meta">
+          <div class="tc-id">TC-EXP-002</div>
+          <div class="tc-name">Export section selection works</div>
+        </div>
+      </div>
+      <div class="tc-steps">
+        <strong>Steps</strong>
+        1. Open the export modal<br>
+        2. Deselect one or more sections<br>
+        3. Click Export and open the file
+      </div>
+      <div class="tc-expected"><strong>Expected:</strong> The exported file only contains the selected sections</div>
+      <div class="result-row">
+        <span class="result-label">Result:</span>
+        <label class="radio-opt pass"><input type="radio" name="tc-exp-002" value="pass" /> Pass</label>
+        <label class="radio-opt fail"><input type="radio" name="tc-exp-002" value="fail" /> Fail</label>
+        <label class="radio-opt block"><input type="radio" name="tc-exp-002" value="blocked" /> Blocked</label>
+        <label class="radio-opt na"><input type="radio" name="tc-exp-002" value="na" /> N/A</label>
+      </div>
+      <span class="notes-label">Notes / Observations</span>
+      <textarea placeholder="Describe what you saw, any issues, or leave blank if none..."></textarea>
+    </div>
+
+  </div>
+
+  <!-- ===================== MODULE 7: CLOUD SYNC ===================== -->
+  <div class="module-header">
+    Module 7: Cloud Sync
+    <span class="badge">2 test cases</span>
+  </div>
+  <div class="module-body">
+
+    <div class="tc">
+      <div class="tc-header">
+        <div class="tc-meta">
+          <div class="tc-id">TC-SYN-001</div>
+          <div class="tc-name">Cloud sync status is visible</div>
+        </div>
+      </div>
+      <div class="tc-steps">
+        <strong>Steps</strong>
+        1. Navigate to Cloud Sync
+      </div>
+      <div class="tc-expected"><strong>Expected:</strong> Sync status (last synced time, connection status) is displayed</div>
+      <div class="result-row">
+        <span class="result-label">Result:</span>
+        <label class="radio-opt pass"><input type="radio" name="tc-syn-001" value="pass" /> Pass</label>
+        <label class="radio-opt fail"><input type="radio" name="tc-syn-001" value="fail" /> Fail</label>
+        <label class="radio-opt block"><input type="radio" name="tc-syn-001" value="blocked" /> Blocked</label>
+        <label class="radio-opt na"><input type="radio" name="tc-syn-001" value="na" /> N/A</label>
+      </div>
+      <span class="notes-label">Notes / Observations</span>
+      <textarea placeholder="Describe what you saw, any issues, or leave blank if none..."></textarea>
+    </div>
+
+    <div class="tc">
+      <div class="tc-header">
+        <div class="tc-meta">
+          <div class="tc-id">TC-SYN-002</div>
+          <div class="tc-name">Planner is accessible on cloud portal after sync</div>
+        </div>
+      </div>
+      <div class="tc-steps">
+        <strong>Steps</strong>
+        1. After syncing a planner, open https://fyp.jameswong.work<br>
+        2. Navigate to Planners
+      </div>
+      <div class="tc-expected"><strong>Expected:</strong> The synced planner appears in the portal</div>
+      <div class="result-row">
+        <span class="result-label">Result:</span>
+        <label class="radio-opt pass"><input type="radio" name="tc-syn-002" value="pass" /> Pass</label>
+        <label class="radio-opt fail"><input type="radio" name="tc-syn-002" value="fail" /> Fail</label>
+        <label class="radio-opt block"><input type="radio" name="tc-syn-002" value="blocked" /> Blocked</label>
+        <label class="radio-opt na"><input type="radio" name="tc-syn-002" value="na" /> N/A</label>
+      </div>
+      <span class="notes-label">Notes / Observations</span>
+      <textarea placeholder="Describe what you saw, any issues, or leave blank if none..."></textarea>
+    </div>
+
+  </div>
+
+  <!-- ===================== MODULE 8: SETTINGS ===================== -->
+  <div class="module-header">
+    Module 8: Settings
+    <span class="badge">1 test case</span>
+  </div>
+  <div class="module-body">
+
+    <div class="tc">
+      <div class="tc-header">
+        <div class="tc-meta">
+          <div class="tc-id">TC-SET-001</div>
+          <div class="tc-name">Settings page is accessible and loads correctly</div>
+        </div>
+      </div>
+      <div class="tc-steps">
+        <strong>Steps</strong>
+        1. Click Settings in the navigation bar
+      </div>
+      <div class="tc-expected"><strong>Expected:</strong> Settings page loads without errors and options are displayed</div>
+      <div class="result-row">
+        <span class="result-label">Result:</span>
+        <label class="radio-opt pass"><input type="radio" name="tc-set-001" value="pass" /> Pass</label>
+        <label class="radio-opt fail"><input type="radio" name="tc-set-001" value="fail" /> Fail</label>
+        <label class="radio-opt block"><input type="radio" name="tc-set-001" value="blocked" /> Blocked</label>
+        <label class="radio-opt na"><input type="radio" name="tc-set-001" value="na" /> N/A</label>
+      </div>
+      <span class="notes-label">Notes / Observations</span>
+      <textarea placeholder="Describe what you saw, any issues, or leave blank if none..."></textarea>
+    </div>
+
+  </div>
+
+  <!-- ===================== MODULE 9: CLOUD PORTAL ===================== -->
+  <div class="module-header">
+    Module 9: Cloud Portal (Admin)
+    <span class="badge">5 test cases</span>
+  </div>
+  <div class="module-body">
+
+    <div class="tc">
+      <div class="tc-header">
+        <div class="tc-meta">
+          <div class="tc-id">TC-CLD-001</div>
+          <div class="tc-name">Planner list loads on the portal</div>
+        </div>
+      </div>
+      <div class="tc-steps">
+        <strong>Steps</strong>
+        1. Open https://fyp.jameswong.work<br>
+        2. Navigate to Planners
+      </div>
+      <div class="tc-expected"><strong>Expected:</strong> A list of planners is shown with status indicators</div>
+      <div class="result-row">
+        <span class="result-label">Result:</span>
+        <label class="radio-opt pass"><input type="radio" name="tc-cld-001" value="pass" /> Pass</label>
+        <label class="radio-opt fail"><input type="radio" name="tc-cld-001" value="fail" /> Fail</label>
+        <label class="radio-opt block"><input type="radio" name="tc-cld-001" value="blocked" /> Blocked</label>
+        <label class="radio-opt na"><input type="radio" name="tc-cld-001" value="na" /> N/A</label>
+      </div>
+      <span class="notes-label">Notes / Observations</span>
+      <textarea placeholder="Describe what you saw, any issues, or leave blank if none..."></textarea>
+    </div>
+
+    <div class="tc">
+      <div class="tc-header">
+        <div class="tc-meta">
+          <div class="tc-id">TC-CLD-002</div>
+          <div class="tc-name">Planner can be approved</div>
+        </div>
+      </div>
+      <div class="tc-steps">
+        <strong>Steps</strong>
+        1. Click on a planner with Draft status<br>
+        2. Click Approve
+      </div>
+      <div class="tc-expected"><strong>Expected:</strong> Planner status changes to Active</div>
+      <div class="result-row">
+        <span class="result-label">Result:</span>
+        <label class="radio-opt pass"><input type="radio" name="tc-cld-002" value="pass" /> Pass</label>
+        <label class="radio-opt fail"><input type="radio" name="tc-cld-002" value="fail" /> Fail</label>
+        <label class="radio-opt block"><input type="radio" name="tc-cld-002" value="blocked" /> Blocked</label>
+        <label class="radio-opt na"><input type="radio" name="tc-cld-002" value="na" /> N/A</label>
+      </div>
+      <span class="notes-label">Notes / Observations</span>
+      <textarea placeholder="Describe what you saw, any issues, or leave blank if none..."></textarea>
+    </div>
+
+    <div class="tc">
+      <div class="tc-header">
+        <div class="tc-meta">
+          <div class="tc-id">TC-CLD-003</div>
+          <div class="tc-name">Planner can be archived</div>
+        </div>
+      </div>
+      <div class="tc-steps">
+        <strong>Steps</strong>
+        1. Click on an active planner<br>
+        2. Click Archive
+      </div>
+      <div class="tc-expected"><strong>Expected:</strong> Planner status changes to Archived</div>
+      <div class="result-row">
+        <span class="result-label">Result:</span>
+        <label class="radio-opt pass"><input type="radio" name="tc-cld-003" value="pass" /> Pass</label>
+        <label class="radio-opt fail"><input type="radio" name="tc-cld-003" value="fail" /> Fail</label>
+        <label class="radio-opt block"><input type="radio" name="tc-cld-003" value="blocked" /> Blocked</label>
+        <label class="radio-opt na"><input type="radio" name="tc-cld-003" value="na" /> N/A</label>
+      </div>
+      <span class="notes-label">Notes / Observations</span>
+      <textarea placeholder="Describe what you saw, any issues, or leave blank if none..."></textarea>
+    </div>
+
+    <div class="tc">
+      <div class="tc-header">
+        <div class="tc-meta">
+          <div class="tc-id">TC-CLD-004</div>
+          <div class="tc-name">Active planner can be exported from portal</div>
+        </div>
+      </div>
+      <div class="tc-steps">
+        <strong>Steps</strong>
+        1. Click on an active planner<br>
+        2. Click Export
+      </div>
+      <div class="tc-expected"><strong>Expected:</strong> A file is downloaded</div>
+      <div class="result-row">
+        <span class="result-label">Result:</span>
+        <label class="radio-opt pass"><input type="radio" name="tc-cld-004" value="pass" /> Pass</label>
+        <label class="radio-opt fail"><input type="radio" name="tc-cld-004" value="fail" /> Fail</label>
+        <label class="radio-opt block"><input type="radio" name="tc-cld-004" value="blocked" /> Blocked</label>
+        <label class="radio-opt na"><input type="radio" name="tc-cld-004" value="na" /> N/A</label>
+      </div>
+      <span class="notes-label">Notes / Observations</span>
+      <textarea placeholder="Describe what you saw, any issues, or leave blank if none..."></textarea>
+    </div>
+
+    <div class="tc">
+      <div class="tc-header">
+        <div class="tc-meta">
+          <div class="tc-id">TC-CLD-005</div>
+          <div class="tc-name">Draft or archived planners cannot be exported</div>
+        </div>
+      </div>
+      <div class="tc-steps">
+        <strong>Steps</strong>
+        1. Click on a Draft or Archived planner<br>
+        2. Attempt to export it
+      </div>
+      <div class="tc-expected"><strong>Expected:</strong> Export is blocked with an appropriate message</div>
+      <div class="result-row">
+        <span class="result-label">Result:</span>
+        <label class="radio-opt pass"><input type="radio" name="tc-cld-005" value="pass" /> Pass</label>
+        <label class="radio-opt fail"><input type="radio" name="tc-cld-005" value="fail" /> Fail</label>
+        <label class="radio-opt block"><input type="radio" name="tc-cld-005" value="blocked" /> Blocked</label>
+        <label class="radio-opt na"><input type="radio" name="tc-cld-005" value="na" /> N/A</label>
+      </div>
+      <span class="notes-label">Notes / Observations</span>
+      <textarea placeholder="Describe what you saw, any issues, or leave blank if none..."></textarea>
+    </div>
+
+  </div>
+
+  <!-- ===================== GENERAL FEEDBACK ===================== -->
+  <div class="card">
+    <h2>General Feedback</h2>
+    <div class="field-row single" style="margin-bottom:16px">
+      <div>
+        <label>Overall, how easy was the app to use? (1 = Very difficult, 5 = Very easy)</label>
+        <select>
+          <option value="">Select rating</option>
+          <option>1 — Very difficult</option>
+          <option>2 — Difficult</option>
+          <option>3 — Neutral</option>
+          <option>4 — Easy</option>
+          <option>5 — Very easy</option>
+        </select>
+      </div>
+    </div>
+    <div class="field-row single" style="margin-bottom:16px">
+      <div>
+        <label>What did you find most useful about the app?</label>
+        <textarea placeholder="e.g. The major matching was accurate and saved me time..."></textarea>
+      </div>
+    </div>
+    <div class="field-row single" style="margin-bottom:16px">
+      <div>
+        <label>What was confusing or difficult to use?</label>
+        <textarea placeholder="e.g. I wasn't sure where to find the export button..."></textarea>
+      </div>
+    </div>
+    <div class="field-row single">
+      <div>
+        <label>Any other comments or suggestions?</label>
+        <textarea placeholder="Free-form feedback..."></textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== DEFECT LOG ===================== -->
+  <div class="card">
+    <h2>Defect Log</h2>
+    <table class="defect-table" id="defect-table">
+      <thead>
+        <tr>
+          <th style="width:80px">Test Case</th>
+          <th>Description of Issue</th>
+          <th style="width:110px">Severity</th>
+        </tr>
+      </thead>
+      <tbody id="defect-body">
+        <tr>
+          <td><input type="text" placeholder="e.g. TC-PRI-001" /></td>
+          <td><input type="text" placeholder="Describe what went wrong..." /></td>
+          <td>
+            <select>
+              <option value="">Level</option>
+              <option>Critical</option>
+              <option>High</option>
+              <option>Medium</option>
+              <option>Low</option>
+            </select>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <button class="add-row-btn" onclick="addDefectRow()">+ Add another defect</button>
+  </div>
+
+  <!-- ===================== SUMMARY ===================== -->
+  <div class="card">
+    <h2>Summary</h2>
+    <div class="summary-grid">
+      <div class="summary-box s-total">
+        <div class="num">26</div>
+        <div class="lbl">Total Cases</div>
+      </div>
+      <div class="summary-box s-pass">
+        <div class="num" id="count-pass">0</div>
+        <div class="lbl">Passed</div>
+      </div>
+      <div class="summary-box s-fail">
+        <div class="num" id="count-fail">0</div>
+        <div class="lbl">Failed</div>
+      </div>
+      <div class="summary-box s-block">
+        <div class="num" id="count-block">0</div>
+        <div class="lbl">Blocked / N/A</div>
+      </div>
+    </div>
+    <div class="pass-rate-bar">
+      <div class="pass-rate-fill" id="pass-bar" style="width:0%"></div>
+    </div>
+    <div class="pass-rate-label">Pass rate: <span id="pass-rate-text">0%</span> &nbsp;·&nbsp; Pass criteria: ≥ 90%</div>
+  </div>
+
+  <!-- ===================== SIGN-OFF ===================== -->
+  <div class="card">
+    <h2>Sign-off</h2>
+    <div class="signoff-grid">
+      <div>
+        <label>Tester Name</label>
+        <input type="text" placeholder="Full name" />
+      </div>
+      <div>
+        <label>Date</label>
+        <input type="date" />
+      </div>
+    </div>
+    <div style="margin-bottom:16px">
+      <label style="margin-bottom:8px; display:block">Outcome</label>
+      <div class="outcome-opts">
+        <label class="outcome-opt"><input type="radio" name="outcome" value="accepted" /> Accepted</label>
+        <label class="outcome-opt"><input type="radio" name="outcome" value="conditions" /> Accepted with conditions</label>
+        <label class="outcome-opt"><input type="radio" name="outcome" value="rejected" /> Not accepted</label>
+      </div>
+    </div>
+    <div>
+      <label>Conditions / Comments</label>
+      <textarea placeholder="Any conditions for acceptance, or reasons for rejection..."></textarea>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button class="btn btn-secondary" onclick="window.print()">Print / Save as PDF</button>
+  </div>
+
+</div>
+
+<script>
+  // Live pass-rate counter
+  function updateSummary() {
+    const radios = document.querySelectorAll('input[type="radio"]');
+    const groups = {};
+    radios.forEach(r => {
+      if (r.name === 'outcome') return;
+      if (!groups[r.name]) groups[r.name] = null;
+      if (r.checked) groups[r.name] = r.value;
+    });
+
+    let pass = 0, fail = 0, block = 0;
+    Object.values(groups).forEach(v => {
+      if (v === 'pass') pass++;
+      else if (v === 'fail') fail++;
+      else if (v === 'blocked' || v === 'na') block++;
+    });
+
+    const total = 26;
+    const rate = total > 0 ? Math.round((pass / total) * 100) : 0;
+
+    document.getElementById('count-pass').textContent = pass;
+    document.getElementById('count-fail').textContent = fail;
+    document.getElementById('count-block').textContent = block;
+    document.getElementById('pass-bar').style.width = rate + '%';
+    document.getElementById('pass-rate-text').textContent = rate + '%';
+    document.getElementById('pass-bar').style.background =
+      rate >= 90 ? 'linear-gradient(90deg, #48bb78, #38a169)' :
+      rate >= 70 ? 'linear-gradient(90deg, #f6ad55, #ed8936)' :
+                  'linear-gradient(90deg, #fc8181, #e53e3e)';
+  }
+
+  document.addEventListener('change', updateSummary);
+
+  // Add defect row
+  function addDefectRow() {
+    const tbody = document.getElementById('defect-body');
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><input type="text" placeholder="e.g. TC-PRI-001" /></td>
+      <td><input type="text" placeholder="Describe what went wrong..." /></td>
+      <td>
+        <select>
+          <option value="">Level</option>
+          <option>Critical</option>
+          <option>High</option>
+          <option>Medium</option>
+          <option>Low</option>
+        </select>
+      </td>`;
+    tbody.appendChild(tr);
+  }
+</script>
+</body>
+</html>

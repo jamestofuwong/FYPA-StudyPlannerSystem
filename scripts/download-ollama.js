@@ -33,14 +33,27 @@ const BINARY_NAME = process.platform === 'win32' ? 'ollama.exe' : 'ollama';
 fs.mkdirSync(OUT_DIR, { recursive: true });
 
 function httpsGetJson(url) {
+  const headers = { 'User-Agent': 'study-planner-build-script' };
+  const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
   return new Promise((resolve, reject) => {
-    https.get(url, { headers: { 'User-Agent': 'study-planner-build-script' } }, (res) => {
+    https.get(url, { headers }, (res) => {
       if (res.statusCode === 301 || res.statusCode === 302) {
         return resolve(httpsGetJson(res.headers.location));
       }
       const chunks = [];
       res.on('data', (c) => chunks.push(c));
-      res.on('end', () => resolve(JSON.parse(Buffer.concat(chunks).toString())));
+      res.on('end', () => {
+        const body = Buffer.concat(chunks).toString();
+        const json = JSON.parse(body);
+        if (res.statusCode !== 200) {
+          return reject(new Error(
+            `GitHub API returned HTTP ${res.statusCode}: ${json.message || body}`
+          ));
+        }
+        resolve(json);
+      });
       res.on('error', reject);
     }).on('error', reject);
   });

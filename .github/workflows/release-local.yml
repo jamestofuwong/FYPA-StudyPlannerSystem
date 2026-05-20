@@ -41,8 +41,12 @@ jobs:
         run: node scripts/download-ollama.js
         env:
           PLATFORM: ${{ matrix.platform }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # ── 5. Build Python parser binary ────────────────────────────────────────
+      - name: Install PyInstaller
+        run: pip install pyinstaller
+
       - name: Build Python parser binary
         run: node scripts/build-python.js
 
