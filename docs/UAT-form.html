@@ -439,7 +439,7 @@
   <!-- ===================== MODULE 2: LOGIN ===================== -->
   <div class="module-header">
     Module 2: Portal Login
-    <span class="badge">3 test cases</span>
+    <span class="badge">2 test cases</span>
   </div>
   <div class="module-body">
 
@@ -452,7 +452,7 @@
       </div>
       <div class="tc-steps">
         <strong>Steps</strong>
-        1. Navigate to the Scraping page<br>
+        1. Navigate to the Matching page<br>
         2. Click the Login button
       </div>
       <div class="tc-expected"><strong>Expected:</strong> A popup window appears prompting you to enter your Swinburne portal credentials</div>
@@ -477,7 +477,7 @@
       <div class="tc-steps">
         <strong>Steps</strong>
         1. Click the Login button to open the popup<br>
-        2. Enter your Swinburne portal username and password<br>
+        2. Enter your Swinburne portal credentials<br>
         3. Submit the login form
       </div>
       <div class="tc-expected"><strong>Expected:</strong> Login succeeds and the app proceeds without error</div>
@@ -492,95 +492,11 @@
       <textarea placeholder="Describe what you saw, any issues, or leave blank if none..."></textarea>
     </div>
 
-    <div class="tc">
-      <div class="tc-header">
-        <div class="tc-meta">
-          <div class="tc-id">TC-LOG-003</div>
-          <div class="tc-name">Invalid credentials are handled gracefully</div>
-        </div>
-      </div>
-      <div class="tc-steps">
-        <strong>Steps</strong>
-        1. Click the Login button to open the popup<br>
-        2. Enter incorrect credentials<br>
-        3. Submit the login form
-      </div>
-      <div class="tc-expected"><strong>Expected:</strong> An error message is displayed; the app does not crash</div>
-      <div class="result-row">
-        <span class="result-label">Result:</span>
-        <label class="radio-opt pass"><input type="radio" name="tc-log-003" value="pass" /> Pass</label>
-        <label class="radio-opt fail"><input type="radio" name="tc-log-003" value="fail" /> Fail</label>
-        <label class="radio-opt block"><input type="radio" name="tc-log-003" value="blocked" /> Blocked</label>
-        <label class="radio-opt na"><input type="radio" name="tc-log-003" value="na" /> N/A</label>
-      </div>
-      <span class="notes-label">Notes / Observations</span>
-      <textarea placeholder="Describe what you saw, any issues, or leave blank if none..."></textarea>
-    </div>
-
   </div>
 
-  <!-- ===================== MODULE 3: IMPORT ===================== -->
+  <!-- ===================== MODULE 3: STUDENT LOOKUP & RESULTS ===================== -->
   <div class="module-header">
-    Module 3: Data Import
-    <span class="badge">2 test cases</span>
-  </div>
-  <div class="module-body">
-
-    <div class="tc">
-      <div class="tc-header">
-        <div class="tc-meta">
-          <div class="tc-id">TC-IMP-001</div>
-          <div class="tc-name">PDF import</div>
-          <span class="req-tag">REQ-PRI-101</span>
-        </div>
-      </div>
-      <div class="tc-steps">
-        <strong>Steps</strong>
-        1. Navigate to Data Import<br>
-        2. Select PDF import<br>
-        3. Upload a planner PDF<br>
-        4. Wait for processing to complete
-      </div>
-      <div class="tc-expected"><strong>Expected:</strong> Planner data is extracted and shown for review</div>
-      <div class="result-row">
-        <span class="result-label">Result:</span>
-        <label class="radio-opt pass"><input type="radio" name="tc-imp-001" value="pass" /> Pass</label>
-        <label class="radio-opt fail"><input type="radio" name="tc-imp-001" value="fail" /> Fail</label>
-        <label class="radio-opt block"><input type="radio" name="tc-imp-001" value="blocked" /> Blocked</label>
-        <label class="radio-opt na"><input type="radio" name="tc-imp-001" value="na" /> N/A</label>
-      </div>
-      <span class="notes-label">Notes / Observations</span>
-      <textarea placeholder="Describe what you saw, any issues, or leave blank if none..."></textarea>
-    </div>
-
-    <div class="tc">
-      <div class="tc-header">
-        <div class="tc-meta">
-          <div class="tc-id">TC-IMP-002</div>
-          <div class="tc-name">Imported data can be reviewed before saving</div>
-        </div>
-      </div>
-      <div class="tc-steps">
-        <strong>Steps</strong>
-        1. After a PDF import completes, review the extracted data on screen
-      </div>
-      <div class="tc-expected"><strong>Expected:</strong> Units, semesters, and credits are displayed correctly before confirming</div>
-      <div class="result-row">
-        <span class="result-label">Result:</span>
-        <label class="radio-opt pass"><input type="radio" name="tc-imp-002" value="pass" /> Pass</label>
-        <label class="radio-opt fail"><input type="radio" name="tc-imp-002" value="fail" /> Fail</label>
-        <label class="radio-opt block"><input type="radio" name="tc-imp-002" value="blocked" /> Blocked</label>
-        <label class="radio-opt na"><input type="radio" name="tc-imp-002" value="na" /> N/A</label>
-      </div>
-      <span class="notes-label">Notes / Observations</span>
-      <textarea placeholder="Describe what you saw, any issues, or leave blank if none..."></textarea>
-    </div>
-
-  </div>
-
-  <!-- ===================== MODULE 4: STUDENT LOOKUP & RESULTS ===================== -->
-  <div class="module-header">
-    Module 4: Student Lookup &amp; Major Matching
+    Module 3: Student Lookup &amp; Major Matching
     <span class="badge">4 test cases</span>
   </div>
   <div class="module-body">
@@ -677,6 +593,65 @@
         <label class="radio-opt fail"><input type="radio" name="tc-slu-004" value="fail" /> Fail</label>
         <label class="radio-opt block"><input type="radio" name="tc-slu-004" value="blocked" /> Blocked</label>
         <label class="radio-opt na"><input type="radio" name="tc-slu-004" value="na" /> N/A</label>
+      </div>
+      <span class="notes-label">Notes / Observations</span>
+      <textarea placeholder="Describe what you saw, any issues, or leave blank if none..."></textarea>
+    </div>
+
+  </div>
+
+  <!-- ===================== MODULE 4: IMPORT ===================== -->
+  <div class="module-header">
+    Module 4: Data Import
+    <span class="badge">2 test cases</span>
+  </div>
+  <div class="module-body">
+
+    <div class="tc">
+      <div class="tc-header">
+        <div class="tc-meta">
+          <div class="tc-id">TC-IMP-001</div>
+          <div class="tc-name">PDF import</div>
+          <span class="req-tag">REQ-PRI-101</span>
+        </div>
+      </div>
+      <div class="tc-steps">
+        <strong>Steps</strong>
+        1. Navigate to Data Import<br>
+        2. Select PDF import<br>
+        3. Upload a planner PDF<br>
+        4. Wait for processing to complete
+      </div>
+      <div class="tc-expected"><strong>Expected:</strong> Planner data is extracted and shown for review</div>
+      <div class="result-row">
+        <span class="result-label">Result:</span>
+        <label class="radio-opt pass"><input type="radio" name="tc-imp-001" value="pass" /> Pass</label>
+        <label class="radio-opt fail"><input type="radio" name="tc-imp-001" value="fail" /> Fail</label>
+        <label class="radio-opt block"><input type="radio" name="tc-imp-001" value="blocked" /> Blocked</label>
+        <label class="radio-opt na"><input type="radio" name="tc-imp-001" value="na" /> N/A</label>
+      </div>
+      <span class="notes-label">Notes / Observations</span>
+      <textarea placeholder="Describe what you saw, any issues, or leave blank if none..."></textarea>
+    </div>
+
+    <div class="tc">
+      <div class="tc-header">
+        <div class="tc-meta">
+          <div class="tc-id">TC-IMP-002</div>
+          <div class="tc-name">Imported data can be reviewed before saving</div>
+        </div>
+      </div>
+      <div class="tc-steps">
+        <strong>Steps</strong>
+        1. After a PDF import completes, review the extracted data on screen
+      </div>
+      <div class="tc-expected"><strong>Expected:</strong> Units, semesters, and credits are displayed correctly before confirming</div>
+      <div class="result-row">
+        <span class="result-label">Result:</span>
+        <label class="radio-opt pass"><input type="radio" name="tc-imp-002" value="pass" /> Pass</label>
+        <label class="radio-opt fail"><input type="radio" name="tc-imp-002" value="fail" /> Fail</label>
+        <label class="radio-opt block"><input type="radio" name="tc-imp-002" value="blocked" /> Blocked</label>
+        <label class="radio-opt na"><input type="radio" name="tc-imp-002" value="na" /> N/A</label>
       </div>
       <span class="notes-label">Notes / Observations</span>
       <textarea placeholder="Describe what you saw, any issues, or leave blank if none..."></textarea>
@@ -1087,7 +1062,7 @@
     <h2>Summary</h2>
     <div class="summary-grid">
       <div class="summary-box s-total">
-        <div class="num">26</div>
+        <div class="num">25</div>
         <div class="lbl">Total Cases</div>
       </div>
       <div class="summary-box s-pass">
@@ -1160,7 +1135,7 @@
       else if (v === 'blocked' || v === 'na') block++;
     });
 
-    const total = 26;
+    const total = 25;
     const rate = total > 0 ? Math.round((pass / total) * 100) : 0;
 
     document.getElementById('count-pass').textContent = pass;
