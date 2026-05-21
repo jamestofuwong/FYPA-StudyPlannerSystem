@@ -30,30 +30,25 @@ export default function Topbar() {
         </span>
       </div>
 
-      {/* Right — status pill + avatar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 6,
-          fontSize: 12, color: 'var(--text-secondary)',
-        }}>
-          <span style={{
-            width: 7, height: 7, borderRadius: '50%',
-            background: 'var(--green)',
-            display: 'inline-block',
-            boxShadow: '0 0 0 2px var(--green-border)',
-          }} />
-          Scheduler active
-        </div>
-        <div style={{
-          width: 30, height: 30,
-          borderRadius: '50%',
-          background: 'var(--orange)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 12, fontWeight: 700, color: '#fff',
-        }}>
-          A
-        </div>
-      </div>
+      {/* Right — logout */}
+      <button
+        onClick={async () => {
+          await fetch('/api/auth/logout', { method: 'POST' });
+          window.location.href = '/login';
+        }}
+        style={{
+          fontSize: 12,
+          fontWeight: 600,
+          color: 'var(--text-secondary)',
+          background: 'none',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-sm)',
+          padding: '5px 12px',
+          cursor: 'pointer',
+        }}
+      >
+        Sign out
+      </button>
     </header>
   );
 }

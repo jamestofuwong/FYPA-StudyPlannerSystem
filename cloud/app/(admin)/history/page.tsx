@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import RunLogs from '../../components/RunLogs';
+import RunLogs from '../../../components/RunLogs';
 
 interface SyncRun {
   id: string;

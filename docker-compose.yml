@@ -53,11 +53,14 @@ services:
       pdf-parser:
         condition: service_healthy
     environment:
-      DATABASE_URL:       postgresql://${POSTGRES_USER:-fypa}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-fypa_cloud}
-      NODE_ENV:           production
-      SCRAPER_SIMULATE:   ${SCRAPER_SIMULATE:-false}
-      PLANNER_PDF_DIR:    /app/data/planners
-      PLANNER_PARSER_URL: http://pdf-parser:8001
+      DATABASE_URL:        postgresql://${POSTGRES_USER:-fypa}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-fypa_cloud}
+      NODE_ENV:            production
+      SCRAPER_SIMULATE:    ${SCRAPER_SIMULATE:-false}
+      PLANNER_PDF_DIR:     /app/data/planners
+      PLANNER_PARSER_URL:  http://pdf-parser:8001
+      ADMIN_USERNAME:          ${ADMIN_USERNAME}
+      ADMIN_PASSWORD_HASH_B64: ${ADMIN_PASSWORD_HASH_B64}
+      SESSION_SECRET:          ${SESSION_SECRET}
     volumes:
       - planner_pdfs:/app/data/planners
     ports:
