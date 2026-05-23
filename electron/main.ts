@@ -206,6 +206,11 @@ function sendUpdateStatus(status: string, data?: Record<string, unknown>) {
   });
 }
 
+// IPC: renderer asks to check for updates
+ipcMain.handle("updater-check", () => {
+  autoUpdater.checkForUpdates().catch(console.error);
+});
+
 // IPC: renderer asks to start downloading
 ipcMain.handle("updater-download", () => {
   autoUpdater.downloadUpdate().catch(console.error);

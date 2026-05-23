@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld("updaterAPI", {
   onStatus: (callback: (payload: Record<string, unknown>) => void) => {
     ipcRenderer.on("updater-status", (_, payload) => callback(payload));
   },
+  check:    () => ipcRenderer.invoke("updater-check"),
   download: () => ipcRenderer.invoke("updater-download"),
   install:  () => ipcRenderer.invoke("updater-install"),
 });
