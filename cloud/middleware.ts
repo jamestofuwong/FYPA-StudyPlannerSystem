@@ -10,6 +10,11 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
+  // Allow public read-only API endpoints used by the local Electron app
+  if (pathname.startsWith('/api/planners')) {
+    return NextResponse.next();
+  }
+
   const res = NextResponse.next();
   const session = await getIronSession<SessionData>(req, res, sessionOptions);
 
