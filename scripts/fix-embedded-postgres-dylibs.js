@@ -4,12 +4,16 @@
  *
  * electron-builder does not preserve symlinks when copying node_modules into
  * the app bundle. The embedded-postgres darwin-arm64 package ships versioned
- * ICU dylibs (e.g. libicudata.77.1.dylib) and unversioned symlinks (e.g.
- * libicudata.77.dylib → libicudata.77.1.dylib).  When the symlinks are
- * missing the postgres binary fails at startup with:
- *   "Library not loaded: @loader_path/../lib/libicudata.77.dylib"
+ * dylibs (e.g. libzstd.1.5.7.dylib, libicudata.77.1.dylib) alongside
+ * shorter-version symlinks (e.g. libzstd.1.dylib, libzstd.dylib).
+ * When the symlinks are missing postgres fails at startup with:
+ *   "Library not loaded: @loader_path/../lib/libzstd.1.dylib"
  *
- * This hook recreates the symlinks inside the packed .app bundle.
+ * This hook finds every fully-versioned .dylib (real file, not symlink) and
+ * recreates all intermediate symlinks inside the packed .app bundle.
+ *
+ * Example: libzstd.1.5.7.dylib → creates libzstd.1.5.dylib, libzstd.1.dylib,
+ *          libzstd.dylib if any of them are missing.
  */
 
 'use strict';
@@ -20,7 +24,7 @@ const path = require('path');
 exports.default = async function afterPack(context) {
   if (context.electronPlatformName !== 'darwin') return;
 
-  const appOutDir  = context.appOutDir;
+  const appOutDir   = context.appOutDir;
   const productName = context.packager.appInfo.productFilename;
   const libDir = path.join(
     appOutDir,
@@ -34,33 +38,45 @@ exports.default = async function afterPack(context) {
     return;
   }
 
-  const files = fs.readdirSync(libDir);
+  const entries = fs.readdirSync(libDir);
 
-  // Build a map: basename-without-patch → versioned filename
-  // e.g. "libicudata.77" → "libicudata.77.1.dylib"
-  const versionedMap = {};
-  for (const f of files) {
-    // Match files like libicudata.77.1.dylib  (name.major.minor.dylib)
-    const m = f.match(/^(.+\.\d+)\.\d+\.dylib$/);
-    if (m) {
-      versionedMap[m[1]] = f; // key: "libicudata.77"
-    }
-  }
+  // Find real files (not symlinks) that look like libname.v1.v2...dylib
+  const realFiles = entries.filter(f => {
+    if (!f.endsWith('.dylib')) return false;
+    const stat = fs.lstatSync(path.join(libDir, f));
+    return stat.isFile() && !stat.isSymbolicLink();
+  });
 
   let fixed = 0;
-  for (const [base, target] of Object.entries(versionedMap)) {
-    const symlinkName = `${base}.dylib`;
-    const symlinkPath = path.join(libDir, symlinkName);
 
-    if (!fs.existsSync(symlinkPath)) {
-      console.log(`[fix-embedded-postgres-dylibs] creating symlink: ${symlinkName} → ${target}`);
-      fs.symlinkSync(target, symlinkPath);
-      fixed++;
+  for (const realFile of realFiles) {
+    // Match: lib<name>.<d1>.<d2>[.<d3>...].dylib  (at least 2 version parts)
+    const m = realFile.match(/^(lib[^.]+)\.(\d+(?:\.\d+)+)\.dylib$/);
+    if (!m) continue;
+
+    const baseName    = m[1];            // e.g. "libzstd"
+    const versionStr  = m[2];            // e.g. "1.5.7"
+    const parts       = versionStr.split('.');
+
+    // Generate all shorter-version names, including the unversioned one.
+    // For parts=[1,5,7]: create libzstd.1.5.dylib, libzstd.1.dylib, libzstd.dylib
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const shortVersion = parts.slice(0, i).join('.');
+      const symlinkName  = shortVersion
+        ? `${baseName}.${shortVersion}.dylib`
+        : `${baseName}.dylib`;
+      const symlinkPath  = path.join(libDir, symlinkName);
+
+      if (!fs.existsSync(symlinkPath)) {
+        console.log(`[fix-embedded-postgres-dylibs] ${symlinkName} → ${realFile}`);
+        fs.symlinkSync(realFile, symlinkPath);
+        fixed++;
+      }
     }
   }
 
   if (fixed === 0) {
-    console.log('[fix-embedded-postgres-dylibs] all symlinks already present, nothing to do.');
+    console.log('[fix-embedded-postgres-dylibs] all symlinks already present.');
   } else {
     console.log(`[fix-embedded-postgres-dylibs] created ${fixed} symlink(s).`);
   }

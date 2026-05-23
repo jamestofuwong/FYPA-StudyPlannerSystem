@@ -93,14 +93,14 @@ async function startNextServer(): Promise<NextServerHandle> {
   );
 
   await new Promise<void>((resolve) => {
-    server.listen(0, "127.0.0.1", () => resolve());
+    server.listen(0, "localhost", () => resolve());
   });
 
   const address = server.address();
   const port = typeof address === "object" && address ? address.port : 0;
 
   return {
-    url: `http://127.0.0.1:${port}`,
+    url: `http://localhost:${port}`,
     close: async () => {
       await new Promise<void>((resolve, reject) => {
         server.close((err?: Error) => {
