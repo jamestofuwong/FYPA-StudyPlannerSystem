@@ -37,4 +37,6 @@ export type ExportInput = {
   completedCodes: string[];
   intakeYear: number;
   mpuCourseList?: { courseId: string; status: string }[];
+  enrollmentMode?: 'scrape' | 'import_xlsx' | 'import_manual' | 'import_paste';
+  appVersion?: string;
 };

@@ -5,7 +5,7 @@ import styles from './page.module.css';
 import { useToast } from '../../../components/providers/ToastProvider';
 import { usePortalAuth } from '../../../components/providers/PortalAuthContext';
 import { useScraperContext } from '../../../components/providers/ScraperContext';
-import type { ScrapedStudent } from '../../../../core/shared/types/student';
+import type { ScrapedStudent, ScrapedCourseListItem } from '../../../../core/shared/types/student';
 import ExportModal from '../../../components/ExportModal';
 import type { ExportInput } from '../../../../core/shared/types/export';
 
@@ -73,9 +73,17 @@ export default function DashboardPage() {
   const [selectedStudentName, setSelectedStudentName] = useState('');
   const suggestionsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showImportPanel, setShowImportPanel] = useState(false);
+  const [importMode, setImportMode] = useState<'xlsx' | 'manual' | 'paste'>('xlsx');
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importIntakeYear, setImportIntakeYear] = useState(new Date().getFullYear());
   const [importIntakeSem, setImportIntakeSem] = useState<1 | 2>(1);
+  const [manualUnits, setManualUnits] = useState<ScrapedCourseListItem[]>([]);
+  const [manualUnitForm, setManualUnitForm] = useState({ courseId: '', courseTitle: '', credits: '', grade: '', term: '', status: 'Complete' });
+  const [unitSuggestions, setUnitSuggestions] = useState<{ unit_code: string; unit_name: string }[]>([]);
+  const [showUnitSuggestions, setShowUnitSuggestions] = useState(false);
+  const unitSuggestionsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [pasteText, setPasteText] = useState('');
+  const [dataSource, setDataSource] = useState<'scrape' | 'import_xlsx' | 'import_manual' | 'import_paste'>('scrape');
   const [isImported, setIsImported] = useState(false);
   const [customPlan, setCustomPlan] = useState<any>(null);
   const [customPlanStart, setCustomPlanStart] = useState<{ year: number; semester: 1 | 2 } | null>(null);
@@ -152,10 +160,11 @@ export default function DashboardPage() {
   // Database Fetcher — called after scraping completes with the mapped student data.
   const fetchDashboardData = async (studentId: string, student: ScrapedStudent, mpuCourseList: any[] = []) => {
     try {
-      const mpuCompleted = mpuCourseList.map((c) => c.courseId); // No filter
+      const isNotFailed = (c: { grade?: string }) => c.grade?.trim().toUpperCase() !== 'N';
+      const mpuCompleted = mpuCourseList.filter(isNotFailed).map((c) => c.courseId);
       const completedUnits = [
         ...new Set([
-          ...student.courseList.map((c) => c.courseId), // No filter
+          ...student.courseList.filter(isNotFailed).map((c) => c.courseId),
           ...mpuCompleted
         ])
       ];
@@ -399,6 +408,114 @@ export default function DashboardPage() {
       };
 
       setIsImported(true);
+      setDataSource('import_xlsx');
+      setScrapedStudent({ student, studentId: 'imported' });
+      await fetchDashboardData('imported', student);
+    } finally {
+      setInternalLoading(false);
+    }
+  };
+
+  const handleUnitInputChange = (value: string) => {
+    setManualUnitForm((f) => ({ ...f, courseId: value.toUpperCase() }));
+    if (unitSuggestionsTimerRef.current) clearTimeout(unitSuggestionsTimerRef.current);
+    if (value.trim().length < 2) { setUnitSuggestions([]); setShowUnitSuggestions(false); return; }
+    unitSuggestionsTimerRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/units?q=${encodeURIComponent(value)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        setUnitSuggestions(data);
+        setShowUnitSuggestions(data.length > 0);
+      } catch {}
+    }, 200);
+  };
+
+  const handleSelectUnitSuggestion = (unit: { unit_code: string; unit_name: string }) => {
+    setShowUnitSuggestions(false);
+    setUnitSuggestions([]);
+    const code = unit.unit_code;
+    if (manualUnits.some((u) => u.courseId === code)) { showToast('Unit code already added.', 'error'); return; }
+    setManualUnits((prev) => [...prev, { courseId: code, courseTitle: unit.unit_name, level: '', credits: 3, creditsEarned: 3, status: 'Complete', grade: '', term: '' }]);
+    setManualUnitForm((f) => ({ ...f, courseId: '' }));
+  };
+
+  const handleAddUnit = () => {
+    const { courseId } = manualUnitForm;
+    if (!courseId.trim()) { showToast('Unit code is required.', 'error'); return; }
+    const code = courseId.trim().toUpperCase();
+    if (manualUnits.some((u) => u.courseId === code)) { showToast('Unit code already added.', 'error'); return; }
+    setManualUnits((prev) => [...prev, {
+      courseId: code,
+      courseTitle: '',
+      level: '',
+      credits: 3,
+      creditsEarned: 3,
+      status: 'Complete',
+      grade: '',
+      term: '',
+    }]);
+    setManualUnitForm({ courseId: '', courseTitle: '', credits: '', grade: '', term: '', status: 'Complete' });
+  };
+
+  const handleRemoveUnit = (index: number) => {
+    setManualUnits((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const buildStudentFromCourseList = (courseList: ScrapedCourseListItem[]): ScrapedStudent => {
+    const creditsCompleted = courseList
+      .filter((c) => c.status === 'Complete')
+      .reduce((sum, c) => sum + (c.creditsEarned || 0), 0);
+    const scheduledCredits = courseList
+      .filter((c) => c.status === 'Current')
+      .reduce((sum, c) => sum + (c.credits || 0), 0);
+    const intakeMonth = importIntakeSem === 1 ? 2 : 8;
+    const enrollmentDate = `01/${String(intakeMonth).padStart(2, '0')}/${importIntakeYear}`;
+    return { course: '', status: 'Active', cgpa: 0, creditsRequired: 0, creditsCompleted, gradeLevel: '', enrollmentDate, graduationDate: null, scheduledCredits, courseList };
+  };
+
+  const handleImportManual = async () => {
+    if (manualUnits.length === 0) { showToast('Add at least one unit.', 'error'); return; }
+    setStudentLoaded(false); setScrapedStudent(null); setDashboardData(null);
+    setScraperApiStatus('idle'); setSelectedPlannerIdx(0); setManualPlanner(null);
+    setShowPlannerPicker(false); setShowImportPanel(false); setIsImported(false);
+    setInternalLoading(true);
+    try {
+      const student = buildStudentFromCourseList(manualUnits);
+      setIsImported(true);
+      setDataSource('import_manual');
+      setScrapedStudent({ student, studentId: 'imported' });
+      await fetchDashboardData('imported', student);
+    } finally {
+      setInternalLoading(false);
+    }
+  };
+
+  const handleImportPaste = async () => {
+    if (!pasteText.trim()) { showToast('Paste some data first.', 'error'); return; }
+    const lines = pasteText.trim().split('\n').filter((l) => l.trim());
+    const courseList: ScrapedCourseListItem[] = [];
+    for (const line of lines) {
+      const cells = line.split('\t').map((c) => c.trim());
+      const code = cells[0];
+      if (!code || /^(course|unit\s*code|code|courseid)/i.test(code)) continue;
+      // Columns: Code(0) · Title(1) · Credits(2) · Earned(3) · Status(4) · Grade(5) · Term(6)
+      const credits = parseFloat(cells[2] ?? '') || 0;
+      const earned  = parseFloat(cells[3] ?? '') || 0;
+      const status  = cells[4] || 'Complete';
+      const grade   = cells[5] ?? '';
+      const term    = cells[6] ?? '';
+      courseList.push({ courseId: code.toUpperCase(), courseTitle: cells[1] ?? '', level: '', credits, creditsEarned: earned, status, grade, term });
+    }
+    if (courseList.length === 0) { showToast('No valid rows found. Check your paste format.', 'error'); return; }
+    setStudentLoaded(false); setScrapedStudent(null); setDashboardData(null);
+    setScraperApiStatus('idle'); setSelectedPlannerIdx(0); setManualPlanner(null);
+    setShowPlannerPicker(false); setShowImportPanel(false); setIsImported(false);
+    setInternalLoading(true);
+    try {
+      const student = buildStudentFromCourseList(courseList);
+      setIsImported(true);
+      setDataSource('import_paste');
       setScrapedStudent({ student, studentId: 'imported' });
       await fetchDashboardData('imported', student);
     } finally {
@@ -420,6 +537,7 @@ export default function DashboardPage() {
     setManualPlanner(null);
     setShowPlannerPicker(false);
     setIsImported(false);
+    setDataSource('scrape');
     setCustomPlan(null);
     setCustomPlanStart(null);
     setInjectedMinors(new Set());
@@ -458,6 +576,9 @@ export default function DashboardPage() {
     setManualPlanner(null);
     setShowPlannerPicker(false);
     setIsImported(false);
+    setDataSource('scrape');
+    setManualUnits([]);
+    setPasteText('');
     setCustomPlan(null);
     setCustomPlanStart(null);
     setInjectedMinors(new Set());
@@ -639,49 +760,129 @@ export default function DashboardPage() {
       {/* ── Import Panel ─────────────────────────────────────────────────── */}
       {showImportPanel && (
         <div style={{ border: '1px solid var(--panel-border)', borderRadius: 4, padding: '14px 16px', marginBottom: 14, background: 'var(--card-bg)' }}>
-          <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 12 }}>Import Results from xlsx</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 12px', marginBottom: 10 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-              <div>
-                <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Intake Year</div>
-                <input
-                  className={`${styles.formInput} ${styles.formInputMono}`}
-                  style={{ width: '100%' }}
-                  type="number"
-                  min={2000}
-                  max={2100}
-                  value={importIntakeYear}
-                  onChange={(e) => setImportIntakeYear(parseInt(e.target.value) || new Date().getFullYear())}
-                />
-              </div>
-              <div>
-                <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Intake Sem</div>
-                <select
-                  className={styles.enrollSelect}
-                  style={{ width: '100%' }}
-                  value={importIntakeSem}
-                  onChange={(e) => setImportIntakeSem(parseInt(e.target.value) as 1 | 2)}
-                >
-                  <option value={1}>Sem 1</option>
-                  <option value={2}>Sem 2</option>
-                </select>
-              </div>
+          {/* Tab bar */}
+          <div style={{ display: 'flex', gap: 4, marginBottom: 12 }}>
+            {(['xlsx', 'manual', 'paste'] as const).map((mode) => (
+              <button key={mode} onClick={() => setImportMode(mode)} style={{ fontSize: 11, padding: '3px 10px', borderRadius: 3, border: '1px solid var(--panel-border)', background: importMode === mode ? 'var(--accent-blue, #2563eb)' : 'transparent', color: importMode === mode ? '#fff' : 'var(--text-muted)', cursor: 'pointer', fontWeight: importMode === mode ? 600 : 400 }}>
+                {mode === 'xlsx' ? 'Upload Excel' : mode === 'manual' ? 'Add Units' : 'Paste Table'}
+              </button>
+            ))}
+          </div>
+
+          {/* Shared intake fields */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+            <div>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Intake Year</div>
+              <input className={`${styles.formInput} ${styles.formInputMono}`} type="number" min={2000} max={2100} value={importIntakeYear} onChange={(e) => setImportIntakeYear(parseInt(e.target.value) || new Date().getFullYear())} />
+            </div>
+            <div>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Intake Sem</div>
+              <select className={styles.enrollSelect} value={importIntakeSem} onChange={(e) => setImportIntakeSem(parseInt(e.target.value) as 1 | 2)}>
+                <option value={1}>Sem 1</option>
+                <option value={2}>Sem 2</option>
+              </select>
             </div>
           </div>
-          <div style={{ marginBottom: 10 }}>
-            <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Results File (.xlsx) <span style={{ color: 'var(--accent-red)' }}>*</span></div>
-            <input
-              type="file"
-              accept=".xlsx"
-              style={{ fontSize: 12, color: 'var(--text-primary)' }}
-              onChange={(e) => setImportFile(e.target.files?.[0] ?? null)}
-            />
-            {importFile && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{importFile.name}</div>}
-          </div>
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <button className={styles.btnSecondary} onClick={() => setShowImportPanel(false)}>Cancel</button>
-            <button className={styles.btnPrimary} onClick={handleImport} disabled={!importFile}>Load</button>
-          </div>
+
+          {/* Tab: Upload Excel */}
+          {importMode === 'xlsx' && (
+            <>
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Results File (.xlsx) <span style={{ color: 'var(--accent-red)' }}>*</span></div>
+                <input type="file" accept=".xlsx" style={{ fontSize: 12, color: 'var(--text-primary)' }} onChange={(e) => setImportFile(e.target.files?.[0] ?? null)} />
+                {importFile && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{importFile.name}</div>}
+              </div>
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                <button className={styles.btnSecondary} onClick={() => setShowImportPanel(false)}>Cancel</button>
+                <button className={styles.btnPrimary} onClick={handleImport} disabled={!importFile}>Load</button>
+              </div>
+            </>
+          )}
+
+          {/* Tab: Add Units (individual entry) */}
+          {importMode === 'manual' && (
+            <>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginBottom: 8 }}>
+                <div style={{ flex: 1, position: 'relative' }}>
+                  <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Unit Code or Name</div>
+                  <input
+                    className={`${styles.formInput} ${styles.formInputMono}`}
+                    style={{ width: '100%' }}
+                    placeholder="e.g. BACS2003 or Data Structures"
+                    value={manualUnitForm.courseId}
+                    onChange={(e) => handleUnitInputChange(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') { setShowUnitSuggestions(false); handleAddUnit(); }
+                      if (e.key === 'Escape') setShowUnitSuggestions(false);
+                    }}
+                    onBlur={() => setTimeout(() => setShowUnitSuggestions(false), 150)}
+                    onFocus={() => unitSuggestions.length > 0 && setShowUnitSuggestions(true)}
+                    autoComplete="off"
+                  />
+                  {showUnitSuggestions && unitSuggestions.length > 0 && (
+                    <div className={styles.suggestionsList} style={{ top: '100%', zIndex: 20 }}>
+                      {unitSuggestions.map((u) => (
+                        <div
+                          key={u.unit_code}
+                          className={styles.suggestionItem}
+                          onMouseDown={(e) => { e.preventDefault(); handleSelectUnitSuggestion(u); }}
+                        >
+                          <span className={styles.suggestionId}>{u.unit_code}</span>
+                          {u.unit_name && <span className={styles.suggestionName}>{u.unit_name}</span>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <button className={styles.btnPrimary} onClick={() => { setShowUnitSuggestions(false); handleAddUnit(); }}>+ Add</button>
+              </div>
+              {manualUnits.length > 0 && (
+                <div style={{ border: '1px solid var(--panel-border)', borderRadius: 3, marginBottom: 8, maxHeight: 180, overflowY: 'auto', display: 'flex', flexWrap: 'wrap', gap: 6, padding: '8px 10px' }}>
+                  {manualUnits.map((u, i) => (
+                    <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'var(--card-bg)', border: '1px solid var(--panel-border)', borderRadius: 3, padding: '2px 8px', fontFamily: 'monospace', fontSize: 11 }}>
+                      {u.courseId}
+                      <button onClick={() => handleRemoveUnit(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent-red)', fontSize: 11, padding: 0, lineHeight: 1 }}>✕</button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
+                {manualUnits.length > 0 && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{manualUnits.length} unit{manualUnits.length !== 1 ? 's' : ''}</span>}
+                <button className={styles.btnSecondary} onClick={() => setShowImportPanel(false)}>Cancel</button>
+                <button className={styles.btnPrimary} onClick={handleImportManual} disabled={manualUnits.length === 0}>Load</button>
+              </div>
+            </>
+          )}
+
+          {/* Tab: Paste Table */}
+          {importMode === 'paste' && (
+            <>
+              <div style={{ marginBottom: 8 }}>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Paste from Excel or student portal</div>
+                {/* Column reference header */}
+                <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr 60px 60px 80px 55px 110px', gap: 0, marginBottom: 2, border: '1px solid var(--panel-border)', borderRadius: '3px 3px 0 0', overflow: 'hidden' }}>
+                  {[['#1', 'Course'], ['#2', 'Course Title'], ['#3', 'Credits'], ['#4', 'Earned'], ['#5', 'Status'], ['#6', 'Grade'], ['#7', 'Term']].map(([num, label]) => (
+                    <div key={num} style={{ padding: '3px 6px', background: 'var(--card-bg)', borderRight: '1px solid var(--panel-border)' }}>
+                      <div style={{ fontSize: 9, color: 'var(--text-muted)', lineHeight: 1.2 }}>{num}</div>
+                      <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</div>
+                    </div>
+                  ))}
+                </div>
+                <textarea
+                  className={styles.formInput}
+                  style={{ width: '100%', minHeight: 140, fontFamily: 'monospace', fontSize: 11, resize: 'vertical', boxSizing: 'border-box', borderRadius: '0 0 3px 3px', borderTop: 'none' }}
+                  placeholder={'COS10003\tComputer and Logic Essentials\t12.5\t12.5\tComplete\tHD\t2024_FEB_S1\nCOS30015\tIT Security\t12.5\t0\tCurrent\t\t2026_MAR_S1\nCOS10022\tData Science Principles\t12.5\t0\tFuture\t\t'}
+                  value={pasteText}
+                  onChange={(e) => setPasteText(e.target.value)}
+                />
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 4 }}>Header row is auto-skipped. Empty Grade and Term cells are allowed.</div>
+              </div>
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                <button className={styles.btnSecondary} onClick={() => setShowImportPanel(false)}>Cancel</button>
+                <button className={styles.btnPrimary} onClick={handleImportPaste} disabled={!pasteText.trim()}>Load</button>
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -1005,8 +1206,8 @@ export default function DashboardPage() {
               ...(dashboardData?.mpuCourseList ?? [])
             ];
             
-            const doneCodes = new Set(allStudentUnits.filter(u => u.status === 'Complete').map(u => u.courseId));
-            const doingCodes = new Set(allStudentUnits.filter(u => u.status === 'Current').map(u => u.courseId));
+            const doneCodes = new Set(allStudentUnits.filter(u => u.status === 'Complete' && u.grade?.trim().toUpperCase() !== 'N').map(u => u.courseId));
+            const doingCodes = new Set(allStudentUnits.filter(u => u.status === 'Current' && u.grade?.trim().toUpperCase() !== 'N').map(u => u.courseId));
 
             const notTaken = (activePlanner?.units ?? [])
               .filter((u: any) => 
@@ -1086,7 +1287,7 @@ export default function DashboardPage() {
 
               const transcriptCodes = new Set(
                   [...(scrapedStudent?.student?.courseList ?? []), ...(dashboardData?.mpuCourseList ?? [])]
-                      .filter(u => u.status === 'Complete')
+                      .filter(u => u.status === 'Complete' && u.grade?.trim().toUpperCase() !== 'N')
                       .map(u => u.courseId?.trim().toUpperCase())
                       .filter(Boolean)
               );
@@ -1163,6 +1364,62 @@ export default function DashboardPage() {
           })()}
           </div>
 
+          {/* Units Outside Planner */}
+          {(() => {
+            const activePlanner = selectedPlannerIdx === -1 ? manualPlanner : dashboardData?.planners?.[selectedPlannerIdx];
+            const plannerCodes = new Set(
+              (activePlanner?.units ?? [])
+                .map((u: any) => u.unit?.unit_code?.trim().toUpperCase())
+                .filter(Boolean)
+            );
+            const allStudentUnits = [
+              ...(scrapedStudent?.student?.courseList ?? []),
+              ...(dashboardData?.mpuCourseList ?? []),
+            ];
+            const outsidePlanner = allStudentUnits.filter(
+              (u) => u.courseId && !plannerCodes.has(u.courseId.trim().toUpperCase())
+            );
+            if (outsidePlanner.length === 0) return null;
+            return (
+              <div style={{ marginBottom: 16 }}>
+                <div className={styles.sectionTitle}>Units Outside Planner</div>
+                <div className={styles.tableWrap}>
+                  <table className={styles.table}>
+                    <thead>
+                      <tr>
+                        <th>Unit Code</th>
+                        <th>Unit Name</th>
+                        <th>Status</th>
+                        <th>Grade</th>
+                        <th>Term</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {outsidePlanner.map((u, i) => (
+                        <tr key={i}>
+                          <td><code className={styles.code}>{u.courseId}</code></td>
+                          <td style={{ color: 'var(--text-muted)' }}>{u.courseTitle || '—'}</td>
+                          <td>
+                            <Badge
+                              label={u.status}
+                              cls={
+                                u.status === 'Complete' ? 'badgeGreen'
+                                : u.status === 'Current' ? 'badgeBlue'
+                                : 'badgeYellow'
+                              }
+                            />
+                          </td>
+                          <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{u.grade || '—'}</td>
+                          <td style={{ color: 'var(--text-muted)', fontSize: 11 }}>{u.term || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Dynamic Year-Semester Tables */}
           {(() => {
             const activePlanner = selectedPlannerIdx === -1 ? manualPlanner : dashboardData.planners?.[selectedPlannerIdx];
@@ -1223,20 +1480,24 @@ export default function DashboardPage() {
                         <tr><th>Unit Code</th><th>Unit Name</th><th>Grade</th><th>Term</th><th>Type</th><th>Status</th></tr>
                       </thead>
                       <tbody>
-                        {units.map((u: any) => (
+                        {units.map((u: any) => {
+                          const isFailed = u.grade?.trim().toUpperCase() === 'N';
+                          return (
                           <tr key={u.code} style={
-                            u.status === 'Current' ? { background: 'rgba(111,191,115,0.12)' } :
-                            (!u.grade || u.grade === '—') ? { background: 'rgba(244,135,113,0.08)' } :
+                            isFailed                              ? { background: 'rgba(244,135,113,0.15)' } :
+                            u.status === 'Current'               ? { background: 'rgba(111,191,115,0.12)' } :
+                            (!u.grade || u.grade === '—')        ? { background: 'rgba(244,135,113,0.08)' } :
                             undefined
                           }>
                             <td><InlineCode>{u.code}</InlineCode></td>
                             <td>{u.name}</td>
-                            <td>{u.grade}</td>
+                            <td style={isFailed ? { color: 'var(--accent-red)', fontWeight: 600 } : undefined}>{u.grade}</td>
                             <td>{u.term}</td>
                             <td><Badge label={u.type} cls={u.typeClass as BadgeClass} /></td>
                             <td>{u.status}</td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -1253,7 +1514,7 @@ export default function DashboardPage() {
 
             const doneCodes = new Set(
               [...(scrapedStudent?.student?.courseList ?? []), ...(dashboardData?.mpuCourseList ?? [])]
-                .filter((u: any) => u.status === 'Complete' || u.status === 'Current')
+                .filter((u: any) => (u.status === 'Complete' || u.status === 'Current') && u.grade?.trim().toUpperCase() !== 'N')
                 .map((u: any) => u.courseId?.trim().toUpperCase())
                 .filter(Boolean)
             );
@@ -1506,6 +1767,7 @@ export default function DashboardPage() {
           completedCodes: dashboardData.completedCodes,
           intakeYear: selectedPlanner.intake_year ?? dashboardData.intakeYear,
           mpuCourseList: dashboardData.mpuCourseList ?? [],
+          enrollmentMode: dataSource,
         };
         return <ExportModal exportInput={exportInput} onClose={() => setShowExportModal(false)} availableSections={isImported ? ['major_match', 'unit_plan', 'study_planner'] : undefined} />;
       })()}

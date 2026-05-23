@@ -12,6 +12,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'No export sections selected.' }, { status: 400 });
     }
 
+    input.appVersion = process.env.APP_VERSION ?? '—';
+
     const buffer = generateExport(input);
     const filename = `student-${input.studentId}-report.xlsx`;
 

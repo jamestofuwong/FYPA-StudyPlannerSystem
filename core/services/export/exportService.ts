@@ -50,6 +50,63 @@ function boldCol0(ws: any, rowIndices: number[]) {
 // Sheet builders
 // ---------------------------------------------------------------------------
 
+const DATA_SOURCE_LABELS: Record<string, string> = {
+  scrape:        'Web Scrape (Anthology Portal)',
+  import_xlsx:   'Manual Import — Excel File',
+  import_manual: 'Manual Import — Unit-by-Unit Entry',
+  import_paste:  'Manual Import — Paste from Table',
+};
+
+// Forward-declared so buildReportInfoSheet can reference SHEET_NAMES before it's defined.
+const SHEET_NAMES: Record<ExportSection, string> = {
+  student_profile: 'Student Profile',
+  major_match:     'Major & Course Match',
+  unit_plan:       'Completed Units',
+  study_planner:   'Study Planner',
+};
+
+function buildReportInfoSheet(input: ExportInput): any {
+  const NUM_COLS = 2;
+
+  const now = new Date();
+  const exportDate =
+    now.toLocaleDateString('en-MY', { day: '2-digit', month: 'long', year: 'numeric' }) +
+    ', ' +
+    now.toLocaleTimeString('en-MY', { hour: '2-digit', minute: '2-digit', hour12: true });
+
+  const p = input.planner;
+  const intakeMonthStr = p.intakeMonth != null
+    ? new Date(2000, p.intakeMonth - 1).toLocaleString('en-MY', { month: 'long' })
+    : null;
+  const plannerLabel = [
+    p.course?.name,
+    p.major?.name,
+    [input.intakeYear, intakeMonthStr].filter(Boolean).join(' '),
+  ].filter(Boolean).join(' · ') || '—';
+
+  const sectionsIncluded = input.options.sections.map((s) => SHEET_NAMES[s]).join(', ');
+
+  const dataRows: [string, string][] = [
+    ['Export Date',       exportDate],
+    ['Student ID',        input.studentId === 'imported' ? '— (manual import)' : input.studentId],
+    ['Student Name',      input.student.studentName ?? '—'],
+    ['Data Source',       DATA_SOURCE_LABELS[input.enrollmentMode ?? 'scrape'] ?? '—'],
+    ['Sections Included', sectionsIncluded],
+    ['Planner',           plannerLabel],
+    ['System Version',    input.appVersion ?? '—'],
+  ];
+
+  const rows = [['Field', 'Value'], ...dataRows];
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{ wch: 22 }, { wch: 46 }];
+
+  applyRow(ws, 0, NUM_COLS, S.hdrDark);
+  dataRows.forEach((_, i) => applyRow(ws, i + 1, NUM_COLS, i % 2 === 0 ? S.row : S.rowAlt));
+  boldCol0(ws, dataRows.map((_, i) => i + 1));
+
+  return ws;
+}
+
 function buildStudentProfileSheet(input: ExportInput): any {
   const { student, studentId } = input;
   const NUM_COLS = 2;
@@ -198,8 +255,29 @@ function buildStudyPlannerSheet(input: ExportInput): any {
     .filter((u) => u.unit !== null)
     .sort((a, b) => a.year_level - b.year_level || a.semester - b.semester);
 
+  const intakeMonthStr = planner.intakeMonth != null
+    ? new Date(2000, planner.intakeMonth - 1).toLocaleString('en-MY', { month: 'long' })
+    : null;
+
   const rows: (string | number)[][] = [];
   const rowStyles: any[] = [];
+
+  // ── Planner info header block ─────────────────────────────────────────────
+  const infoRows: [string, string][] = [
+    ['Course',    planner.course?.name ?? '—'],
+    ['Major',     planner.major?.name  ?? '—'],
+    ['Intake',    [intakeYear, intakeMonthStr].filter(Boolean).join(' ')],
+  ];
+  rows.push(['Planner Information', '', '', '', '', '']);
+  rowStyles.push(S.hdrMed);
+  for (const [label, value] of infoRows) {
+    rows.push([label, value, '', '', '', '']);
+    rowStyles.push(S.row);
+  }
+  rows.push(['', '', '', '', '', '']);
+  rowStyles.push(S.row);
+  // ─────────────────────────────────────────────────────────────────────────
+
   let currentGroup = '';
 
   for (const u of sorted) {
@@ -228,9 +306,12 @@ function buildStudyPlannerSheet(input: ExportInput): any {
     );
   }
 
+  const colAWidth = Math.max(16, ...rows.map((r) => String(r[0] ?? '').length));
+
   const ws = XLSX.utils.aoa_to_sheet(rows);
-  ws['!cols'] = [{ wch: 12 }, { wch: 36 }, { wch: 18 }, { wch: 12 }, { wch: 10 }, { wch: 18 }];
+  ws['!cols'] = [{ wch: colAWidth }, { wch: 36 }, { wch: 18 }, { wch: 12 }, { wch: 10 }, { wch: 18 }];
   rowStyles.forEach((style, r) => applyRow(ws, r, NUM_COLS, style));
+  boldCol0(ws, [1, 2, 3]); // Course, Major, Intake labels
 
   return ws;
 }
@@ -246,19 +327,15 @@ const SHEET_BUILDERS: Record<ExportSection, (input: ExportInput) => any> = {
   study_planner:   buildStudyPlannerSheet,
 };
 
-const SHEET_NAMES: Record<ExportSection, string> = {
-  student_profile: 'Student Profile',
-  major_match:     'Major & Course Match',
-  unit_plan:       'Completed Units',
-  study_planner:   'Study Planner',
-};
-
 /**
  * Generates an xlsx workbook buffer from the provided dashboard data.
- * Only sections listed in options.sections are included.
+ * Always includes a "Report Info" sheet as the first tab.
+ * Only content sections listed in options.sections are included.
  */
 export function generateExport(input: ExportInput): Buffer {
   const wb = XLSX.utils.book_new();
+
+  XLSX.utils.book_append_sheet(wb, buildReportInfoSheet(input), 'Report Info');
 
   for (const section of input.options.sections) {
     const ws = SHEET_BUILDERS[section](input);

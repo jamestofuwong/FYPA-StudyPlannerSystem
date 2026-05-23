@@ -1,6 +1,7 @@
 import dotenv from 'dotenv'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { readFileSync } from 'fs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -8,9 +9,18 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 // web/.env takes precedence — dotenv won't override vars already set.
 dotenv.config({ path: path.join(__dirname, '..', '.env'), override: false })
 
+let appVersion = '0.0.0'
+try {
+  const pkg = JSON.parse(readFileSync(path.join(__dirname, '..', 'package.json'), 'utf-8'))
+  appVersion = pkg.version ?? '0.0.0'
+} catch {}
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  env: {
+    APP_VERSION: appVersion,
+  },
   transpilePackages: ['core'],
   serverExternalPackages: ['@local/prisma-client'],
   webpack: (config) => {
