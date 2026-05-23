@@ -58,12 +58,4 @@ export const NAV_SECTIONS: NavSection[] = [
       { id: 'cloud-sync',  icon: '☁️', label: 'Cloud Sync' },
     ],
   },
-  {
-    id: 'scraping',
-    icon: '🕷️',
-    label: 'Scraping Bot',
-    items: [
-      { id: 'scraping', icon: '🕷️', label: 'Scraping Bot' },
-    ],
-  },
 ];
