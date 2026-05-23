@@ -66,6 +66,7 @@
   },
   "build": {
     "appId": "com.fyp.studyplannersystem",
+    "afterPack": "./scripts/fix-embedded-postgres-dylibs.js",
     "publish": {
       "provider": "github",
       "owner": "jamestofuwong",
