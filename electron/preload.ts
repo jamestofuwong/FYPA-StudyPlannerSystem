@@ -16,6 +16,11 @@ contextBridge.exposeInMainWorld("portalAPI", {
   clearSession: () => ipcRenderer.invoke("clear-portal-session"),
 });
 
+contextBridge.exposeInMainWorld("dbAPI", {
+  isReady: () => ipcRenderer.invoke("is-db-ready"),
+  onReady: (cb: () => void) => ipcRenderer.once("db-ready", cb),
+});
+
 contextBridge.exposeInMainWorld("updaterAPI", {
   onStatus: (callback: (payload: Record<string, unknown>) => void) => {
     ipcRenderer.on("updater-status", (_, payload) => callback(payload));

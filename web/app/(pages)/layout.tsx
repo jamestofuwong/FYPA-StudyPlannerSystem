@@ -23,14 +23,37 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const [openTabs, setOpenTabs] = useState<PanelId[]>([activePanel]);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
+  // DB readiness gate (Electron only — browser dev skips this)
+  const [dbReady, setDbReady] = useState(false);
+
+  useEffect(() => {
+    const api = (window as any).dbAPI;
+    if (!api) {
+      // Running in browser (dev mode) — no embedded DB, proceed immediately
+      setDbReady(true);
+      return;
+    }
+    api.isReady().then((ready: boolean) => {
+      if (ready) {
+        setDbReady(true);
+      } else {
+        api.onReady(() => setDbReady(true));
+      }
+    });
+  }, []);
+
   // Privacy notice gate
   const [privacyChecked, setPrivacyChecked] = useState(false);
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const presentedAtRef = useRef<Date>(new Date());
 
   useEffect(() => {
+    if (!dbReady) return;
     fetch('/api/privacy/status')
-      .then(r => r.json())
+      .then(r => {
+        if (!r.ok) throw new Error('not-ok');
+        return r.json();
+      })
       .then((data: { acknowledged: boolean }) => {
         if (!data.acknowledged) {
           presentedAtRef.current = new Date();
@@ -42,7 +65,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
         // On error, allow app to proceed — don't block the user indefinitely
         setPrivacyChecked(true);
       });
-  }, []);
+  }, [dbReady]);
 
   useEffect(() => {
     setOpenTabs((prev) => (prev.includes(activePanel) ? prev : [...prev, activePanel]));
@@ -102,6 +125,23 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           <StatusBar activePanel={activePanel} />
         </div>
         <PortalLoginModal />
+        {/* DB startup overlay — shown on Windows/first-run while Postgres initialises */}
+        {!dbReady && (
+          <div style={{
+            position: 'fixed', inset: 0, zIndex: 9999,
+            background: 'var(--bg-base, #1e1e1e)',
+            display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center',
+            gap: 12,
+          }}>
+            <div style={{ fontSize: 13, color: 'var(--fg-muted, #858585)' }}>Starting database…</div>
+            <div style={{ width: 160, height: 3, background: 'var(--border, #333)', borderRadius: 2, overflow: 'hidden' }}>
+              <div style={{ width: '40%', height: '100%', background: 'var(--accent-blue, #569cd6)', borderRadius: 2,
+                animation: 'db-pulse 1.2s ease-in-out infinite alternate' }} />
+            </div>
+            <style>{`@keyframes db-pulse { from { margin-left: 0 } to { margin-left: 60% } }`}</style>
+          </div>
+        )}
         {/* Privacy notice — shown above everything until acknowledged */}
         {privacyChecked && showPrivacyModal && (
           <PrivacyNoticeModal

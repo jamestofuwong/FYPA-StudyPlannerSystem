@@ -13,6 +13,7 @@ import { startDatabase, stopDatabase, getDatabaseUrl } from '../runtime/postgres
 import { startOllama, stopOllama } from '../runtime/ollama/ollama'
 
 let nextServerRef: NextServerHandle | undefined
+let dbReady = false;
 
 type NextServerHandle = {
   url: string;
@@ -161,6 +162,8 @@ ipcMain.handle("get-database-url", () => {
   return getDatabaseUrl();
 });
 
+ipcMain.handle("is-db-ready", () => dbReady);
+
 // ── Auto-updater ─────────────────────────────────────────────────────────────
 
 function setupAutoUpdater() {
@@ -240,8 +243,15 @@ app.whenReady().then(async () => {
   setupAutoUpdater();
 
   // Open window immediately — don't block on DB init
+  const dbPromise = startDatabase()
+    .then(() => {
+      dbReady = true;
+      BrowserWindow.getAllWindows().forEach((w) => w.webContents.send('db-ready'));
+    })
+    .catch((err) => console.error('[DB] Startup failed:', err));
+
   const [, windowResult] = await Promise.allSettled([
-    startDatabase().catch((err) => console.error('[DB] Startup failed:', err)),
+    dbPromise,
     createMainWindow(),
   ]);
 
