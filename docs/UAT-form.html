@@ -122,18 +122,6 @@
       margin-bottom: 2px;
     }
     .tc-name { font-weight: 600; font-size: 0.95rem; color: #1a1a2e; }
-    .req-tag {
-      font-size: 0.7rem;
-      background: #ebf4ff;
-      color: #2b6cb0;
-      border-radius: 4px;
-      padding: 2px 7px;
-      font-weight: 600;
-      white-space: nowrap;
-      margin-top: 2px;
-      display: inline-block;
-    }
-
     .tc-steps {
       background: #f7fafc;
       border-radius: 8px;
@@ -175,21 +163,6 @@
 
     .notes-label { font-size: 0.82rem; font-weight: 600; color: #4a5568; margin-bottom: 4px; display: block; }
 
-    /* Defect log */
-    .defect-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
-    .defect-table th {
-      background: #f7fafc;
-      padding: 10px 12px;
-      text-align: left;
-      font-size: 0.75rem;
-      font-weight: 700;
-      color: #4a5568;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      border-bottom: 2px solid #e2e8f0;
-    }
-    .defect-table td { padding: 8px 12px; border-bottom: 1px solid #f0f4f8; vertical-align: top; }
-    .defect-table input, .defect-table select { font-size: 0.82rem; padding: 6px 8px; }
     .add-row-btn {
       margin-top: 12px;
       background: none;
@@ -305,7 +278,6 @@
         <div class="tc-meta">
           <div class="tc-id">TC-PRI-001</div>
           <div class="tc-name">Privacy notice appears on first launch</div>
-          <span class="req-tag">REQ-PRI-102</span>
         </div>
       </div>
       <div class="tc-steps">
@@ -329,7 +301,6 @@
         <div class="tc-meta">
           <div class="tc-id">TC-PRI-002</div>
           <div class="tc-name">Privacy notice is bilingual</div>
-          <span class="req-tag">REQ-PRI-103</span>
         </div>
       </div>
       <div class="tc-steps">
@@ -355,7 +326,6 @@
         <div class="tc-meta">
           <div class="tc-id">TC-PRI-003</div>
           <div class="tc-name">Notice content covers required information</div>
-          <span class="req-tag">REQ-PRI-103(a)(b)(c)(d)</span>
         </div>
       </div>
       <div class="tc-steps">
@@ -380,7 +350,6 @@
         <div class="tc-meta">
           <div class="tc-id">TC-PRI-004</div>
           <div class="tc-name">Scroll-to-bottom gate enforced</div>
-          <span class="req-tag">REQ-PRI-102</span>
         </div>
       </div>
       <div class="tc-steps">
@@ -637,7 +606,6 @@
         <div class="tc-meta">
           <div class="tc-id">TC-IMP-001</div>
           <div class="tc-name">PDF import</div>
-          <span class="req-tag">REQ-PRI-101</span>
         </div>
       </div>
       <div class="tc-steps">
@@ -801,34 +769,17 @@
     </div>
   </div>
 
-  <!-- ===================== DEFECT LOG ===================== -->
+  <!-- ===================== SUGGESTIONS ===================== -->
   <div class="card">
-    <h2>Defect Log</h2>
-    <table class="defect-table" id="defect-table">
-      <thead>
-        <tr>
-          <th style="width:130px">Test Case</th>
-          <th>Description of Issue</th>
-          <th style="width:110px">Severity</th>
-        </tr>
-      </thead>
-      <tbody id="defect-body">
-        <tr>
-          <td><input type="text" placeholder="e.g. TC-PRI-001" /></td>
-          <td><input type="text" placeholder="Describe what went wrong..." /></td>
-          <td>
-            <select>
-              <option value="">Level</option>
-              <option>Critical</option>
-              <option>High</option>
-              <option>Medium</option>
-              <option>Low</option>
-            </select>
-          </td>
-        </tr>
-      </tbody>
-    </table>
-    <button class="add-row-btn" onclick="addDefectRow()">+ Add another defect</button>
+    <h2>Suggestions</h2>
+    <p style="font-size:0.85rem;color:#718096;margin-bottom:16px">List any improvements, features, or changes you would like to see in the app.</p>
+    <div id="suggestion-list">
+      <div class="suggestion-item" style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <span style="font-size:0.8rem;font-weight:700;color:#a0aec0;min-width:20px">1.</span>
+        <input type="text" placeholder="Enter a suggestion..." style="flex:1" />
+      </div>
+    </div>
+    <button class="add-row-btn" onclick="addSuggestion()">+ Add another suggestion</button>
   </div>
 
   <!-- ===================== SUMMARY ===================== -->
@@ -927,23 +878,16 @@
   document.addEventListener('change', updateSummary);
   updateSummary();
 
-  // Add defect row
-  function addDefectRow() {
-    const tbody = document.getElementById('defect-body');
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td><input type="text" placeholder="e.g. TC-PRI-001" /></td>
-      <td><input type="text" placeholder="Describe what went wrong..." /></td>
-      <td>
-        <select>
-          <option value="">Level</option>
-          <option>Critical</option>
-          <option>High</option>
-          <option>Medium</option>
-          <option>Low</option>
-        </select>
-      </td>`;
-    tbody.appendChild(tr);
+  // Add suggestion row
+  function addSuggestion() {
+    const list = document.getElementById('suggestion-list');
+    const num = list.children.length + 1;
+    const div = document.createElement('div');
+    div.className = 'suggestion-item';
+    div.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:8px';
+    div.innerHTML = `<span style="font-size:0.8rem;font-weight:700;color:#a0aec0;min-width:20px">${num}.</span>
+      <input type="text" placeholder="Enter a suggestion..." style="flex:1" />`;
+    list.appendChild(div);
   }
 </script>
 </body>

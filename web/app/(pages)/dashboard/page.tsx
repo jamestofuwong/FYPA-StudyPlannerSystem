@@ -700,62 +700,18 @@ export default function DashboardPage() {
 
   return (
     <div className={styles.panel}>
-      {/* ── Search bar ──────────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-        <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>🔍</span>
-        <div className={styles.suggestionsWrap}>
-          <input
-            className={`${styles.formInput} ${styles.formInputMono}`}
-            value={studentIdInput}
-            onChange={(e) => handleInputChange(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') { setShowSuggestions(false); return; }
-              if (e.key === 'Enter' && !isDisabled) handleSearch();
-            }}
-            onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
-            onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
-            placeholder={!isLoggedIn ? 'Log in to proceed' : isPortalLoading ? 'Logging in to portal…' : isInitializing ? 'Waiting for scraper…' : 'Student ID or name'}
-            disabled={isDisabled}
-          />
-          {selectedStudentName && (
-            <div className={styles.selectedName}>{selectedStudentName}</div>
-          )}
-          {showSuggestions && suggestions.length > 0 && (
-            <div className={styles.suggestionsList}>
-              {suggestions.map((s, i) => (
-                <div
-                  key={i}
-                  className={styles.suggestionItem}
-                  onMouseDown={(e) => { e.preventDefault(); handleSelectSuggestion(s.id, s.name); }}
-                >
-                  <span className={styles.suggestionId}>{s.id}</span>
-                  {s.name && <span className={styles.suggestionName}>{s.name}</span>}
-                </div>
-              ))}
-            </div>
-          )}
+      {/* ── Import trigger bar ──────────────────────────────────────────── */}
+      {!studentLoaded && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+          <button
+            className={styles.btnPrimary}
+            onClick={() => setShowImportPanel((v) => !v)}
+            disabled={loading}
+          >
+            Import Student Data
+          </button>
         </div>
-        <select
-          className={styles.enrollSelect}
-          value={enrollmentMode}
-          onChange={(e) => setEnrollmentMode(e.target.value as 'latest' | 'earliest' | 'mpu')}
-          disabled={isDisabled}
-        >
-          <option value="latest">Latest</option>
-          <option value="earliest">Earliest</option>
-          <option value="mpu">MPU</option>
-        </select>
-        <button className={styles.btnPrimary} onClick={handleSearch} disabled={isDisabled}>
-          Search
-        </button>
-        <button
-          className={styles.btnSecondary}
-          onClick={() => setShowImportPanel((v) => !v)}
-          disabled={loading}
-        >
-          Import
-        </button>
-      </div>
+      )}
 
       {/* ── Import Panel ─────────────────────────────────────────────────── */}
       {showImportPanel && (
@@ -889,47 +845,26 @@ export default function DashboardPage() {
       {/* ── Import action bar — shown instead of identity card for imports */}
       {isImported && studentLoaded && dashboardData && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, marginBottom: 14 }}>
+          <button className={styles.btnSecondary} onClick={() => { setShowImportPanel((v) => !v); }}>Import Again</button>
           <button className={styles.btnSecondary} onClick={() => setShowExportModal(true)}>Export</button>
           <button className={styles.btnDanger} onClick={handleClear}>✕ Clear</button>
         </div>
       )}
 
-      {/* ── Loading states ─────────────────────────────────────────────── */}
-      {!isLoggedIn && !isPortalLoading && (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '60px 20px', textAlign: 'center' }}>
-          <div style={{ fontSize: 48, opacity: 0.25 }}>🔒</div>
-          <div style={{ fontSize: 14, fontWeight: 600, marginTop: 12 }}>Log in to proceed</div>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4, marginBottom: 14 }}>Connect to the student portal to search for students.</div>
-          <button className={styles.btnPrimary} onClick={openLoginModal}>Log in to Portal</button>
-        </div>
-      )}
-
-      {isPortalLoading && (
+      {/* ── Loading state ──────────────────────────────────────────────── */}
+      {loading && !scrapedStudent && (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '60px 20px', textAlign: 'center' }}>
           <div className={styles.spinner} />
-          <div style={{ fontSize: 14, fontWeight: 600, marginTop: 12 }}>Logging in to portal...</div>
-        </div>
-      )}
-
-      {!isPortalLoading && isWaitingForList && (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '60px 20px', textAlign: 'center' }}>
-          <div className={styles.spinner} />
-          <div style={{ fontSize: 14, fontWeight: 600, marginTop: 12 }}>Loading student list...</div>
-        </div>
-      )}
-
-      {!isPortalLoading && isScraping && !scrapedStudent && (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '60px 20px', textAlign: 'center' }}>
-          <div className={styles.spinner} />
-          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 12 }}>Retrieving data...</div>
+          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 12 }}>Loading...</div>
         </div>
       )}
 
       {/* ── Empty state ──────────────────────────────────────────────────── */}
-      {isLoggedIn && !isPortalLoading && !loading && !studentLoaded && !isWaitingForList && (
+      {!loading && !studentLoaded && !showImportPanel && (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '60px 20px', textAlign: 'center' }}>
           <div style={{ fontSize: 48, opacity: 0.25 }}>🎓</div>
-          <div style={{ fontSize: 14, fontWeight: 600 }}>Enter a Student ID to begin</div>
+          <div style={{ fontSize: 14, fontWeight: 600 }}>Import student data to begin</div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>Use the Import button to load a student&apos;s academic record.</div>
         </div>
       )}
 
