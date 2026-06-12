@@ -1,57 +1,99 @@
-// @ts-nocheck
 import { GET, POST } from '@/app/api/courses/route';
 import * as courseRepository from '@core/db/repositories/courseRepository';
-import { NextResponse } from 'next/server';
 
-// 1. Mock the repository so we don't touch the real database
 jest.mock('@core/db/repositories/courseRepository');
 
 describe('Courses API Endpoint (UIT-03)', () => {
-  
-  test('GET should return 200 and a list of courses', async () => {
-    const mockCourses = [{ id: '123', name: 'Computer Science', code: 'BCS' }];
-    (courseRepository.getAllCourses as jest.Mock).mockResolvedValue(mockCourses);
+  const getAllCourses = jest.mocked(courseRepository.getAllCourses);
+  const createCourse = jest.mocked(courseRepository.createCourse);
+  const timestamp = new Date('2026-01-01T00:00:00.000Z');
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test('GET returns the repository courses unchanged', async () => {
+    const mockCourses = [{
+      id: '123',
+      name: 'Computer Science',
+      code: 'BCS',
+      course_type: 'bachelor',
+      created_at: timestamp,
+      updated_at: timestamp,
+    }];
+    getAllCourses.mockResolvedValue(mockCourses);
 
     const response = await GET();
     const data = await response.json();
 
     expect(response.status).toBe(200);
-    expect(data).toEqual(mockCourses);
+    expect(data).toEqual([{
+      ...mockCourses[0],
+      created_at: timestamp.toISOString(),
+      updated_at: timestamp.toISOString(),
+    }]);
+    expect(getAllCourses).toHaveBeenCalledTimes(1);
   });
 
-  test('GET should return 500 when repository fails', async () => {
-    (courseRepository.getAllCourses as jest.Mock).mockRejectedValue(new Error("DB Down"));
+  test('GET maps a repository failure to the public error response', async () => {
+    getAllCourses.mockRejectedValue(new Error('DB Down'));
 
     const response = await GET();
     const data = await response.json();
 
     expect(response.status).toBe(500);
-    expect(data.error).toBe("Failed to fetch courses");
+    expect(data).toEqual({ error: 'Failed to fetch courses' });
   });
 
-  test('GET: should return 500 when database crashes (Negative Test)', async () => {
-  (courseRepository.getAllCourses as jest.Mock).mockRejectedValue(new Error("Database connection lost"));
+  test('POST passes the parsed request body to the repository', async () => {
+    const created = {
+      id: 'new-course',
+      name: 'New Course',
+      code: null,
+      course_type: 'bachelor',
+      created_at: timestamp,
+      updated_at: timestamp,
+    };
+    createCourse.mockResolvedValue(created);
+    const payload = { name: 'New Course', course_type: 'bachelor' };
+    const req = new Request('http://localhost/api/courses', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
 
-  const response = await GET();
-  const data = await response.json();
+    const response = await POST(req);
 
-  expect(response.status).toBe(500);
-  expect(data.error).toBe("Failed to fetch courses");
-});
-
-  test('POST: should return 500 when database fails to create course', async () => {
-  (courseRepository.createCourse as jest.Mock).mockRejectedValue(new Error("Database Error"));
-  
-  const req = new Request('http://localhost/api/courses', {
-    method: 'POST',
-    body: JSON.stringify({ name: 'New Course' })
+    expect(response.status).toBe(201);
+    await expect(response.json()).resolves.toEqual({
+      ...created,
+      created_at: timestamp.toISOString(),
+      updated_at: timestamp.toISOString(),
+    });
+    expect(createCourse).toHaveBeenCalledWith(payload);
   });
 
-  const response = await POST(req);
-  const data = await response.json();
+  test('POST maps repository failures to the public error response', async () => {
+    createCourse.mockRejectedValue(new Error('Database Error'));
+    const req = new Request('http://localhost/api/courses', {
+      method: 'POST',
+      body: JSON.stringify({ name: 'New Course' }),
+    });
 
-  expect(response.status).toBe(500);
-  expect(data.error).toBe("Server error creating course");
-});
+    const response = await POST(req);
 
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toEqual({ error: 'Server error creating course' });
+  });
+
+  test('POST rejects malformed JSON without calling the repository', async () => {
+    const req = new Request('http://localhost/api/courses', {
+      method: 'POST',
+      body: '{invalid',
+    });
+
+    const response = await POST(req);
+
+    expect(response.status).toBe(500);
+    expect(createCourse).not.toHaveBeenCalled();
+  });
 });

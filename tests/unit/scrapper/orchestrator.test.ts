@@ -4,7 +4,7 @@ import * as scraperService from '@core/services/scrapper/advisorScraperService';
 
 jest.mock('@core/services/scrapper/advisorScraperService');
 
-describe('Scraper Orchestrator Advanced Coverage', () => {
+describe('Scraper Orchestrator', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -20,7 +20,7 @@ describe('Scraper Orchestrator Advanced Coverage', () => {
     onScrapeResult: jest.fn(),
   };
 
-  test('runAutoRun: resumes from a specific startIndex (Line 58+)', async () => {
+  test('runAutoRun resumes from a specific startIndex', async () => {
     (scraperService.runScraperStep as jest.Mock).mockResolvedValue({ logs: ['Resumed'] });
     const result = await runAutoRun(mockAdapter, 2, callbacks);
     
@@ -28,7 +28,7 @@ describe('Scraper Orchestrator Advanced Coverage', () => {
     expect(scraperService.runScraperStep).toHaveBeenCalledTimes(2);
   });
 
-  test('runStudentScrape: merges name and enrollment options into final result (Line 113+)', async () => {
+  test('runStudentScrape merges name and enrollment options into final result', async () => {
     (scraperService.runScraperStep as jest.Mock)
       .mockResolvedValueOnce({ logs: [], studentName: 'Jane Doe' })
       .mockResolvedValueOnce({ logs: [], enrollmentOptions: [{ text: 'Latest' }] }) 
@@ -45,7 +45,7 @@ describe('Scraper Orchestrator Advanced Coverage', () => {
     });
   });
 
-  test('orchestrator: runAutoRun catches non-Error objects (Line 80)', async () => {
+  test('runAutoRun converts non-Error rejections to an error message', async () => {
     const { runScraperStep } = require('@core/services/scrapper/advisorScraperService');
     runScraperStep.mockRejectedValue('String Error'); // Throw string instead of Error object
 
@@ -53,7 +53,7 @@ describe('Scraper Orchestrator Advanced Coverage', () => {
     expect(result.error).toBe('String Error');
     });
 
-    test('orchestrator: runStudentScrape handles missing scraped flag (Line 129)', async () => {
+    test('runStudentScrape does not attach metadata to an unsuccessful result', async () => {
       const { runScraperStep } = require('@core/services/scrapper/advisorScraperService');
       runScraperStep.mockResolvedValue({ logs: [], scrapeResult: { scraped: false } });
 
@@ -63,7 +63,7 @@ describe('Scraper Orchestrator Advanced Coverage', () => {
       expect(scraped?.studentName).toBeUndefined();
     });
 
-    test('orchestrator: runAutoRun handles mid-point restart', async () => {
+    test('runAutoRun executes only the remaining step after a mid-point restart', async () => {
       const { runScraperStep } = require('@core/services/scrapper/advisorScraperService');
       runScraperStep.mockResolvedValue({ logs: ['Restarted'] });
 

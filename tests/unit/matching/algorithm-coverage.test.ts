@@ -1,7 +1,5 @@
-// @ts-nocheck
 /**
- * Algorithm Coverage Tests
- * Validates the matching algorithm works correctly with:
+ * Validates the matching pipeline with:
  *   - Foundation programs (typically 1 year)
  *   - Diploma programs (typically 2 years)
  *   - Degree programs (typically 3-4 years)
@@ -20,7 +18,7 @@ afterAll(() => {
   jest.restoreAllMocks();
 });
 
-describe("Algorithm Coverage - Program Types", () => {
+describe("Matching pipeline across program types", () => {
   // ----------------------------------------------------------------
   // Foundation Program (1 year, single intake)
   // ----------------------------------------------------------------

@@ -1,68 +1,74 @@
-// @ts-nocheck
-// Change the import to '* as service' so you can use 'service.runScraperStep'
 import * as service from '@core/services/scrapper/advisorScraperService';
+import type { ScraperStepId } from '@shared/types/scraping';
 
-describe('Scraper Service - Branch Coverage', () => {
+describe('Scraper Service', () => {
+  const steps: ScraperStepId[] = [
+    'go-degree',
+    'open-degree-iframe',
+    'click-student-dropdown',
+    'wait-for-kendo-list',
+    'open-student-dropdown',
+    'enter-student-id',
+    'click-dropdown',
+    'select-dropdown',
+    'scrape-program-data',
+  ];
+
   const mockAdapter = (success: boolean) => ({
-    loadURL: jest.fn(),
-    getURL: jest.fn().mockReturnValue("https://sisportal-100380.campusnexus.cloud"),
-    executeJavaScript: jest.fn().mockResolvedValue({ 
-        found: success, 
-        success: success, 
-        expanded: success,
-        clicked: success,
-        listItemCount: 5,
-        options: success ? [{ text: 'A', value: '1' }] : [], 
-        data: success ? { program: 'CS' } : null, 
-        rows: success ? [{ courseId: '1' }] : [],
-        itemCount: 5
+    loadURL: jest.fn().mockResolvedValue(undefined),
+    getURL: jest.fn().mockReturnValue('https://sisportal-100380.campusnexus.cloud'),
+    executeJavaScript: jest.fn().mockResolvedValue({
+      found: success,
+      success,
+      expanded: success,
+      clicked: success,
+      listItemCount: 5,
+      options: success ? [{ text: 'A', value: '1' }] : [],
+      data: success ? { program: 'CS' } : null,
+      rows: success ? [{ courseId: '1' }] : [],
+      itemCount: 5,
     }),
   });
 
-  test('runScraperStep: covers both Success and Failure branches (Lines 44-245)', async () => {
-    const steps = ["go-degree", "open-degree-iframe", "click-student-dropdown", "wait-for-kendo-list", "enter-student-id", "click-dropdown", "select-dropdown", "scrape-program-data"];
+  test.each(steps)('%s returns diagnostic logs on success', async (step) => {
+    const adapter = mockAdapter(true);
 
-    for (const step of steps) {
-      // 1. Run success path
-      await service.runScraperStep(step, mockAdapter(true), { studentId: "123" });
-      // 2. Run failure path (this triggers the 'else' blocks and logs.push("✗ ..."))
-      await service.runScraperStep(step, mockAdapter(false), { studentId: "123" });
-    }
+    const result = await service.runScraperStep(step, adapter, { studentId: '123' });
+
+    expect(result.logs.length).toBeGreaterThan(0);
+    expect(result.logs.every((log) => typeof log === 'string')).toBe(true);
   });
 
-  test('URL helpers coverage', () => {
-    expect(service.isLoggedInPortalUrl("https://sisportal-100380.campusnexus.cloud")).toBe(true);
-    expect(service.sanitizeUrl("  'https://link.com'  ")).toBe("https://link.com");
+  test.each(steps)('%s reports unsuccessful adapter results without throwing', async (step) => {
+    const adapter = mockAdapter(false);
+
+    const result = await service.runScraperStep(step, adapter, { studentId: '123' });
+
+    expect(result.logs.length).toBeGreaterThan(0);
   });
 
-  test('Covers ALL steps for Success AND Failure (Lines 44-245)', async () => {
-    const steps = ["go-degree", "open-degree-iframe", "click-student-dropdown", "wait-for-kendo-list", "enter-student-id", "click-dropdown", "select-dropdown", "scrape-program-data"];
-    
-    for (const step of steps) {
-      // 1. Trigger the 'if' blocks
-      await service.runScraperStep(step, mockAdapter(true), { studentId: "123" });
-      // 2. Trigger the 'else' blocks (Crucial for coverage!)
-      await service.runScraperStep(step, mockAdapter(false), { studentId: "123" });
-    }
+  test.each([
+    { input: "  'https://link.com'  ", expected: 'https://link.com' },
+    { input: '"https://link.com/path"', expected: 'https://link.com/path' },
+    { input: '', expected: null },
+  ])('sanitizeUrl("$input") returns "$expected"', ({ input, expected }) => {
+    expect(service.sanitizeUrl(input)).toBe(expected);
   });
 
-  test('Covers Sanitize and Login detection logic', () => {
-    service.isMicrosoftLoginUrl("https://login.microsoftonline.com");
-    service.sanitizeUrl("  'http://test.com'  ");
-    service.sanitizeUrl(""); 
+  test('URL detection distinguishes the portal from Microsoft login', () => {
+    expect(service.isLoggedInPortalUrl('https://sisportal-100380.campusnexus.cloud')).toBe(true);
+    expect(service.isMicrosoftLoginUrl('https://login.microsoftonline.com/common/oauth2')).toBe(true);
+    expect(service.isMicrosoftLoginUrl('https://sisportal-100380.campusnexus.cloud')).toBe(false);
   });
 
-  test("Scraper Service - Loop and Sanitize (Lines 259-291)", async () => {
-    // Trigger runAllSteps loop (Line 259+)
-    const mockAdapter = {
-      loadURL: jest.fn(),
-      getURL: jest.fn().mockReturnValue("https://portal.com"),
-      executeJavaScript: jest.fn().mockResolvedValue({ success: true, logs: [] })
-    };
-    await service.runAllSteps(mockAdapter, { studentId: "123" });
+  test('runAllSteps executes the complete scraper workflow', async () => {
+    const adapter = mockAdapter(true);
 
-    // Trigger sanitizeUrl branches (Line 17+)
-    service.sanitizeUrl(" 'http://valid.com' ");
-    service.sanitizeUrl("invalid-url");       
+    const result = await service.runAllSteps(adapter, { studentId: '123' });
+
+    expect(result.logs.length).toBeGreaterThanOrEqual(steps.length);
+    expect(adapter.loadURL).toHaveBeenCalled();
+    expect(adapter.executeJavaScript).toHaveBeenCalled();
+    expect(result.loginDetected).toBeUndefined();
   });
 });

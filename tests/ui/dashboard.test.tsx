@@ -337,6 +337,163 @@ describe('Dashboard Ultimate Coverage Booster', () => {
     expect(semSelect).toHaveValue('2');
   });
 
+  test('Dashboard manual import uses unit suggestions and prevents duplicate codes', async () => {
+    (global.fetch as jest.Mock).mockImplementation((url: string, options?: RequestInit) => {
+      if (url.includes('/api/scraper/status')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ status: 'idle' }),
+        });
+      }
+      if (url.includes('/api/units')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve([
+            { unit_code: 'COS10009', unit_name: 'Introduction to Programming' },
+          ]),
+        });
+      }
+      if (url.includes('/api/match')) {
+        const body = JSON.parse(String(options?.body));
+        expect(body.student.completedUnitCodes).toEqual(['COS10009']);
+        expect(body.student.intakeYear).toBe(new Date().getFullYear());
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            success: true,
+            data: {
+              rankedPlanners: [{ plannerID: 'p1', matchPct: 90 }],
+              primaryMajor: { plannerID: 'p1', matchPct: 90 },
+            },
+          }),
+        });
+      }
+      if (url === '/api/planners/p1') {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            id: 'p1',
+            units: [{
+              year_level: 1,
+              semester: 1,
+              category: 'core',
+              unit: { unit_code: 'COS10009', unit_name: 'Introduction to Programming' },
+            }],
+            minors: [],
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    });
+
+    render(
+      <ToastProvider><PortalAuthProvider><ScraperProvider>
+        <DashboardPage />
+      </ScraperProvider></PortalAuthProvider></ToastProvider>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /^Import$/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add Units' }));
+
+    const unitInput = screen.getByPlaceholderText(/BACS2003 or Data Structures/i);
+    fireEvent.change(unitInput, { target: { value: 'cos' } });
+
+    await act(async () => {
+      jest.advanceTimersByTime(250);
+      await Promise.resolve();
+    });
+
+    const suggestion = await screen.findByText('COS10009');
+    fireEvent.mouseDown(suggestion.closest('div')!);
+
+    expect(screen.getByText('1 unit')).toBeInTheDocument();
+
+    fireEvent.change(unitInput, { target: { value: 'COS10009' } });
+    fireEvent.click(screen.getByRole('button', { name: '+ Add' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Unit code already added');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Load' }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Ranked Planners/i)).toBeInTheDocument();
+      expect(screen.getByText(/COS10009/i)).toBeInTheDocument();
+    }, { timeout: 5000 });
+  });
+
+  test('Dashboard paste import parses transcript rows and submits normalized progress', async () => {
+    (global.fetch as jest.Mock).mockImplementation((url: string, options?: RequestInit) => {
+      if (url.includes('/api/scraper/status')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ status: 'idle' }),
+        });
+      }
+      if (url.includes('/api/match')) {
+        const body = JSON.parse(String(options?.body));
+        expect(body.student.completedUnitCodes).toEqual(['COS10003', 'COS30015']);
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            success: true,
+            data: {
+              rankedPlanners: [{ plannerID: 'p1', matchPct: 75 }],
+              primaryMajor: { plannerID: 'p1', matchPct: 75 },
+            },
+          }),
+        });
+      }
+      if (url === '/api/planners/p1') {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            id: 'p1',
+            units: [
+              {
+                year_level: 1,
+                semester: 1,
+                category: 'core',
+                unit: { unit_code: 'COS10003', unit_name: 'Computer and Logic Essentials' },
+              },
+              {
+                year_level: 3,
+                semester: 1,
+                category: 'major_core',
+                unit: { unit_code: 'COS30015', unit_name: 'IT Security' },
+              },
+            ],
+            minors: [],
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    });
+
+    render(
+      <ToastProvider><PortalAuthProvider><ScraperProvider>
+        <DashboardPage />
+      </ScraperProvider></PortalAuthProvider></ToastProvider>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /^Import$/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Paste Table' }));
+
+    fireEvent.change(screen.getByPlaceholderText(/COS10003/i), {
+      target: {
+        value: [
+          'Course\tCourse Title\tCredits\tEarned\tStatus\tGrade\tTerm',
+          'cos10003\tComputer and Logic Essentials\t12.5\t12.5\tComplete\tHD\t2024_FEB_S1',
+          'cos30015\tIT Security\t12.5\t0\tCurrent\t\t2026_MAR_S1',
+        ].join('\n'),
+      },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Load' }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Ranked Planners/i)).toBeInTheDocument();
+      expect(screen.getByText(/12\.5 credits this term/i)).toBeInTheDocument();
+    }, { timeout: 5000 });
+  });
+
   test('Dashboard: restores session from sessionStorage on mount', async () => {
     const mockSession = JSON.stringify({
       studentId: 'RESTORED-ID',

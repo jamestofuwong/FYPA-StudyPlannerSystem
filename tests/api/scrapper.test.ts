@@ -1,5 +1,4 @@
 /** @jest-environment node */
-// @ts-nocheck
 import { POST } from '@/app/api/scraper/route';
 import { NextRequest } from 'next/server';
 
@@ -26,8 +25,7 @@ describe('Scraper API Endpoint', () => {
     expect(data.courseList[0].courseId).toBe('COS101');
   });
 
-  // COVERAGE BOOSTER: Missing Optional Fields (Covers Line 20, 22, 26, 29)
-  test('POST: should use fallbacks (0 or "") when portal data is missing fields', async () => {
+  test('POST: normalizes missing and invalid optional portal fields', async () => {
     const incompleteResult = {
       scraped: true,
       data: { 
@@ -47,8 +45,17 @@ describe('Scraper API Endpoint', () => {
     const data = await response.json();
 
     expect(response.status).toBe(200);
-    expect(data.cgpa).toBe(0); 
-    expect(data.course).toBe(""); 
+    expect(data).toMatchObject({
+      course: '',
+      cgpa: 0,
+      creditsRequired: 0,
+      creditsCompleted: 0,
+      scheduledCredits: 0,
+      gradeLevel: '',
+      enrollmentDate: '',
+      graduationDate: null,
+      courseList: [],
+    });
   });
 
   // PORTAL FAILURE PATH

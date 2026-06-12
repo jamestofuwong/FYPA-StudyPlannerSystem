@@ -1,7 +1,7 @@
 import { scorePlanners, applyWILExemption } from '@core/services/matching/scoringEngine';
 import { DEFAULT_CONFIG } from '@shared/types/matching';
 
-describe('Matching Algorithm Deep Coverage', () => {
+describe('Matching scoring edge cases', () => {
   const mockProfile = {
     hasWIL: true,
     completedCore: new Set(['COS10001']),
@@ -11,15 +11,14 @@ describe('Matching Algorithm Deep Coverage', () => {
     requisiteFlags: []
   } as any;
 
-  test('Phase 2b: WIL Exemption correctly reduces elective denominator', () => {
-    // If student has WIL, 2 elective slots (25 CP) should be removed from requirement
+  test('WIL exemption reduces elective slots without becoming negative', () => {
     const result = applyWILExemption(4, true, 2);
     expect(result).toBe(2);
     
     expect(applyWILExemption(1, true, 2)).toBe(0);
   });
 
-  test('Phase 3: Handles edge case of zero required units (Prevent Division by Zero)', () => {
+  test('zero required units produce a finite deterministic score', () => {
     const emptyPlanner = {
       plannerID: 'empty',
       requiredCore: [], // Zero core
@@ -30,7 +29,15 @@ describe('Matching Algorithm Deep Coverage', () => {
     } as any;
 
     const scores = scorePlanners(mockProfile, [emptyPlanner], DEFAULT_CONFIG);
-    expect(scores[0].matchPct).toBeDefined();
+    expect(scores).toHaveLength(1);
+    expect(scores[0].matchPct).toBe(30);
     expect(Number.isFinite(scores[0].matchPct)).toBe(true);
+    expect(scores[0]).toMatchObject({
+      coreMatched: 0,
+      majorCoreMatched: 0,
+      prescribedMatched: 0,
+      freeMatched: 0,
+      missingFreeSlots: 0,
+    });
   });
 });

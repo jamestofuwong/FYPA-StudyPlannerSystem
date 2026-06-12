@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { getMockStudent } from '@core/services/studentService';
 import { calculateProgress } from '@core/services/analyticsService'; 
 

@@ -1,25 +1,60 @@
 import { buildStudentProfile } from '@core/services/matching/profileBuilder';
-import { applyWILExemption } from '@core/services/matching/scoringEngine';
-import { DEFAULT_CONFIG } from '@shared/types/matching';
+import type { RawStudentInput, UnitMasterEntry } from '@shared/types/matching';
 
-describe('ProfileBuilder Deep Coverage', () => {
-  test('Correctly categorizes units (Lines 141-173)', () => {
-    const masterTable = [
-        { unit_code: 'CORE1', category: 'core', offered_in: [1, 2] },
-        { unit_code: 'ELECT1', category: 'elective', offered_in: [1, 2] }
+describe('ProfileBuilder categorization', () => {
+  const student: RawStudentInput = {
+    studentID: 'S001',
+    courseType: 'degree',
+    intakeYear: 2024,
+    intakeSemester: 1,
+    currentSemester: 1,
+    completedUnitCodes: [],
+    hasWIL: false,
+  };
+
+  test('categorizes completed units and indexes elective subject tags', () => {
+    const masterTable: UnitMasterEntry[] = [
+      {
+        code: 'CORE1',
+        name: 'Core Unit',
+        category: 'core',
+        creditHours: 12.5,
+        subjectTags: [],
+        offeringSemesters: [1, 2],
+        requisites: [],
+      },
+      {
+        code: 'ELECT1',
+        name: 'Elective Unit',
+        category: 'freeElective',
+        creditHours: 12.5,
+        subjectTags: ['AI'],
+        offeringSemesters: [1, 2],
+        requisites: [],
+      },
     ];
-    const studentInput = { intakeYear: 2024, intakeSemester: 1, completedUnitCodes: ['CORE1', 'ELECT1'] };
-    
-    const profile = buildStudentProfile(studentInput as any, new Set(['CORE1', 'ELECT1']), masterTable as any);
-    
-    // Check for existence of the categorization
-    expect(profile).toBeDefined();
-    // Verify that at least one unit was mapped correctly to a Set
-    expect(profile.completedCore instanceof Set).toBe(true);
+
+    const profile = buildStudentProfile(student, new Set(['CORE1', 'ELECT1']), masterTable);
+
+    expect([...profile.completedCore]).toEqual(['CORE1']);
+    expect([...profile.completedFreeElectives]).toEqual(['ELECT1']);
+    expect([...profile.electivesByTag.get('AI') ?? []]).toEqual(['ELECT1']);
+    expect(profile.unclassifiedUnits).toEqual([]);
   });
 
-  test('Handles units missing from the master table', () => {
-    const profile = buildStudentProfile({} as any, new Set(['UNKNOWN']), []);
-    expect(profile).toBeDefined();
+  test('records unknown units without adding them to a scoring category', () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation();
+
+    const profile = buildStudentProfile(student, new Set(['UNKNOWN']), []);
+
+    expect(profile.unclassifiedUnits).toEqual(['UNKNOWN']);
+    expect(profile.completedUnits).toEqual(new Set(['UNKNOWN']));
+    expect(profile.completedCore).toEqual(new Set());
+    expect(profile.completedMajorCore).toEqual(new Set());
+    expect(profile.completedPrescribed).toEqual(new Set());
+    expect(profile.completedFreeElectives).toEqual(new Set());
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('UNKNOWN'));
+
+    warnSpy.mockRestore();
   });
 });
