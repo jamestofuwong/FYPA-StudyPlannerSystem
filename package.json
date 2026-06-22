@@ -86,7 +86,7 @@
       "web/**",
       "!web/.next/cache/**",
       "!node_modules/lucide-react/dist/esm/**",
-      "node_modules/@local/**",
+      { "from": "node_modules/@local", "to": "node_modules/@local" },
       "core/**",
       "electron/**",
       "runtime/**",
