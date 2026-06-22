@@ -117,9 +117,7 @@
         }
       ]
     },
-    "nsis": {
-      "compression": "store"
-    },
+    "compression": "store",
     "win": {
       "target": [
         "nsis"
