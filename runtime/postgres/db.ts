@@ -100,7 +100,12 @@ export async function startDatabase() : Promise<void> {
     if (isFirstRun) {
         await pg.initialise()
     }
-    await pg.start();
+    await pg.start().catch((err: unknown) => {
+      // embedded-postgres sometimes rejects with a non-Error (e.g. undefined or
+      // a plain string). Wrap it so the caller always sees a meaningful message.
+      const msg = err instanceof Error ? err.message : String(err ?? 'pg.start() rejected with no reason');
+      throw new Error(`[DB] pg.start() failed: ${msg}`);
+    });
 
     console.log('[DB] PostgreSQL started on port ', DB_CONFIG.port);
 

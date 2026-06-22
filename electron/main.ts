@@ -226,12 +226,15 @@ ipcMain.handle("updater-download", () => {
 // NSIS tries to overwrite its binaries, Windows file-locks cause a silent
 // partial update that leaves the binary directory corrupted.
 ipcMain.handle("updater-install", async () => {
+  // Set isQuitting so the before-quit handler (fired by quitAndInstall internally)
+  // skips its shutdown sequence — we handle it here in the correct order.
+  isQuitting = true;
   try {
     // Close Next.js first so Prisma releases its connection pool, then stop
-    // postgres. Running them in parallel would cause pg_ctl stop (smart mode)
-    // to hang waiting for open connections.
-    await nextServerRef?.close();
-    await stopDatabase();
+    // postgres and Ollama. Running them in parallel would cause pg_ctl stop
+    // (smart mode) to hang waiting for open connections.
+    await (nextServerRef?.close() ?? Promise.resolve()).catch(console.warn);
+    await Promise.allSettled([stopDatabase(), stopOllama()]);
   } catch (err) {
     console.warn('[Updater] Pre-install shutdown warning:', err);
   }
