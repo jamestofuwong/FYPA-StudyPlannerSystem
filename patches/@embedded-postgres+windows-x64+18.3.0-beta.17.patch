@@ -1,0 +1,27 @@
+diff --git a/node_modules/@embedded-postgres/windows-x64/dist/index.js b/node_modules/@embedded-postgres/windows-x64/dist/index.js
+--- a/node_modules/@embedded-postgres/windows-x64/dist/index.js
++++ b/node_modules/@embedded-postgres/windows-x64/dist/index.js
+@@ -1,6 +1,19 @@
+ import path from 'path';
+ import { fileURLToPath } from 'url';
+-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+-export const pg_ctl = path.resolve(__dirname, '..', 'native', 'bin', 'pg_ctl.exe');
+-export const initdb = path.resolve(__dirname, '..', 'native', 'bin', 'initdb.exe');
+-export const postgres = path.resolve(__dirname, '..', 'native', 'bin', 'postgres.exe');
++import { existsSync } from 'fs';
++// In a packaged Electron app with asar:true, import.meta.url may resolve to a
++// path inside the asar archive where spawn() cannot execute binaries.
++// Check process.resourcesPath / app.asar.unpacked first (real filesystem).
++function resolvedBinDir() {
++  var rp = (typeof process !== 'undefined') && process.resourcesPath;
++  if (rp) {
++    var unpacked = path.join(rp, 'app.asar.unpacked', 'node_modules', '@embedded-postgres', 'windows-x64', 'native', 'bin');
++    if (existsSync(unpacked)) return unpacked;
++  }
++  var __dirname_fallback = path.dirname(fileURLToPath(import.meta.url));
++  return path.resolve(__dirname_fallback, '..', 'native', 'bin');
++}
++var _binDir = resolvedBinDir();
++export const pg_ctl = path.join(_binDir, 'pg_ctl.exe');
++export const initdb = path.join(_binDir, 'initdb.exe');
++export const postgres = path.join(_binDir, 'postgres.exe');
