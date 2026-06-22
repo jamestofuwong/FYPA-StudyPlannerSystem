@@ -76,6 +76,7 @@
     "productName": "Study Planner System",
     "asar": true,
     "asarUnpack": [
+      "node_modules/embedded-postgres/**",
       "node_modules/@embedded-postgres/**",
       "node_modules/@local/**",
       "runtime/**"
@@ -83,6 +84,12 @@
     "files": [
       "dist/electron/**",
       "web/**",
+      "!web/.next/cache/**",
+      "!node_modules/next/dist/compiled/webpack/**",
+      "!node_modules/next/dist/compiled/babel/**",
+      "!node_modules/next/dist/compiled/jest-worker/**",
+      "!node_modules/next/dist/compiled/terser/**",
+      "!node_modules/lucide-react/dist/esm/**",
       "core/**",
       "electron/**",
       "runtime/**",
@@ -109,6 +116,9 @@
           "to": "ollama"
         }
       ]
+    },
+    "nsis": {
+      "compression": "store"
     },
     "win": {
       "target": [
