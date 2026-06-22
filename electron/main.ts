@@ -60,8 +60,14 @@ process.on('unhandledRejection', (reason) => {
 function getNextProjectDir(): string {
   const candidates = app.isPackaged
     ? [
+        // asar:true — app.getAppPath() returns the .asar file; Electron's fs patches
+        // make isDirectory() work transparently on paths inside the archive.
+        path.join(app.getAppPath(), "web"),
+        path.join(app.getAppPath(), "app"),
+        // asar:false fallback (legacy / asar disabled builds)
         path.join(process.resourcesPath, "app", "web"),
         path.join(process.resourcesPath, "app", "app"),
+        // explicit unpacked fallback if web/ is ever moved to asarUnpack
         path.join(process.resourcesPath, "app.asar.unpacked", "web"),
         path.join(process.resourcesPath, "app.asar.unpacked", "app")
       ]
