@@ -27,5 +27,6 @@ export async function POST(req: NextRequest) {
   scraperStore.result = null;
   scraperStore.error = null;
 
-  return NextResponse.json({ queued: true, studentId });
+  // REQ-SEC-104: do not echo the student ID back in the response body
+  return NextResponse.json({ queued: true });
 }

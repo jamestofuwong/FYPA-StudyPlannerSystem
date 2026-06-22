@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { runMatchingPipeline } from '../../../../core/services/matching/matchingService';
 import * as plannerRepository from '../../../../core/db/repositories/plannerRepository';
 import type { PlannerTemplate, UnitMasterEntry, CourseType } from '../../../../core/shared/types/matching';
+import { prisma } from '../../../../core/db/client';
 
 // Priority for resolving a unit's category when it appears in multiple planners.
 // Higher value wins.
@@ -36,6 +37,10 @@ export async function POST(request: Request) {
       courseType: rawStudent.courseType || "degree",
       currentSemester: rawStudent.currentSemester || 1,
     };
+
+    // REQ-FUN-610: read user-configured second major threshold from SystemConfig (default 0.70)
+    const thresholdRow = await prisma.systemConfig.findUnique({ where: { key: 'second_major_threshold' } }).catch(() => null);
+    const secondMajorThreshold = thresholdRow ? Math.min(1, Math.max(0, parseFloat(thresholdRow.value))) : 0.70;
 
     const dbPlanners = await plannerRepository.getAllPlannersWithUnits();
 
@@ -95,7 +100,7 @@ export async function POST(request: Request) {
       student,
       planners: formattedPlanners,
       unitMasterTable,
-      config: { preferIntakeYear: false },
+      config: { preferIntakeYear: false, secondMajorThreshold },
     });
 
     const payload = result.payload as any;

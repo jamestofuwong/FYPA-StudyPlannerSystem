@@ -11,7 +11,7 @@ export default function TopBar() {
       {/* Logo + App name */}
       <div className={styles.appName}>
         <div className={styles.logo}>S</div>
-        TEST
+        SPS
         <span className={styles.appSubtitle}>· Study Planner System</span>
       </div>
 

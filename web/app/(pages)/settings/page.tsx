@@ -20,10 +20,40 @@ type UpdateStatus =
   | { status: 'downloaded'; version: string }
   | { status: 'error'; message: string };
 
+const DEFAULT_THRESHOLD = 70; // 70 %
+
 export default function SettingsPage() {
   const { preference, setPreference } = useTheme();
   const [update, setUpdate] = useState<UpdateStatus>({ status: 'idle' });
   const appVersion = process.env.APP_VERSION ?? '—';
+
+  // REQ-FUN-610: second major detection threshold
+  const [threshold, setThreshold] = useState<number>(DEFAULT_THRESHOLD);
+  const [thresholdSaved, setThresholdSaved] = useState(false);
+  const [thresholdLoading, setThresholdLoading] = useState(false);
+
+  // Load stored threshold on mount
+  useEffect(() => {
+    fetch('/api/config?key=second_major_threshold')
+      .then((r) => r.json())
+      .then((d) => { if (d.value !== null) setThreshold(Math.round(parseFloat(d.value) * 100)); })
+      .catch(() => {});
+  }, []);
+
+  const handleSaveThreshold = async () => {
+    setThresholdLoading(true);
+    setThresholdSaved(false);
+    try {
+      await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'second_major_threshold', value: String(threshold / 100) }),
+      });
+      setThresholdSaved(true);
+      setTimeout(() => setThresholdSaved(false), 2500);
+    } catch {}
+    setThresholdLoading(false);
+  };
 
   useEffect(() => {
     const api = (window as any).updaterAPI;
@@ -62,6 +92,51 @@ export default function SettingsPage() {
               </button>
             );
           })}
+        </div>
+      </div>
+
+      {/* ── Detection Settings (REQ-FUN-610) ────────────────────────────── */}
+      <div className={styles.sectionTitle}>Detection Settings</div>
+      <div className={styles.card}>
+        <div className={styles.cardTitle}>Second Major Detection Threshold</div>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 14 }}>
+          A second major is detected when a student&apos;s unit completion matches a second planner at or above this percentage.
+          Default: <span style={{ fontFamily: 'var(--font-mono)' }}>70%</span>.
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 14 }}>
+          <input
+            type="range"
+            min={10}
+            max={100}
+            step={5}
+            value={threshold}
+            onChange={(e) => { setThreshold(parseInt(e.target.value)); setThresholdSaved(false); }}
+            style={{ flex: 1, accentColor: 'var(--accent-blue)' }}
+          />
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 14, fontWeight: 600, minWidth: 42, textAlign: 'right' }}>
+            {threshold}%
+          </span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button
+            className={styles.themeOption}
+            style={{ width: 'auto', padding: '7px 14px', borderColor: thresholdSaved ? '#4ec9b0' : undefined }}
+            onClick={handleSaveThreshold}
+            disabled={thresholdLoading}
+          >
+            <span className={styles.themeOptionLabel} style={{ fontSize: 12, minWidth: 'auto', color: thresholdSaved ? '#4ec9b0' : undefined }}>
+              {thresholdLoading ? 'Saving…' : thresholdSaved ? 'Saved ✓' : 'Save'}
+            </span>
+          </button>
+          {threshold !== DEFAULT_THRESHOLD && (
+            <button
+              className={styles.themeOption}
+              style={{ width: 'auto', padding: '7px 14px' }}
+              onClick={() => { setThreshold(DEFAULT_THRESHOLD); setThresholdSaved(false); }}
+            >
+              <span className={styles.themeOptionLabel} style={{ fontSize: 12, minWidth: 'auto' }}>Reset to Default</span>
+            </button>
+          )}
         </div>
       </div>
 

@@ -15,7 +15,8 @@
     "next": "16.1.6",
     "puppeteer": "^24.0.0",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "rebrowser-puppeteer": "^24.8.1"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",

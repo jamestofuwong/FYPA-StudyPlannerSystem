@@ -89,20 +89,10 @@ export default function DashboardPage() {
   const [customPlanStart, setCustomPlanStart] = useState<{ year: number; semester: 1 | 2 } | null>(null);
   const [customPlanLoading, setCustomPlanLoading] = useState(false);
   const [injectedMinors, setInjectedMinors] = useState<Set<string>>(new Set());
+  // REQ-FUN-105: track last scrape error message for retry UI
+  const [scraperError, setScraperError] = useState<string | null>(null);
 
-  // Restore persisted session on mount
-  useEffect(() => {
-    try {
-      const saved = sessionStorage.getItem('dashboardSession');
-      if (saved) {
-        const { studentId, data } = JSON.parse(saved);
-        setStudentIdInput(studentId ?? '');
-        setDashboardData(data ?? null);
-        if (data?.student) setScrapedStudent({ student: data.student, studentId: data.studentId ?? studentId });
-        setStudentLoaded(!!data);
-      }
-    } catch {}
-  }, []);
+  // REQ-SEC-101: no sessionStorage restore — student data must live in RAM only
 
   // Poll scraper status on mount so the dashboard reflects initializing state
   // even before the user clicks Search.
@@ -149,11 +139,15 @@ export default function DashboardPage() {
       setScraperApiStatus(data.status);
       if (data.status === 'done' && data.result) return data.result;
       if (data.status === 'error') {
-        showToast(data.error ?? 'Scrape failed.', 'error');
+        const msg = data.error ?? 'Scrape failed. The portal may be unavailable or the student was not found.';
+        showToast(msg, 'error');
+        setScraperError(msg);
         return null;
       }
     }
-    showToast('Scrape timed out. Check the scraper bot.', 'error');
+    const timeoutMsg = 'Scrape timed out. The portal may be slow — please retry or enter data manually.';
+    showToast(timeoutMsg, 'error');
+    setScraperError(timeoutMsg);
     return null;
   };
 
@@ -224,7 +218,7 @@ export default function DashboardPage() {
         };
         setDashboardData(data);
         setStudentLoaded(true);
-        try { sessionStorage.setItem('dashboardSession', JSON.stringify({ studentId, data })); } catch {}
+        // REQ-SEC-101: student data stays in RAM only — no sessionStorage write
         showToast("Dashboard sync complete!", "success");
       } else {
         showToast("API Error: Check if server is running", "error");
@@ -251,17 +245,36 @@ export default function DashboardPage() {
     const mpuStatusMap = new Map<string, string>(mpuCourseList.map((c) => [c.courseId, c.status]));
     const mpuTermMap   = new Map<string, string>(mpuCourseList.map((c) => [c.courseId, c.term]));
 
+    // REQ-FUN-404: build set of all completed (non-failed) unit codes for prerequisite checking
+    const completedSet = new Set(
+      (dashboardData?.completedCodes ?? []).map((c: string) => c.toUpperCase())
+    );
+
     return planner.units
       .filter((u: any) => u.year_level === yearLevel && u.semester === semester && u.unit !== null)
-      .map((u: any) => ({
-        code: u.unit.unit_code,
-        name: u.unit.unit_name,
-        grade:  gradeMap.get(u.unit.unit_code)  ?? mpuGradeMap.get(u.unit.unit_code)  ?? '—',
-        term:   termMap.get(u.unit.unit_code)   ?? mpuTermMap.get(u.unit.unit_code)   ?? '—',
-        type: u.category.replace('_', ' '),
-        typeClass: u.category === 'core' ? 'badgeRed' : 'badgePurple',
-        status: statusMap.get(u.unit.unit_code) ?? mpuStatusMap.get(u.unit.unit_code) ?? '—',
-      }));
+      .map((u: any) => {
+        // REQ-FUN-404: extract prerequisites from requisite_groups included in planner fetch
+        const prerequisites: Array<{ code: string; name: string; met: boolean }> =
+          (u.unit?.requisite_groups ?? [])
+            .flatMap((rg: any) => rg.conditions ?? [])
+            .filter((c: any) => c.type === 'unit' && c.unit && c.requisite_type === 'prerequisite')
+            .map((c: any) => ({
+              code: c.unit.unit_code,
+              name: c.unit.unit_name,
+              met: completedSet.has(c.unit.unit_code.toUpperCase()),
+            }));
+        return {
+          code: u.unit.unit_code,
+          name: u.unit.unit_name,
+          grade:  gradeMap.get(u.unit.unit_code)  ?? mpuGradeMap.get(u.unit.unit_code)  ?? '—',
+          term:   termMap.get(u.unit.unit_code)   ?? mpuTermMap.get(u.unit.unit_code)   ?? '—',
+          type: u.category.replace('_', ' '),
+          typeClass: u.category === 'core' ? 'badgeRed' : 'badgePurple',
+          status: statusMap.get(u.unit.unit_code) ?? mpuStatusMap.get(u.unit.unit_code) ?? '—',
+          prerequisites,
+          hasUnmetPrereqs: prerequisites.some((p) => !p.met),
+        };
+      });
   };
 
   // Scrapes the MPU enrollment for a student if it exists and the current enrollment is not MPU.
@@ -541,6 +554,7 @@ export default function DashboardPage() {
     setCustomPlan(null);
     setCustomPlanStart(null);
     setInjectedMinors(new Set());
+    setScraperError(null); // REQ-FUN-105: clear previous error on new search
     setInternalLoading(true);
     try {
       // 1. Queue the student ID for the scraper bot via API
@@ -582,7 +596,8 @@ export default function DashboardPage() {
     setCustomPlan(null);
     setCustomPlanStart(null);
     setInjectedMinors(new Set());
-    try { sessionStorage.removeItem('dashboardSession'); } catch {}
+    setScraperError(null);
+    // REQ-SEC-101: no sessionStorage to remove — data was never persisted
     showToast('Student data cleared.', 'info');
   };
 
@@ -925,8 +940,31 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* ── Scrape error / retry panel (REQ-FUN-105) ────────────────────── */}
+      {isLoggedIn && !loading && !studentLoaded && scraperApiStatus === 'error' && scraperError && !isWaitingForList && (
+        <div style={{ border: '1px solid rgba(244,135,113,0.5)', borderRadius: 4, padding: '16px 18px', marginBottom: 14, background: 'rgba(244,135,113,0.07)' }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent-red)', marginBottom: 6 }}>Scrape Failed</div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>{scraperError}</div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              className={styles.btnPrimary}
+              onClick={handleSearch}
+              disabled={!studentIdInput.trim()}
+            >
+              Retry
+            </button>
+            <button
+              className={styles.btnSecondary}
+              onClick={() => { setScraperError(null); setShowImportPanel(true); }}
+            >
+              Enter Data Manually
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── Empty state ──────────────────────────────────────────────────── */}
-      {isLoggedIn && !isPortalLoading && !loading && !studentLoaded && !isWaitingForList && (
+      {isLoggedIn && !isPortalLoading && !loading && !studentLoaded && !isWaitingForList && !scraperError && (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '60px 20px', textAlign: 'center' }}>
           <div style={{ fontSize: 48, opacity: 0.25 }}>🎓</div>
           <div style={{ fontSize: 14, fontWeight: 600 }}>Enter a Student ID to begin</div>
@@ -1055,6 +1093,49 @@ export default function DashboardPage() {
 
         return (
           <div>
+
+          {/* REQ-FUN-611: No Major Detected panel */}
+          {dashboardData.match.status === 'noMajorDetected' && (() => {
+            const closest = (dashboardData.match.rankedPlanners ?? []).slice(0, 3);
+            return (
+              <div style={{ border: '1px solid rgba(244,135,113,0.5)', borderRadius: 4, padding: '14px 16px', marginBottom: 14, background: 'rgba(244,135,113,0.07)' }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent-red)', marginBottom: 4 }}>
+                  No Major Detected
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: closest.length > 0 ? 10 : 0 }}>
+                  None of the stored planners reached the detection threshold for this student.
+                  {closest.length > 0 ? ' Closest matches and their completion gaps:' : ' No planners are stored yet — upload a study planner PDF to begin.'}
+                </div>
+                {closest.map((r: any) => (
+                  <div key={r.plannerID} style={{ background: 'var(--card-bg)', border: '1px solid var(--panel-border)', borderRadius: 3, padding: '10px 12px', marginBottom: 6 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6 }}>
+                      <span style={{ fontSize: 12, fontWeight: 600, flex: 1 }}>{r.majorName || '—'}</span>
+                      <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--accent-orange)' }}>{r.matchPct}% match</span>
+                    </div>
+                    {r.missingCore?.length > 0 && (
+                      <div style={{ fontSize: 11, marginBottom: 3 }}>
+                        <span style={{ color: 'var(--text-muted)' }}>Missing core: </span>
+                        {r.missingCore.map((c: string) => (
+                          <code key={c} style={{ color: 'var(--accent-red)', fontFamily: 'var(--font-mono)', marginRight: 4, fontSize: 10 }}>{c}</code>
+                        ))}
+                      </div>
+                    )}
+                    {r.missingMajorCore?.length > 0 && (
+                      <div style={{ fontSize: 11 }}>
+                        <span style={{ color: 'var(--text-muted)' }}>Missing major core: </span>
+                        {r.missingMajorCore.map((c: string) => (
+                          <code key={c} style={{ color: 'var(--accent-orange)', fontFamily: 'var(--font-mono)', marginRight: 4, fontSize: 10 }}>{c}</code>
+                        ))}
+                      </div>
+                    )}
+                    {(!r.missingCore?.length && !r.missingMajorCore?.length) && (
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>No gap data available.</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
 
           {/* Ranked Planners selector */}
           <div className={styles.sectionTitle}>Ranked Planners</div>
@@ -1475,26 +1556,52 @@ export default function DashboardPage() {
                         <col style={{ width: 130 }} />
                         <col style={{ width: 120 }} />
                         <col style={{ width: 110 }} />
+                        <col style={{ width: 160 }} />
                       </colgroup>
                       <thead>
-                        <tr><th>Unit Code</th><th>Unit Name</th><th>Grade</th><th>Term</th><th>Type</th><th>Status</th></tr>
+                        <tr><th>Unit Code</th><th>Unit Name</th><th>Grade</th><th>Term</th><th>Type</th><th>Status</th><th>Prerequisites</th></tr>
                       </thead>
                       <tbody>
                         {units.map((u: any) => {
                           const isFailed = u.grade?.trim().toUpperCase() === 'N';
+                          // REQ-FUN-404: highlight rows where prerequisites are unmet
+                          const rowStyle: React.CSSProperties =
+                            isFailed                       ? { background: 'rgba(244,135,113,0.15)' } :
+                            u.hasUnmetPrereqs              ? { background: 'rgba(244,135,113,0.12)' } :
+                            u.status === 'Current'         ? { background: 'rgba(111,191,115,0.12)' } :
+                            (!u.grade || u.grade === '—')  ? { background: 'rgba(244,135,113,0.08)' } :
+                            {};
                           return (
-                          <tr key={u.code} style={
-                            isFailed                              ? { background: 'rgba(244,135,113,0.15)' } :
-                            u.status === 'Current'               ? { background: 'rgba(111,191,115,0.12)' } :
-                            (!u.grade || u.grade === '—')        ? { background: 'rgba(244,135,113,0.08)' } :
-                            undefined
-                          }>
+                          <tr key={u.code} style={rowStyle}>
                             <td><InlineCode>{u.code}</InlineCode></td>
                             <td>{u.name}</td>
                             <td style={isFailed ? { color: 'var(--accent-red)', fontWeight: 600 } : undefined}>{u.grade}</td>
                             <td>{u.term}</td>
                             <td><Badge label={u.type} cls={u.typeClass as BadgeClass} /></td>
                             <td>{u.status}</td>
+                            {/* REQ-FUN-404: prerequisites column */}
+                            <td>
+                              {u.prerequisites.length === 0 ? (
+                                <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>—</span>
+                              ) : (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                  {u.prerequisites.map((p: { code: string; name: string; met: boolean }) => (
+                                    <span
+                                      key={p.code}
+                                      title={p.met ? `${p.code} — completed` : `${p.code} — NOT completed`}
+                                      style={{
+                                        display: 'inline-flex', alignItems: 'center', gap: 4,
+                                        fontSize: 11, fontFamily: 'var(--font-mono)',
+                                        color: p.met ? 'var(--accent-green)' : 'var(--accent-red)',
+                                        fontWeight: p.met ? 400 : 600,
+                                      }}
+                                    >
+                                      {p.met ? '✓' : '✗'} {p.code}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </td>
                           </tr>
                           );
                         })}

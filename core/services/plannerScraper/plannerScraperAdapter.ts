@@ -62,11 +62,15 @@ export async function createPuppeteerAdapter(opts: {
 } = {}): Promise<BrowserAdapter> {
   // Dynamic import — avoids hard compile-time dep when mocking.
   // webpackIgnore/turbopackIgnore prevents Turbopack from statically tracing
-  // this import; puppeteer is declared in serverExternalPackages so it is
+  // this import; the package is declared in serverExternalPackages so it is
   // required at runtime from cloud/node_modules rather than bundled.
+  //
+  // rebrowser-puppeteer is a patched fork of Puppeteer that fixes bot-detection
+  // leaks at the CDP protocol level (headless flag, Runtime.enable timing,
+  // navigator.webdriver, etc.) that puppeteer-extra-plugin-stealth cannot reach.
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  // @ts-ignore — puppeteer lives in cloud/node_modules; not resolvable from repo root tsconfig
-  const puppeteer = await import(/* webpackIgnore: true */ 'puppeteer');
+  // @ts-ignore — rebrowser-puppeteer lives in cloud/node_modules; not resolvable from repo root tsconfig
+  const puppeteer = await import(/* webpackIgnore: true */ 'rebrowser-puppeteer');
 
   const launchOpts: Record<string, unknown> = {
     headless: opts.headless ?? true,

@@ -208,7 +208,9 @@ export async function runScraperStep(
       if (studentName) logs.push(`✓ Student name extracted: ${studentName}`);
       return { logs, studentName };
     } else {
-      logs.push(`✗ ${data.error}`);
+      const msg = data.error ?? 'Student not found in portal dropdown';
+      logs.push(`✗ ${msg}`);
+      throw new Error(msg);
     }
 
   } else if (stepId === "click-dropdown") {
