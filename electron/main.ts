@@ -220,7 +220,21 @@ ipcMain.handle("updater-download", () => {
 });
 
 // IPC: renderer asks to quit and install
-ipcMain.handle("updater-install", () => {
+// Stop the database BEFORE spawning the NSIS installer. On Windows,
+// electron-updater spawns the installer as a detached process immediately,
+// which races with our before-quit shutdown. If postgres is still running when
+// NSIS tries to overwrite its binaries, Windows file-locks cause a silent
+// partial update that leaves the binary directory corrupted.
+ipcMain.handle("updater-install", async () => {
+  try {
+    // Close Next.js first so Prisma releases its connection pool, then stop
+    // postgres. Running them in parallel would cause pg_ctl stop (smart mode)
+    // to hang waiting for open connections.
+    await nextServerRef?.close();
+    await stopDatabase();
+  } catch (err) {
+    console.warn('[Updater] Pre-install shutdown warning:', err);
+  }
   autoUpdater.quitAndInstall();
 });
 
@@ -269,16 +283,22 @@ app.on('before-quit', async (event) => {
   isQuitting = true;
 
 
+  // 15 s on Windows (postgres stop can be slow); 5 s on other platforms.
+  const shutdownTimeout = process.platform === 'win32' ? 15_000 : 5_000;
   const forceExit = setTimeout(() => {
     console.warn('[App] Shutdown timed out, forcing exit');
     app.exit(1);
-  }, 5000);
+  }, shutdownTimeout);
 
   try {
+    // Close Next.js first so Prisma releases DB connections before pg stops.
+    // pg_ctl stop (smart mode) waits for active connections — if Prisma's pool
+    // is still open, it hangs until the 5-second timeout force-kills the app,
+    // leaving postgres running and its binaries locked on Windows.
+    await (nextServerRef?.close() ?? Promise.resolve()).catch(console.warn);
     await Promise.allSettled([
       stopDatabase(),
       stopOllama(),
-      nextServerRef?.close() ?? Promise.resolve()
     ]);
     clearTimeout(forceExit);
     app.exit(0);
