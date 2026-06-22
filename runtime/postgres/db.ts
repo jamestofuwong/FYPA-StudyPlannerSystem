@@ -97,6 +97,17 @@ export async function startDatabase() : Promise<void> {
         initdbFlags: ['--locale=C', '--encoding=UTF8'],
     });
 
+    // On Windows, kill any orphaned postgres processes that may be holding
+    // port 5433 from a previous crashed or force-closed session.
+    if (process.platform === 'win32') {
+      try {
+        execSync('taskkill /F /IM postgres.exe /T', { stdio: 'ignore' });
+        console.log('[DB] Cleared any pre-existing postgres.exe processes');
+      } catch {
+        // taskkill exits 128 when no matching process found — that's fine.
+      }
+    }
+
     // initialise (create data dir and pg cluster if first run)
     if (isFirstRun) {
         await pg.initialise()
