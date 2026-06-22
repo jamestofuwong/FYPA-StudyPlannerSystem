@@ -11,11 +11,11 @@ function getDataDir(): string {
 };
 
 function getAppResourcePath(...segments: string[]): string {
-  // With asar: false, files are under Resources/app/
-  // With asar: true,  files are under Resources/app.asar.unpacked/
-  const noAsar   = path.join(process.resourcesPath, 'app', ...segments);
+  // With asar: true (current),  files are under Resources/app.asar.unpacked/
+  // With asar: false (fallback), files are under Resources/app/
   const withAsar = path.join(process.resourcesPath, 'app.asar.unpacked', ...segments);
-  return fs.existsSync(noAsar) ? noAsar : withAsar;
+  const noAsar   = path.join(process.resourcesPath, 'app', ...segments);
+  return fs.existsSync(withAsar) ? withAsar : noAsar;
 }
 
 function getSchemaPath(): string {

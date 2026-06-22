@@ -26,12 +26,12 @@ exports.default = async function afterPack(context) {
 
   const appOutDir   = context.appOutDir;
   const productName = context.packager.appInfo.productFilename;
-  const libDir = path.join(
-    appOutDir,
-    `${productName}.app`,
-    'Contents', 'Resources', 'app',
-    'node_modules', '@embedded-postgres', 'darwin-arm64', 'native', 'lib'
-  );
+  // With asar: true the unpacked modules land in app.asar.unpacked/.
+  // Fall back to the old app/ path so the hook still works if asar is ever disabled.
+  const unpackedDir = path.join(appOutDir, `${productName}.app`, 'Contents', 'Resources', 'app.asar.unpacked');
+  const legacyDir   = path.join(appOutDir, `${productName}.app`, 'Contents', 'Resources', 'app');
+  const baseDir     = fs.existsSync(unpackedDir) ? unpackedDir : legacyDir;
+  const libDir = path.join(baseDir, 'node_modules', '@embedded-postgres', 'darwin-arm64', 'native', 'lib');
 
   if (!fs.existsSync(libDir)) {
     console.log('[fix-embedded-postgres-dylibs] lib dir not found, skipping:', libDir);

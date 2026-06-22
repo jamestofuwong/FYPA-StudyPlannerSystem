@@ -74,7 +74,12 @@
       "releaseType": "release"
     },
     "productName": "Study Planner System",
-    "asar": false,
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/@embedded-postgres/**",
+      "node_modules/@local/**",
+      "runtime/**"
+    ],
     "files": [
       "dist/electron/**",
       "web/**",
@@ -84,12 +89,6 @@
       "scripts/**",
       "package.json",
       "README.md"
-    ],
-    "extraFiles": [
-      {
-        "from": "node_modules/@local",
-        "to": "Resources/app/node_modules/@local"
-      }
     ],
     "directories": {
       "output": "release"
