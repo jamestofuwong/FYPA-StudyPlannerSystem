@@ -29,3 +29,10 @@ contextBridge.exposeInMainWorld("updaterAPI", {
   download: () => ipcRenderer.invoke("updater-download"),
   install:  () => ipcRenderer.invoke("updater-install"),
 });
+
+contextBridge.exposeInMainWorld("shutdownAPI", {
+  onShuttingDown: (cb: () => void) =>
+    ipcRenderer.on("app-shutting-down", () => cb()),
+  onProgress: (cb: (data: { service: string; done: boolean }) => void) =>
+    ipcRenderer.on("shutdown-progress", (_, data) => cb(data)),
+});

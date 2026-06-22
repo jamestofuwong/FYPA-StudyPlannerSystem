@@ -42,6 +42,19 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  // Shutdown overlay state
+  const [shuttingDown, setShuttingDown] = useState(false);
+  const [shutdownDone, setShutdownDone] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    const api = (window as any).shutdownAPI;
+    if (!api) return;
+    api.onShuttingDown(() => setShuttingDown(true));
+    api.onProgress((data: { service: string; done: boolean }) => {
+      setShutdownDone((prev) => ({ ...prev, [data.service]: data.done }));
+    });
+  }, []);
+
   // Privacy notice gate
   const [privacyChecked, setPrivacyChecked] = useState(false);
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
@@ -125,6 +138,45 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           <StatusBar activePanel={activePanel} />
         </div>
         <PortalLoginModal />
+        {/* Shutdown overlay — shown while services are stopping */}
+        {shuttingDown && (
+          <div style={{
+            position: 'fixed', inset: 0, zIndex: 10000,
+            background: 'var(--bg-base, #1e1e1e)',
+            display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center',
+            gap: 16,
+          }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--fg-muted, #858585)', marginBottom: 4 }}>
+              Shutting down…
+            </div>
+            <div style={{ width: 160, height: 3, background: 'var(--border, #333)', borderRadius: 2, overflow: 'hidden' }}>
+              <div style={{ width: '40%', height: '100%', background: 'var(--accent-blue, #569cd6)', borderRadius: 2,
+                animation: 'db-pulse 1.2s ease-in-out infinite alternate' }} />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+              {[
+                { key: 'server',   label: 'Web server' },
+                { key: 'database', label: 'Database' },
+                { key: 'ollama',   label: 'AI engine' },
+              ].map(({ key, label }) => (
+                <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--fg-muted, #858585)' }}>
+                  {shutdownDone[key]
+                    ? <span style={{ color: 'var(--accent-green, #4ec9b0)', fontSize: 11 }}>✓</span>
+                    : <span style={{ display: 'inline-block', width: 10, height: 10, border: '2px solid var(--accent-blue, #569cd6)',
+                        borderTopColor: 'transparent', borderRadius: '50%',
+                        animation: 'spin 0.8s linear infinite' }} />
+                  }
+                  {label}
+                </div>
+              ))}
+            </div>
+            <style>{`
+              @keyframes db-pulse { from { margin-left: 0 } to { margin-left: 60% } }
+              @keyframes spin { to { transform: rotate(360deg) } }
+            `}</style>
+          </div>
+        )}
         {/* DB startup overlay — shown on Windows/first-run while Postgres initialises */}
         {!dbReady && (
           <div style={{
@@ -139,7 +191,6 @@ export default function AppLayout({ children }: { children: ReactNode }) {
               <div style={{ width: '40%', height: '100%', background: 'var(--accent-blue, #569cd6)', borderRadius: 2,
                 animation: 'db-pulse 1.2s ease-in-out infinite alternate' }} />
             </div>
-            <style>{`@keyframes db-pulse { from { margin-left: 0 } to { margin-left: 60% } }`}</style>
           </div>
         )}
         {/* Privacy notice — shown above everything until acknowledged */}

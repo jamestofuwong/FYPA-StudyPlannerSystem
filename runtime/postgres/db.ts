@@ -2,6 +2,7 @@ import EmbeddedPostgres from 'embedded-postgres'
 import { app } from 'electron'
 import path from 'path'
 import fs from 'fs'
+import { execSync } from 'child_process'
 
 let pg: EmbeddedPostgres | null = null
 
@@ -160,16 +161,28 @@ export async function stopDatabase(): Promise<void> {
   console.log('[DB] Stopping PostgreSQL...');
 
   try {
-    // Stop embedded Postgres
     await pg.stop();
     console.log('[DB] PostgreSQL stopped cleanly');
 
-    // give time for the underlying process to fully exit
+    // Give the process time to fully exit before we return.
     await new Promise<void>((resolve) => setTimeout(resolve, 3000));
 
   } catch (err) {
     console.warn('[DB] pg.stop() warning (may be benign):', err);
   } finally {
     pg = null;
+  }
+
+  // On Windows, Electron's exit can leave orphaned postgres.exe processes in a
+  // "Suspended" state rather than terminating them. A suspended postgres still
+  // holds port 5433, so the next app launch fails to start a new instance.
+  // Force-kill any remaining postgres.exe processes after pg.stop() returns.
+  if (process.platform === 'win32') {
+    try {
+      execSync('taskkill /F /IM postgres.exe /T', { stdio: 'ignore' });
+      console.log('[DB] Killed residual postgres.exe processes on Windows');
+    } catch {
+      // taskkill exits with code 128 when no matching process is found — that's fine.
+    }
   }
 }

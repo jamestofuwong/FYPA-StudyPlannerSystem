@@ -209,6 +209,31 @@ function sendUpdateStatus(status: string, data?: Record<string, unknown>) {
   });
 }
 
+function broadcast(channel: string, data?: Record<string, unknown>) {
+  BrowserWindow.getAllWindows().forEach((win) => {
+    if (!win.isDestroyed()) win.webContents.send(channel, data);
+  });
+}
+
+// Shuts down all services in the correct order and broadcasts progress to the
+// renderer so a shutdown overlay can be shown. Used by both the normal quit
+// path and the updater-install path so the sequence is never duplicated.
+async function shutdownAllServices() {
+  broadcast('app-shutting-down');
+
+  // 1. Close Next.js first — releases Prisma connection pool so pg can stop cleanly.
+  await (nextServerRef?.close() ?? Promise.resolve()).catch((err) =>
+    console.warn('[Shutdown] Next.js close warning:', err)
+  );
+  broadcast('shutdown-progress', { service: 'server', done: true });
+
+  // 2. Stop database and Ollama in parallel (they are independent of each other).
+  await Promise.allSettled([
+    stopDatabase().then(() => broadcast('shutdown-progress', { service: 'database', done: true })),
+    stopOllama().then(()   => broadcast('shutdown-progress', { service: 'ollama',   done: true })),
+  ]);
+}
+
 // IPC: renderer asks to check for updates
 ipcMain.handle("updater-check", () => {
   autoUpdater.checkForUpdates().catch(console.error);
@@ -227,14 +252,10 @@ ipcMain.handle("updater-download", () => {
 // partial update that leaves the binary directory corrupted.
 ipcMain.handle("updater-install", async () => {
   // Set isQuitting so the before-quit handler (fired by quitAndInstall internally)
-  // skips its shutdown sequence — we handle it here in the correct order.
+  // skips its shutdown sequence — we handle it here via shutdownAllServices().
   isQuitting = true;
   try {
-    // Close Next.js first so Prisma releases its connection pool, then stop
-    // postgres and Ollama. Running them in parallel would cause pg_ctl stop
-    // (smart mode) to hang waiting for open connections.
-    await (nextServerRef?.close() ?? Promise.resolve()).catch(console.warn);
-    await Promise.allSettled([stopDatabase(), stopOllama()]);
+    await shutdownAllServices();
   } catch (err) {
     console.warn('[Updater] Pre-install shutdown warning:', err);
   }
@@ -294,15 +315,7 @@ app.on('before-quit', async (event) => {
   }, shutdownTimeout);
 
   try {
-    // Close Next.js first so Prisma releases DB connections before pg stops.
-    // pg_ctl stop (smart mode) waits for active connections — if Prisma's pool
-    // is still open, it hangs until the 5-second timeout force-kills the app,
-    // leaving postgres running and its binaries locked on Windows.
-    await (nextServerRef?.close() ?? Promise.resolve()).catch(console.warn);
-    await Promise.allSettled([
-      stopDatabase(),
-      stopOllama(),
-    ]);
+    await shutdownAllServices();
     clearTimeout(forceExit);
     app.exit(0);
   } catch (err) {
