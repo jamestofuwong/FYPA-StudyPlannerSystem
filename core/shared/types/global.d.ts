@@ -14,6 +14,9 @@ declare global {
     portalAPI?: {
       clearSession: () => Promise<void>;
     };
+    auditAPI: {
+      generatePDF(args: { sessionId: string }): Promise<{ success: boolean; filePath?: string; reason?: string }>;
+    };
   }
 
   // Electron <webview> element type used in the renderer process.

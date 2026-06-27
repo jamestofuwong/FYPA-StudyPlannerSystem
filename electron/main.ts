@@ -1,4 +1,4 @@
-import { app, BrowserWindow, nativeTheme, ipcMain, session } from "electron";
+import { app, BrowserWindow, nativeTheme, ipcMain, session, dialog } from "electron";
 import {
   createServer,
   type IncomingMessage,
@@ -274,6 +274,52 @@ nativeTheme.on("updated", () => {
   BrowserWindow.getAllWindows().forEach((win) => {
     win.webContents.send("system-theme-changed", theme);
   });
+});
+
+ipcMain.handle('print-graduation-audit', async (_event, { sessionId }: { sessionId: string }) => {
+  const printWin = new BrowserWindow({
+    width: 794,
+    height: 1123,
+    show: false,
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  });
+
+  const appUrl = nextServerRef?.url ?? devServerUrl ?? 'http://localhost:3000';
+
+  try {
+    await printWin.loadURL(`${appUrl}/graduation-audit?sessionId=${encodeURIComponent(sessionId)}`);
+
+    await new Promise<void>((resolve) => {
+      printWin.webContents.once('did-finish-load', () => {
+        setTimeout(resolve, 1500);
+      });
+    });
+
+    const pdfBuffer = await printWin.webContents.printToPDF({
+      printBackground: true,
+      pageSize: 'A4',
+    });
+
+    if (!printWin.isDestroyed()) printWin.destroy();
+
+    const { canceled, filePath } = await dialog.showSaveDialog({
+      title: 'Save Graduation Audit',
+      defaultPath: `GraduationAudit-${sessionId}.pdf`,
+      filters: [{ name: 'PDF Document', extensions: ['pdf'] }],
+    });
+
+    if (canceled || !filePath) return { success: false, reason: 'cancelled' };
+
+    await fs.promises.writeFile(filePath, pdfBuffer);
+    return { success: true, filePath };
+  } catch (err: any) {
+    if (!printWin.isDestroyed()) printWin.destroy();
+    return { success: false, reason: (err as Error).message };
+  }
 });
 
 app.whenReady().then(async () => {

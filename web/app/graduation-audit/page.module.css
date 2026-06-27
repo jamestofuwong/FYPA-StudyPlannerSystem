@@ -1,0 +1,100 @@
+body {
+  margin: 0;
+  background: #f5f5f5;
+}
+
+.auditPage {
+  max-width: 794px;
+  margin: 20px auto;
+  padding: 20mm 15mm;
+  background: #fff;
+  font-family: 'Times New Roman', Times, serif;
+  font-size: 11pt;
+  line-height: 1.5;
+  color: #000;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.12);
+}
+
+.loading, .error {
+  padding: 2rem;
+  font-family: sans-serif;
+  text-align: center;
+  color: #444;
+}
+
+.header { text-align: center; margin-bottom: 14px; }
+.university { font-size: 14pt; font-weight: bold; letter-spacing: 0.5px; }
+.docTitle { font-size: 12pt; margin-top: 4px; font-style: italic; }
+
+.divider { border: none; border-top: 1.5px solid #000; margin: 14px 0; }
+
+.sectionTitle {
+  font-size: 10pt;
+  font-weight: bold;
+  letter-spacing: 1px;
+  border-bottom: 0.5px solid #888;
+  padding-bottom: 3px;
+  margin-bottom: 10px;
+  color: #000;
+}
+
+.metaRow {
+  display: flex;
+  gap: 40px;
+  font-size: 10pt;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.infoTable { width: 100%; border-collapse: collapse; font-size: 10pt; margin-bottom: 8px; }
+.infoTable td { padding: 3px 6px; vertical-align: top; }
+.infoLabel { font-weight: bold; width: 160px; white-space: nowrap; }
+
+.creditTable { width: 100%; border-collapse: collapse; font-size: 10pt; margin-bottom: 10px; }
+.creditTable th {
+  text-align: left;
+  font-weight: bold;
+  padding: 4px 8px;
+  border-bottom: 1px solid #000;
+  border-top: 1px solid #000;
+}
+.creditTable td { padding: 3px 8px; }
+.totalRow td { border-top: 1px solid #000; padding-top: 5px; }
+
+.eligible { color: #006600; font-weight: bold; }
+.notEligible { color: #cc0000; font-weight: bold; }
+
+.missingSection { font-size: 10pt; margin-bottom: 6px; }
+.missingLabel { font-weight: bold; margin: 0 0 4px; }
+.missingList { margin: 0; padding-left: 20px; }
+.missingList li { margin-bottom: 2px; }
+
+.riskLevel { font-size: 10pt; margin: 0 0 6px; }
+.riskItem { font-size: 10pt; margin-bottom: 4px; padding-left: 8px; }
+
+.notesArea { min-height: 80px; border-bottom: 0.5px solid #bbb; margin-bottom: 8px; }
+
+.signoffGrid { display: flex; flex-direction: column; gap: 20px; font-size: 10pt; }
+.signoffBlock {}
+.signoffRole { font-weight: bold; margin-bottom: 12px; }
+.optional { font-weight: normal; font-style: italic; }
+.signoffLine { margin-bottom: 18px; }
+
+.footer {
+  margin-top: 20px;
+  padding-top: 8px;
+  border-top: 0.5px solid #888;
+  font-size: 8pt;
+  color: #555;
+  text-align: center;
+}
+
+@media print {
+  body { background: white; }
+  .auditPage {
+    max-width: none;
+    margin: 0;
+    padding: 15mm;
+    box-shadow: none;
+  }
+}

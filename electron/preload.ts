@@ -36,3 +36,8 @@ contextBridge.exposeInMainWorld("shutdownAPI", {
   onProgress: (cb: (data: { service: string; done: boolean }) => void) =>
     ipcRenderer.on("shutdown-progress", (_, data) => cb(data)),
 });
+
+contextBridge.exposeInMainWorld('auditAPI', {
+  generatePDF: (args: { sessionId: string }) =>
+    ipcRenderer.invoke('print-graduation-audit', args),
+});
