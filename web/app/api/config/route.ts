@@ -3,7 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '../../../../core/db/client';
 
-const ALLOWED_KEYS = ['second_major_threshold'] as const;
+const ALLOWED_KEYS = ['second_major_threshold', 'agent_model'] as const;
 type AllowedKey = typeof ALLOWED_KEYS[number];
 
 function isAllowedKey(k: string): k is AllowedKey {

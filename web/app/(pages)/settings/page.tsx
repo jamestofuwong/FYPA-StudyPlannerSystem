@@ -22,6 +22,10 @@ type UpdateStatus =
 
 const DEFAULT_THRESHOLD = 70; // 70 %
 
+const AGENT_MODEL_OPTIONS = ['llama3.2:3b', 'phi4-mini', 'qwen2.5:3b'] as const;
+type AgentModelOption = typeof AGENT_MODEL_OPTIONS[number];
+const DEFAULT_AGENT_MODEL: AgentModelOption = 'llama3.2:3b';
+
 export default function SettingsPage() {
   const { preference, setPreference } = useTheme();
   const [update, setUpdate] = useState<UpdateStatus>({ status: 'idle' });
@@ -32,11 +36,41 @@ export default function SettingsPage() {
   const [thresholdSaved, setThresholdSaved] = useState(false);
   const [thresholdLoading, setThresholdLoading] = useState(false);
 
+  // AI Agent model settings
+  const [agentModel, setAgentModel] = useState<AgentModelOption>(DEFAULT_AGENT_MODEL);
+  const [agentModelSaved, setAgentModelSaved] = useState(false);
+  const [agentModelLoading, setAgentModelLoading] = useState(false);
+  const [ollamaStatus, setOllamaStatus] = useState<'unknown' | 'available' | 'unavailable'>('unknown');
+  const [modelStatus, setModelStatus] = useState<'unknown' | 'ready' | 'pulling' | 'unavailable'>('unknown');
+  const [pullProgress, setPullProgress] = useState<number>(0);
+  const [isPulling, setIsPulling] = useState(false);
+
   // Load stored threshold on mount
   useEffect(() => {
     fetch('/api/config?key=second_major_threshold')
       .then((r) => r.json())
       .then((d) => { if (d.value !== null) setThreshold(Math.round(parseFloat(d.value) * 100)); })
+      .catch(() => {});
+  }, []);
+
+  // Load agent model and Ollama status on mount
+  useEffect(() => {
+    fetch('/api/config?key=agent_model')
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.value && AGENT_MODEL_OPTIONS.includes(d.value as AgentModelOption)) {
+          setAgentModel(d.value as AgentModelOption);
+        }
+      })
+      .catch(() => {});
+
+    fetch('/api/ollama/status')
+      .then((r) => r.json())
+      .then((d) => {
+        setOllamaStatus(d.ollama ?? 'unknown');
+        setModelStatus(d.model ?? 'unknown');
+        setPullProgress(d.pullProgress ?? 0);
+      })
       .catch(() => {});
   }, []);
 
@@ -68,6 +102,64 @@ export default function SettingsPage() {
     if (!api) return;
     setUpdate({ status: 'checking' });
     api.check();
+  };
+
+  const handleSaveAgentModel = async () => {
+    setAgentModelLoading(true);
+    setAgentModelSaved(false);
+    try {
+      await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'agent_model', value: agentModel }),
+      });
+      setAgentModelSaved(true);
+      setTimeout(() => setAgentModelSaved(false), 2500);
+    } catch {}
+    setAgentModelLoading(false);
+  };
+
+  const handlePullModel = async () => {
+    setIsPulling(true);
+    setModelStatus('pulling');
+    setPullProgress(0);
+    try {
+      await fetch('/api/ollama/pull', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: agentModel }),
+      });
+      // Poll status until ready or error
+      const poll = setInterval(async () => {
+        try {
+          const r = await fetch('/api/ollama/status');
+          const d = await r.json();
+          setOllamaStatus(d.ollama ?? 'unknown');
+          setModelStatus(d.model ?? 'unknown');
+          setPullProgress(d.pullProgress ?? 0);
+          if (d.model !== 'pulling') {
+            clearInterval(poll);
+            setIsPulling(false);
+          }
+        } catch {
+          clearInterval(poll);
+          setIsPulling(false);
+        }
+      }, 2000);
+    } catch {
+      setIsPulling(false);
+      setModelStatus('unavailable');
+    }
+  };
+
+  const handleCheckOllama = async () => {
+    try {
+      const r = await fetch('/api/ollama/status');
+      const d = await r.json();
+      setOllamaStatus(d.ollama ?? 'unknown');
+      setModelStatus(d.model ?? 'unknown');
+      setPullProgress(d.pullProgress ?? 0);
+    } catch {}
   };
 
   return (
@@ -137,6 +229,82 @@ export default function SettingsPage() {
               <span className={styles.themeOptionLabel} style={{ fontSize: 12, minWidth: 'auto' }}>Reset to Default</span>
             </button>
           )}
+        </div>
+      </div>
+
+      {/* ── AI Agent ─────────────────────────────────────────────────────── */}
+      <div className={styles.sectionTitle}>AI Agent</div>
+      <div className={styles.card}>
+        <div className={styles.cardTitle}>Ollama Status</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+          <span style={dot(ollamaStatus === 'available' ? '#4ec9b0' : ollamaStatus === 'unavailable' ? '#f48771' : '#6b6b6b')} />
+          <span style={statusText}>
+            Ollama: {ollamaStatus === 'available' ? 'Running' : ollamaStatus === 'unavailable' ? 'Not running' : 'Unknown'}
+          </span>
+          <span style={{ ...statusText, marginLeft: 8 }}>
+            Model: {modelStatus === 'ready' ? 'Ready' : modelStatus === 'pulling' ? `Pulling… ${pullProgress}%` : modelStatus === 'unavailable' ? 'Not downloaded' : 'Unknown'}
+          </span>
+          {modelStatus === 'ready' && <span style={dot('#4ec9b0')} />}
+          {modelStatus === 'unavailable' && <span style={dot('#f48771')} />}
+        </div>
+        <button
+          className={styles.themeOption}
+          style={{ width: 'auto', padding: '7px 14px', marginBottom: 4 }}
+          onClick={handleCheckOllama}
+        >
+          <span className={styles.themeOptionLabel} style={{ fontSize: 12, minWidth: 'auto' }}>Refresh Status</span>
+        </button>
+      </div>
+
+      <div className={styles.card}>
+        <div className={styles.cardTitle}>Agent Model</div>
+        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 14 }}>
+          Select the Ollama model for the AI advisor agent. The model must be downloaded before use.
+          Recommended: <span style={{ fontFamily: 'var(--font-mono)' }}>llama3.2:3b</span> (~2 GB RAM).
+        </div>
+        <div style={{ marginBottom: 14 }}>
+          <select
+            value={agentModel}
+            onChange={(e) => { setAgentModel(e.target.value as AgentModelOption); setAgentModelSaved(false); }}
+            style={{
+              width: '100%',
+              padding: '6px 10px',
+              background: 'var(--surface-bg)',
+              border: '1px solid var(--panel-border)',
+              borderRadius: 3,
+              color: 'var(--text-primary)',
+              fontSize: 12,
+              fontFamily: 'var(--font-mono)',
+              outline: 'none',
+              cursor: 'pointer',
+            }}
+          >
+            {AGENT_MODEL_OPTIONS.map((m) => (
+              <option key={m} value={m}>{m}</option>
+            ))}
+          </select>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button
+            className={styles.themeOption}
+            style={{ width: 'auto', padding: '7px 14px', borderColor: agentModelSaved ? '#4ec9b0' : undefined }}
+            onClick={handleSaveAgentModel}
+            disabled={agentModelLoading}
+          >
+            <span className={styles.themeOptionLabel} style={{ fontSize: 12, minWidth: 'auto', color: agentModelSaved ? '#4ec9b0' : undefined }}>
+              {agentModelLoading ? 'Saving…' : agentModelSaved ? 'Saved ✓' : 'Save'}
+            </span>
+          </button>
+          <button
+            className={styles.themeOption}
+            style={{ width: 'auto', padding: '7px 14px', borderColor: isPulling ? '#569cd6' : undefined, opacity: isPulling ? 0.7 : 1 }}
+            onClick={handlePullModel}
+            disabled={isPulling}
+          >
+            <span className={styles.themeOptionLabel} style={{ fontSize: 12, minWidth: 'auto', color: isPulling ? '#569cd6' : undefined }}>
+              {isPulling ? `Pulling… ${pullProgress}%` : 'Download Model'}
+            </span>
+          </button>
         </div>
       </div>
 
