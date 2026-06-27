@@ -3,6 +3,7 @@ import { runMatchingPipeline } from '../../../../core/services/matching/matching
 import * as plannerRepository from '../../../../core/db/repositories/plannerRepository';
 import type { PlannerTemplate, UnitMasterEntry, CourseType } from '../../../../core/shared/types/matching';
 import { prisma } from '../../../../core/db/client';
+import { assessRisk } from '../../../../core/services/riskAssessment/riskAssessmentService';
 
 // Priority for resolving a unit's category when it appears in multiple planners.
 // Higher value wins.
@@ -113,9 +114,19 @@ export async function POST(request: Request) {
         }
     };
 
+    let riskReport;
+    try {
+      const detectedPlanner = formattedPlanners.find(
+        (p) => p.plannerID === (result.payload as any)?.primaryMajor?.plannerID,
+      ) ?? null;
+      riskReport = assessRisk(student, result.payload, detectedPlanner);
+    } catch (riskErr) {
+      console.error('[Risk] Assessment error:', riskErr);
+    }
+
     return NextResponse.json({
       success: true,
-      data: result.payload,
+      data: { ...(result.payload as any), riskReport },
       graduationCheck,
       processingTime: result.durationMs,
     });
