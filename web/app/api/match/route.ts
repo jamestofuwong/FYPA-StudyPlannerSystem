@@ -116,10 +116,13 @@ export async function POST(request: Request) {
 
     let riskReport;
     try {
-      const detectedPlanner = formattedPlanners.find(
-        (p) => p.plannerID === (result.payload as any)?.primaryMajor?.plannerID,
-      ) ?? null;
-      riskReport = assessRisk(student, result.payload, detectedPlanner);
+      // primaryMajor is MajorDisplay (no plannerID) — use rankedPlanners[0] to get the ID,
+      // then look up the raw DB planner so assessYearLevelGap has year_level data on units.
+      const topPlannerID = result.payload.rankedPlanners[0]?.plannerID ?? null;
+      const rawDetectedPlanner = topPlannerID
+        ? dbPlanners.find((p) => p.id === topPlannerID) ?? null
+        : null;
+      riskReport = assessRisk(student, result.payload, rawDetectedPlanner);
     } catch (riskErr) {
       console.error('[Risk] Assessment error:', riskErr);
     }

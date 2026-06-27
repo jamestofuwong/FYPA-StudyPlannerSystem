@@ -30,7 +30,17 @@ export function assessRisk(
 function deriveStudentYear(enrollmentDate: string | undefined): number {
   if (!enrollmentDate) return 1;
   try {
-    const enrolled = new Date(enrollmentDate);
+    // Support DD/MM/YYYY (dashboard import format) and ISO YYYY-MM-DD.
+    // JS's Date constructor treats slash-separated strings as MM/DD/YYYY in most
+    // environments, which gives the wrong month when the input is DD/MM/YYYY.
+    let enrolled: Date;
+    const ddmmyyyy = enrollmentDate.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (ddmmyyyy) {
+      const [, dd, mm, yyyy] = ddmmyyyy;
+      enrolled = new Date(`${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`);
+    } else {
+      enrolled = new Date(enrollmentDate);
+    }
     const now = new Date();
     const monthsElapsed =
       (now.getFullYear() - enrolled.getFullYear()) * 12 +
@@ -109,7 +119,10 @@ function assessCreditTrajectory(student: ScrapedStudent): RiskFactor[] {
 
 function assessFailedUnits(student: ScrapedStudent, matchPayload: any): RiskFactor[] {
   if (!student.courseList?.length) return [];
-  const unmatchedCore: string[] = matchPayload?.unmatchedCore ?? [];
+  // unmatchedCore is not on DisplayPayload — derive from primaryMajor breakdown instead
+  const missingCore: string[] = matchPayload?.primaryMajor?.breakdown?.core?.missingUnits ?? matchPayload?.unmatchedCore ?? [];
+  const missingMajorCore: string[] = matchPayload?.primaryMajor?.breakdown?.majorCore?.missingUnits ?? [];
+  const unmatchedCore: string[] = [...missingCore, ...missingMajorCore];
 
   const failedUnits = student.courseList.filter(
     u => u.grade === 'F' || u.status?.toLowerCase().includes('withdrawn'),
@@ -131,14 +144,21 @@ function assessFailedUnits(student: ScrapedStudent, matchPayload: any): RiskFact
 }
 
 function assessYearLevelGap(matchPayload: any, plannerTemplate: any, studentYear: number): RiskFactor[] {
-  if (!plannerTemplate || !matchPayload?.unmatchedCore?.length) return [];
+  // Derive missing required units from primaryMajor breakdown (DisplayPayload shape)
+  const missingCore: string[] = matchPayload?.primaryMajor?.breakdown?.core?.missingUnits ?? matchPayload?.unmatchedCore ?? [];
+  const missingMajorCore: string[] = matchPayload?.primaryMajor?.breakdown?.majorCore?.missingUnits ?? [];
+  const allMissingRequired: string[] = [...missingCore, ...missingMajorCore];
+
+  if (!plannerTemplate || !allMissingRequired.length) return [];
+
+  // plannerTemplate is the raw DB planner row with units[].year_level and units[].unit.unit_code
   const units: any[] = plannerTemplate.units ?? [];
-  const unmatchedCore: string[] = matchPayload.unmatchedCore ?? [];
 
   const lateUnits = units.filter((u: any) => {
     const code = u.unit?.unit_code ?? u.unitCode ?? '';
     const yearLevel = u.year_level ?? u.yearLevel ?? 0;
-    return unmatchedCore.includes(code) && yearLevel > 0 && yearLevel < studentYear;
+    const isCoreOrMajorCore = u.category === 'core' || u.category === 'major_core';
+    return isCoreOrMajorCore && allMissingRequired.includes(code) && yearLevel > 0 && yearLevel < studentYear;
   });
 
   if (!lateUnits.length) return [];
