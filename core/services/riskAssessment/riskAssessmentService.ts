@@ -2,11 +2,11 @@ import type { AtRiskReport, RiskFactor, RiskSeverity } from '../../shared/types/
 import type { ScrapedStudent } from '../../shared/types/student';
 
 export function assessRisk(
-  student: ScrapedStudent,
+  student: ScrapedStudent & { intakeYear?: number; intakeSemester?: number },
   matchPayload: any,
   plannerTemplate: any | null,
 ): AtRiskReport {
-  const studentYear = deriveStudentYear(student.enrollmentDate);
+  const studentYear = deriveStudentYear(student);
   const factors: RiskFactor[] = [];
 
   try { factors.push(...assessCreditTrajectory(student)); } catch {}
@@ -27,12 +27,24 @@ export function assessRisk(
   };
 }
 
-function deriveStudentYear(enrollmentDate: string | undefined): number {
+function deriveStudentYear(student: { intakeYear?: number; intakeSemester?: number; enrollmentDate?: string }): number {
+  const now = new Date();
+
+  // Prefer intakeYear + intakeSemester — these are always correctly set on the
+  // API request body for both scraped and imported students.
+  if (student.intakeYear) {
+    // Semester 1 starts February, Semester 2 starts September (1-indexed months)
+    const startMonth = student.intakeSemester === 2 ? 9 : 2;
+    const monthsElapsed =
+      (now.getFullYear() - student.intakeYear) * 12 +
+      (now.getMonth() + 1 - startMonth);
+    return Math.min(4, Math.max(1, Math.ceil(monthsElapsed / 12)));
+  }
+
+  // Fallback: parse enrollmentDate (DD/MM/YYYY or ISO)
+  const enrollmentDate = student.enrollmentDate;
   if (!enrollmentDate) return 1;
   try {
-    // Support DD/MM/YYYY (dashboard import format) and ISO YYYY-MM-DD.
-    // JS's Date constructor treats slash-separated strings as MM/DD/YYYY in most
-    // environments, which gives the wrong month when the input is DD/MM/YYYY.
     let enrolled: Date;
     const ddmmyyyy = enrollmentDate.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
     if (ddmmyyyy) {
@@ -41,7 +53,6 @@ function deriveStudentYear(enrollmentDate: string | undefined): number {
     } else {
       enrolled = new Date(enrollmentDate);
     }
-    const now = new Date();
     const monthsElapsed =
       (now.getFullYear() - enrolled.getFullYear()) * 12 +
       (now.getMonth() - enrolled.getMonth());

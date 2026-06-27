@@ -38,54 +38,56 @@ function write(filename, rows, note) {
 
 // ─── CRITICAL ────────────────────────────────────────────────────────────────
 // Student: BCS AI, 2023 Sep intake → Year 3 (as of Jun 2026)
+// Only Y1S1 units done. No major detectable (matchPct ≈ 20% < 30% threshold).
 // Triggers:
-//   - year_level_gap (CRITICAL): Y1/Y2 core units still missing in Year 3
-//   - major_core_rate (HIGH): 0/8 major core done in Year 3
-//   - failed_units (MEDIUM): failed COS20007 (not required-missing since F counts as completed)
-// Overall: CRITICAL
+//   - no_major_late (CRITICAL): noMajorDetected in Year 3
+//   - major_core_rate (HIGH): 0/8 major core in Year 3 (from rankedPlanners top score)
+//   - failed_units (MEDIUM): COS20007 grade F (counted for matching, flagged as failed)
+// Aggregate: CRITICAL
 write('test-transcript-CRITICAL.xlsx', [
-  // Y1 Sem 1 — done
   makeRow('COS10009', 'Introduction to Programming',        12.5, 12.5, 'Complete',   'A',    '2023/S2'),
   makeRow('COS10026', 'Web Technology Project',             12.5, 12.5, 'Complete',   'B+',   '2023/S2'),
   makeRow('TNE10006', 'Networks and Switching',             12.5, 12.5, 'Complete',   'B',    '2023/S2'),
   makeRow('COS10003', 'Computer and Logic Essentials',      12.5, 12.5, 'Complete',   'C+',   '2023/S2'),
   makeRow('MPU3193',  'Philosophy and Current Issues',      0,    0,    'Complete',   'Pass', '2023/S2'),
-  // Y1 Sem 2 — COS10025 never attempted (gap), COS20007 failed
+  // COS20007 failed — counts as completed for matching (F != N) but flagged as failed in risk check
   makeRow('COS20007', 'Object-oriented Programming',        12.5, 0,    'Incomplete', 'F',    '2024/S1'),
-  // COS10025 missing entirely
-  // Y2 and beyond — nothing attempted at all
-], 'Intake Year=2023, Sem=2 → CRITICAL (year_level_gap in Year 3)');
+  // COS10025 and all Y2+ units never attempted → no major detectable
+], 'Intake Year=2023, Sem=2 → CRITICAL (noMajorDetected in Year 3)');
 
 // ─── HIGH ────────────────────────────────────────────────────────────────────
 // Student: BCS AI, 2024 Sep intake → Year 2 (as of Jun 2026)
+// A few units done but no major detectable (matchPct ≈ 22% < 30%).
+// COS10025 (Y1S1 core in 2024 Sep planner) never attempted.
 // Triggers:
-//   - year_level_gap (HIGH): COS10025 (Y1 core) still missing in Year 2
-//   - failed_units (MEDIUM): failed COS10026 (not in unmatchedCore so stays medium)
-// Overall: HIGH
+//   - no_major_late (HIGH): noMajorDetected in Year 2
+//   - OR year_level_gap (HIGH): COS10025 Y1 missing in Year 2 (if major detected via prescribed slots)
+//   - failed_units (MEDIUM): COS10026 grade F
+// Aggregate: HIGH
 write('test-transcript-HIGH.xlsx', [
-  // Y1 Sem 1 — mostly done, COS10026 failed
+  // COS10026 failed — counts for matching, flagged as failed
   makeRow('COS10009', 'Introduction to Programming',        12.5, 12.5, 'Complete',   'A',    '2024/S2'),
   makeRow('COS10026', 'Web Technology Project',             12.5, 0,    'Incomplete', 'F',    '2024/S2'),
   makeRow('TNE10006', 'Networks and Switching',             12.5, 12.5, 'Complete',   'C',    '2024/S2'),
   makeRow('COS10003', 'Computer and Logic Essentials',      12.5, 12.5, 'Complete',   'B',    '2024/S2'),
   makeRow('MPU3193',  'Philosophy and Current Issues',      0,    0,    'Complete',   'Pass', '2024/S2'),
-  // Y1 Sem 2 — COS10025 missing entirely (gap), partial done
   makeRow('COS10022', 'Introduction to Data Science',       12.5, 12.5, 'Complete',   'B+',   '2025/S1'),
   makeRow('MPU3212',  'Bahasa Kebangsaan A',                0,    0,    'Complete',   'Pass', '2025/S1'),
-  // Y2 major core — just started, so major is detectable
   makeRow('COS20031', 'Database Design Project',            12.5, 12.5, 'Complete',   'B',    '2025/S1'),
   makeRow('COS30019', 'Introduction to Artificial Intelligence', 12.5, 12.5, 'Complete', 'B+', '2025/S1'),
-  // COS10025 (Y1S2 core) deliberately not in this file → it will be in unmatchedCore
-  // Y2 Sem 2 — currently enrolled
+  // COS10025 (Y1S1 core in 2024 Sep planner) deliberately absent → year_level_gap fires if detected
   makeRow('COS20019', 'Cloud Computing Architecture',       12.5, 0,    'Current',    'N',    '2025/S2'),
-], 'Intake Year=2024, Sem=2 → HIGH (year_level_gap: COS10025 missing in Year 2)');
+], 'Intake Year=2024, Sem=2 → HIGH (noMajorDetected or yearLevelGap in Year 2)');
 
 // ─── MEDIUM ───────────────────────────────────────────────────────────────────
 // Student: BCS AI, 2023 Sep intake → Year 3 (as of Jun 2026)
+// All Y1+Y2 required units done (no year_level_gap). COS30018 was failed (grade F)
+// but since F != N it is still counted as completed by the matching engine, so it
+// is NOT in missingRequired. This triggers assessFailedUnits at MEDIUM severity.
 // Triggers:
-//   - major_core_rate (MEDIUM): 4/8 major core done in Year 3 = 50% (0.4–0.6 range)
-// No year_level_gap (all Y1/Y2 core complete), no fails
-// Overall: MEDIUM
+//   - failed_units (MEDIUM): COS30018 grade F, not in missingCore
+// No year_level_gap (all Y1/Y2 units present, even if failed).
+// Aggregate: MEDIUM
 write('test-transcript-MEDIUM.xlsx', [
   // Y1 Sem 1 — complete
   makeRow('COS10009', 'Introduction to Programming',        12.5, 12.5, 'Complete', 'A',    '2023/S2'),
@@ -93,26 +95,33 @@ write('test-transcript-MEDIUM.xlsx', [
   makeRow('TNE10006', 'Networks and Switching',             12.5, 12.5, 'Complete', 'B+',   '2023/S2'),
   makeRow('COS10003', 'Computer and Logic Essentials',      12.5, 12.5, 'Complete', 'B',    '2023/S2'),
   makeRow('MPU3193',  'Philosophy and Current Issues',      0,    0,    'Complete', 'Pass', '2023/S2'),
-  // Y1 Sem 2 — complete (including COS10025 — no gap)
-  makeRow('COS10025', 'Technology in an Indigenous Context Project', 12.5, 12.5, 'Complete', 'B', '2024/S1'),
-  makeRow('COS20007', 'Object-oriented Programming',        12.5, 12.5, 'Complete', 'B+',   '2024/S1'),
-  makeRow('COS10022', 'Introduction to Data Science',       12.5, 12.5, 'Complete', 'B',    '2024/S1'),
+  // Y1 Sem 2 — complete, no gaps
+  makeRow('COS10025', 'Technology in an Indigenous Context Project', 12.5, 12.5, 'Complete', 'A-', '2024/S1'),
+  makeRow('COS20007', 'Object-oriented Programming',        12.5, 12.5, 'Complete', 'A',    '2024/S1'),
+  makeRow('COS10022', 'Introduction to Data Science',       12.5, 12.5, 'Complete', 'A-',   '2024/S1'),
+  makeRow('COS30015', 'IT Security',                        12.5, 12.5, 'Complete', 'B+',   '2024/S1'),
   makeRow('MPU3212',  'Bahasa Kebangsaan A',                0,    0,    'Complete', 'Pass', '2024/S1'),
   // Y2 Sem 1 — complete
-  makeRow('COS20031', 'Database Design Project',            12.5, 12.5, 'Complete', 'B',    '2024/S2'),
-  makeRow('COS30019', 'Introduction to Artificial Intelligence', 12.5, 12.5, 'Complete', 'B+', '2024/S2'),
-  makeRow('SWE30009', 'Software Testing and Reliability',   12.5, 12.5, 'Complete', 'C+',   '2024/S2'),
+  makeRow('COS20031', 'Database Design Project',            12.5, 12.5, 'Complete', 'A-',   '2024/S2'),
+  makeRow('COS30019', 'Introduction to Artificial Intelligence', 12.5, 12.5, 'Complete', 'A', '2024/S2'),
+  makeRow('SWE30009', 'Software Testing and Reliability',   12.5, 12.5, 'Complete', 'B+',   '2024/S2'),
   makeRow('MPU3143',  'Malay Language Communication 2',     0,    0,    'Complete', 'Pass', '2024/S2'),
   makeRow('MPU3183',  'Penghayatan Etika dan Peradaban',    0,    0,    'Complete', 'Pass', '2024/S2'),
-  // Y2 Sem 2 — complete (4 major core total: COS20031, COS30019, COS20019, COS30049)
-  makeRow('COS10004', 'Computer Systems',                   12.5, 12.5, 'Complete', 'B',    '2025/S1'),
-  makeRow('COS20019', 'Cloud Computing Architecture',       12.5, 12.5, 'Complete', 'B-',   '2025/S1'),
-  makeRow('COS30049', 'Computing Technology Innovation Project', 12.5, 12.5, 'Complete', 'B', '2025/S1'),
-  // Y3 Sem 1 — currently doing (COS30082 is the 5th major core but not complete yet)
-  makeRow('COS40005', 'Computing Technology Project A',     12.5, 0,    'Current',  'N',    '2025/S2'),
-  makeRow('COS30082', 'Applied Machine Learning',           12.5, 0,    'Current',  'N',    '2025/S2'),
-  // Note: COS30018 (5th major core) deliberately not completed
-], 'Intake Year=2023, Sem=2 → MEDIUM (major_core_rate: 4/8=50% in Year 3)');
+  // Y2 Sem 2 — COS30018 FAILED (grade F counts for matching, flagged as failed risk)
+  makeRow('COS10004', 'Computer Systems',                   12.5, 12.5, 'Complete', 'A-',   '2025/S1'),
+  makeRow('COS20019', 'Cloud Computing Architecture',       12.5, 12.5, 'Complete', 'A',    '2025/S1'),
+  makeRow('COS30018', 'Intelligent Systems',                12.5, 0,    'Incomplete','F',    '2025/S1'),
+  makeRow('COS30049', 'Computing Technology Innovation Project', 12.5, 12.5, 'Complete', 'A-', '2025/S1'),
+  // Y3 Sem 1 — complete
+  makeRow('COS40005', 'Computing Technology Project A',     12.5, 12.5, 'Complete', 'A',    '2025/S2'),
+  makeRow('COS30082', 'Applied Machine Learning',           12.5, 12.5, 'Complete', 'A',    '2025/S2'),
+  // Y3 Sem 2 — currently enrolled
+  makeRow('COS40006', 'Computing Technology Project B',     12.5, 0,    'Current',  'N',    '2026/S1'),
+  makeRow('COS40007', 'Artificial Intelligence for Engineering', 12.5, 0, 'Current', 'N',   '2026/S1'),
+  makeRow('SWE30003', 'Software Architecture and Design',   12.5, 0,    'Current',  'N',    '2026/S1'),
+  makeRow('COS20083', 'Advanced Data Analytics',            12.5, 12.5, 'Complete', 'B+',   '2025/S1'),
+  makeRow('COS30045', 'Data Visualisation',                 12.5, 12.5, 'Complete', 'B',    '2025/S2'),
+], 'Intake Year=2023, Sem=2 → MEDIUM (failed unit COS30018, no year_level_gap)');
 
 // ─── LOW ──────────────────────────────────────────────────────────────────────
 // Student: BCS AI, 2023 Sep intake → Year 3 (as of Jun 2026)
