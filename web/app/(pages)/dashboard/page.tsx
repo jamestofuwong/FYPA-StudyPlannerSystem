@@ -1501,22 +1501,22 @@ export default function DashboardPage() {
           </div>
 
           {/* At-Risk Assessment Card */}
-          {dashboardData?.riskReport && (
-            <div className={`${styles.riskCard} ${styles[`riskCard${capitalize(dashboardData.riskReport.level)}`]}`}>
+          {dashboardData?.match?.riskReport && (
+            <div className={`${styles.riskCard} ${styles[`riskCard${capitalize(dashboardData.match.riskReport.level)}`]}`}>
               <button
                 type="button"
                 className={styles.riskHeader}
                 onClick={() => setRiskExpanded(e => !e)}
               >
                 <span className={styles.riskTitle}>At-Risk Assessment</span>
-                <span className={`${styles.riskBadge} ${styles[`riskBadge${capitalize(dashboardData.riskReport.level)}`]}`}>
-                  {dashboardData.riskReport.level.toUpperCase()}
+                <span className={`${styles.riskBadge} ${styles[`riskBadge${capitalize(dashboardData.match.riskReport.level)}`]}`}>
+                  {dashboardData.match.riskReport.level.toUpperCase()}
                 </span>
                 <span style={{ marginLeft: 'auto', opacity: 0.6 }}>{riskExpanded ? '▲' : '▼'}</span>
               </button>
               {riskExpanded && (
                 <div className={styles.riskBody}>
-                  {dashboardData.riskReport.factors.map((f: any) => (
+                  {dashboardData.match.riskReport.factors.map((f: any) => (
                     <div key={f.id} className={styles.riskFactor}>
                       <span className={styles[`riskSeverity${capitalize(f.severity)}`]}>●</span>
                       <div>
@@ -1532,11 +1532,11 @@ export default function DashboardPage() {
                       </div>
                     </div>
                   ))}
-                  {dashboardData.riskReport.recommendedActions?.length > 0 && (
+                  {dashboardData.match.riskReport.recommendedActions?.length > 0 && (
                     <div className={styles.riskActions}>
                       <strong>Recommended Actions</strong>
                       <ol style={{ margin: '6px 0 0', paddingLeft: 18 }}>
-                        {dashboardData.riskReport.recommendedActions.map((a: string, i: number) => (
+                        {dashboardData.match.riskReport.recommendedActions.map((a: string, i: number) => (
                           <li key={i} style={{ marginBottom: 4, opacity: 0.85 }}>{a}</li>
                         ))}
                       </ol>
