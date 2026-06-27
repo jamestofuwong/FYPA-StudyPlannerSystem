@@ -190,6 +190,13 @@ export default function DashboardPage() {
             intakeSemester,
             completedUnitCodes: completedUnits,
             hasWIL: false,
+            // Additional fields for risk assessment
+            enrollmentDate: student.enrollmentDate,
+            courseList: student.courseList,
+            ...(student.creditsCompleted > 0 && { creditsCompleted: student.creditsCompleted }),
+            ...(student.creditsRequired > 0 && { creditsRequired: student.creditsRequired }),
+            ...(student.cgpa > 0 && { cgpa: student.cgpa }),
+            ...(student.graduationDate && { graduationDate: student.graduationDate }),
           },
         }),
       });
