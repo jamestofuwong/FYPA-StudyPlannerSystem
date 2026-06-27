@@ -447,3 +447,87 @@
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+
+/* ── At-Risk Assessment Card ─────────────────────────── */
+.riskCard {
+  border-radius: 6px;
+  border: 1px solid;
+  margin-top: 16px;
+  overflow: hidden;
+}
+.riskCardCritical { border-color: rgba(220,50,50,0.4); background: rgba(220,50,50,0.06); }
+.riskCardHigh     { border-color: rgba(220,130,50,0.4); background: rgba(220,130,50,0.06); }
+.riskCardMedium   { border-color: rgba(200,180,50,0.4); background: rgba(200,180,50,0.06); }
+.riskCardLow      { border-color: rgba(50,180,80,0.4); background: rgba(50,180,80,0.06); }
+
+.riskHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  cursor: pointer;
+  user-select: none;
+  width: 100%;
+  background: none;
+  border: none;
+  color: inherit;
+  text-align: left;
+  font-size: inherit;
+}
+.riskTitle { font-size: 13px; font-weight: 600; }
+
+.riskBadge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 3px;
+  letter-spacing: 0.5px;
+}
+.riskBadgeCritical { background: rgba(220,50,50,0.2); color: #e05555; }
+.riskBadgeHigh     { background: rgba(220,130,50,0.2); color: #e08840; }
+.riskBadgeMedium   { background: rgba(200,180,50,0.2); color: #b8a830; }
+.riskBadgeLow      { background: rgba(50,180,80,0.2); color: #3ab060; }
+
+.riskBody { padding: 0 14px 12px; display: flex; flex-direction: column; gap: 10px; }
+
+.riskFactor {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  font-size: 12px;
+}
+.riskFactor strong { font-size: 12px; }
+
+.riskSeverityCritical { color: #e05555; font-size: 14px; flex-shrink: 0; margin-top: 1px; }
+.riskSeverityHigh     { color: #e08840; font-size: 14px; flex-shrink: 0; margin-top: 1px; }
+.riskSeverityMedium   { color: #b8a830; font-size: 14px; flex-shrink: 0; margin-top: 1px; }
+.riskSeverityLow      { color: #3ab060; font-size: 14px; flex-shrink: 0; margin-top: 1px; }
+
+.affectedUnits { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.unitCode {
+  font-family: monospace;
+  font-size: 11px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(128,128,128,0.12);
+}
+
+.riskActions {
+  border-top: 1px solid rgba(128,128,128,0.15);
+  padding-top: 10px;
+  font-size: 12px;
+}
+
+/* ── Graduation Audit Button ─────────────────────────── */
+.auditBtn {
+  padding: 6px 14px;
+  font-size: 12px;
+  border-radius: 4px;
+  border: 1px solid rgba(128,128,128,0.3);
+  background: transparent;
+  cursor: pointer;
+  color: inherit;
+  white-space: nowrap;
+}
+.auditBtn:hover:not(:disabled) { background: rgba(128,128,128,0.1); }
+.auditBtn:disabled { opacity: 0.4; cursor: not-allowed; }

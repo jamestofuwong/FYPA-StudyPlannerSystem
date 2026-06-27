@@ -46,6 +46,10 @@ function ProgressBar({ pct, color }: { pct: number; color: string }) {
   );
 }
 
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
 // ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
@@ -91,6 +95,8 @@ export default function DashboardPage() {
   const [injectedMinors, setInjectedMinors] = useState<Set<string>>(new Set());
   // REQ-FUN-105: track last scrape error message for retry UI
   const [scraperError, setScraperError] = useState<string | null>(null);
+  const [riskExpanded, setRiskExpanded] = useState(true);
+  const [auditLoading, setAuditLoading] = useState(false);
 
   // REQ-SEC-101: no sessionStorage restore — student data must live in RAM only
 
@@ -601,6 +607,39 @@ export default function DashboardPage() {
     showToast('Student data cleared.', 'info');
   };
 
+  const handleGenerateAudit = async () => {
+    if (!dashboardData || !scrapedStudent) return;
+    setAuditLoading(true);
+    try {
+      const res = await fetch('/api/graduation-audit/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          student: scrapedStudent.student,
+          matchResult: dashboardData,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Failed to create audit session');
+
+      const auditAPI = (window as any).auditAPI;
+      if (!auditAPI) {
+        showToast('Graduation audit is only available in the desktop app.');
+        return;
+      }
+      const result = await auditAPI.generatePDF({ sessionId: data.sessionId });
+      if (result?.success) {
+        showToast(`Graduation audit saved to: ${result.filePath}`);
+      } else if (result?.reason !== 'cancelled') {
+        showToast(`Failed to generate audit: ${result?.reason ?? 'Unknown error'}`);
+      }
+    } catch (err: any) {
+      showToast(`Error: ${err.message}`);
+    } finally {
+      setAuditLoading(false);
+    }
+  };
+
   const generateCustomPlan = async (overrideInjections?: Set<string>) => {
     const effectiveInjections = overrideInjections ?? injectedMinors;
     const activePlanner = selectedPlannerIdx === -1 ? manualPlanner : dashboardData?.planners?.[selectedPlannerIdx];
@@ -905,6 +944,14 @@ export default function DashboardPage() {
       {isImported && studentLoaded && dashboardData && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, marginBottom: 14 }}>
           <button className={styles.btnSecondary} onClick={() => setShowExportModal(true)}>Export</button>
+          <button
+            onClick={handleGenerateAudit}
+            disabled={!dashboardData || auditLoading}
+            className={styles.auditBtn}
+            title="Generate a formal PDF graduation audit report"
+          >
+            {auditLoading ? 'Generating...' : 'Graduation Audit PDF'}
+          </button>
           <button className={styles.btnDanger} onClick={handleClear}>✕ Clear</button>
         </div>
       )}
@@ -992,6 +1039,14 @@ export default function DashboardPage() {
               {dashboardData && (
                 <button className={styles.btnSecondary} onClick={() => setShowExportModal(true)}>Export</button>
               )}
+              <button
+                onClick={handleGenerateAudit}
+                disabled={!dashboardData || auditLoading}
+                className={styles.auditBtn}
+                title="Generate a formal PDF graduation audit report"
+              >
+                {auditLoading ? 'Generating...' : 'Graduation Audit PDF'}
+              </button>
               <button className={styles.btnDanger} onClick={handleClear}>✕ Clear</button>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '6px 16px' }}>
@@ -1444,6 +1499,53 @@ export default function DashboardPage() {
               );
           })()}
           </div>
+
+          {/* At-Risk Assessment Card */}
+          {dashboardData?.riskReport && (
+            <div className={`${styles.riskCard} ${styles[`riskCard${capitalize(dashboardData.riskReport.level)}`]}`}>
+              <button
+                type="button"
+                className={styles.riskHeader}
+                onClick={() => setRiskExpanded(e => !e)}
+              >
+                <span className={styles.riskTitle}>At-Risk Assessment</span>
+                <span className={`${styles.riskBadge} ${styles[`riskBadge${capitalize(dashboardData.riskReport.level)}`]}`}>
+                  {dashboardData.riskReport.level.toUpperCase()}
+                </span>
+                <span style={{ marginLeft: 'auto', opacity: 0.6 }}>{riskExpanded ? '▲' : '▼'}</span>
+              </button>
+              {riskExpanded && (
+                <div className={styles.riskBody}>
+                  {dashboardData.riskReport.factors.map((f: any) => (
+                    <div key={f.id} className={styles.riskFactor}>
+                      <span className={styles[`riskSeverity${capitalize(f.severity)}`]}>●</span>
+                      <div>
+                        <strong>{f.title}</strong>
+                        <p style={{ margin: '2px 0 0', opacity: 0.8, fontSize: '12px' }}>{f.description}</p>
+                        {f.affectedUnits?.length > 0 && (
+                          <div className={styles.affectedUnits}>
+                            {f.affectedUnits.map((u: string) => (
+                              <code key={u} className={styles.unitCode}>{u}</code>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  {dashboardData.riskReport.recommendedActions?.length > 0 && (
+                    <div className={styles.riskActions}>
+                      <strong>Recommended Actions</strong>
+                      <ol style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+                        {dashboardData.riskReport.recommendedActions.map((a: string, i: number) => (
+                          <li key={i} style={{ marginBottom: 4, opacity: 0.85 }}>{a}</li>
+                        ))}
+                      </ol>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Units Outside Planner */}
           {(() => {
