@@ -183,8 +183,11 @@ function AuditContent() {
 
 export default function GraduationAuditPage() {
   return (
-    <Suspense fallback={<div style={{ padding: '2rem', fontFamily: 'serif' }}>Loading...</div>}>
-      <AuditContent />
-    </Suspense>
+    <>
+      <style>{`body { margin: 0; background: #f5f5f5; } @media print { body { background: white; } }`}</style>
+      <Suspense fallback={<div style={{ padding: '2rem', fontFamily: 'serif' }}>Loading...</div>}>
+        <AuditContent />
+      </Suspense>
+    </>
   );
 }
