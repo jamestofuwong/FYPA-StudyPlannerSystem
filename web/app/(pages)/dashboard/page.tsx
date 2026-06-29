@@ -91,6 +91,7 @@ export default function DashboardPage() {
   const [injectedMinors, setInjectedMinors] = useState<Set<string>>(new Set());
   // REQ-FUN-105: track last scrape error message for retry UI
   const [scraperError, setScraperError] = useState<string | null>(null);
+  const [auditGenerating, setAuditGenerating] = useState(false);
 
   // REQ-SEC-101: no sessionStorage restore — student data must live in RAM only
 
@@ -601,6 +602,43 @@ export default function DashboardPage() {
     showToast('Student data cleared.', 'info');
   };
 
+  const handleGenerateAudit = async () => {
+    if (!scrapedStudent || !dashboardData) return;
+    setAuditGenerating(true);
+    try {
+      const res = await fetch('/api/graduation-audit/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          student: scrapedStudent.student,
+          matchResult: dashboardData.match,
+          generatedBy: 'advisor',
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        showToast(err.error ?? 'Failed to create audit session.', 'error');
+        return;
+      }
+      const { sessionId } = await res.json();
+      const api = (window as any).auditAPI;
+      if (!api) {
+        showToast('Audit API not available — are you running in Electron?', 'error');
+        return;
+      }
+      const result = await api.generatePDF({ sessionId });
+      if (result?.error) {
+        showToast(result.error, 'error');
+      } else if (result?.filePath) {
+        showToast(`Audit saved to ${result.filePath}`, 'success');
+      }
+    } catch (e: any) {
+      showToast(e.message ?? 'Unexpected error generating audit.', 'error');
+    } finally {
+      setAuditGenerating(false);
+    }
+  };
+
   const generateCustomPlan = async (overrideInjections?: Set<string>) => {
     const effectiveInjections = overrideInjections ?? injectedMinors;
     const activePlanner = selectedPlannerIdx === -1 ? manualPlanner : dashboardData?.planners?.[selectedPlannerIdx];
@@ -904,6 +942,9 @@ export default function DashboardPage() {
       {/* ── Import action bar — shown instead of identity card for imports */}
       {isImported && studentLoaded && dashboardData && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, marginBottom: 14 }}>
+          <button className={styles.btnSecondary} onClick={handleGenerateAudit} disabled={auditGenerating}>
+            {auditGenerating ? 'Generating…' : 'Graduation Audit PDF'}
+          </button>
           <button className={styles.btnSecondary} onClick={() => setShowExportModal(true)}>Export</button>
           <button className={styles.btnDanger} onClick={handleClear}>✕ Clear</button>
         </div>
@@ -990,7 +1031,12 @@ export default function DashboardPage() {
                 <div style={{ fontSize: 14, fontWeight: 600 }}>{s?.studentName || scrapedStudent.studentId || '—'}</div>
               </div>
               {dashboardData && (
-                <button className={styles.btnSecondary} onClick={() => setShowExportModal(true)}>Export</button>
+                <>
+                  <button className={styles.btnSecondary} onClick={handleGenerateAudit} disabled={auditGenerating}>
+                    {auditGenerating ? 'Generating…' : 'Graduation Audit PDF'}
+                  </button>
+                  <button className={styles.btnSecondary} onClick={() => setShowExportModal(true)}>Export</button>
+                </>
               )}
               <button className={styles.btnDanger} onClick={handleClear}>✕ Clear</button>
             </div>
