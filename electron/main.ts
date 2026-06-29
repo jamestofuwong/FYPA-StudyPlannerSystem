@@ -285,8 +285,19 @@ ipcMain.handle('print-graduation-audit', async (_event, { sessionId }: { session
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
+      // Isolated session so HMR websockets from the print window don't
+      // trigger a hot-reload in the main window during development.
+      partition: 'print-audit',
     },
   });
+
+  // Block all WebSocket connections in the print window.
+  // In dev mode, Next.js opens an HMR websocket; if that connects it will
+  // broadcast a "rebuilding" event to every client and refresh the main window.
+  printWin.webContents.session.webRequest.onBeforeRequest(
+    { urls: ['ws://*/*', 'wss://*/*'] },
+    (_details, callback) => callback({ cancel: true }),
+  );
 
   const appUrl = nextServerRef?.url ?? devServerUrl ?? 'http://localhost:3000';
 

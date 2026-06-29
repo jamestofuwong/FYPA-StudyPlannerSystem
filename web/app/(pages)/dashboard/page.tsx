@@ -627,10 +627,10 @@ export default function DashboardPage() {
         return;
       }
       const result = await api.generatePDF({ sessionId });
-      if (result?.error) {
-        showToast(result.error, 'error');
-      } else if (result?.filePath) {
+      if (result?.success && result?.filePath) {
         showToast(`Audit saved to ${result.filePath}`, 'success');
+      } else if (!result?.success && result?.reason && result.reason !== 'cancelled') {
+        showToast(`PDF generation failed: ${result.reason}`, 'error');
       }
     } catch (e: any) {
       showToast(e.message ?? 'Unexpected error generating audit.', 'error');
