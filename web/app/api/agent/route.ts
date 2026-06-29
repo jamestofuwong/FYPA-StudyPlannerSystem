@@ -2,15 +2,14 @@ import { NextResponse } from 'next/server';
 import { runAgentTurn } from '../../../../core/services/agent/agentService';
 import { getAgentStore } from './store';
 import { prisma } from '../../../../core/db/client';
-
-const DEFAULT_MODEL = 'llama3.2:3b';
+import { OLLAMA_MODEL } from '../ollama/store';
 
 async function getAgentModel(): Promise<string> {
   try {
     const row = await prisma.systemConfig.findUnique({ where: { key: 'agent_model' } });
-    return row?.value ?? DEFAULT_MODEL;
+    return row?.value ?? OLLAMA_MODEL;
   } catch {
-    return DEFAULT_MODEL;
+    return OLLAMA_MODEL;
   }
 }
 
