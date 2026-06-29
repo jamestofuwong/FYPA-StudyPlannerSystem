@@ -17,7 +17,6 @@ const TAB_META: Record<PanelId, TabMeta> = {
     scraping: { id: 'scraping', icon: '🕷️', label: 'Data Scraping' },
     planners: { id: 'planners', icon: '✅', label: 'Study Planners' },
     'cloud-sync': { id: 'cloud-sync', icon: '☁️', label: 'Cloud Sync' },
-    cohort: { id: 'cohort', icon: '👥', label: 'Cohort Processing' },
     settings: { id: 'settings', icon: '⚙️', label: 'Settings' },
     'user-guide': { id: 'user-guide', icon: '📖', label: 'User Guide' },
 };

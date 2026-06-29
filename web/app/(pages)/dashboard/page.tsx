@@ -92,6 +92,19 @@ export default function DashboardPage() {
   // REQ-FUN-105: track last scrape error message for retry UI
   const [scraperError, setScraperError] = useState<string | null>(null);
 
+  // Batch mode
+  const [batchList, setBatchList] = useState<{ studentId: string; name?: string }[]>([]);
+  const [showBatchPanel, setShowBatchPanel] = useState(false);
+  const [batchResults, setBatchResults] = useState<Record<string, {
+    status: 'pending' | 'processing' | 'done' | 'error';
+    scrapedStudent?: { student: ScrapedStudent; studentId: string };
+    dashboardData?: any;
+    error?: string;
+  }>>({});
+  const [batchRunning, setBatchRunning] = useState(false);
+  const [batchCurrentIndex, setBatchCurrentIndex] = useState(0);
+  const [batchMode, setBatchMode] = useState(false); // true when viewing batch results
+
   // REQ-SEC-101: no sessionStorage restore — student data must live in RAM only
 
   // Poll scraper status on mount so the dashboard reflects initializing state
@@ -601,6 +614,187 @@ export default function DashboardPage() {
     showToast('Student data cleared.', 'info');
   };
 
+  const handleAddToBatch = () => {
+    const id = studentIdInput.trim();
+    if (!id) return;
+    if (batchList.find((s) => s.studentId === id)) {
+      showToast('Student already in batch.', 'info');
+      return;
+    }
+    setBatchList((prev) => [...prev, { studentId: id, name: selectedStudentName || undefined }]);
+    setShowBatchPanel(true);
+    setStudentIdInput('');
+    setSelectedStudentName('');
+    setSuggestions([]);
+  };
+
+  const fetchDashboardDataForBatch = async (
+    studentId: string,
+    student: ScrapedStudent,
+    mpuCourseList: any[] = [],
+  ): Promise<any | null> => {
+    try {
+      const isNotFailed = (c: { grade?: string }) => c.grade?.trim().toUpperCase() !== 'N';
+      const mpuCompleted = mpuCourseList.filter(isNotFailed).map((c) => c.courseId);
+      const completedUnits = [
+        ...new Set([
+          ...student.courseList.filter(isNotFailed).map((c) => c.courseId),
+          ...mpuCompleted,
+        ]),
+      ];
+      const enrollStr = student.enrollmentDate ?? '';
+      const yearMatch = enrollStr.match(/\b(20\d{2})\b/);
+      const intakeYear = yearMatch ? parseInt(yearMatch[1], 10) : new Date().getFullYear();
+      const monthNumMatch = enrollStr.match(/^\d{1,2}\/(\d{1,2})\//);
+      const intakeMonth = monthNumMatch ? parseInt(monthNumMatch[1]) : 1;
+      const intakeSemester: 1 | 2 = intakeMonth >= 7 ? 2 : 1;
+
+      const matchRes = await fetch('/api/match', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          student: {
+            studentID: studentId,
+            courseCode: student.course,
+            intakeYear,
+            intakeSemester,
+            completedUnitCodes: completedUnits,
+            hasWIL: false,
+            enrollmentDate: student.enrollmentDate,
+            courseList: student.courseList,
+            ...(student.creditsCompleted > 0 && { creditsCompleted: student.creditsCompleted }),
+            ...(student.creditsRequired > 0 && { creditsRequired: student.creditsRequired }),
+            ...(student.cgpa > 0 && { cgpa: student.cgpa }),
+            ...(student.graduationDate && { graduationDate: student.graduationDate }),
+          },
+        }),
+      });
+      const matchData = await matchRes.json();
+      if (!matchData.success) return null;
+
+      const top3 = matchData.data.rankedPlanners.slice(0, 3);
+      if (top3.length === 0) return null;
+
+      const plannerResponses = await Promise.all(
+        top3.map((r: any) => fetch(`/api/planners/${r.plannerID}`))
+      );
+      const plannerDataArr = await Promise.all(plannerResponses.map((r) => r.json()));
+
+      if (!plannerResponses[0].ok) return null;
+
+      return {
+        match: matchData.data,
+        planners: plannerDataArr,
+        completedCodes: completedUnits,
+        intakeYear,
+        student,
+        studentId,
+        enrollmentMode,
+        mpuCourseList,
+      };
+    } catch {
+      return null;
+    }
+  };
+
+  const handleRunBatch = async () => {
+    if (batchList.length === 0) return;
+    setBatchRunning(true);
+    setBatchMode(true);
+    setBatchCurrentIndex(0);
+
+    // Initialise all as pending
+    const initial: Record<string, { status: 'pending' | 'processing' | 'done' | 'error' }> = {};
+    for (const s of batchList) initial[s.studentId] = { status: 'pending' };
+    setBatchResults(initial);
+
+    for (let i = 0; i < batchList.length; i++) {
+      const { studentId } = batchList[i];
+
+      setBatchResults((prev) => ({ ...prev, [studentId]: { status: 'processing' } }));
+
+      try {
+        const startRes = await fetch('/api/scraper/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ studentId, enrollmentMode }),
+        });
+        if (!startRes.ok) throw new Error('Failed to start scrape');
+
+        const student = await pollScraperResult();
+        if (!student) throw new Error('Scrape returned no result');
+
+        const scrapedStudentEntry = { student, studentId };
+
+        // Show the first result immediately
+        if (i === 0) {
+          setScrapedStudent(scrapedStudentEntry);
+          setStudentLoaded(false);
+        }
+
+        const mpuCourseList = await fetchMpuCourseList(studentId, student);
+        const data = await fetchDashboardDataForBatch(studentId, student, mpuCourseList);
+
+        setBatchResults((prev) => ({
+          ...prev,
+          [studentId]: {
+            status: 'done',
+            scrapedStudent: scrapedStudentEntry,
+            dashboardData: data,
+          },
+        }));
+
+        // Auto-display first completed result
+        if (i === 0 && data) {
+          setScrapedStudent(scrapedStudentEntry);
+          setDashboardData(data);
+          setStudentLoaded(true);
+          setBatchCurrentIndex(0);
+        }
+      } catch (e: any) {
+        setBatchResults((prev) => ({
+          ...prev,
+          [studentId]: { status: 'error', error: e.message },
+        }));
+      }
+    }
+
+    setBatchRunning(false);
+    showToast(`Batch complete. ${batchList.length} student(s) processed.`, 'success');
+  };
+
+  const handleBatchNavigate = (direction: 'prev' | 'next') => {
+    const newIndex = direction === 'prev' ? batchCurrentIndex - 1 : batchCurrentIndex + 1;
+    if (newIndex < 0 || newIndex >= batchList.length) return;
+    setBatchCurrentIndex(newIndex);
+
+    const { studentId } = batchList[newIndex];
+    const result = batchResults[studentId];
+
+    if (result?.status === 'done' && result.scrapedStudent && result.dashboardData) {
+      setScrapedStudent(result.scrapedStudent);
+      setDashboardData(result.dashboardData);
+      setStudentLoaded(true);
+      setSelectedPlannerIdx(0);
+    } else {
+      // Still processing — show loading state
+      setScrapedStudent(null);
+      setDashboardData(null);
+      setStudentLoaded(false);
+      setScraperApiStatus(result?.status === 'processing' ? 'scraping' : 'idle');
+    }
+  };
+
+  const handleExitBatch = () => {
+    setBatchMode(false);
+    setBatchList([]);
+    setBatchResults({});
+    setBatchCurrentIndex(0);
+    setBatchRunning(false);
+    setShowBatchPanel(false);
+    handleClear();
+  };
+
   const generateCustomPlan = async (overrideInjections?: Set<string>) => {
     const effectiveInjections = overrideInjections ?? injectedMinors;
     const activePlanner = selectedPlannerIdx === -1 ? manualPlanner : dashboardData?.planners?.[selectedPlannerIdx];
@@ -765,12 +959,50 @@ export default function DashboardPage() {
         </button>
         <button
           className={styles.btnSecondary}
+          onClick={handleAddToBatch}
+          disabled={isDisabled || !studentIdInput.trim()}
+        >
+          Add to Batch
+        </button>
+        <button
+          className={styles.btnSecondary}
           onClick={() => setShowImportPanel((v) => !v)}
           disabled={loading}
         >
           Import
         </button>
       </div>
+
+      {/* ── Batch Panel ─────────────────────────────────────────────────── */}
+      {showBatchPanel && batchList.length > 0 && !batchMode && (
+        <div style={{ border: '1px solid var(--panel-border)', borderRadius: 4, padding: '12px 14px', marginBottom: 14, background: 'var(--card-bg)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            <span style={{ fontSize: 12, fontWeight: 600 }}>Batch Queue ({batchList.length})</span>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button className={styles.btnPrimary} onClick={handleRunBatch} disabled={batchRunning || batchList.length === 0}>
+                {batchRunning ? 'Running…' : 'Run Batch'}
+              </button>
+              <button className={styles.btnSecondary} onClick={() => { setBatchList([]); setShowBatchPanel(false); }}>
+                Clear
+              </button>
+            </div>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {batchList.map((s, i) => (
+              <div key={s.studentId} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, padding: '4px 6px', background: 'var(--surface-bg)', borderRadius: 3 }}>
+                <span style={{ color: 'var(--text-muted)', minWidth: 20, textAlign: 'right' }}>{i + 1}.</span>
+                <span style={{ fontFamily: 'monospace', fontWeight: 500 }}>{s.studentId}</span>
+                {s.name && <span style={{ color: 'var(--text-muted)' }}>{s.name}</span>}
+                <button
+                  style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 14, lineHeight: 1, padding: '0 2px' }}
+                  onClick={() => setBatchList((prev) => prev.filter((_, idx) => idx !== i))}
+                  aria-label="Remove"
+                >×</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── Import Panel ─────────────────────────────────────────────────── */}
       {showImportPanel && (
@@ -898,6 +1130,37 @@ export default function DashboardPage() {
               </div>
             </>
           )}
+        </div>
+      )}
+
+      {/* ── Batch navigation bar ──────────────────────────────────────────── */}
+      {batchMode && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, padding: '8px 12px', background: 'var(--card-bg)', border: '1px solid var(--panel-border)', borderRadius: 4 }}>
+          <button
+            className={styles.btnSecondary}
+            style={{ padding: '3px 10px', fontSize: 16 }}
+            onClick={() => handleBatchNavigate('prev')}
+            disabled={batchCurrentIndex === 0}
+          >←</button>
+          <span style={{ fontSize: 12, flex: 1, textAlign: 'center' }}>
+            {(() => {
+              const s = batchList[batchCurrentIndex];
+              if (!s) return '';
+              const r = batchResults[s.studentId];
+              const statusLabel = r?.status === 'done' ? '' : r?.status === 'processing' ? ' · Scraping…' : r?.status === 'error' ? ' · Error' : ' · Pending';
+              return `Student ${batchCurrentIndex + 1} of ${batchList.length} · ${s.studentId}${s.name ? ` · ${s.name}` : ''}${statusLabel}`;
+            })()}
+            {batchRunning && <span style={{ color: 'var(--text-muted)', marginLeft: 8 }}>(batch running…)</span>}
+          </span>
+          <button
+            className={styles.btnSecondary}
+            style={{ padding: '3px 10px', fontSize: 16 }}
+            onClick={() => handleBatchNavigate('next')}
+            disabled={batchCurrentIndex === batchList.length - 1}
+          >→</button>
+          <button className={styles.btnDanger} style={{ marginLeft: 8 }} onClick={handleExitBatch}>
+            Exit Batch
+          </button>
         </div>
       )}
 
