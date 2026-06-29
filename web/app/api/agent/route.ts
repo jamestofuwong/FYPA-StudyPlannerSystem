@@ -7,8 +7,12 @@ import { OLLAMA_MODEL } from '../ollama/store';
 async function getAgentModel(): Promise<string> {
   try {
     const row = await prisma.systemConfig.findUnique({ where: { key: 'agent_model' } });
-    return row?.value ?? OLLAMA_MODEL;
-  } catch {
+    const model = row?.value ?? OLLAMA_MODEL;
+    console.log(`[Agent] agent_model DB row: ${JSON.stringify(row)}`);
+    console.log(`[Agent] resolved model: ${model} (OLLAMA_MODEL constant: ${OLLAMA_MODEL})`);
+    return model;
+  } catch (e) {
+    console.error(`[Agent] getAgentModel error: ${e}`);
     return OLLAMA_MODEL;
   }
 }

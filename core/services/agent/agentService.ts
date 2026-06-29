@@ -30,6 +30,7 @@ export async function runAgentTurn(
     iterations++;
 
     let response: Response;
+    console.log(`[Agent] iteration ${iterations}: sending request to Ollama with model="${ctx.modelName}"`);
     try {
       response = await fetch(`${OLLAMA_BASE}/api/chat`, {
         method: 'POST',
