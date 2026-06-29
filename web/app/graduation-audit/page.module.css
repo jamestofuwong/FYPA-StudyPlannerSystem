@@ -1,4 +1,4 @@
-body {
+:global(body) {
   margin: 0;
   background: #f5f5f5;
 }
@@ -90,7 +90,7 @@ body {
 }
 
 @media print {
-  body { background: white; }
+  :global(body) { background: white; }
   .auditPage {
     max-width: none;
     margin: 0;
