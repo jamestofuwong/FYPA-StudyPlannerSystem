@@ -7,7 +7,6 @@ import styles from './page.module.css';
 function AuditContent() {
   const searchParams = useSearchParams();
   const sessionId = searchParams.get('sessionId');
-  const autoprint = searchParams.get('autoprint') === '1';
   const [session, setSession] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -21,16 +20,6 @@ function AuditContent() {
       })
       .catch((e: Error) => setError(e.message));
   }, [sessionId]);
-
-  useEffect(() => {
-    if (!autoprint || !session) return;
-    // Small delay to let the browser finish painting before opening print dialog
-    const t = setTimeout(() => {
-      window.print();
-      window.close();
-    }, 500);
-    return () => clearTimeout(t);
-  }, [autoprint, session]);
 
   if (error) return <div className={styles.error}>Error: {error}</div>;
   if (!session) return <div className={styles.loading}>Loading audit data...</div>;

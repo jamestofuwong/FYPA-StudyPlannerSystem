@@ -606,7 +606,7 @@ export default function DashboardPage() {
     if (!scrapedStudent || !dashboardData) return;
     setAuditGenerating(true);
     try {
-      const res = await fetch('/api/graduation-audit/session', {
+      const sessionRes = await fetch('/api/graduation-audit/session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -615,13 +615,28 @@ export default function DashboardPage() {
           generatedBy: 'advisor',
         }),
       });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
+      if (!sessionRes.ok) {
+        const err = await sessionRes.json().catch(() => ({}));
         showToast(err.error ?? 'Failed to create audit session.', 'error');
         return;
       }
-      const { sessionId } = await res.json();
-      window.open(`/graduation-audit?sessionId=${encodeURIComponent(sessionId)}&autoprint=1`, '_blank');
+      const { sessionId } = await sessionRes.json();
+
+      const pdfRes = await fetch(`/api/graduation-audit/pdf?sessionId=${encodeURIComponent(sessionId)}`);
+      if (!pdfRes.ok) {
+        const err = await pdfRes.json().catch(() => ({}));
+        showToast(err.error ?? 'Failed to generate PDF.', 'error');
+        return;
+      }
+
+      const blob = await pdfRes.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `GraduationAudit-${scrapedStudent.studentId}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast('Graduation audit PDF downloaded.', 'success');
     } catch (e: any) {
       showToast(e.message ?? 'Unexpected error generating audit.', 'error');
     } finally {
