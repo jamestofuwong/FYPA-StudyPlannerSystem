@@ -22,9 +22,10 @@ type UpdateStatus =
 
 const DEFAULT_THRESHOLD = 70; // 70 %
 
-const AGENT_MODEL_OPTIONS = ['deepseek-r1:1.5b', 'llama3.2:3b', 'phi4-mini', 'qwen2.5:3b'] as const;
+// Only models that support Ollama's tools/function-calling API are listed here.
+const AGENT_MODEL_OPTIONS = ['llama3.2:3b', 'llama3.1:8b', 'qwen2.5:3b'] as const;
 type AgentModelOption = typeof AGENT_MODEL_OPTIONS[number];
-const DEFAULT_AGENT_MODEL: AgentModelOption = 'deepseek-r1:1.5b';
+const DEFAULT_AGENT_MODEL: AgentModelOption = 'llama3.2:3b';
 
 export default function SettingsPage() {
   const { preference, setPreference } = useTheme();
@@ -260,7 +261,7 @@ export default function SettingsPage() {
         <div className={styles.cardTitle}>Agent Model</div>
         <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 14 }}>
           Select the Ollama model for the AI advisor agent. The model must be downloaded before use.
-          Recommended: <span style={{ fontFamily: 'var(--font-mono)' }}>deepseek-r1:1.5b</span> (~1 GB RAM).
+          Recommended: <span style={{ fontFamily: 'var(--font-mono)' }}>llama3.2:3b</span> (~2 GB RAM). Model must support function calling.
         </div>
         <div style={{ marginBottom: 14 }}>
           <select

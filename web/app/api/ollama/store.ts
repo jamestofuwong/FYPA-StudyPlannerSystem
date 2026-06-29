@@ -2,7 +2,9 @@
 // Node.js process (works correctly in Electron where Next.js runs in-process).
 
 export const OLLAMA_URL = 'http://127.0.0.1:11434';
-export const OLLAMA_MODEL = 'deepseek-r1:1.5b';
+// llama3.2:3b is required — it supports Ollama's tools/function-calling API.
+// deepseek-r1 and similar reasoning models do NOT support tools and return a 400.
+export const OLLAMA_MODEL = 'llama3.2:3b';
 
 export type OllamaAvailability = 'unknown' | 'available' | 'unavailable';
 export type ModelStatus = 'unknown' | 'ready' | 'pulling' | 'unavailable';

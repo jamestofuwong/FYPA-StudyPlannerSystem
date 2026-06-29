@@ -52,8 +52,13 @@ export async function runAgentTurn(
 
     if (!response.ok) {
       const errText = await response.text().catch(() => response.statusText);
+      console.error(`[Agent] Ollama error (HTTP ${response.status}): ${errText}`);
+      const isToolsUnsupported = errText.includes('does not support tools');
+      const reply = isToolsUnsupported
+        ? `The model "${ctx.modelName}" does not support function calling, which is required by this agent. Go to Settings → AI Agent and select a tools-compatible model such as llama3.2:3b, then download it.`
+        : `Ollama returned an error: ${errText}`;
       return {
-        reply: `Ollama returned an error: ${errText}`,
+        reply,
         updatedHistory: trimHistory([...history, { role: 'user', content: userMessage }]),
       };
     }
