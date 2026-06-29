@@ -276,62 +276,6 @@ nativeTheme.on("updated", () => {
   });
 });
 
-ipcMain.handle('print-graduation-audit', async (_event, { sessionId }: { sessionId: string }) => {
-  const printWin = new BrowserWindow({
-    width: 794,
-    height: 1123,
-    show: false,
-    webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: false,
-      // Isolated session so HMR websockets from the print window don't
-      // trigger a hot-reload in the main window during development.
-      partition: 'print-audit',
-    },
-  });
-
-  // Block all WebSocket connections in the print window.
-  // In dev mode, Next.js opens an HMR websocket; if that connects it will
-  // broadcast a "rebuilding" event to every client and refresh the main window.
-  printWin.webContents.session.webRequest.onBeforeRequest(
-    { urls: ['ws://*/*', 'wss://*/*'] },
-    (_details, callback) => callback({ cancel: true }),
-  );
-
-  const appUrl = nextServerRef?.url ?? devServerUrl ?? 'http://localhost:3000';
-
-  try {
-    await printWin.loadURL(`${appUrl}/graduation-audit?sessionId=${encodeURIComponent(sessionId)}`);
-
-    await new Promise<void>((resolve) => {
-      printWin.webContents.once('did-finish-load', () => {
-        setTimeout(resolve, 1500);
-      });
-    });
-
-    const pdfBuffer = await printWin.webContents.printToPDF({
-      printBackground: true,
-      pageSize: 'A4',
-    });
-
-    if (!printWin.isDestroyed()) printWin.destroy();
-
-    const { canceled, filePath } = await dialog.showSaveDialog({
-      title: 'Save Graduation Audit',
-      defaultPath: `GraduationAudit-${sessionId}.pdf`,
-      filters: [{ name: 'PDF Document', extensions: ['pdf'] }],
-    });
-
-    if (canceled || !filePath) return { success: false, reason: 'cancelled' };
-
-    await fs.promises.writeFile(filePath, pdfBuffer);
-    return { success: true, filePath };
-  } catch (err: any) {
-    if (!printWin.isDestroyed()) printWin.destroy();
-    return { success: false, reason: (err as Error).message };
-  }
-});
 
 app.whenReady().then(async () => {
   // Set DATABASE_URL immediately so Prisma has the connection string

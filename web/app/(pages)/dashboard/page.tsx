@@ -621,17 +621,7 @@ export default function DashboardPage() {
         return;
       }
       const { sessionId } = await res.json();
-      const api = (window as any).auditAPI;
-      if (!api) {
-        showToast('Audit API not available — are you running in Electron?', 'error');
-        return;
-      }
-      const result = await api.generatePDF({ sessionId });
-      if (result?.success && result?.filePath) {
-        showToast(`Audit saved to ${result.filePath}`, 'success');
-      } else if (!result?.success && result?.reason && result.reason !== 'cancelled') {
-        showToast(`PDF generation failed: ${result.reason}`, 'error');
-      }
+      window.open(`/graduation-audit?sessionId=${encodeURIComponent(sessionId)}&autoprint=1`, '_blank');
     } catch (e: any) {
       showToast(e.message ?? 'Unexpected error generating audit.', 'error');
     } finally {
