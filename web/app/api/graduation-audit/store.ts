@@ -9,7 +9,10 @@ export interface AuditSession {
   generatedBy?: string;
 }
 
-const auditSessions = new Map<string, AuditSession>();
+type AuditSessionStore = typeof globalThis & { __auditSessions?: Map<string, AuditSession> };
+const g = globalThis as AuditSessionStore;
+if (!g.__auditSessions) g.__auditSessions = new Map();
+const auditSessions = g.__auditSessions;
 
 export function generateAuditRef(studentId: string): string {
   const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
