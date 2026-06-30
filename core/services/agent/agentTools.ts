@@ -152,6 +152,12 @@ export const TOOL_EXECUTORS: Record<string, ToolExecutor> = {
         }),
       });
       const result = await res.json();
+      console.log('[Agent:run_major_detection] match API status:', res.status);
+      console.log('[Agent:run_major_detection] result.success:', result?.success);
+      console.log('[Agent:run_major_detection] result.data.status:', result?.data?.status);
+      console.log('[Agent:run_major_detection] result.data.primaryMajor:', JSON.stringify(result?.data?.primaryMajor));
+      console.log('[Agent:run_major_detection] completedUnitCodes count:', completedUnitCodes.length);
+      console.log('[Agent:run_major_detection] courseCode sent:', student.course ?? '');
       ctx.store.lastMatchResult = result;
       ctx.store.lastStudent = student;
       return summariseMatchResult(result);
