@@ -115,18 +115,45 @@ export const TOOL_EXECUTORS: Record<string, ToolExecutor> = {
   },
 
   async run_major_detection(args, ctx) {
-    const student = args.student;
+    const student: any = args.student ?? ctx.store.lastStudent;
     if (!student) return { error: 'No student data provided. Call fetch_student first.' };
     try {
+      // Transform ScrapedStudent → match API format (same as dashboard fetchDashboardData)
+      const isNotFailed = (c: any) => c.grade?.trim().toUpperCase() !== 'N';
+      const completedUnitCodes = student.courseList
+        ? student.courseList.filter(isNotFailed).map((c: any) => c.courseId)
+        : [];
+
+      const enrollStr: string = student.enrollmentDate ?? '';
+      const yearMatch = enrollStr.match(/\b(20\d{2})\b/);
+      const intakeYear = yearMatch ? parseInt(yearMatch[1], 10) : new Date().getFullYear();
+      const monthNumMatch = enrollStr.match(/^\d{1,2}\/(\d{1,2})\//);
+      const intakeMonth = monthNumMatch ? parseInt(monthNumMatch[1]) : 1;
+      const intakeSemester: 1 | 2 = intakeMonth >= 7 ? 2 : 1;
+
       const res = await fetch(`${ctx.baseUrl}/api/match`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ student }),
+        body: JSON.stringify({
+          student: {
+            studentID: student.studentId ?? '',
+            courseCode: student.course ?? '',
+            intakeYear,
+            intakeSemester,
+            completedUnitCodes,
+            hasWIL: false,
+            enrollmentDate: student.enrollmentDate,
+            courseList: student.courseList,
+            ...(student.creditsCompleted > 0 && { creditsCompleted: student.creditsCompleted }),
+            ...(student.creditsRequired > 0 && { creditsRequired: student.creditsRequired }),
+            ...(student.cgpa > 0 && { cgpa: student.cgpa }),
+            ...(student.graduationDate && { graduationDate: student.graduationDate }),
+          },
+        }),
       });
       const result = await res.json();
       ctx.store.lastMatchResult = result;
       ctx.store.lastStudent = student;
-      // Return condensed result to save context window space
       return summariseMatchResult(result);
     } catch (e: any) {
       return { error: `Match pipeline failed: ${e.message}` };
