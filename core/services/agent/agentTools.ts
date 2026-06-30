@@ -19,13 +19,10 @@ export const AGENT_TOOLS: OllamaTool[] = [
     type: 'function',
     function: {
       name: 'run_major_detection',
-      description: 'Run the major detection algorithm on a student. Returns detected major, match percentage, missing units, and at-risk level. Must call fetch_student first.',
+      description: 'Run the major detection algorithm on the student that was most recently fetched with fetch_student. Returns detected major, match percentage, missing units, and at-risk level. Must call fetch_student first.',
       parameters: {
         type: 'object',
-        properties: {
-          student: { type: 'object', description: 'The student object returned from fetch_student' },
-        },
-        required: ['student'],
+        properties: {},
       },
     },
   },
@@ -114,9 +111,9 @@ export const TOOL_EXECUTORS: Record<string, ToolExecutor> = {
     return { error: 'Scrape timed out after 2 minutes.' };
   },
 
-  async run_major_detection(args, ctx) {
-    const student: any = args.student ?? ctx.store.lastStudent;
-    if (!student) return { error: 'No student data provided. Call fetch_student first.' };
+  async run_major_detection(_args, ctx) {
+    const student: any = ctx.store.lastStudent;
+    if (!student) return { error: 'No student loaded. Call fetch_student first.' };
     try {
       // Transform ScrapedStudent → match API format (same as dashboard fetchDashboardData)
       const isNotFailed = (c: any) => c.grade?.trim().toUpperCase() !== 'N';
