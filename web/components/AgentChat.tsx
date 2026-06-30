@@ -13,16 +13,24 @@ interface AgentChatProps {
   onClose: () => void;
 }
 
+const TOOL_LABELS: Record<string, string> = {
+  fetch_student:        'Scraping student data…',
+  run_major_detection:  'Running major detection…',
+  get_all_planners:     'Fetching study planners…',
+  export_student_report:'Preparing export…',
+};
+
 export default function AgentChat({ isOpen, onClose }: AgentChatProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [history, setHistory] = useState<any[]>([]); // server-side history format
+  const [statusLabel, setStatusLabel] = useState<string>('Thinking…');
+  const [history, setHistory] = useState<any[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isLoading]);
+  }, [messages, isLoading, statusLabel]);
 
   const sendMessage = async () => {
     const text = input.trim();
@@ -31,6 +39,7 @@ export default function AgentChat({ isOpen, onClose }: AgentChatProps) {
     setInput('');
     setMessages(prev => [...prev, { role: 'user', content: text }]);
     setIsLoading(true);
+    setStatusLabel('Thinking…');
 
     try {
       const res = await fetch('/api/agent', {
@@ -38,17 +47,44 @@ export default function AgentChat({ isOpen, onClose }: AgentChatProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: text, history }),
       });
-      const data = await res.json();
 
-      if (data.error) {
-        setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${data.error}` }]);
-      } else {
-        setMessages(prev => [...prev, { role: 'assistant', content: data.reply }]);
-        setHistory(data.history ?? []);
+      if (!res.ok || !res.body) {
+        const err = await res.json().catch(() => ({}));
+        setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${err.error ?? 'Unknown error'}` }]);
+        return;
+      }
 
-        // Handle pending export triggered by agent
-        if (data.pendingExport) {
-          handlePendingExport(data.pendingExport);
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const event = JSON.parse(line.slice(6));
+
+            if (event.type === 'thinking') {
+              setStatusLabel('Thinking…');
+            } else if (event.type === 'tool_start') {
+              setStatusLabel(TOOL_LABELS[event.tool] ?? `Running ${event.tool}…`);
+            } else if (event.type === 'tool_done') {
+              setStatusLabel('Thinking…');
+            } else if (event.type === 'reply') {
+              setMessages(prev => [...prev, { role: 'assistant', content: event.reply }]);
+              setHistory(event.history ?? []);
+              if (event.pendingExport) handlePendingExport(event.pendingExport);
+            } else if (event.type === 'error') {
+              setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${event.error}` }]);
+            }
+          } catch { /* malformed SSE line — skip */ }
         }
       }
     } catch (e: any) {
@@ -118,6 +154,7 @@ export default function AgentChat({ isOpen, onClose }: AgentChatProps) {
               <span className={styles.dot} />
               <span className={styles.dot} />
               <span className={styles.dot} />
+              <span className={styles.statusLabel}>{statusLabel}</span>
             </div>
           </div>
         )}

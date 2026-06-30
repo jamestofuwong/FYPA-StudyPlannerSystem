@@ -6,6 +6,11 @@ const OLLAMA_BASE = 'http://127.0.0.1:11434';
 const MAX_ITERATIONS = 6;
 const MAX_HISTORY_TURNS = 6;
 
+export type AgentEvent =
+  | { type: 'tool_start'; tool: string }
+  | { type: 'tool_done'; tool: string }
+  | { type: 'thinking' };
+
 export function trimHistory(history: AgentMessage[]): AgentMessage[] {
   return history.slice(-MAX_HISTORY_TURNS);
 }
@@ -14,6 +19,7 @@ export async function runAgentTurn(
   userMessage: string,
   history: AgentMessage[],
   ctx: { baseUrl: string; store: AgentSessionStore; modelName: string },
+  onEvent?: (event: AgentEvent) => void,
 ): Promise<{ reply: string; updatedHistory: AgentMessage[] }> {
   const messages: AgentMessage[] = [
     {
@@ -28,6 +34,8 @@ export async function runAgentTurn(
 
   while (iterations < MAX_ITERATIONS) {
     iterations++;
+
+    onEvent?.({ type: 'thinking' });
 
     let response: Response;
     console.log(`[Agent] iteration ${iterations}: sending request to Ollama with model="${ctx.modelName}"`);
@@ -68,8 +76,7 @@ export async function runAgentTurn(
     messages.push(assistantMessage);
 
     if (!assistantMessage.tool_calls || assistantMessage.tool_calls.length === 0) {
-      // Model is done — return the final answer
-      const historyWithoutSystem = messages.slice(1); // drop system prompt
+      const historyWithoutSystem = messages.slice(1);
       return {
         reply: assistantMessage.content ?? '',
         updatedHistory: trimHistory(historyWithoutSystem),
@@ -81,6 +88,9 @@ export async function runAgentTurn(
       const { name, arguments: args } = toolCall.function;
       const executor = TOOL_EXECUTORS[name];
       let toolResult: unknown;
+
+      onEvent?.({ type: 'tool_start', tool: name });
+
       if (!executor) {
         toolResult = { error: `Unknown tool: ${name}` };
       } else {
@@ -93,6 +103,9 @@ export async function runAgentTurn(
           toolResult = { error: e.message };
         }
       }
+
+      onEvent?.({ type: 'tool_done', tool: name });
+
       messages.push({
         role: 'tool',
         content: JSON.stringify(toolResult),

@@ -27,25 +27,47 @@ export async function POST(req: Request) {
     const modelName = await getAgentModel();
     const store = getAgentStore();
 
-    // Determine base URL for tool executors to call internal APIs
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL
       ?? process.env.NEXT_DEV_SERVER_URL
       ?? 'http://localhost:3000';
 
-    const { reply, updatedHistory } = await runAgentTurn(
-      message,
-      Array.isArray(history) ? history : store.history,
-      { baseUrl, store, modelName },
-    );
+    const encoder = new TextEncoder();
 
-    // Persist history in server store for continuity
-    store.history = updatedHistory;
+    const stream = new ReadableStream({
+      async start(controller) {
+        const send = (data: object) => {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+        };
 
-    // Check if a tool queued a pending export
-    const pendingExport = store.pendingExport;
-    if (pendingExport) store.pendingExport = null;
+        try {
+          const { reply, updatedHistory } = await runAgentTurn(
+            message,
+            Array.isArray(history) ? history : store.history,
+            { baseUrl, store, modelName },
+            (event) => send(event),
+          );
 
-    return NextResponse.json({ reply, history: updatedHistory, pendingExport });
+          store.history = updatedHistory;
+
+          const pendingExport = store.pendingExport;
+          if (pendingExport) store.pendingExport = null;
+
+          send({ type: 'reply', reply, history: updatedHistory, pendingExport });
+        } catch (err: any) {
+          send({ type: 'error', error: err.message });
+        } finally {
+          controller.close();
+        }
+      },
+    });
+
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      },
+    });
   } catch (err: any) {
     console.error('[Agent] Error:', err);
     return NextResponse.json({ error: err.message }, { status: 500 });

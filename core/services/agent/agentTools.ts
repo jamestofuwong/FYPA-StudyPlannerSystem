@@ -70,19 +70,48 @@ export type ToolExecutor = (args: Record<string, unknown>, ctx: ToolExecutorCont
 export const TOOL_EXECUTORS: Record<string, ToolExecutor> = {
   async fetch_student(args, ctx) {
     const studentId = String(args.studentId ?? '');
-    // Check the scraper session store for recently scraped student
+
+    // Check if this student is already the last scrape result
     try {
-      const res = await fetch(`${ctx.baseUrl}/api/scraper/status`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data?.result) {
+      const statusRes = await fetch(`${ctx.baseUrl}/api/scraper/status`);
+      if (statusRes.ok) {
+        const data = await statusRes.json();
+        if (data?.result?.studentId === studentId) {
           ctx.store.lastStudent = data.result;
           ctx.store.loadedStudentId = data.result.studentId;
           return data.result;
         }
       }
-    } catch { /* fall through */ }
-    return { error: `No scraped data found for student ${studentId}. The advisor must scrape this student via the Scraping page first. In development, use GET /api/mock/student.` };
+    } catch { /* fall through to scrape */ }
+
+    // Trigger a fresh scrape
+    const startRes = await fetch(`${ctx.baseUrl}/api/scraper/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ studentId, enrollmentMode: 'latest' }),
+    }).catch(() => null);
+
+    if (!startRes?.ok) {
+      return { error: 'Failed to start scraper. Ensure you are logged into the student portal via the Scraping page.' };
+    }
+
+    // Poll until done (max 2 minutes)
+    const deadline = Date.now() + 120_000;
+    while (Date.now() < deadline) {
+      await new Promise<void>((r) => setTimeout(r, 1_500));
+      const res = await fetch(`${ctx.baseUrl}/api/scraper/status`).catch(() => null);
+      if (!res?.ok) continue;
+      const data = await res.json();
+      if (data.status === 'done' && data.result) {
+        ctx.store.lastStudent = data.result;
+        ctx.store.loadedStudentId = data.result.studentId;
+        return data.result;
+      }
+      if (data.status === 'error') {
+        return { error: data.error ?? 'Scrape failed. The portal may be unavailable or the student ID was not found.' };
+      }
+    }
+    return { error: 'Scrape timed out after 2 minutes.' };
   },
 
   async run_major_detection(args, ctx) {
