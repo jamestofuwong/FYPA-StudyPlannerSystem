@@ -166,4 +166,79 @@ describe('Custom Planner Scheduler', () => {
       { code: 'BLOCKED', name: 'Unit BLOCKED', category: 'core' },
     ]);
   });
+
+  // A failed unit (grade N or SN) is deliberately left out of completedUnitCodes
+  // so the scheduler treats it as outstanding and places it as a retake.
+  describe('failed units', () => {
+    test('schedules a unit that is absent from completedUnitCodes', () => {
+      const result = buildCustomPlan([unit('FAILED')], [], 2024, 1);
+
+      expect(result.semesters[0].units.map((item) => item.code)).toEqual(['FAILED']);
+      expect(result.unschedulableUnits).toEqual([]);
+    });
+
+    test('places a dependent unit strictly after the retake', () => {
+      const result = buildCustomPlan([
+        unit('FAILED'),
+        unit('DEPENDENT', {
+          requisiteGroups: [[{
+            type: 'unit',
+            unitCode: 'FAILED',
+            requisiteType: 'prerequisite',
+          }]],
+        }),
+      ], [], 2024, 1);
+
+      const placement = (code: string) => {
+        const index = result.semesters.findIndex((sem) =>
+          sem.units.some((item) => item.code === code));
+        return index;
+      };
+
+      expect(placement('FAILED')).toBeGreaterThanOrEqual(0);
+      expect(placement('DEPENDENT')).toBeGreaterThan(placement('FAILED'));
+      expect(result.unschedulableUnits).toEqual([]);
+    });
+
+    test('defers a Semester 1 only retake when anchored at Semester 2', () => {
+      const result = buildCustomPlan(
+        [unit('S1-ONLY', { offeringSemesters: [1] })],
+        [],
+        2024,
+        2,
+      );
+
+      expect(result.semesters.map(({ year, semester, units }) => ({
+        year,
+        semester,
+        codes: units.map((item) => item.code),
+      }))).toEqual([
+        { year: 2025, semester: 1, codes: ['S1-ONLY'] },
+      ]);
+    });
+
+    // buildCustomPlan does not filter its own pool. /api/custom-planner drops
+    // completedUnitCodes from remainingUnits before calling it. So a passed unit
+    // stays out of the plan by being absent from the pool, and completedUnitCodes
+    // only ever satisfies requisites.
+    test('keeps a unit already in completedUnitCodes out of the plan', () => {
+      const result = buildCustomPlan(
+        [unit('OUTSTANDING', {
+          requisiteGroups: [[{
+            type: 'unit',
+            unitCode: 'PASSED',
+            requisiteType: 'prerequisite',
+          }]],
+        })],
+        ['PASSED'],
+        2024,
+        1,
+      );
+
+      const scheduled = result.semesters.flatMap((sem) => sem.units.map((item) => item.code));
+      expect(scheduled).toEqual(['OUTSTANDING']);
+      expect(scheduled).not.toContain('PASSED');
+      expect(result.unschedulableUnits).toEqual([]);
+    });
+  });
 });
