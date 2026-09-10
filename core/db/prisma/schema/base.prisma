@@ -41,9 +41,9 @@ model Unit {
   id                      String                      @id @default(uuid())
   unit_code               String                      @unique
   unit_name               String
-  offered_in              Int?
   created_at              DateTime                    @default(now())
   updated_at              DateTime                    @updatedAt
+  offerings               UnitOffering[]   
   templates               TemplateUnit[]
   requisite_groups        UnitRequisiteGroup[]
   requisite_conditions    UnitRequisiteCondition[] @relation("RequisiteUnit")
@@ -52,6 +52,19 @@ model Unit {
 
   @@map("units")
 }
+
+model UnitOffering {
+  id         String   @id @default(uuid())
+  unit_id    String
+  unit       Unit     @relation(fields: [unit_id], references: [id], onDelete: Cascade)
+  semester   Int      // The semester/term code (e.g., 1, 2, 3)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@unique([unit_id, semester])
+  @@map("unit_offerings")
+}
+
 
 model UnitRequisiteGroup {
   id         String                      @id @default(uuid())
