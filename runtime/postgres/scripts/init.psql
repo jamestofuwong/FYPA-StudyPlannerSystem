@@ -4,9 +4,9 @@
 -- Scope  : Persistent storage for study planner templates ONLY.
 --          Student data is NEVER stored here (REQ-CON-105, REQ-DB-102).
 -- DBMS   : PostgreSQL (local, bundled)
--- Version: 1.7.0  |  Sprint 3 — Restructured requisite tables (renamed from prerequisite),
---                    added requisite_type column (prerequisite/corequisite/antirequisite)
---                    to unit_requisite_conditions table.
+-- Version: 1.8.0  |  Sprint 4 — Migrated unit offering system from a single
+--                    column constraint to a flexible unit_offerings junction
+--                    table.
 -- =============================================================================
 
 -- ---------------------------------------------------------------------------
@@ -101,13 +101,26 @@ CREATE TABLE units (
     id            UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
     unit_code     VARCHAR(20)   NOT NULL UNIQUE,    -- e.g. 'COS40003', 'COS20031'
     unit_name     VARCHAR(255)  NOT NULL,
-    offered_in    SMALLINT      DEFAULT NULL    CHECK (offered_in BETWEEN 1 AND 2), -- e.g. 1 or 2, null for every semester
     created_at    TIMESTAMPTZ   NOT NULL DEFAULT now(),
     updated_at    TIMESTAMPTZ   NOT NULL DEFAULT now()
 );
 
 COMMENT ON TABLE units IS
     'Global unit catalogue. Populated from planner PDFs. REQ-DB-102.1';
+
+CREATE TABLE unit_offerings (
+    unit_id     UUID          NOT NULL REFERENCES units(id) ON DELETE CASCADE,
+    offered_in  SMALLINT      NOT NULL CHECK (offered_in BETWEEN 1 AND 4),
+                              -- 1 = Semester 1, 2 = Semester 2, 3 = Summer, 4 = Winter
+    created_at  TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    PRIMARY KEY (unit_id, offered_in)
+);
+
+COMMENT ON TABLE unit_offerings IS 
+    'Junction table mapping units to the semesters/terms in which they are offered.';
+
+CREATE INDEX idx_unit_offerings_term ON unit_offerings(offered_in);
 
 -- Requisite relationships between units (derived from planners).
 -- Uses two tables to support AND/OR logic and credit point requirements:
@@ -494,6 +507,10 @@ CREATE TRIGGER trg_minors_updated_at
     BEFORE UPDATE ON minors
     FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
+CREATE TRIGGER trg_unit_offerings_updated_at
+    BEFORE UPDATE ON unit_offerings
+    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
 
 -- ===========================================================================
 -- SECTION 13 — SCHEMA VERSION TRACKING
@@ -507,7 +524,7 @@ CREATE TABLE schema_migrations (
 );
 
 INSERT INTO schema_migrations (version, description)
-VALUES ('1.7.0', 'Restructured requisite tables (renamed from prerequisite) and added requisite_type column to unit_requisite_conditions. Sprint 3');
+VALUES ('1.8.0', 'Baseline database schema initialization (migrated unit offering system to a flexible unit_offerings junction table)');
 
 
 -- ===========================================================================
@@ -800,6 +817,23 @@ BEGIN
 
         i := i + 2;
     END LOOP;
+END;
+$$;
+
+
+-- Helper: Link a unit to a specific offering semester/term
+CREATE OR REPLACE FUNCTION add_unit_offering(
+    p_unit_code VARCHAR,
+    p_term      SMALLINT
+) RETURNS VOID LANGUAGE plpgsql AS $$
+DECLARE
+    v_unit_id UUID;
+BEGIN
+    SELECT id INTO STRICT v_unit_id FROM units WHERE unit_code = p_unit_code;
+    
+    INSERT INTO unit_offerings (unit_id, offered_in)
+    VALUES (v_unit_id, p_term)
+    ON CONFLICT DO NOTHING;
 END;
 $$;
 
