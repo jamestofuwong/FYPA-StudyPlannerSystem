@@ -9,9 +9,9 @@ import fs from "fs";
 import next from "next";
 import path from "path";
 import { autoUpdater } from "electron-updater";
-import { startDatabase, stopDatabase, getDatabaseUrl } from '../runtime/postgres/db'
-import { startOllama, stopOllama } from '../runtime/ollama/ollama'
-import { exec } from "child_process";
+import { startDatabase, stopDatabase, getDatabaseUrl, runSeedsIfFirstRun } from '../runtime/postgres/db';
+import { startOllama, stopOllama } from '../runtime/ollama/ollama';
+import { fork } from "child_process";
 import { PrismaClient } from "@local/prisma-client";
 
 let nextServerRef: NextServerHandle | undefined
@@ -46,21 +46,54 @@ function initLogger() {
 function runMigrations(): Promise<void> {
   return new Promise((resolve, reject) => {
     const isDev = !app.isPackaged;
-    
-    // Define the command based on dev vs packaged production environment
-    const command = isDev
-      ? `npx prisma migrate deploy --schema="${path.join(process.cwd(), 'core/db/prisma/schema/base.prisma')}"`
-      : `node "${path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'prisma', 'build', 'index.js')}" migrate deploy --schema="${path.join(process.resourcesPath, 'app.asar.unpacked', 'core', 'db', 'prisma', 'schema', 'base.prisma')}"`;
 
-    console.log('[DB] Running database migrations...');
-    
-    exec(command, { env: process.env }, (error, stdout) => {
-      if (error) {
-        console.error('[DB] Migration failed:', error);
-        return reject(error);
+    const dbBaseDir = isDev
+      ? path.join(process.cwd(), 'core', 'db')
+      : path.join(process.resourcesPath, 'app.asar.unpacked', 'core', 'db');
+
+    const schemaPath = path.join(dbBaseDir, 'prisma', 'schema', 'base.prisma');
+
+    const prismaCliPath = isDev
+      ? path.resolve(process.cwd(), 'node_modules/prisma/build/index.js')
+      : path.join(
+          process.resourcesPath,
+          'app.asar.unpacked',
+          'node_modules',
+          'prisma',
+          'build',
+          'index.js'
+        );
+
+    console.log('[DB] Running Prisma migrations (migrate deploy)...');
+
+    // Setting cwd to core/db makes Prisma look in core/db/prisma/migrations
+    const proc = fork(
+      prismaCliPath,
+      ['migrate', 'deploy', `--schema=${schemaPath}`],
+      {
+        cwd: dbBaseDir,
+        env: {
+          ...process.env,
+          DATABASE_URL: getDatabaseUrl(),
+        },
+        stdio: 'pipe',
       }
-      console.log('[DB] Migration successful:', stdout);
-      resolve();
+    );
+
+    proc.stdout?.on('data', (d) => console.log(`[Prisma]: ${d.toString().trim()}`));
+    proc.stderr?.on('data', (d) => console.error(`[Prisma Error]: ${d.toString().trim()}`));
+
+    proc.on('exit', (code) => {
+      if (code === 0) {
+        console.log('[DB] Migrations applied successfully.');
+        resolve();
+      } else {
+        reject(new Error(`Prisma migration failed with exit code ${code}`));
+      }
+    });
+
+    proc.on('error', (err) => {
+      reject(err);
     });
   });
 }
@@ -314,16 +347,18 @@ app.whenReady().then(async () => {
 
   // Open window immediately — don't block on DB init
   const dbPromise = startDatabase()
-    .then(async () => {
+    .then(async (isFirstRun) => {
       // 1. Database is running, now run schema migrations
       try {
         await runMigrations();
+        // 2. Load seed files only if this is a brand new database (isFirstRun)
+        await runSeedsIfFirstRun(isFirstRun);
       } catch (migrationError) {
         console.error('[DB] Migration sequence failed:', migrationError);
         // log the error but don't crash, allowing the app to attempt standard booting
       }
 
-      // 2. Mark database as fully ready for the frontend
+      // 3. Mark database as fully ready for the frontend
       dbReady = true;
       BrowserWindow.getAllWindows().forEach((w) => w.webContents.send('db-ready'));
     })

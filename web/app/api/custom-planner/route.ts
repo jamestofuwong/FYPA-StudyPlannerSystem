@@ -9,7 +9,7 @@ import {
 
 /** Convert a raw unit + its requisite groups into a SchedulableUnit. */
 function toSchedulable(
-  unit: { unit_code: string; unit_name: string; offered_in: number | null; requisite_groups: any[] },
+  unit: { unit_code: string; unit_name: string; offerings: { semester: number }[]; requisite_groups: any[] },
   category: string
 ): SchedulableUnit {
   const requisiteGroups: RequisiteCondition[][] = (unit.requisite_groups ?? [])
@@ -32,8 +32,9 @@ function toSchedulable(
     )
     .filter((g: RequisiteCondition[]) => g.length > 0);
 
-  const offeringSemesters: (1 | 2)[] =
-    unit.offered_in === 1 ? [1] : unit.offered_in === 2 ? [2] : [];
+  const offeringSemesters = (unit.offerings ?? [])
+    .map(offering => offering.semester as 1 | 2)
+    .filter(sem => sem === 1 || sem === 2);
 
   return { code: unit.unit_code, name: unit.unit_name, category, offeringSemesters, requisiteGroups };
 }
@@ -59,6 +60,7 @@ export async function POST(req: NextRequest) {
           include: {
             unit: {
               include: {
+                offerings: true,
                 requisite_groups: {
                   include: { conditions: { include: { unit: true } } },
                 },
@@ -92,6 +94,7 @@ export async function POST(req: NextRequest) {
             include: {
               unit: {
                 include: {
+                  offerings: true,
                   requisite_groups: {
                     include: { conditions: { include: { unit: true } } },
                   },

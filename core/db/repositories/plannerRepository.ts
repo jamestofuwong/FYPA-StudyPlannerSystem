@@ -170,23 +170,34 @@ export async function savePlannerFromImport(planner: PlannerImportPlanner) {
     // ===================================================================================================
     // Section 1: Upsert Course & Major
     // ===================================================================================================
-    // Upsert Course
-    const [course] = await Promise.all([
-      tx.course.upsert({
-        where: { name: courseName },
-        update: {},
-        create: { name: courseName },
-      }),
-    ]);
+    let course = await tx.course.findFirst({
+      where: { name: courseName },
+    });
+
+    if (!course) {
+      course = await tx.course.create({
+        data: { name: courseName },
+      });
+    }
 
     // Find or create major only if a major name is provided
     let major = null;
     if (majorName) {
-      major = await tx.major.upsert({
-        where: { course_id_name: { course_id: course.id, name: majorName } },
-        update: {},
-        create: { name: majorName, course_id: course.id },
+      major = await tx.major.findFirst({
+        where: {
+          course_id: course.id,
+          name: majorName,
+        },
       });
+
+      if (!major) {
+        major = await tx.major.create({
+          data: {
+            name: majorName,
+            course_id: course.id,
+          },
+        });
+      }
     }
 
 
