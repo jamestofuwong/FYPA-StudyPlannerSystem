@@ -9,8 +9,10 @@ import fs from "fs";
 import next from "next";
 import path from "path";
 import { autoUpdater } from "electron-updater";
-import { startDatabase, stopDatabase, getDatabaseUrl } from '../runtime/postgres/db'
-import { startOllama, stopOllama } from '../runtime/ollama/ollama'
+import { startDatabase, stopDatabase, getDatabaseUrl, runSeedsIfFirstRun } from '../runtime/postgres/db';
+import { startOllama, stopOllama } from '../runtime/ollama/ollama';
+import { fork } from "child_process";
+import { PrismaClient } from "@local/prisma-client";
 
 let nextServerRef: NextServerHandle | undefined
 let dbReady = false;
@@ -37,6 +39,63 @@ function initLogger() {
   console.log   = (...a) => write('INFO',  a);
   console.warn  = (...a) => write('WARN',  a);
   console.error = (...a) => write('ERROR', a);
+}
+
+
+// ── Database Migration ────────────────────────────────────────────
+function runMigrations(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const isDev = !app.isPackaged;
+
+    const dbBaseDir = isDev
+      ? path.join(process.cwd(), 'core', 'db')
+      : path.join(process.resourcesPath, 'app.asar.unpacked', 'core', 'db');
+
+    const schemaPath = path.join(dbBaseDir, 'prisma', 'schema', 'base.prisma');
+
+    const prismaCliPath = isDev
+      ? path.resolve(process.cwd(), 'node_modules/prisma/build/index.js')
+      : path.join(
+          process.resourcesPath,
+          'app.asar.unpacked',
+          'node_modules',
+          'prisma',
+          'build',
+          'index.js'
+        );
+
+    console.log('[DB] Running Prisma migrations (migrate deploy)...');
+
+    // Setting cwd to core/db makes Prisma look in core/db/prisma/migrations
+    const proc = fork(
+      prismaCliPath,
+      ['migrate', 'deploy', `--schema=${schemaPath}`],
+      {
+        cwd: dbBaseDir,
+        env: {
+          ...process.env,
+          DATABASE_URL: getDatabaseUrl(),
+        },
+        stdio: 'pipe',
+      }
+    );
+
+    proc.stdout?.on('data', (d) => console.log(`[Prisma]: ${d.toString().trim()}`));
+    proc.stderr?.on('data', (d) => console.error(`[Prisma Error]: ${d.toString().trim()}`));
+
+    proc.on('exit', (code) => {
+      if (code === 0) {
+        console.log('[DB] Migrations applied successfully.');
+        resolve();
+      } else {
+        reject(new Error(`Prisma migration failed with exit code ${code}`));
+      }
+    });
+
+    proc.on('error', (err) => {
+      reject(err);
+    });
+  });
 }
 
 app.whenReady().then(initLogger);
@@ -288,7 +347,18 @@ app.whenReady().then(async () => {
 
   // Open window immediately — don't block on DB init
   const dbPromise = startDatabase()
-    .then(() => {
+    .then(async (isFirstRun) => {
+      // 1. Database is running, now run schema migrations
+      try {
+        await runMigrations();
+        // 2. Load seed files only if this is a brand new database (isFirstRun)
+        await runSeedsIfFirstRun(isFirstRun);
+      } catch (migrationError) {
+        console.error('[DB] Migration sequence failed:', migrationError);
+        // log the error but don't crash, allowing the app to attempt standard booting
+      }
+
+      // 3. Mark database as fully ready for the frontend
       dbReady = true;
       BrowserWindow.getAllWindows().forEach((w) => w.webContents.send('db-ready'));
     })
