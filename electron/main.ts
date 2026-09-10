@@ -11,6 +11,8 @@ import path from "path";
 import { autoUpdater } from "electron-updater";
 import { startDatabase, stopDatabase, getDatabaseUrl } from '../runtime/postgres/db'
 import { startOllama, stopOllama } from '../runtime/ollama/ollama'
+import { exec } from "child_process";
+import { PrismaClient } from "@local/prisma-client";
 
 let nextServerRef: NextServerHandle | undefined
 let dbReady = false;
@@ -37,6 +39,30 @@ function initLogger() {
   console.log   = (...a) => write('INFO',  a);
   console.warn  = (...a) => write('WARN',  a);
   console.error = (...a) => write('ERROR', a);
+}
+
+
+// ── Database Migration ────────────────────────────────────────────
+function runMigrations(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const isDev = !app.isPackaged;
+    
+    // Define the command based on dev vs packaged production environment
+    const command = isDev
+      ? `npx prisma migrate deploy --schema="${path.join(process.cwd(), 'core/db/prisma/schema/base.prisma')}"`
+      : `node "${path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'prisma', 'build', 'index.js')}" migrate deploy --schema="${path.join(process.resourcesPath, 'app.asar.unpacked', 'core', 'db', 'prisma', 'schema', 'base.prisma')}"`;
+
+    console.log('[DB] Running database migrations...');
+    
+    exec(command, { env: process.env }, (error, stdout) => {
+      if (error) {
+        console.error('[DB] Migration failed:', error);
+        return reject(error);
+      }
+      console.log('[DB] Migration successful:', stdout);
+      resolve();
+    });
+  });
 }
 
 app.whenReady().then(initLogger);
@@ -288,7 +314,16 @@ app.whenReady().then(async () => {
 
   // Open window immediately — don't block on DB init
   const dbPromise = startDatabase()
-    .then(() => {
+    .then(async () => {
+      // 1. Database is running, now run schema migrations
+      try {
+        await runMigrations();
+      } catch (migrationError) {
+        console.error('[DB] Migration sequence failed:', migrationError);
+        // log the error but don't crash, allowing the app to attempt standard booting
+      }
+
+      // 2. Mark database as fully ready for the frontend
       dbReady = true;
       BrowserWindow.getAllWindows().forEach((w) => w.webContents.send('db-ready'));
     })
