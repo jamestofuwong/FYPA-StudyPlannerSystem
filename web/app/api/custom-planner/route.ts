@@ -7,7 +7,6 @@ import {
   type RequisiteCondition,
 } from '../../../../core/services/scheduling/customPlannerScheduler';
 
-/** Convert a raw unit + its requisite groups into a SchedulableUnit. */
 function toSchedulable(
   unit: { unit_code: string; unit_name: string; offerings: { semester: number }[]; requisite_groups: any[] },
   category: string
@@ -52,7 +51,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid request parameters' }, { status: 400 });
     }
 
-    // Fetch planner with full unit + requisite data in a single query
     const planner = await prisma.plannerTemplate.findUnique({
       where: { id: plannerId },
       include: {
@@ -79,12 +77,12 @@ export async function POST(req: NextRequest) {
       (completedUnitCodes as string[]).map((c) => c.trim().toUpperCase())
     );
 
-    // Build the core pool — all planner units the student has not yet completed/enrolled in
+    // The core pool is all planner units the student has not yet completed/enrolled in
     const remainingUnits: SchedulableUnit[] = planner.units
       .filter((tu) => tu.unit !== null && !normalizedCompleted.has(tu.unit.unit_code.toUpperCase()))
       .map((tu) => toSchedulable(tu.unit!, String(tu.category)));
 
-    // ── Minor injection ────────────────────────────────────────────────────
+    // Minor injection
     const minorIds: string[] = Array.isArray(injectedMinorIds) ? injectedMinorIds : [];
     if (minorIds.length > 0) {
       const minors = await prisma.minor.findMany({

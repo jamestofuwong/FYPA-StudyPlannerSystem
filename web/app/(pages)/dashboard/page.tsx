@@ -8,11 +8,16 @@ import { useScraperContext } from '../../../components/providers/ScraperContext'
 import type { ScrapedStudent, ScrapedCourseListItem } from '../../../../core/shared/types/student';
 import ExportModal from '../../../components/ExportModal';
 import type { ExportInput } from '../../../../core/shared/types/export';
+import {
+  findGradeCreditAnomalies,
+  getCompletedUnitCodes,
+  isFailingGrade,
+  normaliseUnitCode,
+  resolveUnitStates,
+} from '../../../../core/shared/constants/grades';
 
 
-// ---------------------------------------------------------------------------
 // Helper sub-components
-// ---------------------------------------------------------------------------
 
 type BadgeClass = 'badgeGreen' | 'badgeBlue' | 'badgeYellow' | 'badgeOrange' | 'badgeRed' | 'badgePurple';
 
@@ -46,9 +51,7 @@ function ProgressBar({ pct, color }: { pct: number; color: string }) {
   );
 }
 
-// ---------------------------------------------------------------------------
 // Main component
-// ---------------------------------------------------------------------------
 
 export default function DashboardPage() {
   const { showToast } = useToast();
@@ -87,12 +90,14 @@ export default function DashboardPage() {
   const [isImported, setIsImported] = useState(false);
   const [customPlan, setCustomPlan] = useState<any>(null);
   const [customPlanStart, setCustomPlanStart] = useState<{ year: number; semester: 1 | 2 } | null>(null);
+  // Units in the generated pathway that are repeat attempts after a failed grade
+  const [retakeUnitCodes, setRetakeUnitCodes] = useState<Set<string>>(new Set());
   const [customPlanLoading, setCustomPlanLoading] = useState(false);
   const [injectedMinors, setInjectedMinors] = useState<Set<string>>(new Set());
   // REQ-FUN-105: track last scrape error message for retry UI
   const [scraperError, setScraperError] = useState<string | null>(null);
 
-  // REQ-SEC-101: no sessionStorage restore — student data must live in RAM only
+  // REQ-SEC-101: no sessionStorage restore. Student data must live in RAM only
 
   // Poll scraper status on mount so the dashboard reflects initializing state
   // even before the user clicks Search.
@@ -108,7 +113,6 @@ export default function DashboardPage() {
     return () => globalThis.clearInterval(id);
   }, []);
 
-  // When the selected planner changes, open all year-semester groups and reset custom plan
   useEffect(() => {
     const planner = selectedPlannerIdx === -1 ? manualPlanner : dashboardData?.planners?.[selectedPlannerIdx];
     if (!planner?.units) return;
@@ -116,6 +120,7 @@ export default function DashboardPage() {
     setOpenYears(keys);
     setCustomPlan(null);
     setCustomPlanStart(null);
+    setRetakeUnitCodes(new Set());
     setInjectedMinors(new Set());
   }, [selectedPlannerIdx, dashboardData, manualPlanner]);
 
@@ -151,28 +156,28 @@ export default function DashboardPage() {
     return null;
   };
 
-  // Database Fetcher — called after scraping completes with the mapped student data.
+  // Called after scraping completes, with the mapped student data.
   const fetchDashboardData = async (studentId: string, student: ScrapedStudent, mpuCourseList: any[] = []) => {
     try {
-      const isNotFailed = (c: { grade?: string }) => c.grade?.trim().toUpperCase() !== 'N';
-      const mpuCompleted = mpuCourseList.filter(isNotFailed).map((c) => c.courseId);
-      const completedUnits = [
-        ...new Set([
-          ...student.courseList.filter(isNotFailed).map((c) => c.courseId),
-          ...mpuCompleted
-        ])
-      ];
+      const allTranscriptRows = [...student.courseList, ...mpuCourseList];
+      const completedUnits = getCompletedUnitCodes(allTranscriptRows);
+
+      // Surfaces grade codes outside the 2018 Swinburne scale: a passing grade
+      // that earned no credit, or an unknown code that did.
+      const gradeAnomalies = findGradeCreditAnomalies(allTranscriptRows);
+      if (gradeAnomalies.length > 0) {
+        console.warn('Grade/credit anomalies in transcript:', gradeAnomalies);
+      }
 
       // Parse year and semester from the raw portal date string (e.g. "02/2024", "Feb 2024")
       const enrollStr = student.enrollmentDate ?? '';
       const yearMatch = enrollStr.match(/\b(20\d{2})\b/);
       const intakeYear = yearMatch ? parseInt(yearMatch[1], 10) : new Date().getFullYear();
-      // enrollmentDate is DD/MM/YYYY — take the second segment for month
+      // enrollmentDate is DD/MM/YYYY, so the second segment is the month
       const monthNumMatch = enrollStr.match(/^\d{1,2}\/(\d{1,2})\//);
       const intakeMonth = monthNumMatch ? parseInt(monthNumMatch[1]) : 1;
       const intakeSemester: 1 | 2 = intakeMonth >= 7 ? 2 : 1;
 
-      // 1. Fetch Matching Engine Data
       const matchRes = await fetch('/api/match', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -194,7 +199,6 @@ export default function DashboardPage() {
         return;
       }
 
-      // 2. Fetch the top-3 ranked planner templates from DB in parallel
       const top3 = matchData.data.rankedPlanners.slice(0, 3);
       if (top3.length === 0) {
         showToast("No matching planner found for this student.", "error");
@@ -218,7 +222,7 @@ export default function DashboardPage() {
         };
         setDashboardData(data);
         setStudentLoaded(true);
-        // REQ-SEC-101: student data stays in RAM only — no sessionStorage write
+        // REQ-SEC-101: student data stays in RAM only, no sessionStorage write
         showToast("Dashboard sync complete!", "success");
       } else {
         showToast("API Error: Check if server is running", "error");
@@ -553,11 +557,11 @@ export default function DashboardPage() {
     setDataSource('scrape');
     setCustomPlan(null);
     setCustomPlanStart(null);
+    setRetakeUnitCodes(new Set());
     setInjectedMinors(new Set());
     setScraperError(null); // REQ-FUN-105: clear previous error on new search
     setInternalLoading(true);
     try {
-      // 1. Queue the student ID for the scraper bot via API
       const startRes = await fetch('/api/scraper/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -567,14 +571,12 @@ export default function DashboardPage() {
         showToast('Failed to queue scrape. Is the server running?', 'error');
         return;
       }
-      // 2. Wait for the scraper bot to finish
       const student = await pollScraperResult();
       if (!student) return;
-      // 3. Show identity card immediately — matching is still running
+      // Show identity card immediately (matching is still running)
       setScrapedStudent({ student, studentId: id });
-      // 4. Scrape MPU enrollment to supplement completedCodes for matching
+      // Supplements completedCodes for matching
       const mpuCourseList = await fetchMpuCourseList(id, student);
-      // 5. Fetch matching + planner data
       await fetchDashboardData(id, student, mpuCourseList);
     } finally {
       setInternalLoading(false);
@@ -595,9 +597,10 @@ export default function DashboardPage() {
     setPasteText('');
     setCustomPlan(null);
     setCustomPlanStart(null);
+    setRetakeUnitCodes(new Set());
     setInjectedMinors(new Set());
     setScraperError(null);
-    // REQ-SEC-101: no sessionStorage to remove — data was never persisted
+    // REQ-SEC-101: no sessionStorage to remove, data was never persisted
     showToast('Student data cleared.', 'info');
   };
 
@@ -609,12 +612,18 @@ export default function DashboardPage() {
     const courseList: any[] = scrapedStudent?.student?.courseList ?? [];
     const mpuCourseList: any[] = dashboardData.mpuCourseList ?? [];
 
-    // Only exclude Complete and Current — Future pre-enrollments go back into
-    // the pool so the scheduler can repack them as the single source of truth.
-    const completedForScheduler = [
-      ...courseList.filter((u: any) => u.status === 'Complete' || u.status === 'Current').map((u: any) => u.courseId),
-      ...mpuCourseList.filter((u: any) => u.status === 'Complete' || u.status === 'Current').map((u: any) => u.courseId),
-    ].filter(Boolean);
+    const allTranscriptRows = [...courseList, ...mpuCourseList];
+
+    // Only exclude passed and in-progress units. Future pre-enrollments go back
+    // into the pool so the scheduler can repack them as the single source of
+    // truth, and so do failed units (N / SN) so they get rescheduled as retakes.
+    const completedForScheduler = getCompletedUnitCodes(allTranscriptRows);
+
+    // Units the student attempted and failed, so the pathway can mark them as retakes.
+    const transcriptStates = resolveUnitStates(allTranscriptRows);
+    const retakeCodes = new Set(
+      [...transcriptStates].filter(([, state]) => state === 'must_retake').map(([code]) => code)
+    );
 
     const plannerUnits: any[] = activePlanner.units ?? [];
 
@@ -649,12 +658,11 @@ export default function DashboardPage() {
         startSemester = 1;
       }
     } else {
-      // No Current units — fall back to the semester after the last Complete unit
+      // No Current units, so fall back to the semester after the last passed unit.
+      // Passed only: a failed unit must not push the start semester forward.
+      const courseListStates = resolveUnitStates(courseList);
       const completeCodes = new Set(
-        courseList
-          .filter((u: any) => u.status === 'Complete')
-          .map((u: any) => u.courseId?.trim().toUpperCase())
-          .filter(Boolean)
+        [...courseListStates].filter(([, state]) => state === 'passed').map(([code]) => code)
       );
       const completedPlannerUnits = plannerUnits.filter(
         (u: any) => u.unit && completeCodes.has(u.unit.unit_code?.trim().toUpperCase())
@@ -667,7 +675,7 @@ export default function DashboardPage() {
         startYear = maxSemInYear === 1 ? maxYear : maxYear + 1;
         startSemester = maxSemInYear === 1 ? 2 : 1;
       } else {
-        // Student has no history at all — start from the planner's first slot
+        // Student has no history at all, so start from the planner's first slot
         const allYearSems = [...new Set(plannerUnits.map((u: any) => `${u.year_level}-${u.semester}`))].sort();
         if (allYearSems.length > 0) {
           const [y, s] = (allYearSems[0] as string).split('-');
@@ -695,6 +703,7 @@ export default function DashboardPage() {
       if (data.success) {
         setCustomPlan(data.data);
         setCustomPlanStart({ year: startYear, semester: startSemester });
+        setRetakeUnitCodes(retakeCodes);
       } else {
         showToast('Failed to generate custom pathway.', 'error');
       }
@@ -715,7 +724,7 @@ export default function DashboardPage() {
 
   return (
     <div className={styles.panel}>
-      {/* ── Search bar ──────────────────────────────────────────────────── */}
+      {/* Search bar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
         <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>🔍</span>
         <div className={styles.suggestionsWrap}>
@@ -772,7 +781,7 @@ export default function DashboardPage() {
         </button>
       </div>
 
-      {/* ── Import Panel ─────────────────────────────────────────────────── */}
+      {/* Import Panel */}
       {showImportPanel && (
         <div style={{ border: '1px solid var(--panel-border)', borderRadius: 4, padding: '14px 16px', marginBottom: 14, background: 'var(--card-bg)' }}>
           {/* Tab bar */}
@@ -901,7 +910,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* ── Import action bar — shown instead of identity card for imports */}
+      {/* Import action bar, shown instead of identity card for imports */}
       {isImported && studentLoaded && dashboardData && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, marginBottom: 14 }}>
           <button className={styles.btnSecondary} onClick={() => setShowExportModal(true)}>Export</button>
@@ -909,7 +918,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* ── Loading states ─────────────────────────────────────────────── */}
+      {/* Loading states */}
       {!isLoggedIn && !isPortalLoading && (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '60px 20px', textAlign: 'center' }}>
           <div style={{ fontSize: 48, opacity: 0.25 }}>🔒</div>
@@ -940,7 +949,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* ── Scrape error / retry panel (REQ-FUN-105) ────────────────────── */}
+      {/* Scrape error / retry panel (REQ-FUN-105) */}
       {isLoggedIn && !loading && !studentLoaded && scraperApiStatus === 'error' && scraperError && !isWaitingForList && (
         <div style={{ border: '1px solid rgba(244,135,113,0.5)', borderRadius: 4, padding: '16px 18px', marginBottom: 14, background: 'rgba(244,135,113,0.07)' }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent-red)', marginBottom: 6 }}>Scrape Failed</div>
@@ -963,7 +972,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* ── Empty state ──────────────────────────────────────────────────── */}
+      {/* Empty state */}
       {isLoggedIn && !isPortalLoading && !loading && !studentLoaded && !isWaitingForList && !scraperError && (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '60px 20px', textAlign: 'center' }}>
           <div style={{ fontSize: 48, opacity: 0.25 }}>🎓</div>
@@ -971,7 +980,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* ── Identity Card — shown only for scraped (not imported) results ─ */}
+      {/* Identity Card, shown only for scraped (not imported) results */}
       {scrapedStudent && !isImported && (() => {
         const s = scrapedStudent.student;
         const fields: [string, string][] = [
@@ -1033,7 +1042,7 @@ export default function DashboardPage() {
         );
       })()}
 
-      {/* ── Matching spinner — shown after scrape, before match result ─── */}
+      {/* Matching spinner, shown after scrape, before match result */}
       {scrapedStudent && !dashboardData && loading && (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '40px 20px', textAlign: 'center' }}>
           <div className={styles.spinner} />
@@ -1041,7 +1050,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* ── Dashboard Content ────────────────────────────────────────────── */}
+      {/* Dashboard Content */}
       {!loading && studentLoaded && dashboardData && (() => {
         const isMpu = (scrapedStudent?.student?.selectedEnrollment ?? '').includes('Mata Pelajaran Umum');
 
@@ -1085,7 +1094,7 @@ export default function DashboardPage() {
           );
         }
          
-        {/* --- LOGIC FOR GRADUATION CHECK --- */}
+        {/* Graduation check */}
         const matchPayload = dashboardData.match;
         const totalCredits = matchPayload.totalCredits || 0;
         const missingCoreCount = matchPayload.unmatchedCore?.length || 0;
@@ -1287,14 +1296,20 @@ export default function DashboardPage() {
               ...(dashboardData?.mpuCourseList ?? [])
             ];
             
-            const doneCodes = new Set(allStudentUnits.filter(u => u.status === 'Complete' && u.grade?.trim().toUpperCase() !== 'N').map(u => u.courseId));
-            const doingCodes = new Set(allStudentUnits.filter(u => u.status === 'Current' && u.grade?.trim().toUpperCase() !== 'N').map(u => u.courseId));
+            // Keyed on normalised (uppercase) unit codes, so normalise the lookup side too.
+            const studentUnitStates = resolveUnitStates(allStudentUnits);
+            const doneCodes = new Set(
+              [...studentUnitStates].filter(([, state]) => state === 'passed').map(([code]) => code)
+            );
+            const doingCodes = new Set(
+              [...studentUnitStates].filter(([, state]) => state === 'in_progress').map(([code]) => code)
+            );
 
             const notTaken = (activePlanner?.units ?? [])
-              .filter((u: any) => 
-                u.unit !== null && 
-                !doneCodes.has(u.unit.unit_code) && 
-                !doingCodes.has(u.unit.unit_code)
+              .filter((u: any) =>
+                u.unit !== null &&
+                !doneCodes.has(normaliseUnitCode(u.unit.unit_code)) &&
+                !doingCodes.has(normaliseUnitCode(u.unit.unit_code))
               )
               .map((u: any) => ({ 
                 code: u.unit.unit_code, 
@@ -1366,11 +1381,11 @@ export default function DashboardPage() {
               const activePlanner = selectedPlannerIdx === -1 ? manualPlanner : dashboardData?.planners?.[selectedPlannerIdx];
               if (!activePlanner) return null;
 
-              const transcriptCodes = new Set(
+              const transcriptStates = resolveUnitStates(
                   [...(scrapedStudent?.student?.courseList ?? []), ...(dashboardData?.mpuCourseList ?? [])]
-                      .filter(u => u.status === 'Complete' && u.grade?.trim().toUpperCase() !== 'N')
-                      .map(u => u.courseId?.trim().toUpperCase())
-                      .filter(Boolean)
+              );
+              const transcriptCodes = new Set(
+                  [...transcriptStates].filter(([, state]) => state === 'passed').map(([code]) => code)
               );
 
               //Count matches within the planner (Capping MPU to 1 slot)
@@ -1516,7 +1531,7 @@ export default function DashboardPage() {
             const open  = openYears.has(key);
 
             // A group is "superseded" when the custom plan has taken over scheduling
-            // from that semester onwards — i.e. all its units are Future (none Complete/Current).
+            // from that semester onwards, i.e. all its units are Future (none Complete/Current).
             const superseded = customPlan !== null && customPlanStart !== null && (
               year > customPlanStart.year ||
               (year === customPlanStart.year && sem >= customPlanStart.semester)
@@ -1563,7 +1578,7 @@ export default function DashboardPage() {
                       </thead>
                       <tbody>
                         {units.map((u: any) => {
-                          const isFailed = u.grade?.trim().toUpperCase() === 'N';
+                          const isFailed = isFailingGrade(u.grade);
                           // REQ-FUN-404: highlight rows where prerequisites are unmet
                           const rowStyle: React.CSSProperties =
                             isFailed                       ? { background: 'rgba(244,135,113,0.15)' } :
@@ -1620,10 +1635,9 @@ export default function DashboardPage() {
             if (minors.length === 0) return null;
 
             const doneCodes = new Set(
-              [...(scrapedStudent?.student?.courseList ?? []), ...(dashboardData?.mpuCourseList ?? [])]
-                .filter((u: any) => (u.status === 'Complete' || u.status === 'Current') && u.grade?.trim().toUpperCase() !== 'N')
-                .map((u: any) => u.courseId?.trim().toUpperCase())
-                .filter(Boolean)
+              getCompletedUnitCodes(
+                [...(scrapedStudent?.student?.courseList ?? []), ...(dashboardData?.mpuCourseList ?? [])]
+              )
             );
 
             // How many free elective slots the student still needs to fill
@@ -1703,7 +1717,7 @@ export default function DashboardPage() {
             );
           })()}
 
-          {/* ── Custom Study Pathway ─────────────────────────────────────── */}
+          {/* Custom Study Pathway */}
           {(() => {
             const activePlanner = selectedPlannerIdx === -1 ? manualPlanner : dashboardData?.planners?.[selectedPlannerIdx];
             if (!activePlanner) return null;
@@ -1713,17 +1727,12 @@ export default function DashboardPage() {
               ...(dashboardData?.mpuCourseList ?? []),
             ];
 
+            const transcriptStates = resolveUnitStates(allTranscriptUnits);
             const completeCodes = new Set(
-              allTranscriptUnits
-                .filter((u: any) => u.status === 'Complete')
-                .map((u: any) => u.courseId?.trim().toUpperCase())
-                .filter(Boolean)
+              [...transcriptStates].filter(([, state]) => state === 'passed').map(([code]) => code)
             );
             const currentCodes = new Set(
-              allTranscriptUnits
-                .filter((u: any) => u.status === 'Current')
-                .map((u: any) => u.courseId?.trim().toUpperCase())
-                .filter(Boolean)
+              [...transcriptStates].filter(([, state]) => state === 'in_progress').map(([code]) => code)
             );
             // Units that are neither complete nor actively enrolled = truly unplanned
             const takenCodes = new Set([...completeCodes, ...currentCodes]);
@@ -1816,7 +1825,23 @@ export default function DashboardPage() {
                                         {u.code}
                                       </InlineCode>
                                     </td>
-                                    <td>{u.name}</td>
+                                    <td>
+                                      {u.name}
+                                      {retakeUnitCodes.has(normaliseUnitCode(u.code)) && (
+                                        <span
+                                          title="Previously attempted and failed — this is a repeat attempt."
+                                          style={{
+                                            marginLeft: 6,
+                                            fontSize: 9,
+                                            fontFamily: 'var(--font-mono)',
+                                            color: 'var(--accent-orange)',
+                                            letterSpacing: '0.05em',
+                                          }}
+                                        >
+                                          RETAKE
+                                        </span>
+                                      )}
+                                    </td>
                                     <td>
                                       <Badge
                                         label={u.category === 'minor' ? 'minor elective' : u.category.replace(/_/g, ' ')}
@@ -1858,7 +1883,7 @@ export default function DashboardPage() {
         );
       })()}
 
-      {/* ── Export Modal ─────────────────────────────────────────────────── */}
+      {/* Export Modal */}
       {showExportModal && dashboardData && scrapedStudent && (() => {
         const selectedPlanner = selectedPlannerIdx === -1 ? manualPlanner : dashboardData.planners[selectedPlannerIdx];
         const exportInput: Omit<ExportInput, 'options'> = {

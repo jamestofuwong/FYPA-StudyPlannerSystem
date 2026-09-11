@@ -1,5 +1,3 @@
-// ============================================================
-// Custom Planner Scheduler
 // Builds an extended semester-by-semester study plan for
 // students who need more time than the standard template.
 //
@@ -9,7 +7,6 @@
 //  - Requisites must be satisfied before/alongside a unit
 //  - Units are only placed in semesters they are offered in
 //    (offered_in = 1 | 2; null = available any semester)
-// ============================================================
 
 const MAX_STANDARD_PER_SEM = 4;
 const MAX_MPU_PER_SEM = 1;
