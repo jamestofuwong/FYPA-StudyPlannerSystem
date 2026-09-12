@@ -1,0 +1,12 @@
+.shell {
+  display: flex;
+  min-height: 100vh;
+  align-items: flex-start;
+}
+
+.content {
+  flex: 1;
+  min-width: 0;
+  min-height: 100vh;
+  background: var(--color-surface);
+}

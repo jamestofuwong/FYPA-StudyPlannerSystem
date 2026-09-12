@@ -1,0 +1,521 @@
+.form {
+  max-width: 960px;
+}
+
+.section {
+  margin-bottom: var(--space-10);
+}
+
+.sectionTitle {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  margin-bottom: var(--space-5);
+  padding-bottom: var(--space-3);
+  border-bottom: 2px solid var(--color-border);
+}
+
+.sectionDesc {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-4);
+}
+
+.infoGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-5);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.label {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+}
+
+.select,
+.input {
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-base);
+  color: var(--color-text-primary);
+  background: var(--color-bg);
+  box-sizing: border-box;
+  font-family: inherit;
+  outline: none;
+}
+
+.select:focus,
+.input:focus {
+  border-color: var(--color-accent);
+  box-shadow: var(--shadow-focus);
+}
+
+/* Year groups */
+
+.yearGroup {
+  margin-bottom: var(--space-8);
+}
+
+.yearHeading {
+  font-size: 11px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 2px solid var(--color-border);
+}
+
+/* Semester cards */
+
+.semesterCard {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--space-4);
+}
+
+.semesterHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  background: #1f2937;
+  color: #ffffff;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+.semesterLabel {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+}
+
+.semesterLabelInput {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.35);
+  color: #fff;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  font-family: inherit;
+  outline: none;
+  padding: 2px 4px;
+  min-width: 140px;
+  flex: 1;
+}
+
+.semesterLabelInput::placeholder {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.semesterLabelInput:focus {
+  border-bottom-color: rgba(255, 255, 255, 0.9);
+}
+
+.semesterBody {
+  padding: var(--space-3) var(--space-4);
+}
+
+/* Unit rows */
+
+.unitRow {
+  display: grid;
+  grid-template-columns: 90px 1fr 180px 32px;
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-surface);
+}
+
+.unitRow:last-of-type {
+  border-bottom: none;
+}
+
+.unitCode {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-accent);
+  font-family: monospace;
+}
+
+.unitName {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+}
+
+.electiveSlot {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  font-style: italic;
+  grid-column: span 2;
+}
+
+.categorySelect {
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-primary);
+  background: var(--color-bg);
+  font-family: inherit;
+  cursor: pointer;
+}
+
+/* Semester actions bar */
+
+.semActions {
+  display: flex;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface);
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.addUnitWrap {
+  position: relative;
+  flex: 1;
+  min-width: 200px;
+  max-width: 340px;
+}
+
+.addSlotBtn {
+  background: none;
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+  transition: border-color 0.12s, color 0.12s;
+}
+
+.addSlotBtn:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+/* Unit dropdown */
+
+.unitDropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  width: 360px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card-hover);
+  z-index: 30;
+  overflow: hidden;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.unitDropdownItem {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  width: 100%;
+  padding: var(--space-2) var(--space-4);
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.1s;
+}
+
+.unitDropdownItem:hover {
+  background: var(--color-surface);
+}
+
+.unitDropdownCode {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-accent);
+  font-family: monospace;
+  flex-shrink: 0;
+  width: 80px;
+}
+
+.unitDropdownName {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.unitSearchInput {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+  background: var(--color-bg);
+  box-sizing: border-box;
+  font-family: inherit;
+  outline: none;
+}
+
+.unitSearchInput:focus {
+  border-color: var(--color-accent);
+  box-shadow: var(--shadow-focus);
+}
+
+/* Add semester row */
+
+.addSemRow {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-end;
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-lg);
+  margin-top: var(--space-4);
+}
+
+/* Remove buttons */
+
+.removeBtn {
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  color: var(--color-text-secondary);
+  transition: background 0.12s, color 0.12s;
+}
+
+.removeBtn:hover {
+  background: #fef2f2;
+  color: #dc2626;
+  border-color: #fca5a5;
+}
+
+.semesterHeaderActions {
+  display: flex;
+  gap: var(--space-1);
+  align-items: center;
+}
+
+.semMoveBtn {
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: var(--radius-sm);
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.7);
+  transition: background 0.12s;
+}
+
+.semMoveBtn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+}
+
+.semRemoveBtn {
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: var(--radius-sm);
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  color: rgba(255, 255, 255, 0.7);
+  transition: background 0.12s;
+}
+
+.semRemoveBtn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+}
+
+/* Elective pool */
+
+.poolTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+  min-height: 32px;
+  align-items: center;
+}
+
+.poolTag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-pill);
+  padding: 4px var(--space-3);
+  font-size: var(--font-size-sm);
+}
+
+.poolTagCode {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-accent);
+  font-family: monospace;
+}
+
+.poolTagRemove {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  font-size: 16px;
+  line-height: 1;
+  padding: 0;
+  transition: color 0.12s;
+}
+
+.poolTagRemove:hover {
+  color: #dc2626;
+}
+
+.poolEmpty {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  font-style: italic;
+}
+
+.poolSearchWrap {
+  position: relative;
+  max-width: 340px;
+}
+
+/* Form footer */
+
+.formFooter {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  padding-top: var(--space-8);
+  border-top: 1px solid var(--color-border);
+  margin-top: var(--space-8);
+}
+
+.saveBtn {
+  background: var(--color-accent);
+  color: #fff;
+  border: none;
+  padding: 0 var(--space-6);
+  height: 40px;
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.12s;
+}
+
+.saveBtn:hover {
+  background: var(--color-accent-dark);
+}
+
+.saveBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.cancelLink {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  text-decoration: none;
+  padding: 0 var(--space-4);
+}
+
+.cancelLink:hover {
+  color: var(--color-text-primary);
+}
+
+.deleteBtn {
+  background: none;
+  border: 1px solid #fca5a5;
+  color: #dc2626;
+  padding: 0 var(--space-4);
+  height: 40px;
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.12s, color 0.12s;
+  margin-left: auto;
+}
+
+.deleteBtn:hover {
+  background: #fef2f2;
+}
+
+.deleteBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.feedbackError {
+  font-size: var(--font-size-sm);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #dc2626;
+}
+
+.addBtn {
+  background: var(--color-accent);
+  color: #fff;
+  border: none;
+  padding: 0 var(--space-4);
+  height: 32px;
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+  transition: background 0.12s;
+}
+
+.addBtn:hover {
+  background: var(--color-accent-dark);
+}
+
+.noUnits {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  font-style: italic;
+  padding: var(--space-2) 0;
+}

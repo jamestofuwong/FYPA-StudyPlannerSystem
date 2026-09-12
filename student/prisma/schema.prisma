@@ -1,0 +1,282 @@
+// Student-facing interface schema
+// Separate from the main app (core/db/prisma/schema/)
+//
+// Connection URL is configured in prisma.config.ts (Prisma 7+)
+// Local dev:  postgresql://localhost:5435/fypa_student  (in .env)
+// Production: Supabase connection string (swap DATABASE_URL in .env only)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Courses & Majors ─────────────────────────────────────────────────────────
+
+model Course {
+  id         String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name       String            @db.VarChar(255)
+  code       String?           @unique @db.VarChar(50)
+  created_at DateTime          @default(now()) @db.Timestamptz
+  updated_at DateTime          @updatedAt @db.Timestamptz
+  majors     Major[]
+  planners   PlannerTemplate[]
+
+  @@map("courses")
+}
+
+model Major {
+  id         String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  course_id  String            @db.Uuid
+  course     Course            @relation(fields: [course_id], references: [id], onDelete: Cascade)
+  name       String            @db.VarChar(255)
+  created_at DateTime          @default(now()) @db.Timestamptz
+  updated_at DateTime          @updatedAt @db.Timestamptz
+  planners   PlannerTemplate[]
+
+  @@unique([course_id, name])
+  @@map("majors")
+}
+
+// ─── Planner Templates ────────────────────────────────────────────────────────
+
+model PlannerTemplate {
+  id             String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  course_id      String             @db.Uuid
+  course         Course             @relation(fields: [course_id], references: [id], onDelete: Restrict)
+  major_id       String?            @db.Uuid
+  major          Major?             @relation(fields: [major_id], references: [id], onDelete: Restrict)
+  intake_month   Int                @db.SmallInt // 3 = March, 8 = August
+  intake_year    Int                @db.SmallInt
+  duration_years Int                @default(3) @db.SmallInt
+  created_at     DateTime           @default(now()) @db.Timestamptz
+  updated_at     DateTime           @updatedAt @db.Timestamptz
+  semesters      Semester[]
+  elective_pool  ElectivePoolUnit[]
+
+  @@unique([course_id, major_id, intake_month, intake_year])
+  @@map("planner_templates")
+}
+
+model Semester {
+  id          String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  template_id String         @db.Uuid
+  template    PlannerTemplate @relation(fields: [template_id], references: [id], onDelete: Cascade)
+  year_number Int            @db.SmallInt // 1, 2, 3, 4
+  sem_number  Int            @db.SmallInt // 1, 2
+  label       String?        @db.VarChar(100) // e.g. "Semester 1" — auto-generated if null
+  created_at  DateTime       @default(now()) @db.Timestamptz
+  updated_at  DateTime       @updatedAt @db.Timestamptz
+  units       SemesterUnit[]
+
+  @@unique([template_id, year_number, sem_number])
+  @@map("semesters")
+}
+
+enum UnitCategory {
+  core
+  major_core
+  prescribed_elective
+  elective
+  wil
+  mpu
+
+  @@map("unit_category")
+}
+
+model SemesterUnit {
+  id               String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  semester_id      String       @db.Uuid
+  semester         Semester     @relation(fields: [semester_id], references: [id], onDelete: Cascade)
+  unit_id          String?      @db.Uuid
+  unit             Unit?        @relation(fields: [unit_id], references: [id], onDelete: Restrict)
+  category         UnitCategory
+  is_elective_slot Boolean      @default(false) // true = open slot with no assigned unit
+  position         Int          @db.SmallInt    // display order within the semester
+  created_at       DateTime     @default(now()) @db.Timestamptz
+  updated_at       DateTime     @updatedAt @db.Timestamptz
+
+  @@map("semester_units")
+}
+
+model ElectivePoolUnit {
+  template_id String          @db.Uuid
+  template    PlannerTemplate @relation(fields: [template_id], references: [id], onDelete: Cascade)
+  unit_id     String          @db.Uuid
+  unit        Unit            @relation(fields: [unit_id], references: [id], onDelete: Cascade)
+
+  @@id([template_id, unit_id])
+  @@map("elective_pool_units")
+}
+
+// ─── Units ────────────────────────────────────────────────────────────────────
+
+model Unit {
+  id                String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code              String               @unique @db.VarChar(20)
+  name              String               @db.VarChar(255)
+  credit_points     Decimal              @default(12.5) @db.Decimal(5, 1)
+  year_level        Int                  @db.SmallInt
+  overview          String?              @db.Text
+  created_at        DateTime             @default(now()) @db.Timestamptz
+  updated_at        DateTime             @updatedAt @db.Timestamptz
+  availability      UnitAvailability[]
+  requisites        UnitRequisite[]      @relation("UnitRequisites")
+  requisite_of      UnitRequisite[]      @relation("RequisiteUnit")
+  learning_outcomes UnitLearningOutcome[]
+  content_topics    UnitContentTopic[]
+  assessments       UnitAssessment[]
+  semester_units    SemesterUnit[]
+  elective_pool     ElectivePoolUnit[]
+
+  @@map("units")
+}
+
+model UnitAvailability {
+  unit_id String @db.Uuid
+  unit    Unit   @relation(fields: [unit_id], references: [id], onDelete: Cascade)
+  month   Int    @db.SmallInt // 1 = Jan, 3 = Mar, 8 = Aug, etc.
+
+  @@id([unit_id, month])
+  @@map("unit_availability")
+}
+
+enum RequisiteType {
+  prerequisite
+  corequisite
+  antirequisite
+
+  @@map("requisite_type")
+}
+
+model UnitRequisite {
+  id                String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  unit_id           String        @db.Uuid
+  unit              Unit          @relation("UnitRequisites", fields: [unit_id], references: [id], onDelete: Cascade)
+  requisite_type    RequisiteType
+  requisite_unit_id String        @db.Uuid
+  requisite_unit    Unit          @relation("RequisiteUnit", fields: [requisite_unit_id], references: [id], onDelete: Cascade)
+
+  @@unique([unit_id, requisite_type, requisite_unit_id])
+  @@map("unit_requisites")
+}
+
+model UnitLearningOutcome {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  unit_id     String   @db.Uuid
+  unit        Unit     @relation(fields: [unit_id], references: [id], onDelete: Cascade)
+  ulo_number  Int      @db.SmallInt // 1, 2, 3 ...
+  description String   @db.Text
+  created_at  DateTime @default(now()) @db.Timestamptz
+  updated_at  DateTime @updatedAt @db.Timestamptz
+
+  @@unique([unit_id, ulo_number])
+  @@map("unit_learning_outcomes")
+}
+
+model UnitContentTopic {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  unit_id    String   @db.Uuid
+  unit       Unit     @relation(fields: [unit_id], references: [id], onDelete: Cascade)
+  position   Int      @db.SmallInt
+  topic      String   @db.VarChar(500)
+  created_at DateTime @default(now()) @db.Timestamptz
+  updated_at DateTime @updatedAt @db.Timestamptz
+
+  @@unique([unit_id, position])
+  @@map("unit_content_topics")
+}
+
+model UnitAssessment {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  unit_id    String   @db.Uuid
+  unit       Unit     @relation(fields: [unit_id], references: [id], onDelete: Cascade)
+  title      String   @db.VarChar(255)
+  type       String   @db.VarChar(100) // e.g. "Assignment", "Exam"
+  weight     Int      @db.SmallInt     // percentage, e.g. 40
+  ulos       Int[]                     // ULO numbers this assessment maps to
+  position   Int      @db.SmallInt     // display order
+  created_at DateTime @default(now()) @db.Timestamptz
+  updated_at DateTime @updatedAt @db.Timestamptz
+
+  @@map("unit_assessments")
+}
+
+// ─── Help Page ────────────────────────────────────────────────────────────────
+
+model FaqItem {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  question   String   @db.Text
+  answer     String   @db.Text
+  position   Int      @db.SmallInt // controls display order
+  created_at DateTime @default(now()) @db.Timestamptz
+  updated_at DateTime @updatedAt @db.Timestamptz
+
+  @@map("faq_items")
+}
+
+// Singleton — expect exactly one row
+model GeneralEnquiries {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  venue_name  String   @db.VarChar(255) // e.g. "Student HQ"
+  location    String   @db.VarChar(255) // e.g. "A001 – A002"
+  hours       String   @db.VarChar(255) // e.g. "Mon – Fri, 9:00 am – 5:00 pm"
+  closed_note String?  @db.VarChar(255) // e.g. "Closed on weekends and public holidays"
+  updated_at  DateTime @updatedAt @db.Timestamptz
+
+  @@map("general_enquiries")
+}
+
+// Singleton — expect exactly one row
+model ItHelpDesk {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  telephone    String   @db.VarChar(50)
+  email        String   @db.VarChar(255)
+  location     String   @db.VarChar(100)
+  hours_mon_thu String  @db.VarChar(255) // e.g. "8:30 am – 5:30 pm"
+  hours_fri    String   @db.VarChar(255) // e.g. "8:30 am – 12:00 pm, 2:00 pm – 5:30 pm"
+  closed_note  String?  @db.VarChar(255)
+  updated_at   DateTime @updatedAt @db.Timestamptz
+
+  @@map("it_help_desk")
+}
+
+model HeadOfDepartment {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  faculty    String   @db.VarChar(255) // faculty group heading
+  department String   @db.VarChar(255)
+  name       String   @db.VarChar(255)
+  email      String   @db.VarChar(255)
+  position   Int      @db.SmallInt    // display order
+  created_at DateTime @default(now()) @db.Timestamptz
+  updated_at DateTime @updatedAt @db.Timestamptz
+
+  @@map("heads_of_department")
+}
+
+// ─── CMS Auth ─────────────────────────────────────────────────────────────────
+
+model CmsUser {
+  id             String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email          String            @unique @db.VarChar(255)
+  password_hash  String            @db.Text
+  name           String            @db.VarChar(255)
+  created_at     DateTime          @default(now()) @db.Timestamptz
+  updated_at     DateTime          @updatedAt @db.Timestamptz
+  refresh_tokens CmsRefreshToken[]
+
+  @@map("cms_users")
+}
+
+model CmsRefreshToken {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id    String   @db.Uuid
+  user       CmsUser  @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  token_hash String   @db.Text
+  expires_at DateTime @db.Timestamptz
+  created_at DateTime @default(now()) @db.Timestamptz
+
+  @@map("cms_refresh_tokens")
+}

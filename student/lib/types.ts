@@ -30,6 +30,7 @@ export interface UnitListing {
   code: string
   name: string
   creditPoints: number
+  yearLevel?: number
   prerequisites?: string[]
   corequisites?: string[]
   antirequisites?: string[]
@@ -55,10 +56,11 @@ export interface PlannerSummary {
   courseName: string
   majorName: string | null
   intakeYear: number
-  intakeMonth: number | null
+  intakeMonth: number
   intakeLabel: string
-  courseType: string
-  durationSemesters: number
+  // NOTE: Course.code is not configurable via CMS (CMS only sets course name).
+  // ⚠️  MISMATCH: DB has Course.code (optional) but CMS cannot set it.
+  durationYears: number
   totalUnits: number
 }
 

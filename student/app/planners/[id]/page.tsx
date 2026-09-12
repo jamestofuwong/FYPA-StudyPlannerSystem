@@ -31,11 +31,10 @@ function majorAbbrev(name: string): string {
 
 function semesterPeriod(
   intakeYear: number,
-  intakeMonth: number | null,
+  intakeMonth: number,
   year: number,
   semester: number,
 ): string {
-  if (intakeMonth === null) return ''
   const offset = (year - 1) * 12 + (semester - 1) * 5
   const total = (intakeMonth - 1) + offset
   return `${MONTH_NAMES[total % 12]} ${intakeYear + Math.floor(total / 12)}`

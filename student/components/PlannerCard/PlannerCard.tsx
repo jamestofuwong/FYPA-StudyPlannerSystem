@@ -19,7 +19,7 @@ function courseAbbrev(name: string): string {
 }
 
 export default function PlannerCard({ planner }: Props) {
-  const durationYears = planner.durationSemesters / 2
+  const durationYears = planner.durationYears
   const abbrev = courseAbbrev(planner.courseName)
 
   return (

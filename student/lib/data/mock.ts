@@ -111,8 +111,8 @@ const bcsAiDetail: PlannerDetail = {
   intakeYear: 2024,
   intakeMonth: 3,
   intakeLabel: 'March 2024',
-  courseType: 'bachelor',
-  durationSemesters: 6,
+
+  durationYears: 3,
   totalUnits: 24,
   semesters: bcsAiSemesters,
   requirements: {
@@ -214,8 +214,8 @@ const bcsCyDetail: PlannerDetail = {
   intakeYear: 2024,
   intakeMonth: 3,
   intakeLabel: 'March 2024',
-  courseType: 'bachelor',
-  durationSemesters: 6,
+
+  durationYears: 3,
   totalUnits: 24,
   semesters: bcsCySemesters,
   requirements: {
@@ -321,8 +321,8 @@ const bcsSdDetail: PlannerDetail = {
   intakeYear: 2024,
   intakeMonth: 3,
   intakeLabel: 'March 2024',
-  courseType: 'bachelor',
-  durationSemesters: 6,
+
+  durationYears: 3,
   totalUnits: 24,
   semesters: bcsSdSemesters,
   requirements: {
@@ -417,8 +417,8 @@ const bbusBaDetail: PlannerDetail = {
   intakeYear: 2024,
   intakeMonth: 3,
   intakeLabel: 'March 2024',
-  courseType: 'bachelor',
-  durationSemesters: 6,
+
+  durationYears: 3,
   totalUnits: 24,
   semesters: bbusBaSemesters,
   requirements: {
@@ -524,8 +524,8 @@ const bbusFiDetail: PlannerDetail = {
   intakeYear: 2024,
   intakeMonth: 3,
   intakeLabel: 'March 2024',
-  courseType: 'bachelor',
-  durationSemesters: 6,
+
+  durationYears: 3,
   totalUnits: 24,
   semesters: bbusFiSemesters,
   requirements: {
@@ -653,8 +653,8 @@ const bengCeDetail: PlannerDetail = {
   intakeYear: 2024,
   intakeMonth: 3,
   intakeLabel: 'March 2024',
-  courseType: 'bachelor',
-  durationSemesters: 8,
+
+  durationYears: 4,
   totalUnits: 32,
   semesters: bengCeSemesters,
   requirements: {
@@ -698,8 +698,8 @@ export const MOCK_PLANNERS: PlannerSummary[] = [
     intakeYear: 2024,
     intakeMonth: 3,
     intakeLabel: 'March 2024',
-    courseType: 'bachelor',
-    durationSemesters: 6,
+  
+    durationYears: 3,
     totalUnits: 24,
   },
   {
@@ -709,8 +709,8 @@ export const MOCK_PLANNERS: PlannerSummary[] = [
     intakeYear: 2024,
     intakeMonth: 3,
     intakeLabel: 'March 2024',
-    courseType: 'bachelor',
-    durationSemesters: 6,
+  
+    durationYears: 3,
     totalUnits: 24,
   },
   {
@@ -720,8 +720,8 @@ export const MOCK_PLANNERS: PlannerSummary[] = [
     intakeYear: 2024,
     intakeMonth: 3,
     intakeLabel: 'March 2024',
-    courseType: 'bachelor',
-    durationSemesters: 6,
+  
+    durationYears: 3,
     totalUnits: 24,
   },
   {
@@ -731,8 +731,8 @@ export const MOCK_PLANNERS: PlannerSummary[] = [
     intakeYear: 2024,
     intakeMonth: 3,
     intakeLabel: 'March 2024',
-    courseType: 'bachelor',
-    durationSemesters: 6,
+  
+    durationYears: 3,
     totalUnits: 24,
   },
   {
@@ -742,8 +742,8 @@ export const MOCK_PLANNERS: PlannerSummary[] = [
     intakeYear: 2024,
     intakeMonth: 3,
     intakeLabel: 'March 2024',
-    courseType: 'bachelor',
-    durationSemesters: 6,
+  
+    durationYears: 3,
     totalUnits: 24,
   },
   {
@@ -753,8 +753,8 @@ export const MOCK_PLANNERS: PlannerSummary[] = [
     intakeYear: 2024,
     intakeMonth: 3,
     intakeLabel: 'March 2024',
-    courseType: 'bachelor',
-    durationSemesters: 8,
+  
+    durationYears: 4,
     totalUnits: 32,
   },
 ]
