@@ -1,0 +1,98 @@
+/* Design System A — Campus Clean */
+/* Single source of truth for all design tokens */
+
+:root {
+  /* Colour palette */
+  --color-bg:            #ffffff;
+  --color-surface:       #f8f9fa;
+  --color-border:        #e5e7eb;
+  --color-border-strong: #d1d5db;
+  --color-accent:        #dd2d27;
+  --color-accent-dark:   #b52320;
+  --color-text-primary:  #111827;
+  --color-text-secondary:#6b7280;
+  --color-text-inverse:  #ffffff;
+
+  /* Unit category colours */
+  --color-cat-core-bg:        #c6daf1;
+  --color-cat-core-border:    #5b9bd5;
+  --color-cat-major-bg:       #fde9d9;
+  --color-cat-major-border:   #f4a460;
+  --color-cat-elective-bg:    #d7e3bc;
+  --color-cat-elective-border:#7baa2e;
+  --color-cat-wil-bg:         #ccc1d9;
+  --color-cat-wil-border:     #9579b5;
+  --color-cat-mpu-bg:         #e5b8b7;
+  --color-cat-mpu-border:     #c97676;
+  --color-cat-slot-bg:        #f9fafb;
+  --color-cat-slot-border:    #d1d5db;
+
+  /* Typography */
+  --font-sans:       'Inter', system-ui, -apple-system, sans-serif;
+  --font-size-xs:    11px;
+  --font-size-sm:    13px;
+  --font-size-base:  15px;
+  --font-size-lg:    18px;
+  --font-size-xl:    22px;
+  --font-size-2xl:   28px;
+  --font-size-3xl:   36px;
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  /* Spacing */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* Radius */
+  --radius-sm:   4px;
+  --radius-md:   8px;
+  --radius-lg:   12px;
+  --radius-pill: 9999px;
+
+  /* Shadow */
+  --shadow-sm:        0 1px 2px rgba(0,0,0,0.06);
+  --shadow-card:      0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.05);
+  --shadow-card-hover:0 4px 16px rgba(0,0,0,0.12), 0 2px 4px rgba(0,0,0,0.06);
+  --shadow-focus:     0 0 0 3px rgba(221,45,39,0.15);
+
+  /* Layout */
+  --max-content:   1200px;
+  --header-height: 60px;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  height: 100%;
+  font-family: var(--font-sans);
+  font-size: var(--font-size-base);
+  background: var(--color-bg);
+  color: var(--color-text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  line-height: 1.6;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  font-family: var(--font-sans);
+  cursor: pointer;
+}
