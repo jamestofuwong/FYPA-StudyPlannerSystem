@@ -2,80 +2,27 @@ import Link from 'next/link'
 import Nav from '@student/components/Nav/Nav'
 import styles from './page.module.css'
 
+// TODO: replace stubs with real data from the CMS or database
 const DEPARTMENTS = [
   {
-    faculty: 'Faculty of Engineering, Computing & Science',
+    faculty: 'Faculty A',
     heads: [
-      {
-        department: 'School of Computing & Technology',
-        name: 'Assoc. Prof. Dr. Lee Sze Wei',
-        email: 'swlee@swinburne.edu.my',
-      },
-      {
-        department: 'School of Engineering (Chemical)',
-        name: 'Dr. Tham Hui Juan',
-        email: 'hjtham@swinburne.edu.my',
-      },
-      {
-        department: 'School of Engineering (Civil & Construction)',
-        name: 'Assoc. Prof. Dr. Wong Sing Yee',
-        email: 'sywong@swinburne.edu.my',
-      },
-      {
-        department: 'School of Engineering (Electrical & Electronic)',
-        name: 'Dr. Marcus Yong Keng Wah',
-        email: 'mkyong@swinburne.edu.my',
-      },
-      {
-        department: 'School of Engineering (Mechanical)',
-        name: 'Dr. Lau Hieng Ho',
-        email: 'hhlau@swinburne.edu.my',
-      },
+      { department: 'Department 1', name: 'Head of Department', email: 'hod1@swinburne.edu.my' },
+      { department: 'Department 2', name: 'Head of Department', email: 'hod2@swinburne.edu.my' },
+      { department: 'Department 3', name: 'Head of Department', email: 'hod3@swinburne.edu.my' },
     ],
   },
   {
-    faculty: 'Faculty of Business, Design & Arts',
+    faculty: 'Faculty B',
     heads: [
-      {
-        department: 'School of Business',
-        name: 'Assoc. Prof. Dr. Faridah Haji Abdul Rani',
-        email: 'fhrani@swinburne.edu.my',
-      },
-      {
-        department: 'School of Accounting & Finance',
-        name: 'Dr. Lim Siew Eng',
-        email: 'selim@swinburne.edu.my',
-      },
-      {
-        department: 'School of Design & Creative Arts',
-        name: 'Dr. Patrick Hang Hui Then',
-        email: 'phthen@swinburne.edu.my',
-      },
+      { department: 'Department 1', name: 'Head of Department', email: 'hod4@swinburne.edu.my' },
+      { department: 'Department 2', name: 'Head of Department', email: 'hod5@swinburne.edu.my' },
     ],
   },
   {
-    faculty: 'Faculty of Social Sciences & Humanities',
+    faculty: 'Faculty C',
     heads: [
-      {
-        department: 'School of Media & Communication',
-        name: 'Dr. Florinda Mateos-Aparicio',
-        email: 'fmapario@swinburne.edu.my',
-      },
-      {
-        department: 'School of Psychology',
-        name: 'Dr. Tan Chee Seng',
-        email: 'cstan@swinburne.edu.my',
-      },
-    ],
-  },
-  {
-    faculty: 'Centre for Foundation Studies',
-    heads: [
-      {
-        department: 'Foundation Studies',
-        name: 'Dr. Cynthia Lau Hui Chieh',
-        email: 'clau@swinburne.edu.my',
-      },
+      { department: 'Department 1', name: 'Head of Department', email: 'hod6@swinburne.edu.my' },
     ],
   },
 ]

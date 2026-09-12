@@ -56,32 +56,6 @@ const FAQ_ITEMS = [
   },
 ]
 
-const OTHER_CHANNELS = [
-  {
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="10" />
-        <path d="M12 8v4l3 3" />
-      </svg>
-    ),
-    title: 'Student Central',
-    description: 'Walk-in help for enrolment, fees, timetabling, and general administrative enquiries.',
-    action: 'Level 1, ENX Building',
-    detail: 'Mon – Fri, 8:30 am – 5:00 pm',
-  },
-  {
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="2" y="3" width="20" height="14" rx="2" />
-        <path d="M8 21h8M12 17v4" />
-      </svg>
-    ),
-    title: 'IT Help Desk',
-    description: 'For technical issues with the student portal, Canvas, or this study planner system.',
-    action: 'ithelpdesk@swinburne.edu.my',
-    detail: 'Level 2, ENX Building',
-  },
-]
 
 export default function HelpPage() {
   return (
@@ -132,18 +106,65 @@ export default function HelpPage() {
                 </svg>
               </Link>
 
-              {/* Other channels */}
-              {OTHER_CHANNELS.map(ch => (
-                <div key={ch.title} className={styles.channelCard}>
-                  <div className={styles.channelIcon}>{ch.icon}</div>
-                  <div className={styles.channelBody}>
-                    <div className={styles.channelTitle}>{ch.title}</div>
-                    <p className={styles.channelDesc}>{ch.description}</p>
-                    <span className={styles.channelAction}>{ch.action}</span>
-                    <span className={styles.channelDetail}>{ch.detail}</span>
+              {/* General Enquiries */}
+              <div className={styles.channelCard}>
+                <div className={styles.channelIcon}>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                  </svg>
+                </div>
+                <div className={styles.channelBody}>
+                  <div className={styles.channelTitle}>General Enquiries</div>
+                  <p className={styles.channelDesc}>For enrolment, fees, timetabling, and general administrative matters.</p>
+                  <div className={styles.infoBlock}>
+                    <div className={styles.infoRow}>
+                      <span className={styles.infoLabel}>Location</span>
+                      <span className={styles.infoValue}>Student HQ, A001 – A002</span>
+                    </div>
+                    <div className={styles.infoRow}>
+                      <span className={styles.infoLabel}>Hours</span>
+                      <span className={styles.infoValue}>Mon – Fri, 9:00 am – 5:00 pm</span>
+                    </div>
+                    <div className={styles.infoNote}>Closed on weekends and public holidays</div>
                   </div>
                 </div>
-              ))}
+              </div>
+
+              {/* IT Help Desk */}
+              <div className={styles.channelCard}>
+                <div className={styles.channelIcon}>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="2" y="3" width="20" height="14" rx="2" />
+                    <path d="M8 21h8M12 17v4" />
+                  </svg>
+                </div>
+                <div className={styles.channelBody}>
+                  <div className={styles.channelTitle}>IT Help Desk</div>
+                  <p className={styles.channelDesc}>For technical issues with the student portal, Canvas, or this study planner system.</p>
+                  <div className={styles.infoBlock}>
+                    <div className={styles.infoRow}>
+                      <span className={styles.infoLabel}>Tel</span>
+                      <span className={styles.infoValue}>+6082 255000</span>
+                    </div>
+                    <div className={styles.infoRow}>
+                      <span className={styles.infoLabel}>Email</span>
+                      <a href="mailto:servicedesk@swinburne.edu.my" className={styles.infoLink}>servicedesk@swinburne.edu.my</a>
+                    </div>
+                    <div className={styles.infoRow}>
+                      <span className={styles.infoLabel}>Location</span>
+                      <span className={styles.infoValue}>G003</span>
+                    </div>
+                    <div className={styles.infoRow}>
+                      <span className={styles.infoLabel}>Hours</span>
+                      <span className={styles.infoValue}>
+                        Mon – Thu: 8:30 am – 5:30 pm<br />
+                        Fri: 8:30 am – 12:00 pm, 2:00 pm – 5:30 pm
+                      </span>
+                    </div>
+                    <div className={styles.infoNote}>Closed on weekends and public holidays</div>
+                  </div>
+                </div>
+              </div>
 
             </div>
           </aside>
