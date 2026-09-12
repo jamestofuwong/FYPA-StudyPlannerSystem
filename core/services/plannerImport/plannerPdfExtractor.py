@@ -799,60 +799,6 @@ def _clean_mpu_name(name):
     return _clean_candidate_name(name)
 
 
-# This takes extracted MPU title candidate and returns corruption status because known MPU noise should trigger recovery from cleaner nearby evidence.
-def _looks_corrupted_mpu_name(name):
-    name = _normalise_table_text(name)
-    if not name:
-        return True
-    if name.startswith('('):
-        return True
-    if re.search(r'\bN[Ii][Ll]\b|\[\s*OR\s*\]', name, re.IGNORECASE):
-        return True
-    if re.search(r'\b(?:Malaysian|International)\b', name, re.IGNORECASE):
-        return True
-    if re.search(r'\($', name):
-        return True
-    if re.search(r'Bahasa Melayu credit\)', name, re.IGNORECASE):
-        return True
-    if re.search(r'Students?\)', name, re.IGNORECASE):
-        return True
-    words = name.split()
-    if len(words) >= 4:
-        half = len(words) // 2
-        if len(words) % 2 == 0 and words[:half] == words[half:]:
-            return True
-    return False
-
-
-# This takes MPU code plus nearby source text and returns canonical MPU name because stable titles should win over wrapped-row contamination.
-def _canonical_mpu_name(code, source_text=''):
-    code = str(code or '').strip().upper()
-    text = _normalise_table_text(source_text)
-    if code in ('MPU3272', 'MPU3273'):
-        return 'Integrity and Anti-Corruption'
-    if code == 'MPU3212':
-        return 'Bahasa Kebangsaan A'
-    if code in ('MPU3182', 'MPU3183'):
-        return 'Penghayatan Etika dan Peradaban'
-    if code in ('MPU3192', 'MPU3193'):
-        return 'Philosophy and Current Issues'
-    if code in ('MPU3412', 'MPU2412'):
-        return 'Service Learning'
-    if code in ('MPU3142', 'MPU3143'):
-        if re.search(r'Bahasa Melayu Komunikasi 2', text, re.IGNORECASE):
-            return 'Bahasa Melayu Komunikasi 2'
-        return 'Malay Language Communication 2'
-    if code == 'MPU2272':
-        return 'Kursus Integriti dan Anti Rasuah'
-    if code == 'MPU2212':
-        return 'Bahasa Kebangsaan A'
-    if code == 'MPU2182':
-        return 'Penghayatan Etika dan Peradaban'
-    if code == 'MPU2132':
-        return 'Malay Language Communication 1'
-    return None
-
-
 # This takes extracted prerequisite candidate and returns nullable prerequisite because nil/noise should become None in the app schema.
 def _clean_candidate_prereq(prereq):
     prereq = _normalise_table_text(prereq)
@@ -1430,10 +1376,9 @@ def _extract_clean_wil_name(combined_row):
         text,
         flags=re.IGNORECASE
     )
-    if re.search(r'\bIndustry\s+Training\b', text, re.IGNORECASE):
-        return 'Industry Training'
-    if re.search(r'\bIndustry\b.*?\bTraining\b.*?\binternship as a prerequisite to graduate\b', text, re.IGNORECASE):
-        return 'Industry Training'
+    industry_training = re.search(r'\b(Industry\s+Training)\b', text, re.IGNORECASE)
+    if industry_training:
+        return industry_training.group(1)
     m = re.search(
         r'(Completing\s+Work-Integrated\s+Learning\s+Internship\s+\(equivalent to\s+\d+\s+elective)(?:\s+\w+){0,10}\s+(units\))',
         text,
@@ -2120,9 +2065,12 @@ def _process_row_cells(cells, page, row_bbox, legend, has_offered,
                         if nc_bbox and len(nc_text.strip()) > 1 and not SKIP_ROW_RE.match(nc_text)
                     ).strip()
                     if (last.get('name') or '').strip().endswith('Industry') and row_continuation.startswith('Training'):
-                        last['name'] = 'Industry Training'
+                        continuation_parts = row_continuation.split(maxsplit=1)
+                        last['name'] = _clean_candidate_name(
+                            (last['name'] + ' ' + continuation_parts[0]).strip()
+                        )
                         last['category'] = 'wil'
-                        remainder = row_continuation[len('Training'):].strip(' -')
+                        remainder = continuation_parts[1].strip(' -') if len(continuation_parts) > 1 else ''
                         if remainder:
                             last['prerequisite'] = (
                                 (last.get('prerequisite') or '') + ' ' + remainder
@@ -2228,11 +2176,11 @@ def _process_row_cells(cells, page, row_bbox, legend, has_offered,
         )
     ):
         category = 'wil'
+        wil_name_from_text = _extract_clean_wil_name(combined_wil_text)
+        if wil_name_from_text:
+            name_clean = wil_name_from_text
         if re.search(r'work integrated learning|work-?integrated learning', combined_wil_text, re.IGNORECASE):
-            name_clean = 'Work Integrated Learning Placement'
             prereq = None
-        else:
-            name_clean = 'Industry Training'
         if internship_match:
             prereq = internship_match.group(1).strip()
         else:
@@ -2309,13 +2257,6 @@ def extract_units_with_structure(pdf_path):
     engineering_mode = bool(
         re.search(r'Bachelor of Engineering\b', planner_text, re.IGNORECASE)
     )
-    mpu_name_fallbacks = {
-        'MPU2272': 'Kursus Integriti dan Anti Rasuah (Malaysian & International students)',
-        'MPU2212': 'Bahasa Kebangsaan A (Malaysian students who do not have SPM Bahasa Melayu credit)',
-        'MPU2182': 'Penghayatan Etika dan Peradaban (Malaysian Students Only)',
-        'MPU2132': 'Malay Language Communication 1 (International Students Only)',
-    }
-
     # This takes unit code and returns existing unit dict or None because fallback rows should enrich existing units instead of duplicating them.
     def find_unit(code):
         return next((u for u in units if u.get('code') == code), None)
@@ -2692,26 +2633,42 @@ def extract_units_with_structure(pdf_path):
                 str(u.get('code', '')).startswith(('ENG', 'COS', 'MTH', 'PHY'))
             ):
                 u['category'] = 'core'
+        # Recover a split WIL title and prerequisite from the same row context.
+        # Keep the matched document wording rather than supplying a canonical answer.
         if (
             isinstance(u.get('name'), str) and
             u['name'].startswith('Industry') and
-            'internship as a prerequisite to graduate' in u['name'].lower()
+            re.search(
+                r'internship\s+as\s+a\s+prerequisite\s+to(?:\s+graduate)?',
+                ' '.join(part for part in [u.get('name'), u.get('prerequisite')] if part),
+                re.IGNORECASE,
+            )
         ):
             combined_prereq = re.sub(r'\s+', ' ', ' '.join(
                 part for part in [u.get('prerequisite'), u.get('name')]
                 if part
             )).strip()
             internship_match = re.search(
-                r'(Students need to complete .*?(?:-\s*)?(?:Training\s+)?internship as a prerequisite to graduate)',
+                r'(Students need to complete .*?(?:-\s*)?(?:Training\s+)?internship as a prerequisite to(?:\s+graduate)?)',
                 combined_prereq,
-                re.IGNORECASE
+                re.IGNORECASE,
             )
             u['category'] = 'wil'
-            u['name'] = 'Industry Training'
-            if 'internship as a prerequisite to graduate' in combined_prereq.lower():
-                u['prerequisite'] = 'Students need to complete 3 months internship as a prerequisite to graduate'
-            elif internship_match:
+            wil_name_from_text = _extract_clean_wil_name(combined_prereq)
+            if not wil_name_from_text:
+                wil_name_match = re.search(
+                    r'\b(Industry)\b.*?\b(Training)\b',
+                    combined_prereq,
+                    re.IGNORECASE,
+                )
+                if wil_name_match:
+                    wil_name_from_text = ' '.join(wil_name_match.groups())
+            if wil_name_from_text:
+                u['name'] = wil_name_from_text
+            if internship_match:
                 u['prerequisite'] = internship_match.group(1).replace('- Training ', ' ').strip()
+                if u['prerequisite'].lower().endswith(' prerequisite to'):
+                    u['prerequisite'] += ' graduate'
         if u.get('category') == 'wil' and isinstance(u.get('prerequisite'), str):
             wil_phrase = re.search(
                 r'(Students need to complete .*? internship as a prerequisite(?:\s+to)?(?:\s+\w+){0,4}\s+graduate)',
@@ -2729,20 +2686,6 @@ def extract_units_with_structure(pdf_path):
             graduate_cut = re.search(r'^(.*?\bgraduate)\b', u['prerequisite'], re.IGNORECASE)
             if graduate_cut:
                 u['prerequisite'] = graduate_cut.group(1).strip()
-        if u.get('code') in mpu_name_fallbacks:
-            fallback_name = mpu_name_fallbacks[u['code']]
-            current_name = str(u.get('name') or '')
-            has_other_mpu_title = any(
-                other_name != fallback_name and other_name in current_name
-                for other_name in mpu_name_fallbacks.values()
-            )
-            if (
-                not current_name or
-                len(current_name) < len(fallback_name) or
-                _looks_corrupted_mpu_name(current_name) or
-                has_other_mpu_title
-            ):
-                u['name'] = fallback_name
         if (
             ctx_year is not None and
             u.get('year_level') is None and
@@ -2804,18 +2747,6 @@ def extract_units_with_structure(pdf_path):
             ).strip()
             u['name'] = re.sub(r'\bEolution\b', 'Evolution', u['name']).strip()
             u['name'] = _clean_candidate_name(u['name'])
-            if str(u.get('code', '')).startswith('MPU'):
-                nearby_mpu_text = _extract_nearby_lines_for_code(planner_text, u.get('code'))
-                canonical_mpu_name = _canonical_mpu_name(
-                    u.get('code'),
-                    ' '.join(part for part in [nearby_mpu_text or '', combined_row or '', u.get('name') or ''] if part),
-                )
-                if canonical_mpu_name and (
-                    len(u['name']) < len(canonical_mpu_name) or
-                    _looks_corrupted_mpu_name(u['name']) or
-                    canonical_mpu_name in mpu_name_fallbacks.values()
-                ):
-                    u['name'] = canonical_mpu_name
         if isinstance(u.get('prerequisite'), str):
             u['prerequisite'] = re.sub(r'\b(?:All commencing students|Business courses will be automatically)\b.*$', '', u['prerequisite'], flags=re.IGNORECASE).strip(' -')
             u['prerequisite'] = re.sub(r'^(\d+(?:\.\d+)?\s*Credit\s+Points?)\b.*?(?:Elective\s+\d+.*|award of their degree.*)$', r'\1', u['prerequisite'], flags=re.IGNORECASE)
@@ -2911,6 +2842,12 @@ def extract_units_with_structure(pdf_path):
                 note_parts.append(re.sub(r'^WIL placement', 'WIL internship placement', year_match.group(1), flags=re.IGNORECASE))
             if note_parts:
                 u['prerequisite'] = '; '.join(dict.fromkeys(note_parts))
+        if u.get('category') != 'wil' and re.search(
+            r'^\s*Industry\b.*\binternship\s+as\s+a\s+prerequisite\b',
+            str(u.get('name') or ''),
+            re.IGNORECASE,
+        ):
+            u['category'] = 'wil'
         if business_accounting_mode:
             code_prefix = str(u.get('code', ''))[:3].upper()
             if code_prefix in ('ACC', 'FIN', 'LAW') and u.get('category') in (None, 'elective'):
@@ -2953,17 +2890,6 @@ def extract_units_with_structure(pdf_path):
                 if u.get('category') is None and not str(u.get('code', '')).startswith('MPU'):
                     u['category'] = 'elective'
                     needed -= 1
-
-    for u in deduped:
-        if not str(u.get('code', '')).startswith('MPU'):
-            continue
-        nearby_mpu_text = _extract_nearby_lines_for_code(planner_text, u.get('code'))
-        canonical_mpu_name = _canonical_mpu_name(
-            u.get('code'),
-            ' '.join(part for part in [nearby_mpu_text or '', str(u.get('name') or '')] if part),
-        )
-        if canonical_mpu_name:
-            u['name'] = canonical_mpu_name
 
     return deduped
 

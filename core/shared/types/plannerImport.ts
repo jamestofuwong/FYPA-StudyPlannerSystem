@@ -58,27 +58,12 @@ export type PlannerImportPlanner = {
 export type PlannerImportReport = {
   file_name: string;
   pdf_path: string;
-  model: string;
-  llm_mode: string;
-  llm_strategy?: string;
-  enhanced_evidence?: boolean;
-  llm_retries: number;
-  llm_used: boolean;
-  llm_applied: boolean;
-  llm_error: string | null;
-  llm_attempts: Array<Record<string, unknown>>;
   validation_issues: string[];
   outcome: {
     status: string;
     reason?: string;
   };
   unit_counts: Record<string, number>;
-  confidence?: {
-    overall_score: number;
-    manual_review_required: boolean;
-    signals: Record<string, number>;
-    issues: string[];
-  };
 };
 
 export type PlannerImportResult = {

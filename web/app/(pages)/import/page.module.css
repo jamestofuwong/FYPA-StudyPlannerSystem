@@ -543,8 +543,7 @@
   margin: 10px 0 12px;
 }
 
-.resultGroup,
-.confidencePanel {
+.resultGroup {
   min-width: 0;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 6px;
@@ -575,38 +574,6 @@
 }
 
 .resultLabel {
-  font-size: 11px;
-  color: var(--text-muted);
-}
-
-.confidencePanel {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
-
-.confidenceHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.confidenceHeader .resultGroupTitle {
-  margin-bottom: 0;
-}
-
-.confidenceScore {
-  margin-top: 8px;
-  font-family: var(--font-mono);
-  font-size: 30px;
-  line-height: 1;
-  font-weight: 700;
-  color: var(--text-white);
-}
-
-.confidenceCaption {
-  margin-top: 4px;
   font-size: 11px;
   color: var(--text-muted);
 }

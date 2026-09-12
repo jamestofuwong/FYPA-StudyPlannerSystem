@@ -4,14 +4,8 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import type { PlannerImportResult } from "../../shared/types/plannerImport";
 
-
-const LOCAL_OLLAMA_BASE_URL = "http://127.0.0.1:11434";
-
 export type ExtractPlannerOptions = {
   filename?: string;
-  useLlm?: boolean;
-  model?: string;
-  llmRetries?: number;
 };
 
 type PythonCommand = {
@@ -50,14 +44,41 @@ function parsePlannerImportResult(stdout: string): PlannerImportResult {
     throw new Error("Planner import returned no JSON output.");
   }
 
-  const parsed = JSON.parse(trimmed) as PlannerImportResult & { error?: string };
-  if (parsed && typeof parsed === "object" && "error" in parsed && parsed.error) {
-    throw new Error(String(parsed.error));
+  // Some fallback libraries can write diagnostics to stdout, so recover the complete contract object instead of parsing the entire stream as JSON.
+  for (let start = 0; start < trimmed.length; start += 1) {
+    if (trimmed[start] !== "{") continue;
+
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    for (let index = start; index < trimmed.length; index += 1) {
+      const character = trimmed[index];
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (character === "\\") escaped = true;
+        else if (character === '"') inString = false;
+        continue;
+      }
+      if (character === '"') inString = true;
+      else if (character === "{") depth += 1;
+      else if (character === "}") {
+        depth -= 1;
+        if (depth !== 0) continue;
+
+        let parsed: PlannerImportResult & { error?: string };
+        try {
+          parsed = JSON.parse(trimmed.slice(start, index + 1)) as PlannerImportResult & { error?: string };
+        } catch {
+          break;
+        }
+        if (parsed?.error) throw new Error(String(parsed.error));
+        if (parsed?.planner && parsed?.report) return parsed;
+        break;
+      }
+    }
   }
-  if (!parsed?.planner || !parsed?.report) {
-    throw new Error("Planner import returned an unexpected payload shape.");
-  }
-  return parsed;
+
+  throw new Error("Planner import returned no valid JSON payload.");
 }
 
 // Persist the uploaded PDF temporarily, run the Python extraction pipeline, and return structured planner data.
@@ -73,20 +94,11 @@ export async function extractPlannerFromPdf(
 
     const { executable, prefixArgs } = resolvePythonCommand();
     const args = [...prefixArgs, tempFile];
-    if (options.useLlm === false) args.push("--no-llm");
-    if (options.model) args.push("--model", options.model);
-    if (typeof options.llmRetries === "number") args.push("--llm-retries", String(options.llmRetries));
 
     const result = await new Promise<PlannerImportResult>((resolve, reject) => {
       const child = spawn(executable, args, {
         cwd: process.cwd(),
-        env: {
-          ...process.env,
-          // Force the extractor to call the app-managed local Ollama runtime.
-          // A caller can still override this for diagnostics with STUDY_PLANNER_OLLAMA_URL.
-          STUDY_PLANNER_OLLAMA_URL:
-            process.env.STUDY_PLANNER_OLLAMA_URL?.trim() || LOCAL_OLLAMA_BASE_URL,
-        },
+        env: process.env,
         stdio: ["ignore", "pipe", "pipe"],
       });
 

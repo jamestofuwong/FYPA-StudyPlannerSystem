@@ -1,3 +1,5 @@
 pdfplumber
-requests
 pyinstaller
+pdftext
+docling
+pypdfium2
