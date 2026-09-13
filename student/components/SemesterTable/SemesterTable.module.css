@@ -1,0 +1,136 @@
+.wrap {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  margin-bottom: var(--space-6);
+  box-shadow: var(--shadow-card);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-sm);
+}
+
+/* Dark charcoal semester header */
+.semesterHeaderRow th {
+  background: #1f2937;
+  color: var(--color-text-inverse);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  padding: 10px 14px;
+}
+
+/* Column headers */
+.colHeaderRow th {
+  background: #f3f4f6;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 8px 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--color-border);
+}
+
+
+/* Unit rows */
+.unitRow td {
+  padding: 10px 14px;
+  vertical-align: middle;
+  height: 40px;
+  transition: filter 0.12s;
+}
+
+.clickable { cursor: pointer; }
+.clickable:hover td { filter: brightness(0.94); }
+.clickable:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+
+/* Row background by category */
+.rowCore td     { background: var(--color-cat-core-bg); }
+.rowMajor td    { background: var(--color-cat-major-bg); }
+.rowElective td { background: var(--color-cat-elective-bg); }
+.rowWil td      { background: var(--color-cat-wil-bg); }
+.rowMpu td      { background: var(--color-cat-mpu-bg); }
+.rowSlot td     { background: var(--color-cat-slot-bg); }
+.rowSlot td     { border-bottom: 1px dashed var(--color-cat-slot-border) !important; }
+
+/* Cell styles */
+.cellCode {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+  white-space: nowrap;
+}
+
+.cellCodeSlot { color: var(--color-text-secondary); }
+
+.cellName { color: var(--color-text-primary); }
+
+.asterisk {
+  color: var(--color-accent);
+  font-weight: var(--font-weight-bold);
+  margin-left: 2px;
+  font-size: var(--font-size-xs);
+  vertical-align: super;
+  line-height: 0;
+}
+
+.cellNameSlot {
+  font-style: italic;
+  color: var(--color-text-secondary);
+}
+
+.cellPrereq {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  position: relative;
+}
+
+.viewHint {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  padding: 0 14px 0 56px;
+  display: flex;
+  align-items: center;
+  opacity: 0;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-accent);
+  white-space: nowrap;
+  transition: opacity 0.2s;
+  pointer-events: none;
+  /* default fallback gradient */
+  background: linear-gradient(to right, transparent, var(--color-bg) 45%);
+}
+
+.clickable:hover .viewHint { opacity: 1; }
+
+/* Per-category gradient end colours */
+.rowCore     .viewHint { background: linear-gradient(to right, transparent, var(--color-cat-core-bg) 45%); }
+.rowMajor    .viewHint { background: linear-gradient(to right, transparent, var(--color-cat-major-bg) 45%); }
+.rowElective .viewHint { background: linear-gradient(to right, transparent, var(--color-cat-elective-bg) 45%); }
+.rowWil      .viewHint { background: linear-gradient(to right, transparent, var(--color-cat-wil-bg) 45%); }
+.rowMpu      .viewHint { background: linear-gradient(to right, transparent, var(--color-cat-mpu-bg) 45%); }
+.rowSlot     .viewHint { background: linear-gradient(to right, transparent, var(--color-cat-slot-bg) 45%); }
+
+/* Completed row state */
+.rowCompleted td { opacity: 0.6; }
+.rowCompleted:hover td { opacity: 0.8; }
+
+.completedCheck {
+  color: #16a34a;
+  font-weight: var(--font-weight-bold);
+  margin-right: 5px;
+  font-size: var(--font-size-xs);
+}
+
+/* Override viewHint text colour for completed rows */
+.rowCompleted .viewHint { color: #16a34a; }
+

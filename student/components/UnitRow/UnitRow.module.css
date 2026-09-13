@@ -1,0 +1,71 @@
+.row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-5);
+  border-left: 3px solid transparent;
+  border-bottom: 1px solid var(--color-border);
+  transition: background 0.1s;
+  min-height: 52px;
+}
+
+.row:last-child { border-bottom: none; }
+
+/* Per-category left-border accent */
+.core     { border-left-color: var(--color-cat-core-border); }
+.majorCore { border-left-color: var(--color-cat-major-border); }
+.elective  { border-left-color: var(--color-cat-elective-border); }
+.wil       { border-left-color: var(--color-cat-wil-border); }
+.mpu       { border-left-color: var(--color-cat-mpu-border); }
+.slot      { border-left-color: var(--color-cat-slot-border); border-left-style: dashed; }
+
+.code {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  min-width: 80px;
+  flex-shrink: 0;
+  padding-top: 1px;
+}
+
+.name {
+  flex: 1;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  line-height: 1.4;
+  padding-top: 1px;
+}
+
+.slotCode {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-secondary);
+  min-width: 80px;
+  flex-shrink: 0;
+}
+
+.slotLabel {
+  flex: 1;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  font-style: italic;
+}
+
+/* Category tags */
+.catTag {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  flex-shrink: 0;
+  align-self: center;
+}
+
+.cat_core     { background: var(--color-cat-core-bg);     color: var(--color-cat-core-border); }
+.cat_majorCore { background: var(--color-cat-major-bg);   color: var(--color-cat-major-border); }
+.cat_elective  { background: var(--color-cat-elective-bg); color: var(--color-cat-elective-border); }
+.cat_wil       { background: var(--color-cat-wil-bg);     color: var(--color-cat-wil-border); }
+.cat_mpu       { background: var(--color-cat-mpu-bg);     color: var(--color-cat-mpu-border); }
+.catSlot       { background: var(--color-cat-slot-bg);    color: var(--color-text-secondary); border: 1px dashed var(--color-cat-slot-border); }

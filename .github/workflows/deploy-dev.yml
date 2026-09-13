@@ -1,0 +1,40 @@
+name: Deploy — Dev DB Migration
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - student/prisma/schema.prisma
+      - student/prisma/migrations/**
+
+jobs:
+  migrate:
+    name: Migrate Dev Database
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: student
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: student/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL_DEV }}
+
+      - name: Run migrations
+        run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL_DEV }}
