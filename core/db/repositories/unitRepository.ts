@@ -253,3 +253,34 @@ export async function deleteUnit(id: string) {
     where: { id }
   });
 }
+
+// ===================================================================================================
+// Direct Unit Offering Actions
+// ===================================================================================================
+
+// Assign a unit to a specific semester/term offering
+export async function addUnitOffering(unitId: string, term: number) {
+  return await prisma.unitOffering.upsert({
+    where: {
+      unit_id_offered_in: {
+        unit_id: unitId,
+        offered_in: term,
+      },
+    },
+    update: {},
+    create: {
+      unit_id: unitId,
+      offered_in: term,
+    },
+  });
+}
+
+// Remove a unit from a specific semester/term offering
+export async function removeUnitOffering(unitId: string, term: number) {
+  return await prisma.unitOffering.deleteMany({
+    where: {
+      unit_id: unitId,
+      offered_in: term,
+    },
+  });
+}

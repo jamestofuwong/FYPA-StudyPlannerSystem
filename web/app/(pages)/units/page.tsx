@@ -3,6 +3,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import styles from './page.module.css';
+import UnitOfferingsModal from './UnitOfferingsModal';
+
 
 // ==================================================================================================================
 // Utility Functions
@@ -56,6 +58,8 @@ export default function UnitsPage() {
     const [formPrereq, setFormPrereq] = useState('');
     const [isSaving, setIsSaving] = useState(false);
     const [formError, setFormError] = useState('');
+
+    const [isOfferingsModalOpen, setIsOfferingsModalOpen] = useState(false);
 
     // ==================================================================================================================
     // useMemo (derived data)
@@ -207,11 +211,14 @@ export default function UnitsPage() {
                 </div>
 
                 <div style={{ display: 'flex', gap: 8 }}>
+                    <button className={styles.btnSecondary} onClick={() => setIsOfferingsModalOpen(true)}>
+                        Unit Offerings
+                    </button>
                     <button className={styles.btnPrimary} onClick={handleOpenAdd}>
                         + Add Unit
                     </button>
                     <Link href="/planners">
-                        <button className={styles.btnSecondary}>← View Planners</button>
+                        <button className={styles.btnSecondary}>View Planners</button>
                     </Link>
                 </div>
             </div>
@@ -372,6 +379,12 @@ export default function UnitsPage() {
                     </div>
                 </div>
             )}
+            <UnitOfferingsModal
+                isOpen={isOfferingsModalOpen}
+                onClose={() => setIsOfferingsModalOpen(false)}
+                units={units}
+                onRefresh={fetchAllUnits}
+            />
         </div>
     );
 }
