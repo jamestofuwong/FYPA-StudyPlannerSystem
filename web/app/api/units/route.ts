@@ -48,6 +48,7 @@ export async function POST(req: Request) {
         unit_code: body.unit_code,
         unit_name: body.unit_name,
         offerings: body.offerings,
+        prerequisite: body.prerequisite,
       });
       return NextResponse.json(saved, { status: 200 });
     }
