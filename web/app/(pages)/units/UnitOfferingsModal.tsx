@@ -54,7 +54,13 @@ export default function UnitOfferingsModal({
     // Close dropdown on outside click
     useEffect(() => {
         function handleClickOutside(event: MouseEvent) {
-            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+            const target = event.target as HTMLElement;
+            // Ignore if clicking the add/cancel button itself
+            if (target.closest(`.${styles.addUnitInlineBtn}`)) {
+                return;
+            }
+
+            if (dropdownRef.current && !dropdownRef.current.contains(target)) {
                 setActiveAddTerm(null);
                 setDropdownSearch('');
             }
@@ -88,14 +94,34 @@ export default function UnitOfferingsModal({
     // Dropdown search results for active "+ Add Unit" term
     const dropdownResults = useMemo(() => {
         if (activeAddTerm === null) return [];
-        const q = dropdownSearch.toLowerCase().trim();
-        return units
-        .filter(
-            (u) =>
-            u.unit_code.toLowerCase().includes(q) ||
-            u.unit_name.toLowerCase().includes(q)
-        )
-        .slice(0, 15);
+        const rawQuery = dropdownSearch.trim().toLowerCase();
+        if (!rawQuery) {
+            // Show recent/top units when input is empty
+            return units.slice(0, 20);
+        }
+
+        // Split user query into keywords (e.g., "cos data" -> ["cos", "data"])
+        const keywords = rawQuery.split(/\s+/).filter(Boolean);
+        const normalizedQueryCode = rawQuery.replace(/[^a-z0-9]/g, '');
+
+        return units.filter((u) => {
+            const code = (u.unit_code || '').toLowerCase();
+            const normalizedCode = code.replace(/[^a-z0-9]/g, '');
+            const name = (u.unit_name || '').toLowerCase();
+            const prereq = ((u as any).prerequisite || '').toLowerCase();
+
+            // 1. Direct code match (handles "cos 10009" matching "COS10009")
+            if (normalizedQueryCode && normalizedCode.includes(normalizedQueryCode)) {
+                return true;
+            }
+
+            // 2. Multi-word search: all keywords must match either code, name, or prerequisite
+            const allKeywordsMatch = keywords.every((kw) => 
+                code.includes(kw) || name.includes(kw) || prereq.includes(kw)
+            );
+
+            return allKeywordsMatch;
+        }).slice(0, 50);
     }, [units, dropdownSearch, activeAddTerm]);
 
     // API Call: Add Unit to Term
@@ -179,9 +205,10 @@ export default function UnitOfferingsModal({
                             <div className={styles.termDivider} />
                             <button
                                 className={styles.addUnitInlineBtn}
-                                onClick={() => {
-                                setActiveAddTerm(isAddingThisTerm ? null : term.id);
-                                setDropdownSearch('');
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActiveAddTerm(isAddingThisTerm ? null : term.id);
+                                    setDropdownSearch('');
                                 }}
                             >
                                 {isAddingThisTerm ? '✕ Cancel' : '+ Add Unit'}
