@@ -7,15 +7,12 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "db:setup": "npm run db:init && npm run db:start && npm run db:create",
-    "db:init": "initdb -D .postgres/data --no-locale --encoding=UTF8",
-    "db:start": "/opt/homebrew/opt/postgresql@16/bin/pg_ctl -D .postgres/data -l .postgres/postgres.log -o '-p 5435' start",
-    "db:stop": "/opt/homebrew/opt/postgresql@16/bin/pg_ctl -D .postgres/data stop",
-    "db:create": "createdb -p 5435 fypa_student",
     "db:migrate": "prisma migrate dev",
-    "db:migrate:prod": "prisma migrate deploy",
+    "db:migrate:prod": "dotenv -e .env.production -- prisma migrate deploy",
     "db:studio": "prisma studio",
-    "db:seed": "tsx --env-file .env prisma/seed.ts"
+    "db:studio:prod": "dotenv -e .env.production -- prisma studio",
+    "db:seed": "tsx --env-file .env prisma/seed.ts",
+    "db:seed:prod": "tsx --env-file .env.production prisma/seed.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",
@@ -31,6 +28,7 @@
     "@types/node": "25.4.0",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
+    "dotenv-cli": "^11.0.0",
     "eslint": "9.39.4",
     "eslint-config-next": "16.1.6",
     "prisma": "^7.10.0",
