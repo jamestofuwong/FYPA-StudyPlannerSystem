@@ -6,6 +6,8 @@ import DashboardPage from '@/app/(pages)/dashboard/page';
 import { PortalAuthProvider, usePortalAuth } from '@/components/providers/PortalAuthContext';
 import { ScraperProvider } from '@/components/providers/ScraperContext';
 import { ToastProvider } from '@/components/providers/ToastProvider';
+import { StudentSessionProvider } from '@/components/providers/StudentSessionContext';
+import PathwayPage from '@/app/(pages)/pathway/page';
 
 process.on('unhandledRejection', (reason) => {
   console.warn('Unhandled Rejection at:', reason);
@@ -115,7 +117,7 @@ describe('Dashboard Ultimate Coverage Booster', () => {
       <ToastProvider>
         <PortalAuthProvider>
           <ScraperProvider>
-            <DashboardPage />
+            <StudentSessionProvider><DashboardPage /></StudentSessionProvider>
           </ScraperProvider>
         </PortalAuthProvider>
       </ToastProvider>
@@ -193,7 +195,7 @@ describe('Dashboard Ultimate Coverage Booster', () => {
 
     render(
       <ToastProvider><PortalAuthProvider><ScraperProvider>
-        <DashboardPage />
+        <StudentSessionProvider><DashboardPage /><PathwayPage /></StudentSessionProvider>
       </ScraperProvider></PortalAuthProvider></ToastProvider>
     );
 
@@ -271,7 +273,7 @@ describe('Dashboard Ultimate Coverage Booster', () => {
 
     render(
       <ToastProvider><PortalAuthProvider><ScraperProvider>
-        <DashboardPage />
+        <StudentSessionProvider><DashboardPage /></StudentSessionProvider>
       </ScraperProvider></PortalAuthProvider></ToastProvider>
     );
 
@@ -310,7 +312,7 @@ describe('Dashboard Ultimate Coverage Booster', () => {
       return Promise.resolve({ ok: true, json: () => Promise.resolve({ status: 'idle' }) });
     });
 
-    render(<ToastProvider><PortalAuthProvider><ScraperProvider><DashboardPage /></ScraperProvider></PortalAuthProvider></ToastProvider>);
+    render(<ToastProvider><PortalAuthProvider><ScraperProvider><StudentSessionProvider><DashboardPage /></StudentSessionProvider></ScraperProvider></PortalAuthProvider></ToastProvider>);
     
     fireEvent.click(screen.getByRole('button', { name: /^Import$/i }));
     
@@ -327,7 +329,7 @@ describe('Dashboard Ultimate Coverage Booster', () => {
   }, 30000);
 
   test('Dashboard: handles import panel intake inputs (Line 360+)', async () => {
-    render(<ToastProvider><PortalAuthProvider><ScraperProvider><DashboardPage /></ScraperProvider></PortalAuthProvider></ToastProvider>);
+    render(<ToastProvider><PortalAuthProvider><ScraperProvider><StudentSessionProvider><DashboardPage /></StudentSessionProvider></ScraperProvider></PortalAuthProvider></ToastProvider>);
     
     fireEvent.click(screen.getByRole('button', { name: /^Import$/i }));
     
@@ -388,7 +390,7 @@ describe('Dashboard Ultimate Coverage Booster', () => {
 
     render(
       <ToastProvider><PortalAuthProvider><ScraperProvider>
-        <DashboardPage />
+        <StudentSessionProvider><DashboardPage /></StudentSessionProvider>
       </ScraperProvider></PortalAuthProvider></ToastProvider>,
     );
 
@@ -470,7 +472,7 @@ describe('Dashboard Ultimate Coverage Booster', () => {
 
     render(
       <ToastProvider><PortalAuthProvider><ScraperProvider>
-        <DashboardPage />
+        <StudentSessionProvider><DashboardPage /></StudentSessionProvider>
       </ScraperProvider></PortalAuthProvider></ToastProvider>,
     );
 
@@ -516,7 +518,7 @@ describe('Dashboard Ultimate Coverage Booster', () => {
         <ToastProvider>
           <PortalAuthProvider>
             <ScraperProvider>
-              <DashboardPage />
+              <StudentSessionProvider><DashboardPage /></StudentSessionProvider>
             </ScraperProvider>
           </PortalAuthProvider>
         </ToastProvider>
@@ -586,7 +588,7 @@ describe('Dashboard Ultimate Coverage Booster', () => {
         <ToastProvider>
           <PortalAuthProvider>
             <ScraperProvider>
-              <DashboardPage />
+              <StudentSessionProvider><DashboardPage /></StudentSessionProvider>
             </ScraperProvider>
           </PortalAuthProvider>
         </ToastProvider>
@@ -636,7 +638,7 @@ describe('Dashboard Ultimate Coverage Booster', () => {
       return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
     });
 
-    render(<ToastProvider><PortalAuthProvider><ScraperProvider><DashboardPage /></ScraperProvider></PortalAuthProvider></ToastProvider>);
+    render(<ToastProvider><PortalAuthProvider><ScraperProvider><StudentSessionProvider><DashboardPage /></StudentSessionProvider></ScraperProvider></PortalAuthProvider></ToastProvider>);
 
     fireEvent.change(screen.getByPlaceholderText(/Student ID or name/i), { target: { value: 'TEST-001' } });
     fireEvent.click(screen.getByText('Search'));
@@ -677,7 +679,7 @@ describe('Dashboard Ultimate Coverage Booster', () => {
       return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
     });
 
-    render(<ToastProvider><PortalAuthProvider><ScraperProvider><DashboardPage /></ScraperProvider></PortalAuthProvider></ToastProvider>);
+    render(<ToastProvider><PortalAuthProvider><ScraperProvider><StudentSessionProvider><DashboardPage /></StudentSessionProvider></ScraperProvider></PortalAuthProvider></ToastProvider>);
 
     fireEvent.change(screen.getByPlaceholderText(/Student ID or name/i), { target: { value: 'TEST-002' } });
     fireEvent.click(screen.getByText('Search'));
