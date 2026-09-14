@@ -6,6 +6,7 @@ import type { PanelId } from '../../lib/navigation';
 
 const PANEL_LABELS: Record<PanelId, string> = {
     dashboard: 'Dashboard',
+    pathway: 'Student Pathway',
     scraping: 'Data Scraping',
     import: 'Data Import',
     planners: 'Study Planners',

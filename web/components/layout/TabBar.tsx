@@ -13,6 +13,7 @@ interface TabMeta {
 
 const TAB_META: Record<PanelId, TabMeta> = {
     dashboard: { id: 'dashboard', icon: '📊', label: 'Dashboard' },
+    pathway: { id: 'pathway', icon: '🧭', label: 'Student Pathway' },
     import: { id: 'import', icon: '📥', label: 'Data Import' },
     scraping: { id: 'scraping', icon: '🕷️', label: 'Data Scraping' },
     planners: { id: 'planners', icon: '✅', label: 'Study Planners' },
