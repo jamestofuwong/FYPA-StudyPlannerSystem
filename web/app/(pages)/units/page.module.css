@@ -574,3 +574,9 @@
     text-align: center;
     padding: 12px;
 }
+
+.modalHeaderBtn {
+    display: flex;
+    align-items: center;
+    gap: 8;
+}

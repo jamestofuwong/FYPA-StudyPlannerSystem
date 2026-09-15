@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useRef, useEffect } from 'react';
 import styles from './page.module.css';
+import SyncOfferingsPreviewModal from './SyncOfferingsPreviewModal';
 
 type UnitWithOfferings = {
     id?: string;
@@ -50,6 +51,11 @@ export default function UnitOfferingsModal({
     const [dropdownSearch, setDropdownSearch] = useState('');
     const [isUpdating, setIsUpdating] = useState(false);
     const dropdownRef = useRef<HTMLDivElement | null>(null);
+
+    const [isAnalyzing, setIsAnalyzing] = useState(false);
+    const [syncData, setSyncData] = useState<any | null>(null);
+    const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
+
 
     // Close dropdown on outside click
     useEffect(() => {
@@ -166,6 +172,24 @@ export default function UnitOfferingsModal({
         }
     };
 
+    // Handler for Sync Offerings
+    const handleRunSync = async () => {
+        setIsAnalyzing(true);
+        try {
+            const res = await fetch('/api/units/offerings/sync');
+            if (res.ok) {
+                const data = await res.json();
+                setSyncData(data);
+                setIsSyncModalOpen(true);
+            }
+        } catch (err) {
+            console.error('Failed to run sync analysis:', err);
+        } finally {
+            setIsAnalyzing(false);
+        }
+    };
+
+
     if (!isOpen) return null;
 
     return (
@@ -176,15 +200,26 @@ export default function UnitOfferingsModal({
             >
                 {/* Modal Header */}
                 <div className={styles.modalHeader}>
-                <div>
-                    <h3 className={styles.modalTitle}>Unit Offerings Manager</h3>
-                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                    Organize scheduled unit offerings across semesters and classify pending units.
-                    </span>
-                </div>
-                <button className={styles.closeBtn} onClick={onClose}>
-                    ✕
-                </button>
+                    <div>
+                        <h3 className={styles.modalTitle}>Unit Offerings Manager</h3>
+                        <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                            Organize scheduled unit offerings across semesters and classify pending units.
+                        </span>
+                    </div>
+                    <div className={styles.modalHeaderBtn}>
+                        <button
+                            className={styles.addUnitInlineBtn}
+                            onClick={handleRunSync}
+                            disabled={isAnalyzing}
+                            title="Scan recent planners (last 3 years) and auto-detect offering terms"
+                        >
+                            {isAnalyzing ? 'Analyzing...' : 'Auto-Detect from Planners'}
+                        </button>
+
+                        <button className={styles.closeBtn} onClick={onClose}>
+                            ✕
+                        </button>
+                    </div>
                 </div>
 
                 {/* Modal Scrollable Content: 5 Stacked Tables */}
@@ -397,6 +432,16 @@ export default function UnitOfferingsModal({
                 </button>
                 </div>
             </div>
+            {isSyncModalOpen && syncData && (
+                <SyncOfferingsPreviewModal
+                    isOpen={isSyncModalOpen}
+                    onClose={() => setIsSyncModalOpen(false)}
+                    yearRangeStr={syncData.yearRangeStr}
+                    totalPlanners={syncData.totalPlannersScanned}
+                    initialDiffs={syncData.diffs}
+                    onRefresh={onRefresh}
+                />
+            )}
         </div>
     );
 }

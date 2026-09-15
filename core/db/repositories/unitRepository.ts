@@ -284,3 +284,179 @@ export async function removeUnitOffering(unitId: string, term: number) {
     },
   });
 }
+
+
+// ===================================================================================================
+// Infer Offerings From Recent Planners
+// ===================================================================================================
+
+export type InferredOfferingDiff = {
+  unit_id: string;
+  unit_code: string;
+  unit_name: string;
+  current_offerings: number[];
+  proposed_offerings: number[];
+  status: 'new' | 'changed' | 'unchanged';
+};
+
+
+// Maps student's progression semester into a calendar offering term (1 to 4) based on their enrollment intake month.
+function mapProgressionToCalendarTerm(progressionSemester: number, intakeMonth: number): number {
+  // Semester 1 Intake (Feb / March / April)
+  if (intakeMonth >= 2 && intakeMonth <= 4) {
+    if (progressionSemester === 1) return 1;
+    if (progressionSemester === 2) return 2;
+    if (progressionSemester === 3) return 3;
+    if (progressionSemester === 4) return 4;
+  }
+
+  // Semester 2 Intake (August / September / October)
+  if (intakeMonth >= 8 && intakeMonth <= 10) {
+    if (progressionSemester === 1) return 2; // Starts in Aug/Sep -> Calendar Sem 2
+    if (progressionSemester === 2) return 1; // Continues in Feb/Mar -> Calendar Sem 1
+    if (progressionSemester === 3) return 3;
+    if (progressionSemester === 4) return 4;
+  }
+
+  // Fallback: assume progression matches term
+  return progressionSemester;
+}
+
+
+// Analyzes planners from the last 3 years and computes proposed offerings vs current offerings in unit_offerings.
+export async function getInferredOfferingsDiff(): Promise<{
+  yearRangeStr: string;
+  totalPlannersScanned: number;
+  diffs: InferredOfferingDiff[];
+}> {
+  // Current year (2026) and 2 years before (2024) -> 3 years total: 2024, 2025, 2026
+  const currentYear = new Date().getFullYear();
+  const minYear = currentYear - 4; // 2026 - 2 = 2024
+  const maxYear = currentYear;     // 2026
+
+  // 2. Fetch all planners within [currentYear - 2, currentYear]
+  const recentPlanners = await prisma.plannerTemplate.findMany({
+    where: {
+      intake_year: { gte: minYear, lte: maxYear },
+    },
+    include: {
+      units: {
+        include: {
+          unit: {
+            select: { id: true, unit_code: true, unit_name: true },
+          },
+        },
+      },
+    },
+  });
+
+  // 3. Aggregate detected calendar terms for every unit
+  const detectedTermsMap = new Map<string, Set<number>>();
+  const unitInfoMap = new Map<string, { id: string; unit_code: string; unit_name: string }>();
+
+  for (const planner of recentPlanners) {
+    const intakeMonth = planner.intake_month || 2; // Default to Feb/Mar if null
+
+    for (const tu of planner.units) {
+      if (!tu.unit || !tu.unit.unit_code || tu.unit.unit_code === '-') continue;
+
+      const unitCode = tu.unit.unit_code;
+      unitInfoMap.set(unitCode, tu.unit);
+
+      if (!detectedTermsMap.has(unitCode)) {
+        detectedTermsMap.set(unitCode, new Set<number>());
+      }
+
+      const calendarTerm = mapProgressionToCalendarTerm(tu.semester || 1, intakeMonth);
+      if (calendarTerm >= 1 && calendarTerm <= 4) {
+        detectedTermsMap.get(unitCode)!.add(calendarTerm);
+      }
+    }
+  }
+
+  // 4. Fetch currently stored offerings for these units from DB
+  const currentUnitsWithOfferings = await prisma.unit.findMany({
+    where: {
+      unit_code: { in: Array.from(unitInfoMap.keys()) },
+    },
+    include: {
+      offerings: { select: { offered_in: true } },
+    },
+  });
+
+  const currentOfferingsMap = new Map<string, number[]>();
+  for (const u of currentUnitsWithOfferings) {
+    currentOfferingsMap.set(
+      u.unit_code,
+      u.offerings.map((o) => o.offered_in).sort((a, b) => a - b)
+    );
+  }
+
+  // 5. Construct diffs
+  const diffs: InferredOfferingDiff[] = [];
+
+  for (const [code, info] of unitInfoMap.entries()) {
+    const current = currentOfferingsMap.get(code) || [];
+    const proposed = Array.from(detectedTermsMap.get(code) || []).sort((a, b) => a - b);
+
+    const isCurrentEmpty = current.length === 0;
+    const isExactMatch =
+      current.length === proposed.length &&
+      current.every((val, idx) => val === proposed[idx]);
+
+    let status: 'new' | 'changed' | 'unchanged' = 'unchanged';
+    if (isCurrentEmpty && proposed.length > 0) {
+      status = 'new';
+    } else if (!isExactMatch) {
+      status = 'changed';
+    }
+
+    diffs.push({
+      unit_id: info.id,
+      unit_code: code,
+      unit_name: info.unit_name,
+      current_offerings: current,
+      proposed_offerings: proposed,
+      status,
+    });
+  }
+
+  // Sort: changed and new first, then alphabetically by code
+  diffs.sort((a, b) => {
+    if (a.status !== 'unchanged' && b.status === 'unchanged') return -1;
+    if (a.status === 'unchanged' && b.status !== 'unchanged') return 1;
+    return a.unit_code.localeCompare(b.unit_code);
+  });
+
+  return {
+    yearRangeStr: `${minYear}-${maxYear}`,
+    totalPlannersScanned: recentPlanners.length,
+    diffs,
+  };
+}
+
+// Overwrites unit offerings for the selected units in a single transaction.
+export async function overwriteUnitOfferings(
+  updates: Array<{ unit_id: string; offerings: number[] }>
+) {
+  return await prisma.$transaction(async (tx) => {
+    for (const item of updates) {
+      const termList = Array.isArray(item.offerings) ? item.offerings : [];
+
+      // 1. Wipe existing offerings for this unit
+      await tx.unitOffering.deleteMany({
+        where: { unit_id: item.unit_id },
+      });
+
+      // 2. Insert new offerings
+      for (const term of termList) {
+        await tx.unitOffering.create({
+          data: {
+            unit_id: item.unit_id,
+            offered_in: term,
+          },
+        });
+      }
+    }
+  });
+}
