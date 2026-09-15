@@ -331,7 +331,7 @@ export async function getInferredOfferingsDiff(): Promise<{
 }> {
   // Current year (2026) and 2 years before (2024) -> 3 years total: 2024, 2025, 2026
   const currentYear = new Date().getFullYear();
-  const minYear = currentYear - 4; // 2026 - 2 = 2024
+  const minYear = currentYear - 2; // 2026 - 2 = 2024
   const maxYear = currentYear;     // 2026
 
   // 2. Fetch all planners within [currentYear - 2, currentYear]
