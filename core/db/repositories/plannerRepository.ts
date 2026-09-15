@@ -32,25 +32,105 @@ export async function getAllPlanners() {
   });
 }
 
+// Maps semesters and terms to standard numeric values:
+// 1 = Semester 1
+// 2 = Semester 2
+// 3 = Summer Term
+// 4 = Winter Term
+function parseOfferingTerms(value: unknown): number[] {
+  if (value == null) return [];
+
+  // Case 1: Direct number input (1 to 4)
+  if (typeof value === "number") {
+    return Number.isInteger(value) && value >= 1 && value <= 4 ? [value] : [];
+  }
+
+  // Case 2: Array of numbers/strings (e.g., [1, 2], ["Semester 1", "Summer"])
+  if (Array.isArray(value)) {
+    const terms = value.flatMap((item) => parseOfferingTerms(item));
+    return [...new Set(terms)].sort((a, b) => a - b);
+  }
+
+  // Case 3: String parsing
+  if (typeof value === "string") {
+    const lower = value.toLowerCase().trim();
+    if (!lower || lower === "-" || lower === "none" || lower === "n/a") return [];
+
+    const result = new Set<number>();
+
+    // 1. Keyword check for special terms
+    if (lower.includes("summer")) {
+      result.add(3);
+    }
+    if (lower.includes("winter")) {
+      result.add(4);
+    }
+
+    // 2. Semester keywords (e.g. "sem 1", "semester 2", "s1", "s2")
+    if (/(\bsem(ester)?\s*1\b|\bs1\b)/i.test(lower)) {
+      result.add(1);
+    }
+    if (/(\bsem(ester)?\s*2\b|\bs2\b)/i.test(lower)) {
+      result.add(2);
+    }
+    if (/(\bsem(ester)?\s*3\b|\bs3\b)/i.test(lower)) {
+      result.add(3);
+    }
+    if (/(\bsem(ester)?\s*4\b|\bs4\b)/i.test(lower)) {
+      result.add(4);
+    }
+
+    // 3. Fallback: extract standalone numbers 1 to 4 (e.g., "1, 2", "1 / 2", "1&2", "3")
+    if (result.size === 0) {
+      const numberMatches = lower.match(/[1-4]/g);
+      if (numberMatches) {
+        numberMatches.forEach((numStr) => result.add(Number(numStr)));
+      }
+    }
+
+    return [...result].sort((a, b) => a - b);
+  }
+
+  return [];
+}
+
 export async function getAllPlannersWithUnits() {
   return await prisma.plannerTemplate.findMany({
     include: {
       course: true,
       major: true,
       units: {
-        include: { unit: true }
+        include: { 
+          unit: {
+            include: {
+              offerings: { select: { offered_in: true }}
+            }
+          }
+        }
       },
       elective_groups: {
         include: {
           units: {
-            include: { unit: true }
+            include: { 
+              unit: {
+                include: {
+                  offerings: { select: { offered_in: true}}
+                }
+              }
+            }
           }
         }
       },
       minors: {
         include: {
           units: {
-            include: { unit: true }
+            include: { 
+              unit: {
+                include: {
+                  offerings: { select: { offered_in: true}}
+                }
+              }
+            }
           }
         }
       }
@@ -68,10 +148,11 @@ export async function getPlannerById(id: string) {
         include: {
           unit: {
             include: {
-              requisite_groups:{
+              offerings: { select: { offered_in: true } },
+              requisite_groups: {
                 include: {
                   conditions: {
-                    include: {unit: true,}
+                    include: { unit: true }
                   }
                 }
               }
@@ -82,13 +163,14 @@ export async function getPlannerById(id: string) {
       elective_groups: {
         include: {
           units: {
-            include: { 
+            include: {
               unit: {
                 include: {
+                  offerings: { select: { offered_in: true } },
                   requisite_groups: {
                     include: {
                       conditions: {
-                        include: {unit: true,}
+                        include: { unit: true }
                       }
                     }
                   }
@@ -101,15 +183,14 @@ export async function getPlannerById(id: string) {
       minors: {
         include: {
           units: {
-            include: { 
+            include: {
               unit: {
                 include: {
+                  offerings: { select: { offered_in: true } },
                   requisite_groups: {
                     include: {
                       conditions: {
-                        include: {
-                          unit: true,
-                        }
+                        include: { unit: true }
                       }
                     }
                   }
@@ -336,27 +417,51 @@ export async function savePlannerFromImport(planner: PlannerImportPlanner) {
 
         const existingUnitId = unitIdByCode.get(code);
 
+        let unitRecord;
         if (existingUnitId) {
           const latest = unitLatestPlannerMap.get(existingUnitId);
           const latestYear = latest?.year ?? 0;
           const latestMonth = latest?.month ?? 0;
 
-          const isNewer = currentYear > latestYear || 
+          const isNewer =
+            currentYear > latestYear ||
             (currentYear === latestYear && currentMonth >= latestMonth);
 
           if (isNewer) {
-            return tx.unit.update({
+            unitRecord = await tx.unit.update({
               where: { id: existingUnitId },
               data: { unit_name: safeName },
             });
+          } else {
+            unitRecord = await tx.unit.findUnique({ where: { id: existingUnitId } });
           }
-
-          return tx.unit.findUnique({ where: { id: existingUnitId } });
+        } else {
+          unitRecord = await tx.unit.create({
+            data: { unit_code: code, unit_name: safeName },
+          });
         }
 
-        return tx.unit.create({
-          data: { unit_code: code, unit_name: safeName },
-        });
+        // Save offerings if provided in imported unit
+        if (unitRecord && match && (match as any).offered_in) {
+          const terms = parseOfferingTerms((match as any).offered_in);
+          for (const term of terms) {
+            await tx.unitOffering.upsert({
+              where: {
+                unit_id_offered_in: {
+                  unit_id: unitRecord.id,
+                  offered_in: term,
+                },
+              },
+              update: {},
+              create: {
+                unit_id: unitRecord.id,
+                offered_in: term,
+              },
+            });
+          }
+        }
+
+        return unitRecord;
       })
     );
 
@@ -586,6 +691,12 @@ export async function exportPlannerAsImport(templateId: string): Promise<Planner
 
   const t = template; // capture non-null reference for use in nested callbacks
 
+  // Helper to extract numeric arroy from unit.offerings
+  const mapOfferings = (unit: any): number[] => {
+    if (!unit?.offerings || !Array.isArray(unit.offerings)) return [];
+    return unit.offerings.map((o: any) => o.offered_in).sort((a: number, b: number) => a - b);
+  };
+
   const byCategory = (cat: string) =>
     t.units.filter((tu: any) => tu.category === cat).map((tu: any): PlannerImportUnit => ({
       unit_code: tu.unit?.unit_code ?? '-',
@@ -594,7 +705,7 @@ export async function exportPlannerAsImport(templateId: string): Promise<Planner
       semester: tu.semester,
       category: tu.category,
       prerequisite: null,
-      offered_in: tu.unit?.offered_in ?? null,
+      offered_in: mapOfferings(tu.unit),
       requisites: tu.unit?.requisite_groups?.map((g: any) => ({
         conditions: g.conditions.map((c: any) => ({
           type: c.type,
@@ -614,7 +725,7 @@ export async function exportPlannerAsImport(templateId: string): Promise<Planner
       semester: null,
       category: 'elective',
       prerequisite: null,
-      offered_in: egu.unit?.offered_in ?? null,
+      offered_in: mapOfferings(egu.unit),
       requisites: egu.unit?.requisite_groups?.map((g: any) => ({
         conditions: g.conditions.map((c: any) => ({
           type: c.type,
@@ -660,7 +771,7 @@ export async function exportPlannerAsImport(templateId: string): Promise<Planner
           semester: null,
           category: null,
           prerequisite: null,
-          offered_in: mu.unit.offered_in ?? null,
+          offered_in: mapOfferings(mu.unit),
         })),
       })),
     },

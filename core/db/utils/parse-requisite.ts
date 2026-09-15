@@ -22,11 +22,16 @@ export function parseRequisiteString(input: string | null): ParsedGroup[] {
     // Normalize: uppercase, replace operators, normalize prefixes
     const normalized = input
         .toUpperCase()
-        .replace(/CO-REQUISITE|CO-REQ/g, 'corequisite')
-        .replace(/ANTI-REQUISITE|ANTI-REQ/g, 'antirequisite')
-        .replace(/PRE-REQUISITES|PRE-REQUISITE|PRE-REQ/g, 'prerequisite')
+
+        .replace(/\b(CO-REQUISITES?|CO-REQS?|COREQUISITES?|CO)\s*:\s*/g, 'corequisite ')
+        .replace(/\b(ANTI-REQUISITES?|ANTI-REQS?|ANTIREQUISITES?|ANTI)\s*:\s*/g, 'antirequisite ')
+        .replace(/\b(PRE-REQUISITES?|PRE-REQS?|PREREQUISITES?|PREREQ)\s*:\s*/g, 'prerequisite ')
+
+        .replace(/\b(CO-REQUISITES?|CO-REQS?|COREQUISITES?)\b/g, 'corequisite')
+        .replace(/\b(ANTI-REQUISITES?|ANTI-REQS?|ANTIREQUISITES?)\b/g, 'antirequisite')
+        .replace(/\b(PRE-REQUISITES?|PRE-REQS?|PREREQUISITES?)\b/g, 'prerequisite')
+        
         .replace(/CREDIT\s+POINTS?/g, 'cp') 
-        .replace(/CREDIT\s+POINT?/g, 'cp') 
         .replace(/:/g, '')
         .replace(/[()]/g, '') 
         .replace(/\s+OR\s+/g, ' / ')
