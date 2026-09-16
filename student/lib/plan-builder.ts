@@ -1,21 +1,11 @@
 // ---------------------------------------------------------------------------
-// Plan Builder — Algorithm Integration Layer
+// Plan Builder — client-safe seam
 //
-// To connect the real algorithm/API:
-//   1. Keep the `PlanBuilderConfig`, `GenerationInput`, and `GenerationResult`
-//      types stable — the frontend depends on them.
-//   2. Replace the body of `generatePlan` with an API call, e.g.:
-//        const res = await fetch('/api/generate-plan', {
-//          method: 'POST',
-//          body: JSON.stringify(input),
-//        })
-//        return res.json()
-//   3. The mock implementation below can be deleted once the real one is ready.
+// Types are shared with the UI. `generatePlan` calls the server so Prisma/`pg`
+// is never bundled into the browser (those packages need Node's `dns`/`net`).
 // ---------------------------------------------------------------------------
 
 import type { SemesterBlock, Unit } from './types'
-import { getPlannerById } from './planners'
-import { resolvePlannerId } from './data/courses-mock'
 
 export interface PlanBuilderConfig {
   /** e.g. "march-2024" or "august-2025" */
@@ -36,32 +26,24 @@ export interface GenerationResult {
   electivePool: Unit[]
 }
 
-// ---------------------------------------------------------------------------
-// PUBLIC SEAM — swap this body when the real algorithm is ready
-// ---------------------------------------------------------------------------
-export async function generatePlan(input: GenerationInput): Promise<GenerationResult | null> {
-  return mockGeneratePlan(input)
+type GenerationResultJson = Omit<GenerationResult, 'completedCodes'> & {
+  completedCodes: string[]
 }
 
-// ---------------------------------------------------------------------------
-// MOCK IMPLEMENTATION
-// Loads the matching planner template and marks the completed units.
-// The semester structure itself is unchanged — the algorithm would normally
-// reorder or reassign units based on prerequisites and preferences.
-// ---------------------------------------------------------------------------
-async function mockGeneratePlan({
-  config,
-  completedUnitCodes,
-}: GenerationInput): Promise<GenerationResult | null> {
-  const plannerId = resolvePlannerId(config.courseId, config.majorId)
-  const planner = await getPlannerById(plannerId)
-  if (!planner) return null
+export async function generatePlan(input: GenerationInput): Promise<GenerationResult | null> {
+  const res = await fetch('/api/generate-plan', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
 
-  const completedCodes = new Set(completedUnitCodes.map(c => c.toUpperCase()))
+  if (res.status === 404) return null
+  if (!res.ok) throw new Error('Failed to generate plan')
 
+  const data = (await res.json()) as GenerationResultJson
   return {
-    semesters: planner.semesters,
-    completedCodes,
-    electivePool: planner.electivePool,
+    semesters: data.semesters,
+    electivePool: data.electivePool,
+    completedCodes: new Set(data.completedCodes),
   }
 }

@@ -1,3 +1,4 @@
+import 'server-only'
 import { prisma } from './prisma'
 import type { PlannerSummary, PlannerDetail, SemesterBlock, Unit, UnitCategory } from './types'
 
