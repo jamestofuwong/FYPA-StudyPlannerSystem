@@ -1,6 +1,6 @@
-export type PanelId = 'dashboard' | 'import' | 'scraping' | 'planners' | 'units' | 'cloud-sync' | 'settings' | 'user-guide';
+export type PanelId = 'dashboard' | 'pathway' | 'import' | 'scraping' | 'planners' | 'cloud-sync' | 'settings' | 'user-guide';
 
-export const PANEL_IDS: PanelId[] = ['dashboard', 'import', 'scraping', 'planners', 'units', 'cloud-sync', 'settings', 'user-guide'];
+export const PANEL_IDS: PanelId[] = ['dashboard', 'pathway', 'import', 'scraping', 'planners', 'cloud-sync', 'settings', 'user-guide'];
 
 export function isPanelId(value: string): value is PanelId {
   return (PANEL_IDS as string[]).includes(value);
@@ -8,6 +8,7 @@ export function isPanelId(value: string): value is PanelId {
 
 export const PANEL_PATHS: Record<PanelId, string> = {
   dashboard: '/dashboard',
+  pathway: '/pathway',
   import: '/import',
   scraping: '/scraping',
   planners: '/planners',
@@ -48,6 +49,7 @@ export const NAV_SECTIONS: NavSection[] = [
     label: 'Major Detection',
     items: [
       { id: 'dashboard', icon: '🎓', label: 'Major Detection' },
+      { id: 'pathway', icon: '🧭', label: 'Student Pathway' },
     ],
   },
   {
