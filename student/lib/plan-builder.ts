@@ -8,11 +8,9 @@
 import type { SemesterBlock, Unit } from './types'
 
 export interface PlanBuilderConfig {
-  /** e.g. "march-2024" or "august-2025" */
-  intake: string
-  courseId: string
-  majorId: string
-  secondMajorId: string | null
+  plannerId: string
+  intakeYear: number
+  intakeMonth: number
 }
 
 export interface GenerationInput {

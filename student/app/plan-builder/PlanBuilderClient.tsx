@@ -5,6 +5,7 @@ import { COURSE_OPTIONS } from '@student/lib/data/courses-mock'
 import { MOCK_UNITS } from '@student/lib/data/units-mock'
 import { generatePlan } from '@student/lib/plan-builder'
 import type { GenerationResult } from '@student/lib/plan-builder'
+import type { PlannerCourseOption } from '@student/lib/planners'
 import type { SemesterBlock } from '@student/lib/types'
 import SemesterTable from '@student/components/SemesterTable/SemesterTable'
 import ElectivePool from '@student/components/ElectivePool/ElectivePool'
@@ -31,15 +32,20 @@ function matchesCourse(code: string, courseId: string): boolean {
   return prefixes.some(p => code.startsWith(p))
 }
 
-// All intakes: March and August for each year
-const INTAKE_OPTIONS = (() => {
-  const opts: { value: string; label: string }[] = []
-  for (let y = 2020; y <= 2028; y++) {
-    opts.push({ value: `march-${y}`,  label: `March ${y}`  })
-    opts.push({ value: `august-${y}`, label: `August ${y}` })
-  }
-  return opts
-})()
+const MONTH_OPTIONS = [
+  { value: 1,  label: 'January'   },
+  { value: 2,  label: 'February'  },
+  { value: 3,  label: 'March'     },
+  { value: 4,  label: 'April'     },
+  { value: 5,  label: 'May'       },
+  { value: 6,  label: 'June'      },
+  { value: 7,  label: 'July'      },
+  { value: 8,  label: 'August'    },
+  { value: 9,  label: 'September' },
+  { value: 10, label: 'October'   },
+  { value: 11, label: 'November'  },
+  { value: 12, label: 'December'  },
+]
 
 interface CompletedSemester {
   id: string
@@ -112,12 +118,16 @@ function groupByYear(semesters: SemesterBlock[]): Map<number, SemesterBlock[]> {
   return map
 }
 
-export default function PlanBuilderClient() {
+interface Props {
+  plannerOptions: PlannerCourseOption[]
+}
+
+export default function PlanBuilderClient({ plannerOptions }: Props) {
   // ── Config ──
-  const [intake, setIntake]               = useState('march-2024')
-  const [courseId, setCourseId]           = useState('')
-  const [majorId, setMajorId]             = useState('')
-  const [secondMajorId, setSecondMajorId] = useState('')
+  const [selectedCourseId, setSelectedCourseId]   = useState('')
+  const [selectedPlannerId, setSelectedPlannerId] = useState('')
+  const [intakeYear, setIntakeYear]               = useState(new Date().getFullYear())
+  const [intakeMonth, setIntakeMonth]             = useState(3)
 
   // ── Completed semesters ──
   const semCounter = useRef(1)
@@ -135,10 +145,9 @@ export default function PlanBuilderClient() {
   const [error, setError]               = useState<string | null>(null)
   const [draftReady, setDraftReady]     = useState(false)
 
-  const selectedCourse = COURSE_OPTIONS.find(c => c.id === courseId)
-  const majors         = selectedCourse?.majors ?? []
-  const secondMajors   = majors.filter(m => m.id !== majorId)
-  const canGenerate    = Boolean(courseId && majorId)
+  const selectedCourse  = plannerOptions.find(c => c.courseId === selectedCourseId)
+  const majors          = selectedCourse?.majors ?? []
+  const canGenerate     = Boolean(selectedPlannerId)
 
   const allCompletedCodes = completedSemesters.flatMap(s => s.unitCodes)
 
@@ -161,9 +170,8 @@ export default function PlanBuilderClient() {
   }, [draftReady, intake, courseId, majorId, secondMajorId, completedSemesters])
 
   function handleCourseChange(id: string) {
-    setCourseId(id)
-    setMajorId('')
-    setSecondMajorId('')
+    setSelectedCourseId(id)
+    setSelectedPlannerId('')
     setResult(null)
     setError(null)
   }
@@ -241,7 +249,7 @@ export default function PlanBuilderClient() {
     setError(null)
     try {
       const res = await generatePlan({
-        config: { intake, courseId, majorId, secondMajorId: secondMajorId || null },
+        config: { plannerId: selectedPlannerId, intakeYear, intakeMonth },
         completedUnitCodes: allCompletedCodes,
       })
       if (!res) {
@@ -274,30 +282,16 @@ export default function PlanBuilderClient() {
 
         <div className={styles.configGrid}>
           <div className={styles.field}>
-            <label className={styles.label} htmlFor="intake">Intake</label>
-            <select
-              id="intake"
-              className={styles.select}
-              value={intake}
-              onChange={e => setIntake(e.target.value)}
-            >
-              {INTAKE_OPTIONS.map(o => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className={styles.field}>
             <label className={styles.label} htmlFor="course">Course</label>
             <select
               id="course"
               className={styles.select}
-              value={courseId}
+              value={selectedCourseId}
               onChange={e => handleCourseChange(e.target.value)}
             >
               <option value="">Select a course…</option>
-              {COURSE_OPTIONS.map(c => (
-                <option key={c.id} value={c.id}>{c.name}</option>
+              {plannerOptions.map(c => (
+                <option key={c.courseId} value={c.courseId}>{c.courseName}</option>
               ))}
             </select>
           </div>
@@ -319,7 +313,7 @@ export default function PlanBuilderClient() {
             >
               <option value="">Select a major…</option>
               {majors.map(m => (
-                <option key={m.id} value={m.id}>{m.name}</option>
+                <option key={m.plannerId} value={m.plannerId}>{m.majorName ?? 'No Major'}</option>
               ))}
             </select>
           </div>
@@ -333,18 +327,30 @@ export default function PlanBuilderClient() {
               <span className={styles.fieldHint}> — optional</span>
             </label>
             <select
-              id="secondMajor"
+              id="intakeMonth"
               className={styles.select}
               value={secondMajorId}
               onChange={e => setSecondMajorId(e.target.value)}
               disabled={!courseId || !majorId || secondMajors.length === 0}
               tabIndex={courseId ? 0 : -1}
             >
-              <option value="">None</option>
-              {secondMajors.map(m => (
-                <option key={m.id} value={m.id}>{m.name}</option>
+              {MONTH_OPTIONS.map(m => (
+                <option key={m.value} value={m.value}>{m.label}</option>
               ))}
             </select>
+          </div>
+
+          <div className={styles.field}>
+            <label className={styles.label} htmlFor="intakeYear">Intake Year</label>
+            <input
+              id="intakeYear"
+              type="number"
+              className={styles.select}
+              value={intakeYear}
+              min={2000}
+              max={2099}
+              onChange={e => setIntakeYear(Number(e.target.value))}
+            />
           </div>
         </div>
       </section>
@@ -570,29 +576,21 @@ export default function PlanBuilderClient() {
                 <div className={styles.summaryRow}>
                   <span className={styles.summaryLabel}>Intake</span>
                   <span className={styles.summaryValue}>
-                    {INTAKE_OPTIONS.find(o => o.value === intake)?.label ?? intake}
+                    {MONTH_OPTIONS.find(m => m.value === intakeMonth)?.label} {intakeYear}
                   </span>
                 </div>
                 <div className={styles.summaryRow}>
                   <span className={styles.summaryLabel}>Course</span>
                   <span className={styles.summaryValue}>
-                    {COURSE_OPTIONS.find(c => c.id === courseId)?.name ?? courseId}
+                    {selectedCourse?.courseName ?? '—'}
                   </span>
                 </div>
                 <div className={styles.summaryRow}>
                   <span className={styles.summaryLabel}>Major</span>
                   <span className={styles.summaryValue}>
-                    {majors.find(m => m.id === majorId)?.name ?? majorId}
+                    {majors.find(m => m.plannerId === selectedPlannerId)?.majorName ?? '—'}
                   </span>
                 </div>
-                {secondMajorId && (
-                  <div className={styles.summaryRow}>
-                    <span className={styles.summaryLabel}>2nd Major</span>
-                    <span className={styles.summaryValue}>
-                      {secondMajors.find(m => m.id === secondMajorId)?.name ?? secondMajorId}
-                    </span>
-                  </div>
-                )}
                 <hr className={styles.summaryDivider} />
                 <div className={styles.summaryRow}>
                   <span className={styles.summaryLabel}>Completed</span>

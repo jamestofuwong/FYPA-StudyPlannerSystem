@@ -2,6 +2,45 @@ import 'server-only'
 import { prisma } from './prisma'
 import type { PlannerSummary, PlannerDetail, SemesterBlock, Unit, UnitCategory } from './types'
 
+export interface PlannerMajorOption {
+  majorId: string | null
+  majorName: string | null
+  plannerId: string
+}
+
+export interface PlannerCourseOption {
+  courseId: string
+  courseName: string
+  majors: PlannerMajorOption[]
+}
+
+export async function getPlannerOptions(): Promise<PlannerCourseOption[]> {
+  const templates = await prisma.plannerTemplate.findMany({
+    include: { course: true, major: true },
+    orderBy: { intake_year: 'desc' },
+  })
+
+  const courseMap = new Map<string, PlannerCourseOption>()
+  const seen = new Set<string>()
+
+  for (const t of templates) {
+    const comboKey = `${t.course_id}-${t.major_id ?? 'null'}`
+    if (seen.has(comboKey)) continue // keep only the most recent intake per course+major
+    seen.add(comboKey)
+
+    if (!courseMap.has(t.course_id)) {
+      courseMap.set(t.course_id, { courseId: t.course_id, courseName: t.course.name, majors: [] })
+    }
+    courseMap.get(t.course_id)!.majors.push({
+      majorId: t.major_id ?? null,
+      majorName: t.major?.name ?? null,
+      plannerId: t.id,
+    })
+  }
+
+  return [...courseMap.values()]
+}
+
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
@@ -43,12 +82,30 @@ export async function getPlannerById(id: string): Promise<PlannerDetail | null> 
         include: {
           units: {
             orderBy: { position: 'asc' },
-            include: { unit: true },
+            include: {
+                unit: {
+                  include: {
+                    requisites: {
+                      where: { requisite_type: 'prerequisite' },
+                      include: { requisite_unit: { select: { code: true } } },
+                    },
+                  },
+                },
+              },
           },
         },
       },
       elective_pool: {
-        include: { unit: true },
+        include: {
+          unit: {
+            include: {
+              requisites: {
+                where: { requisite_type: 'prerequisite' },
+                include: { requisite_unit: { select: { code: true } } },
+              },
+            },
+          },
+        },
       },
     },
   })
@@ -68,6 +125,7 @@ export async function getPlannerById(id: string): Promise<PlannerDetail | null> 
       yearLevel: su.unit?.year_level ?? s.year_number,
       semester: s.sem_number,
       isElectiveSlot: su.is_elective_slot,
+      prerequisites: su.unit?.requisites.map(r => r.requisite_unit.code) ?? [],
     })),
   }))
 
@@ -109,6 +167,7 @@ export async function getPlannerById(id: string): Promise<PlannerDetail | null> 
       yearLevel: ep.unit.year_level,
       semester: 0,
       isElectiveSlot: false,
+      prerequisites: ep.unit.requisites.map(r => r.requisite_unit.code),
     })),
   }
 }
