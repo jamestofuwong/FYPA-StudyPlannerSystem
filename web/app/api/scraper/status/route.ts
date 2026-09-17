@@ -1,15 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { scraperStore, type ScraperQueueStatus } from '../store';
+import { scraperStore, portalSessionStore, portalStore, type ScraperQueueStatus } from '../store';
 
-// Dashboard polls this to know when scraping is done.
+// Dashboard polls this to know the current scraper and portal session state.
 export async function GET() {
   return NextResponse.json({
+    // Legacy DOM scraper state
     status: scraperStore.status,
     studentId: scraperStore.studentId,
     enrollmentMode: scraperStore.enrollmentMode,
     enrollmentText: scraperStore.enrollmentText,
     result: scraperStore.result,
     error: scraperStore.error,
+    // Portal API session state
+    sessionStatus: portalSessionStore.sessionStatus,
+    sessionError: portalSessionStore.sessionError,
+    studentCount: portalStore.students.length,
+    // Manual step-through debug state
+    manualMode: portalSessionStore.manualMode,
+    manualStep: portalSessionStore.manualStep,
+    manualStepError: portalSessionStore.manualStepError,
   });
 }
 

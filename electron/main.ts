@@ -146,6 +146,9 @@ function getNextProjectDir(): string {
 }
 
 async function startNextServer(): Promise<NextServerHandle> {
+  // Expose userData path so Next.js API routes can locate portal-session.json
+  process.env.APP_DATA_DIR = app.getPath('userData');
+
   const nextApp = next({
     dev: false,
     dir: getNextProjectDir()
