@@ -1,6 +1,6 @@
-export type PanelId = 'dashboard' | 'import' | 'scraping' | 'planners' | 'cloud-sync' | 'settings' | 'user-guide';
+export type PanelId = 'dashboard' | 'import' | 'scraping' | 'planners' | 'cloud-sync' | 'settings' | 'user-guide' | 'copilot';
 
-export const PANEL_IDS: PanelId[] = ['dashboard', 'import', 'scraping', 'planners', 'cloud-sync', 'settings', 'user-guide'];
+export const PANEL_IDS: PanelId[] = ['dashboard', 'import', 'scraping', 'planners', 'cloud-sync', 'settings', 'user-guide', 'copilot'];
 
 export function isPanelId(value: string): value is PanelId {
   return (PANEL_IDS as string[]).includes(value);
@@ -14,6 +14,7 @@ export const PANEL_PATHS: Record<PanelId, string> = {
   'cloud-sync': '/cloud-sync',
   settings: '/settings',
   'user-guide': '/user-guide',
+  copilot: '/copilot',
 };
 
 export function panelToPath(panel: PanelId): string {
@@ -56,6 +57,14 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { id: 'planners',    icon: '📋', label: 'Study Planners' },
       { id: 'cloud-sync',  icon: '☁️', label: 'Cloud Sync' },
+    ],
+  },
+  {
+    id: 'copilot',
+    icon: '🤖',
+    label: 'AI Copilot',
+    items: [
+      { id: 'copilot', icon: '🤖', label: 'AI Copilot' },
     ],
   },
 ];

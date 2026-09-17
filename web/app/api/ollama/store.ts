@@ -2,7 +2,7 @@
 // Node.js process (works correctly in Electron where Next.js runs in-process).
 
 export const OLLAMA_URL = 'http://127.0.0.1:11435';
-export const OLLAMA_MODEL = 'deepseek-r1:1.5b';
+export const OLLAMA_MODEL = 'qwen2.5:3b';
 
 export type OllamaAvailability = 'unknown' | 'available' | 'unavailable';
 export type ModelStatus = 'unknown' | 'ready' | 'pulling' | 'unavailable';
