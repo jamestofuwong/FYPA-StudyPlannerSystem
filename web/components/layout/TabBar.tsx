@@ -19,6 +19,7 @@ const TAB_META: Record<PanelId, TabMeta> = {
     'cloud-sync': { id: 'cloud-sync', icon: '☁️', label: 'Cloud Sync' },
     settings: { id: 'settings', icon: '⚙️', label: 'Settings' },
     'user-guide': { id: 'user-guide', icon: '📖', label: 'User Guide' },
+    'class-estimation': { id: 'class-estimation', icon: '📈', label: 'Class Estimation' },
 };
 
 interface TabBarProps {

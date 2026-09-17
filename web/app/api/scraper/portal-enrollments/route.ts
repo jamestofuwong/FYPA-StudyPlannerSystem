@@ -1,13 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { portalFetch, PortalAuthError } from '../../../../../core/services/portal/portalFetch';
-import { portalSessionStore, clearPersistedSession } from '../store';
-
-type EnrollmentResponse = {
-  DataList: { EnrollId: number; EnrollmentDesc: string }[];
-};
+import { fetchEnrollments, getStatus, PortalAuthError } from '../../../../../core/services/portal/portalSessionService';
 
 export async function POST(req: NextRequest) {
-  if (portalSessionStore.sessionStatus !== 'logged-in' || !portalSessionStore.cookies || !portalSessionStore.portalToken) {
+  if (getStatus().sessionStatus !== 'logged-in') {
     return NextResponse.json({ error: 'Not logged in to portal' }, { status: 401 });
   }
 
@@ -24,20 +19,13 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const data = await portalFetch<EnrollmentResponse>(
-      `/WebServices/api/CourseRegistration/GetEnrollmentDetailsByStudentId?StudentId=${dbId}`,
-      { cookies: portalSessionStore.cookies, portalToken: portalSessionStore.portalToken },
-    );
-
-    const enrollments = data.DataList ?? [];
+    const enrollments = await fetchEnrollments(dbId);
     if (enrollments.length === 0) {
       return NextResponse.json({ enrollments: [], error: 'No enrollments found for this student' });
     }
-
     return NextResponse.json({ enrollments });
   } catch (err) {
     if (err instanceof PortalAuthError) {
-      clearPersistedSession();
       return NextResponse.json({ error: err.message }, { status: 401 });
     }
     const msg = err instanceof Error ? err.message : 'Failed to fetch enrollments';
