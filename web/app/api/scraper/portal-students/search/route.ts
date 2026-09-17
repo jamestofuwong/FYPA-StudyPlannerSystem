@@ -1,28 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { portalStore, portalSessionStore } from '../../store';
+import { searchStudents, getStatus } from '../../../../../../core/services/portal/portalSessionService';
 
 export async function GET(req: NextRequest) {
-  if (portalSessionStore.sessionStatus !== 'logged-in') {
+  if (getStatus().sessionStatus !== 'logged-in') {
     return NextResponse.json({ error: 'Not logged in to portal' }, { status: 401 });
   }
 
-  const q = (req.nextUrl.searchParams.get('q') ?? '').trim().toLowerCase();
-  if (!q) {
-    return NextResponse.json({ results: [], source: 'portal' });
-  }
+  const q = (req.nextUrl.searchParams.get('q') ?? '').trim();
+  if (!q) return NextResponse.json({ results: [], source: 'portal' });
 
-  const results = portalStore.students
-    .filter(s => {
-      const fullName = [s.FirstName, s.MiddleName, s.LastName].filter(Boolean).join(' ').toLowerCase();
-      const studentNum = (s.StudentNumber ?? '').toLowerCase();
-      return fullName.includes(q) || studentNum.includes(q);
-    })
-    .slice(0, 10)
-    .map(s => ({
-      student_id: s.StudentNumber ?? '',
-      name: [s.FirstName, s.MiddleName, s.LastName].filter(Boolean).join(' '),
-      db_id: s.Id,
-    }));
-
+  const results = searchStudents(q);
   return NextResponse.json({ results, source: 'portal' });
 }

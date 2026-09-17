@@ -6,11 +6,15 @@
 //   - All session cookies (as a single Cookie header string)
 //   - The `token` header value sent by the Angular PortalExtension app
 //
-// This is a one-time operation. After it succeeds, all subsequent portal
-// API calls use plain fetch() with the captured credentials.
+// Normal flow (keepOpen = false):
+//   Phase 1 — Headed browser: user completes SSO, cookies captured, browser closed.
+//   Phase 2 — Headless browser: portal navigation continues invisibly in background.
+//
+// Debug flow (keepOpen = true):
+//   Single headed browser stays open for all steps (original behaviour).
 // ---------------------------------------------------------------------------
 
-import puppeteer, { type Browser, type Page } from 'puppeteer';
+import puppeteer, { type Browser, type Page, type CookieParam } from 'puppeteer';
 
 // ─── Portal URL constants ──────────────────────────────────────────────────
 
@@ -28,7 +32,6 @@ const FALLBACK_STUDENT_LOGIN_URL =
 
 const FALLBACK_DEGREE1_URL =
   'https://sisportal-100380.campusnexus.cloud/CMCPortal/secure/links/Degree1.aspx';
-
 
 const MICROSOFT_LOGIN_HOST = 'login.microsoftonline.com';
 
@@ -49,42 +52,131 @@ function isMicrosoftLoginUrl(url: string): boolean {
   }
 }
 
+// ─── Portal navigation (shared between headed and headless phase) ─────────────
+
+async function runPortalNavigation(
+  page: Page,
+  log: (msg: string) => void,
+  onTokenCaptured: (token: string) => void,
+): Promise<string> {
+  await page.setRequestInterception(true);
+  let captured = false;
+  page.on('request', (req) => {
+    const token = req.headers()['token'];
+    if (token && !captured) {
+      captured = true;
+      onTokenCaptured(token);
+      log('Portal token captured.');
+    }
+    req.continue();
+  });
+
+  log('Navigating to Degree1…');
+  await page.goto(DEGREE1_URL, { waitUntil: 'domcontentloaded' });
+
+  let iframeSrc = await page.evaluate((): string | null => {
+    const iframe = document.querySelector('iframe');
+    return iframe?.src ?? null;
+  });
+
+  if (!iframeSrc) {
+    log('Iframe not found — running fallback: Dashboard1 → loginstu → Degree1…');
+    await page.goto(FALLBACK_DASHBOARD1_URL,    { waitUntil: 'domcontentloaded' });
+    await page.goto(FALLBACK_STUDENT_LOGIN_URL, { waitUntil: 'domcontentloaded' });
+    await page.goto(FALLBACK_DEGREE1_URL,       { waitUntil: 'domcontentloaded' });
+
+    iframeSrc = await page.evaluate((): string | null => {
+      const iframe = document.querySelector('iframe');
+      return iframe?.src ?? null;
+    });
+  }
+
+  if (!iframeSrc) {
+    throw new Error('Could not find PortalExtension iframe on Degree1.aspx');
+  }
+  log(`Found PortalExtension iframe: ${iframeSrc}`);
+
+  log('Loading PortalExtension (waiting for Angular startup)…');
+  await page.goto(iframeSrc, { waitUntil: 'networkidle0', timeout: IDLE_TIMEOUT_MS });
+
+  return iframeSrc;
+}
+
+// ─── Main export ──────────────────────────────────────────────────────────────
+
 export async function captureLoginSession(
   onStatus?: (msg: string) => void,
   keepOpen = false,
 ): Promise<CaptureResult> {
   const log = (msg: string) => onStatus?.(msg);
 
-  log('Launching browser for portal login…');
+  // ── Debug mode: single headed browser stays open throughout ─────────────────
+  if (keepOpen) {
+    log('Launching browser (debug mode — window will stay open)…');
+    const browser: Browser = await puppeteer.launch({
+      headless: false,
+      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+      defaultViewport: null,
+    });
 
-  const browser: Browser = await puppeteer.launch({
-    headless: false, // Visible so the user can complete SSO
+    let capturedToken: string | null = null;
+
+    try {
+      const page: Page = await browser.newPage();
+      page.setDefaultNavigationTimeout(NAV_TIMEOUT_MS);
+
+      log('Navigating to portal…');
+      await page.goto(PORTAL_LOGIN_URL, { waitUntil: 'domcontentloaded' });
+
+      if (isMicrosoftLoginUrl(page.url())) {
+        log('Microsoft SSO detected — waiting for you to log in…');
+        await page.waitForFunction(
+          (msHost: string) => !window.location.hostname.includes(msHost),
+          { timeout: SSO_TIMEOUT_MS },
+          MICROSOFT_LOGIN_HOST,
+        );
+        log('SSO complete.');
+      }
+
+      await runPortalNavigation(page, log, (token) => { capturedToken = token; });
+
+      if (!capturedToken) {
+        throw new Error('Portal token was not captured — Angular startup requests may not have fired.');
+      }
+
+      log('Collecting session cookies…');
+      const cookies = await browser.cookies();
+      const cookieHeader = cookies.map(c => `${c.name}=${c.value}`).join('; ');
+      if (!cookieHeader) throw new Error('No cookies captured after login.');
+
+      log('Session captured. Browser kept open for debugging — close it manually when done.');
+      return { cookieHeader, portalToken: capturedToken };
+    } catch (err) {
+      await browser.close();
+      throw err;
+    }
+    // Browser intentionally NOT closed in normal exit (keepOpen = true)
+  }
+
+  // ── Normal mode ─────────────────────────────────────────────────────────────
+  // Phase 1: Headed browser — visible only for SSO. Closed as soon as SSO is done.
+
+  log('Launching browser for portal login…');
+  const headedBrowser: Browser = await puppeteer.launch({
+    headless: false,
     args: ['--no-sandbox', '--disable-setuid-sandbox'],
     defaultViewport: null,
   });
 
-  let capturedToken: string | null = null;
+  let ssoCookies: CookieParam[] = [];
 
   try {
-    const page: Page = await browser.newPage();
+    const page: Page = await headedBrowser.newPage();
     page.setDefaultNavigationTimeout(NAV_TIMEOUT_MS);
 
-    // ── Step 1: Intercept requests to capture the `token` header ────────────
-    await page.setRequestInterception(true);
-    page.on('request', (req) => {
-      const token = req.headers()['token'];
-      if (token && !capturedToken) {
-        capturedToken = token;
-        log('Portal token captured.');
-      }
-      req.continue();
-    });
-
-    // ── Step 2: Navigate to portal login page ────────────────────────────────
     log('Navigating to portal…');
     await page.goto(PORTAL_LOGIN_URL, { waitUntil: 'domcontentloaded' });
 
-    // ── Step 3: Wait for Microsoft SSO to complete (up to 10 minutes) ────────
     if (isMicrosoftLoginUrl(page.url())) {
       log('Microsoft SSO detected — waiting for you to log in…');
       await page.waitForFunction(
@@ -95,59 +187,46 @@ export async function captureLoginSession(
       log('SSO complete.');
     }
 
-    // ── Step 4: Navigate to Degree1 and extract iframe src ───────────────────
-    log('Navigating to Degree1…');
-    await page.goto(DEGREE1_URL, { waitUntil: 'domcontentloaded' });
+    // Capture SSO cookies before closing the visible browser
+    ssoCookies = await headedBrowser.cookies() as CookieParam[];
+  } finally {
+    await headedBrowser.close();
+    log('Browser closed — continuing session capture in background…');
+  }
 
-    let iframeSrc = await page.evaluate((): string | null => {
-      const iframe = document.querySelector('iframe');
-      return iframe?.src ?? null;
-    });
+  // Phase 2: Headless browser — invisible, carries SSO cookies forward.
 
-    if (!iframeSrc) {
-      log('Iframe not found — running fallback: Dashboard1 → loginstu → Degree1…');
-      await page.goto(FALLBACK_DASHBOARD1_URL,    { waitUntil: 'domcontentloaded' });
-      await page.goto(FALLBACK_STUDENT_LOGIN_URL, { waitUntil: 'domcontentloaded' });
-      await page.goto(FALLBACK_DEGREE1_URL,       { waitUntil: 'domcontentloaded' });
+  log('Starting background session capture…');
+  const headlessBrowser: Browser = await puppeteer.launch({
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+  });
 
-      iframeSrc = await page.evaluate((): string | null => {
-        const iframe = document.querySelector('iframe');
-        return iframe?.src ?? null;
-      });
+  let capturedToken: string | null = null;
+
+  try {
+    const page: Page = await headlessBrowser.newPage();
+    page.setDefaultNavigationTimeout(NAV_TIMEOUT_MS);
+
+    // Transfer SSO cookies into the headless session
+    if (ssoCookies.length > 0) {
+      await page.setCookie(...ssoCookies);
     }
 
-    if (!iframeSrc) {
-      throw new Error('Could not find PortalExtension iframe on Degree1.aspx');
-    }
-    log(`Found PortalExtension iframe: ${iframeSrc}`);
-
-    // ── Step 5: Load PortalExtension — triggers Angular startup requests ──────
-    // networkidle0 ensures Angular fires all its initialisation API calls,
-    // which carry the `token` header that the interceptor captures.
-    log('Loading PortalExtension (waiting for Angular startup)…');
-    await page.goto(iframeSrc, { waitUntil: 'networkidle0', timeout: IDLE_TIMEOUT_MS });
+    await runPortalNavigation(page, log, (token) => { capturedToken = token; });
 
     if (!capturedToken) {
       throw new Error('Portal token was not captured — Angular startup requests may not have fired.');
     }
 
-    // ── Step 6: Collect all cookies ──────────────────────────────────────────
     log('Collecting session cookies…');
-    const cookies = await browser.cookies();
+    const cookies = await headlessBrowser.cookies();
     const cookieHeader = cookies.map(c => `${c.name}=${c.value}`).join('; ');
-
-    if (!cookieHeader) {
-      throw new Error('No cookies captured after login.');
-    }
+    if (!cookieHeader) throw new Error('No cookies captured after login.');
 
     log('Session captured successfully.');
     return { cookieHeader, portalToken: capturedToken };
-
   } finally {
-    if (keepOpen) {
-      log('Browser kept open for debugging — close it manually when done.');
-    } else {
-      await browser.close();
-    }
+    await headlessBrowser.close();
   }
 }

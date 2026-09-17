@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
-import { clearPersistedSession } from '../store';
+import { logout } from '../../../../../core/services/portal/portalSessionService';
 
 export async function POST() {
-  clearPersistedSession();
+  logout();
   return NextResponse.json({ ok: true });
 }
