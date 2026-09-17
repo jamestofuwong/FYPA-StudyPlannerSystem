@@ -5,8 +5,9 @@
 //  - Max 4 standard units per semester
 //  - Max 1 MPU unit per semester
 //  - Requisites must be satisfied before/alongside a unit
-//  - Units are only placed in semesters they are offered in
-//    (offered_in = 1 | 2; null = available any semester)
+//  - Units are only placed in semesters they are offered in, per their
+//    unit_offerings rows (calendar terms). A unit with no rows is
+//    available in any semester.
 
 const MAX_STANDARD_PER_SEM = 4;
 const MAX_MPU_PER_SEM = 1;
@@ -51,7 +52,8 @@ export function buildCustomPlan(
   remainingUnits: SchedulableUnit[],
   completedUnitCodes: string[],
   startYear: number,
-  startSemester: 1 | 2
+  startSemester: 1 | 2,
+  intakeSemester: 1 | 2 = 1
 ): CustomPlanResult {
   const completed = new Set(completedUnitCodes.map((c) => c.trim().toUpperCase()));
   const pool: SchedulableUnit[] = [...remainingUnits];
@@ -63,6 +65,8 @@ export function buildCustomPlan(
 
   for (let i = 0; i < MAX_SEMESTERS && pool.length > 0; i++) {
     const totalCredits = completed.size * CREDIT_POINTS_PER_UNIT;
+    // currentSem counts from the student's intake; offerings are calendar terms
+    const calendarTerm: 1 | 2 = intakeSemester === 1 ? currentSem : (currentSem === 1 ? 2 : 1);
 
 
     const bucketCodes = new Set<string>();
@@ -81,7 +85,7 @@ export function buildCustomPlan(
         if (isMpu && mpuCount >= MAX_MPU_PER_SEM) continue;
         if (!isMpu && standardCount >= MAX_STANDARD_PER_SEM) continue;
 
-        if (canTake(unit, currentSem, completed, bucketCodes, totalCredits)) {
+        if (canTake(unit, calendarTerm, completed, bucketCodes, totalCredits)) {
           toPlace.push(unit);
           bucketCodes.add(unit.code.toUpperCase());
           changed = true;
@@ -121,12 +125,12 @@ export function buildCustomPlan(
 
 function canTake(
   unit: SchedulableUnit,
-  sem: 1 | 2,
+  calendarTerm: 1 | 2,
   completed: Set<string>,
   bucketCodes: Set<string>,
   totalCredits: number
 ): boolean {
-  if (unit.offeringSemesters.length > 0 && !unit.offeringSemesters.includes(sem)) return false;
+  if (unit.offeringSemesters.length > 0 && !unit.offeringSemesters.includes(calendarTerm)) return false;
   if (unit.requisiteGroups.length === 0) return true;
   return unit.requisiteGroups.some((group) =>
     group.every((condition) => isConditionSatisfied(condition, completed, bucketCodes, totalCredits))

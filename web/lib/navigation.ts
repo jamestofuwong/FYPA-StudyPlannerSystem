@@ -1,6 +1,6 @@
-export type PanelId = 'dashboard' | 'import' | 'scraping' | 'planners' | 'cloud-sync' | 'settings' | 'user-guide' | 'copilot';
+export type PanelId = 'dashboard' | 'pathway' | 'import' | 'scraping' | 'planners' | 'cloud-sync' | 'settings' | 'user-guide' | 'class-estimation' | 'copilot';
 
-export const PANEL_IDS: PanelId[] = ['dashboard', 'import', 'scraping', 'planners', 'cloud-sync', 'settings', 'user-guide', 'copilot'];
+export const PANEL_IDS: PanelId[] = ['dashboard', 'pathway', 'import', 'scraping', 'planners', 'cloud-sync', 'settings', 'user-guide', 'class-estimation', 'copilot'];
 
 export function isPanelId(value: string): value is PanelId {
   return (PANEL_IDS as string[]).includes(value);
@@ -8,13 +8,16 @@ export function isPanelId(value: string): value is PanelId {
 
 export const PANEL_PATHS: Record<PanelId, string> = {
   dashboard: '/dashboard',
+  pathway: '/pathway',
   import: '/import',
   scraping: '/scraping',
   planners: '/planners',
+  units: '/units',
   'cloud-sync': '/cloud-sync',
   settings: '/settings',
   'user-guide': '/user-guide',
   copilot: '/copilot',
+  'class-estimation': '/class-estimation',
 };
 
 export function panelToPath(panel: PanelId): string {
@@ -48,6 +51,7 @@ export const NAV_SECTIONS: NavSection[] = [
     label: 'Major Detection',
     items: [
       { id: 'dashboard', icon: '🎓', label: 'Major Detection' },
+      { id: 'pathway', icon: '🧭', label: 'Student Pathway' },
     ],
   },
   {
@@ -56,6 +60,7 @@ export const NAV_SECTIONS: NavSection[] = [
     label: 'Study Planners',
     items: [
       { id: 'planners',    icon: '📋', label: 'Study Planners' },
+      { id: 'units',    icon: '📝', label: 'Units' },
       { id: 'cloud-sync',  icon: '☁️', label: 'Cloud Sync' },
     ],
   },
@@ -65,6 +70,14 @@ export const NAV_SECTIONS: NavSection[] = [
     label: 'AI Copilot',
     items: [
       { id: 'copilot', icon: '🤖', label: 'AI Copilot' },
+    ]
+  },
+  {
+    id: 'analytics',
+    icon: '📈',
+    label: 'Analytics',
+    items: [
+      { id: 'class-estimation', icon: '📈', label: 'Class Estimation' },
     ],
   },
 ];

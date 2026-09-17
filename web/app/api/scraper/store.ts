@@ -1,5 +1,7 @@
 import type { ScrapedStudent } from '../../../../core/shared/types/student';
 
+// ─── Scrape queue state (legacy DOM scraper, kept for compatibility) ───────────
+
 export type ScraperQueueStatus = 'idle' | 'initializing' | 'pending' | 'scraping' | 'done' | 'error';
 export type EnrollmentMode = 'latest' | 'earliest' | 'mpu' | 'by-text';
 
@@ -12,13 +14,23 @@ type ScraperQueueState = {
   error: string | null;
 };
 
-// Module-level singleton — shared across all API route invocations in the same
-// Node.js process (works correctly in Electron where Next.js runs in-process).
-export const scraperStore: ScraperQueueState = {
-  status: 'idle',
-  studentId: null,
-  enrollmentMode: 'latest',
-  enrollmentText: null,
-  result: null,
-  error: null,
-};
+// ─── Global singleton ─────────────────────────────────────────────────────────
+// Anchored on globalThis to survive Next.js HMR module reloads in dev mode.
+
+declare global {
+  // eslint-disable-next-line no-var
+  var __scraperStore: ScraperQueueState | undefined;
+}
+
+if (!globalThis.__scraperStore) {
+  globalThis.__scraperStore = {
+    status: 'idle',
+    studentId: null,
+    enrollmentMode: 'latest',
+    enrollmentText: null,
+    result: null,
+    error: null,
+  };
+}
+
+export const scraperStore = globalThis.__scraperStore;
