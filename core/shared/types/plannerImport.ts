@@ -18,7 +18,7 @@ export type PlannerImportUnit = {
       requisite_type?: string | null;
     }[];
   }[] | null;
-  offered_in: number | null;
+  offered_in?: number[] | number | null;
   minor_name?: string | null;
 };
 
