@@ -74,6 +74,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Planner not found' }, { status: 404 });
     }
 
+    if (planner.intake_month == null) {
+      console.warn(`[custom-planner] planner ${plannerId} has no intake_month, assuming a Feb/Mar intake`);
+    }
+    const intakeSemester: 1 | 2 = (planner.intake_month ?? 1) >= 7 ? 2 : 1;
+
     const normalizedCompleted = new Set(
       (completedUnitCodes as string[]).map((c) => c.trim().toUpperCase())
     );
@@ -123,7 +128,8 @@ export async function POST(req: NextRequest) {
       remainingUnits,
       completedUnitCodes as string[],
       startYear as number,
-      startSemester as 1 | 2
+      startSemester as 1 | 2,
+      intakeSemester
     );
 
     return NextResponse.json({ success: true, data: result });

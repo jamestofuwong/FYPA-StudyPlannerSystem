@@ -241,4 +241,111 @@ describe('Custom Planner Scheduler', () => {
       expect(result.unschedulableUnits).toEqual([]);
     });
   });
+
+  // Bucket semesters count from the student's intake, offerings are calendar
+  // terms. Slot 1 of a September intake is calendar Semester 2.
+  describe('intake-relative vs calendar terms', () => {
+    const placements = (result: ReturnType<typeof buildCustomPlan>) =>
+      result.semesters.map(({ year, semester, units }) => ({
+        year,
+        semester,
+        codes: units.map((item) => item.code),
+      }));
+
+    test('Feb/Mar intake defers a Semester 2 only unit from slot 1 to slot 2', () => {
+      const result = buildCustomPlan(
+        [unit('S2-ONLY', { offeringSemesters: [2] })],
+        [],
+        2024,
+        1,
+        1,
+      );
+
+      expect(placements(result)).toEqual([
+        { year: 2024, semester: 2, codes: ['S2-ONLY'] },
+      ]);
+    });
+
+    test('September intake places a Semester 2 only unit in slot 1', () => {
+      const result = buildCustomPlan(
+        [unit('S2-ONLY', { offeringSemesters: [2] })],
+        [],
+        2024,
+        1,
+        2,
+      );
+
+      expect(placements(result)).toEqual([
+        { year: 2024, semester: 1, codes: ['S2-ONLY'] },
+      ]);
+    });
+
+    test('September intake defers a Semester 1 only unit from slot 1 to slot 2', () => {
+      const result = buildCustomPlan(
+        [unit('S1-ONLY', { offeringSemesters: [1] })],
+        [],
+        2024,
+        1,
+        2,
+      );
+
+      expect(placements(result)).toEqual([
+        { year: 2024, semester: 2, codes: ['S1-ONLY'] },
+      ]);
+    });
+
+    test('omitting the intake semester behaves as a Feb/Mar intake', () => {
+      const units = () => [
+        unit('S1-ONLY', { offeringSemesters: [1] }),
+        unit('S2-ONLY', { offeringSemesters: [2] }),
+        unit('ANY'),
+        unit('AFTER-S1', {
+          offeringSemesters: [2],
+          requisiteGroups: [[{
+            type: 'unit',
+            unitCode: 'S1-ONLY',
+            requisiteType: 'prerequisite',
+          }]],
+        }),
+      ];
+
+      const omitted = buildCustomPlan(units(), [], 2024, 2);
+      const explicit = buildCustomPlan(units(), [], 2024, 2, 1);
+
+      expect(omitted).toEqual(explicit);
+      expect(placements(omitted)).toEqual([
+        { year: 2024, semester: 2, codes: ['S2-ONLY', 'ANY'] },
+        { year: 2025, semester: 1, codes: ['S1-ONLY'] },
+        { year: 2025, semester: 2, codes: ['AFTER-S1'] },
+      ]);
+    });
+
+    test('September intake buckets keep slot numbers, not calendar terms', () => {
+      const result = buildCustomPlan(
+        [
+          unit('S2-ONLY', { offeringSemesters: [2] }),
+          unit('S1-AFTER', {
+            offeringSemesters: [1],
+            requisiteGroups: [[{
+              type: 'unit',
+              unitCode: 'S2-ONLY',
+              requisiteType: 'prerequisite',
+            }]],
+          }),
+        ],
+        [],
+        2024,
+        2,
+        2,
+      );
+
+      // Slot 2 of a September intake is calendar Semester 1, so S2-ONLY waits
+      // for slot 1 of the next year (calendar Semester 2).
+      expect(placements(result)).toEqual([
+        { year: 2025, semester: 1, codes: ['S2-ONLY'] },
+        { year: 2025, semester: 2, codes: ['S1-AFTER'] },
+      ]);
+      expect(result.semesters.map((bucket) => bucket.semester)).toEqual([1, 2]);
+    });
+  });
 });
