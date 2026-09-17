@@ -8,7 +8,7 @@ import {
 } from '../../../../core/services/scheduling/customPlannerScheduler';
 
 function toSchedulable(
-  unit: { unit_code: string; unit_name: string; offerings: { semester: number }[]; requisite_groups: any[] },
+  unit: { unit_code: string; unit_name: string; offerings: { offered_in: number }[]; requisite_groups: any[] },
   category: string
 ): SchedulableUnit {
   const requisiteGroups: RequisiteCondition[][] = (unit.requisite_groups ?? [])
@@ -31,8 +31,9 @@ function toSchedulable(
     )
     .filter((g: RequisiteCondition[]) => g.length > 0);
 
+  // Terms 3 (summer) and 4 (winter) are dropped because the scheduler only cycles semesters 1 and 2
   const offeringSemesters = (unit.offerings ?? [])
-    .map(offering => offering.semester as 1 | 2)
+    .map(o => o.offered_in as 1 | 2)
     .filter(sem => sem === 1 || sem === 2);
 
   return { code: unit.unit_code, name: unit.unit_name, category, offeringSemesters, requisiteGroups };
