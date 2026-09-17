@@ -1,30 +1,111 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { COURSE_OPTIONS } from '@student/lib/data/courses-mock'
 import { MOCK_UNITS } from '@student/lib/data/units-mock'
 import { generatePlan } from '@student/lib/plan-builder'
 import type { GenerationResult } from '@student/lib/plan-builder'
+import type { PlannerCourseOption } from '@student/lib/planners'
 import type { SemesterBlock } from '@student/lib/types'
 import SemesterTable from '@student/components/SemesterTable/SemesterTable'
 import ElectivePool from '@student/components/ElectivePool/ElectivePool'
 import styles from './PlanBuilderClient.module.css'
 
 const YEAR_WORDS = ['One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight']
+const UNIT_LEVELS = [1, 2, 3, 4]
 
-// All intakes: March and August for each year
-const INTAKE_OPTIONS = (() => {
-  const opts: { value: string; label: string }[] = []
-  for (let y = 2020; y <= 2028; y++) {
-    opts.push({ value: `march-${y}`,  label: `March ${y}`  })
-    opts.push({ value: `august-${y}`, label: `August ${y}` })
-  }
-  return opts
-})()
+/** Discipline prefixes used to surface likely units for the selected course. */
+const COURSE_UNIT_PREFIXES: Record<string, string[]> = {
+  bcs:  ['COS', 'SWE', 'INF', 'TNE', 'MTH', 'STA', 'FTE'],
+  bbus: ['BUS', 'ACC', 'ECO', 'MGT', 'FIN', 'HRM', 'STA', 'INF'],
+  beng: ['MTH', 'COS', 'TNE'],
+}
+
+function unitLevel(code: string): number {
+  const match = code.match(/\d/)
+  return match ? parseInt(match[0], 10) : 0
+}
+
+function matchesCourse(code: string, courseId: string): boolean {
+  const prefixes = COURSE_UNIT_PREFIXES[courseId]
+  if (!prefixes) return false
+  return prefixes.some(p => code.startsWith(p))
+}
+
+const MONTH_OPTIONS = [
+  { value: 1,  label: 'January'   },
+  { value: 2,  label: 'February'  },
+  { value: 3,  label: 'March'     },
+  { value: 4,  label: 'April'     },
+  { value: 5,  label: 'May'       },
+  { value: 6,  label: 'June'      },
+  { value: 7,  label: 'July'      },
+  { value: 8,  label: 'August'    },
+  { value: 9,  label: 'September' },
+  { value: 10, label: 'October'   },
+  { value: 11, label: 'November'  },
+  { value: 12, label: 'December'  },
+]
 
 interface CompletedSemester {
   id: string
   unitCodes: string[]
+}
+
+const DRAFT_KEY = 'plan-builder-draft'
+
+interface PlanBuilderDraft {
+  intake: string
+  courseId: string
+  majorId: string
+  secondMajorId: string
+  completedSemesters: CompletedSemester[]
+}
+
+function readDraft(): PlanBuilderDraft | null {
+  try {
+    const raw = sessionStorage.getItem(DRAFT_KEY)
+    if (!raw) return null
+    const data = JSON.parse(raw) as Partial<PlanBuilderDraft>
+    if (typeof data.intake !== 'string' || typeof data.courseId !== 'string') return null
+    if (!Array.isArray(data.completedSemesters)) return null
+    const completedSemesters = data.completedSemesters
+      .filter((s): s is CompletedSemester =>
+        Boolean(s) && typeof s.id === 'string' && Array.isArray(s.unitCodes),
+      )
+      .map(s => ({
+        id: s.id,
+        unitCodes: s.unitCodes.filter((code): code is string => typeof code === 'string'),
+      }))
+    return {
+      intake: data.intake,
+      courseId: data.courseId,
+      majorId: typeof data.majorId === 'string' ? data.majorId : '',
+      secondMajorId: typeof data.secondMajorId === 'string' ? data.secondMajorId : '',
+      completedSemesters: completedSemesters.length > 0
+        ? completedSemesters
+        : [{ id: 'sem-1', unitCodes: [] }],
+    }
+  } catch {
+    return null
+  }
+}
+
+function writeDraft(draft: PlanBuilderDraft) {
+  try {
+    sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft))
+  } catch {
+    // Ignore quota / private-mode failures
+  }
+}
+
+function nextSemCounter(semesters: CompletedSemester[]): number {
+  let max = 0
+  for (const s of semesters) {
+    const n = Number(s.id.replace(/^sem-/, ''))
+    if (Number.isFinite(n) && n > max) max = n
+  }
+  return Math.max(1, max)
 }
 
 function groupByYear(semesters: SemesterBlock[]): Map<number, SemesterBlock[]> {
@@ -37,12 +118,16 @@ function groupByYear(semesters: SemesterBlock[]): Map<number, SemesterBlock[]> {
   return map
 }
 
-export default function PlanBuilderClient() {
+interface Props {
+  plannerOptions: PlannerCourseOption[]
+}
+
+export default function PlanBuilderClient({ plannerOptions }: Props) {
   // ── Config ──
-  const [intake, setIntake]               = useState('march-2024')
-  const [courseId, setCourseId]           = useState('')
-  const [majorId, setMajorId]             = useState('')
-  const [secondMajorId, setSecondMajorId] = useState('')
+  const [selectedCourseId, setSelectedCourseId]   = useState('')
+  const [selectedPlannerId, setSelectedPlannerId] = useState('')
+  const [intakeYear, setIntakeYear]               = useState(new Date().getFullYear())
+  const [intakeMonth, setIntakeMonth]             = useState(3)
 
   // ── Completed semesters ──
   const semCounter = useRef(1)
@@ -58,18 +143,35 @@ export default function PlanBuilderClient() {
   const [result, setResult]             = useState<GenerationResult | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
   const [error, setError]               = useState<string | null>(null)
+  const [draftReady, setDraftReady]     = useState(false)
 
-  const selectedCourse = COURSE_OPTIONS.find(c => c.id === courseId)
-  const majors         = selectedCourse?.majors ?? []
-  const secondMajors   = majors.filter(m => m.id !== majorId)
-  const canGenerate    = Boolean(courseId && majorId)
+  const selectedCourse  = plannerOptions.find(c => c.courseId === selectedCourseId)
+  const majors          = selectedCourse?.majors ?? []
+  const canGenerate     = Boolean(selectedPlannerId)
 
   const allCompletedCodes = completedSemesters.flatMap(s => s.unitCodes)
 
+  useEffect(() => {
+    const draft = readDraft()
+    if (draft) {
+      setIntake(draft.intake)
+      setCourseId(draft.courseId)
+      setMajorId(draft.majorId)
+      setSecondMajorId(draft.secondMajorId)
+      setCompletedSemesters(draft.completedSemesters)
+      semCounter.current = nextSemCounter(draft.completedSemesters)
+    }
+    setDraftReady(true)
+  }, [])
+
+  useEffect(() => {
+    if (!draftReady) return
+    writeDraft({ intake, courseId, majorId, secondMajorId, completedSemesters })
+  }, [draftReady, intake, courseId, majorId, secondMajorId, completedSemesters])
+
   function handleCourseChange(id: string) {
-    setCourseId(id)
-    setMajorId('')
-    setSecondMajorId('')
+    setSelectedCourseId(id)
+    setSelectedPlannerId('')
     setResult(null)
     setError(null)
   }
@@ -93,8 +195,6 @@ export default function PlanBuilderClient() {
     setCompletedSemesters(prev =>
       prev.map(s => s.id === semId ? { ...s, unitCodes: [...s.unitCodes, code] } : s)
     )
-    setAddQuery('')
-    // Keep search open for rapid entry
   }
 
   function removeUnitFromSem(semId: string, code: string) {
@@ -113,14 +213,23 @@ export default function PlanBuilderClient() {
     setAddQuery('')
   }
 
-  // Filter units for the active add row (exclude anything already added anywhere)
-  const filteredAddUnits = addQuery.trim().length >= 1
-    ? MOCK_UNITS.filter(u =>
-        !allCompletedCodes.includes(u.code) &&
-        (u.code.toLowerCase().includes(addQuery.toLowerCase()) ||
-         u.name.toLowerCase().includes(addQuery.toLowerCase()))
-      ).slice(0, 8)
-    : []
+  const filteredAddUnits = useMemo(() => {
+    const q = addQuery.trim().toLowerCase()
+    return MOCK_UNITS.filter(u => {
+      if (allCompletedCodes.includes(u.code)) return false
+      if (q && !u.code.toLowerCase().includes(q) && !u.name.toLowerCase().includes(q)) return false
+      return true
+    })
+  }, [allCompletedCodes, addQuery])
+
+  const suggestedAddUnits = useMemo(
+    () => courseId ? filteredAddUnits.filter(u => matchesCourse(u.code, courseId)) : filteredAddUnits,
+    [filteredAddUnits, courseId],
+  )
+  const otherAddUnits = useMemo(
+    () => courseId ? filteredAddUnits.filter(u => !matchesCourse(u.code, courseId)) : [],
+    [filteredAddUnits, courseId],
+  )
 
   // Close inline search on outside click
   useEffect(() => {
@@ -140,7 +249,7 @@ export default function PlanBuilderClient() {
     setError(null)
     try {
       const res = await generatePlan({
-        config: { intake, courseId, majorId, secondMajorId: secondMajorId || null },
+        config: { plannerId: selectedPlannerId, intakeYear, intakeMonth },
         completedUnitCodes: allCompletedCodes,
       })
       if (!res) {
@@ -173,38 +282,26 @@ export default function PlanBuilderClient() {
 
         <div className={styles.configGrid}>
           <div className={styles.field}>
-            <label className={styles.label} htmlFor="intake">Intake</label>
-            <select
-              id="intake"
-              className={styles.select}
-              value={intake}
-              onChange={e => setIntake(e.target.value)}
-            >
-              {INTAKE_OPTIONS.map(o => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className={styles.field}>
             <label className={styles.label} htmlFor="course">Course</label>
             <select
               id="course"
               className={styles.select}
-              value={courseId}
+              value={selectedCourseId}
               onChange={e => handleCourseChange(e.target.value)}
             >
               <option value="">Select a course…</option>
-              {COURSE_OPTIONS.map(c => (
-                <option key={c.id} value={c.id}>{c.name}</option>
+              {plannerOptions.map(c => (
+                <option key={c.courseId} value={c.courseId}>{c.courseName}</option>
               ))}
             </select>
           </div>
 
-          <div className={styles.field}>
+          <div
+            className={`${styles.field} ${!courseId ? styles.fieldHidden : ''}`}
+            aria-hidden={!courseId}
+          >
             <label className={styles.label} htmlFor="major">
               Major
-              {!courseId && <span className={styles.fieldHint}> — select a course first</span>}
             </label>
             <select
               id="major"
@@ -212,31 +309,48 @@ export default function PlanBuilderClient() {
               value={majorId}
               onChange={e => { setMajorId(e.target.value); setResult(null); setError(null) }}
               disabled={!courseId}
+              tabIndex={courseId ? 0 : -1}
             >
               <option value="">Select a major…</option>
               {majors.map(m => (
-                <option key={m.id} value={m.id}>{m.name}</option>
+                <option key={m.plannerId} value={m.plannerId}>{m.majorName ?? 'No Major'}</option>
               ))}
             </select>
           </div>
 
-          <div className={styles.field}>
+          <div
+            className={`${styles.field} ${!courseId ? styles.fieldHidden : ''}`}
+            aria-hidden={!courseId}
+          >
             <label className={styles.label} htmlFor="secondMajor">
               Second Major
               <span className={styles.fieldHint}> — optional</span>
             </label>
             <select
-              id="secondMajor"
+              id="intakeMonth"
               className={styles.select}
               value={secondMajorId}
               onChange={e => setSecondMajorId(e.target.value)}
-              disabled={!majorId || secondMajors.length === 0}
+              disabled={!courseId || !majorId || secondMajors.length === 0}
+              tabIndex={courseId ? 0 : -1}
             >
-              <option value="">None</option>
-              {secondMajors.map(m => (
-                <option key={m.id} value={m.id}>{m.name}</option>
+              {MONTH_OPTIONS.map(m => (
+                <option key={m.value} value={m.value}>{m.label}</option>
               ))}
             </select>
+          </div>
+
+          <div className={styles.field}>
+            <label className={styles.label} htmlFor="intakeYear">Intake Year</label>
+            <input
+              id="intakeYear"
+              type="number"
+              className={styles.select}
+              value={intakeYear}
+              min={2000}
+              max={2099}
+              onChange={e => setIntakeYear(Number(e.target.value))}
+            />
           </div>
         </div>
       </section>
@@ -286,7 +400,7 @@ export default function PlanBuilderClient() {
                 {/* Unit rows */}
                 {sem.unitCodes.length === 0 && !isAddActive && (
                   <div className={styles.completedEmpty}>
-                    No units added. Click &ldquo;+ Add unit&rdquo; below.
+                    No units added. Click &ldquo;+ Add unit&rdquo; and pick from the list.
                   </div>
                 )}
 
@@ -310,24 +424,53 @@ export default function PlanBuilderClient() {
                   <div className={styles.addUnitRow} ref={addRowRef}>
                     <input
                       autoFocus
-                      type="text"
+                      type="search"
                       className={styles.addUnitInput}
-                      placeholder="Search by unit code or name…"
+                      placeholder="Filter by code or name"
                       value={addQuery}
                       onChange={e => setAddQuery(e.target.value)}
                       autoComplete="off"
                       onKeyDown={e => { if (e.key === 'Escape') closeAddUnit() }}
-                      aria-label="Search units to add"
+                      aria-label="Filter units to add"
                     />
-                    <button
-                      className={styles.addUnitDone}
-                      onClick={closeAddUnit}
-                      aria-label="Close search"
-                    >Done</button>
 
-                    {filteredAddUnits.length > 0 && (
-                      <ul className={styles.addDropdown} role="listbox">
-                        {filteredAddUnits.map(u => (
+                    {filteredAddUnits.length > 0 ? (
+                      <ul className={styles.addDropdown} role="listbox" aria-label="Units you can add">
+                        {courseId && suggestedAddUnits.length > 0 && otherAddUnits.length > 0 && (
+                          <li className={styles.addDropdownGroup} role="presentation">Suggested for your course</li>
+                        )}
+                        {(courseId ? suggestedAddUnits : filteredAddUnits).map(u => (
+                          <li
+                            key={u.code}
+                            className={styles.addDropdownItem}
+                            role="option"
+                            aria-selected={false}
+                            onMouseDown={e => { e.preventDefault(); addUnitToSem(sem.id, u.code) }}
+                          >
+                            <span className={styles.addDropdownCode}>{u.code}</span>
+                            <span className={styles.addDropdownName}>{u.name}</span>
+                            <span className={styles.addDropdownPlus} aria-hidden="true">+</span>
+                          </li>
+                        ))}
+                        {otherAddUnits.length > 0 && suggestedAddUnits.length > 0 && (
+                          <>
+                            <li className={styles.addDropdownGroup} role="presentation">Other units</li>
+                            {otherAddUnits.map(u => (
+                              <li
+                                key={u.code}
+                                className={styles.addDropdownItem}
+                                role="option"
+                                aria-selected={false}
+                                onMouseDown={e => { e.preventDefault(); addUnitToSem(sem.id, u.code) }}
+                              >
+                                <span className={styles.addDropdownCode}>{u.code}</span>
+                                <span className={styles.addDropdownName}>{u.name}</span>
+                                <span className={styles.addDropdownPlus} aria-hidden="true">+</span>
+                              </li>
+                            ))}
+                          </>
+                        )}
+                        {otherAddUnits.length > 0 && suggestedAddUnits.length === 0 && otherAddUnits.map(u => (
                           <li
                             key={u.code}
                             className={styles.addDropdownItem}
@@ -341,10 +484,12 @@ export default function PlanBuilderClient() {
                           </li>
                         ))}
                       </ul>
-                    )}
-
-                    {addQuery.trim().length >= 1 && filteredAddUnits.length === 0 && (
-                      <div className={styles.addDropdownEmpty}>No units found.</div>
+                    ) : (
+                      <div className={styles.addDropdownEmpty}>
+                        {addQuery.trim()
+                          ? 'No units match that search.'
+                          : 'All units have already been added.'}
+                      </div>
                     )}
                   </div>
                 ) : (
@@ -431,29 +576,21 @@ export default function PlanBuilderClient() {
                 <div className={styles.summaryRow}>
                   <span className={styles.summaryLabel}>Intake</span>
                   <span className={styles.summaryValue}>
-                    {INTAKE_OPTIONS.find(o => o.value === intake)?.label ?? intake}
+                    {MONTH_OPTIONS.find(m => m.value === intakeMonth)?.label} {intakeYear}
                   </span>
                 </div>
                 <div className={styles.summaryRow}>
                   <span className={styles.summaryLabel}>Course</span>
                   <span className={styles.summaryValue}>
-                    {COURSE_OPTIONS.find(c => c.id === courseId)?.name ?? courseId}
+                    {selectedCourse?.courseName ?? '—'}
                   </span>
                 </div>
                 <div className={styles.summaryRow}>
                   <span className={styles.summaryLabel}>Major</span>
                   <span className={styles.summaryValue}>
-                    {majors.find(m => m.id === majorId)?.name ?? majorId}
+                    {majors.find(m => m.plannerId === selectedPlannerId)?.majorName ?? '—'}
                   </span>
                 </div>
-                {secondMajorId && (
-                  <div className={styles.summaryRow}>
-                    <span className={styles.summaryLabel}>2nd Major</span>
-                    <span className={styles.summaryValue}>
-                      {secondMajors.find(m => m.id === secondMajorId)?.name ?? secondMajorId}
-                    </span>
-                  </div>
-                )}
                 <hr className={styles.summaryDivider} />
                 <div className={styles.summaryRow}>
                   <span className={styles.summaryLabel}>Completed</span>

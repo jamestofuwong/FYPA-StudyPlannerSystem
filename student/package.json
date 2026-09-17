@@ -3,10 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "bash scripts/dev.sh",
+    "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "db:generate": "prisma generate",
+    "postinstall": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:migrate:prod": "dotenv -e .env.production -- prisma migrate deploy",
     "db:studio": "prisma studio",

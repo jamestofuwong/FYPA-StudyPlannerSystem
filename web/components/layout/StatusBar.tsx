@@ -10,6 +10,7 @@ const PANEL_LABELS: Record<PanelId, string> = {
     scraping: 'Data Scraping',
     import: 'Data Import',
     planners: 'Study Planners',
+    units: 'Units',
     settings: 'Settings',
     "cloud-sync": 'Cloud Sync',
     "user-guide": 'User Guide', 

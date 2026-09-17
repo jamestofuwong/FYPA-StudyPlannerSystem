@@ -1235,22 +1235,9 @@ export default function DashboardPage() {
                   [...transcriptStates].filter(([, state]) => state === 'passed').map(([code]) => code)
               );
 
-              //Count matches within the planner (Capping MPU to 1 slot)
-              let completedInPlannerCount = 0;
-              let mpuSlotFilled = false;
-              const plannerCodes = new Set((activePlanner.units ?? []).map((u: any) => u.unit?.unit_code?.trim().toUpperCase()).filter(Boolean));
-
-              plannerCodes.forEach((code: any) => {
-                  if (transcriptCodes.has(code)) {
-                      if (code.startsWith('MPU')) {
-                          if (!mpuSlotFilled) { completedInPlannerCount += 1; mpuSlotFilled = true; }
-                      } else {
-                          completedInPlannerCount += 1;
-                      }
-                  }
-              });
-
-              const matchedCP = completedInPlannerCount * 12.5;
+              // Same source as the identity card: portal enrolment CP (or import sum).
+              const creditsCompleted = scrapedStudent?.student?.creditsCompleted ?? 0;
+              const creditsRequired = scrapedStudent?.student?.creditsRequired || 300;
 
               const coreMissing = (activePlanner?.units ?? [])
                 .filter((u: any) => u.unit !== null && (u.category === 'core' || u.category === 'major_core') && !transcriptCodes.has(u.unit.unit_code?.toUpperCase()));
@@ -1258,7 +1245,7 @@ export default function DashboardPage() {
               const prescribedMissing = (activePlanner?.units ?? [])
                 .filter((u: any) => u.unit !== null && u.category === 'prescribed_elective' && !transcriptCodes.has(u.unit.unit_code?.toUpperCase()));
 
-              const isEligible = (coreMissing.length + prescribedMissing.length === 0) && matchedCP >= 300;
+              const isEligible = (coreMissing.length + prescribedMissing.length === 0) && creditsCompleted >= creditsRequired;
               
               return (
                 <div style={{ background: 'var(--card-bg)', border: `1px solid ${isEligible ? 'var(--accent-green)' : 'var(--accent-purple)'}`, borderRadius: 4, padding: '12px 14px' }}>
@@ -1294,13 +1281,13 @@ export default function DashboardPage() {
                           )}
                       </div>
 
-                      <div style={{ fontSize:'12px', color: matchedCP >= 300 ? 'var(--accent-green)' : 'var(--text-muted)' }}>
-                          {matchedCP >= 300 ? '●' : '○'} Credits: {matchedCP}/300 CP
+                      <div style={{ fontSize:'12px', color: creditsCompleted >= creditsRequired ? 'var(--accent-green)' : 'var(--text-muted)' }}>
+                          {creditsCompleted >= creditsRequired ? '●' : '○'} Credits: {creditsCompleted}/{creditsRequired} CP
                       </div>
                   </div>
 
                   <div style={{ marginTop: 10 }}>
-                    <ProgressBar pct={Math.min((matchedCP / 300) * 100, 100)} color="var(--accent-purple)" />
+                    <ProgressBar pct={Math.min((creditsCompleted / creditsRequired) * 100, 100)} color="var(--accent-purple)" />
                   </div>
                 </div>
               );
