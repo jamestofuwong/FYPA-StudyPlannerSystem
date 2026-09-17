@@ -7,7 +7,7 @@ export async function GET() {
   }
 
   const students = portalStore.students.map(s => ({
-    student_id: s.StudentNumber,
+    student_id: s.StudentNumber ?? '',
     name: [s.FirstName, s.MiddleName, s.LastName].filter(Boolean).join(' '),
     db_id: s.Id,
   }));

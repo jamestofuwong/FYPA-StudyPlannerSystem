@@ -13,12 +13,13 @@ export async function GET(req: NextRequest) {
 
   const results = portalStore.students
     .filter(s => {
-      const fullName = `${s.FirstName} ${s.MiddleName} ${s.LastName}`.toLowerCase();
-      return fullName.includes(q) || s.StudentNumber.toLowerCase().includes(q);
+      const fullName = [s.FirstName, s.MiddleName, s.LastName].filter(Boolean).join(' ').toLowerCase();
+      const studentNum = (s.StudentNumber ?? '').toLowerCase();
+      return fullName.includes(q) || studentNum.includes(q);
     })
     .slice(0, 10)
     .map(s => ({
-      student_id: s.StudentNumber,
+      student_id: s.StudentNumber ?? '',
       name: [s.FirstName, s.MiddleName, s.LastName].filter(Boolean).join(' '),
       db_id: s.Id,
     }));
