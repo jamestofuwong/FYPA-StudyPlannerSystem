@@ -8,9 +8,53 @@ import { Badge, InlineCode } from '../../../components/common/Primitives';
 import MinorProgressCard, { getMinorProgress } from '../../../components/common/MinorProgressCard';
 import {
   getCompletedUnitCodes,
+  getConcededPassUnitCodes,
   normaliseUnitCode,
   resolveUnitStates,
 } from '../../../../core/shared/constants/grades';
+import {
+  DEFAULT_SCHEDULER_CONFIG,
+  type PlanWarning,
+} from '../../../../core/services/scheduling/customPlannerScheduler';
+
+const TERM_NAMES: Record<number, string> = { 1: 'Semester 1', 2: 'Semester 2', 3: 'summer', 4: 'winter' };
+
+function listCodes(codes: string[]): string {
+  if (codes.length <= 1) return codes.join('');
+  return `${codes.slice(0, -1).join(', ')} and ${codes[codes.length - 1]}`;
+}
+
+function describeWarning(w: PlanWarning, maxSemesters: number): string | null {
+  switch (w.kind) {
+    case 'requisite_violation': {
+      const parts: string[] = [];
+      const concededPass = new Set(w.concededPass ?? []);
+      const notInPlan = w.missing.filter((c) => !concededPass.has(c));
+      if (notInPlan.length > 0) {
+        parts.push(`needs ${listCodes(notInPlan)}, which ${notInPlan.length === 1 ? 'is' : 'are'} not in this plan`);
+      }
+      if (concededPass.size > 0) {
+        parts.push(`needs ${listCodes([...concededPass])}, but a Conceded Pass cannot satisfy a prerequisite`);
+      }
+      if (w.conflictsWith?.length) {
+        parts.push(`cannot be taken with ${listCodes(w.conflictsWith)}, which is already taken`);
+      }
+      if (w.creditPointsNeeded !== undefined) {
+        parts.push(`needs ${w.creditPointsNeeded} credit points, which this plan never reaches`);
+      }
+      return `${w.unitCode} ${parts.length > 0 ? parts.join('; ') : 'has requisites that cannot be met'}`;
+    }
+    case 'not_offered':
+      return `${w.unitCode} is only offered in ${listCodes(w.offeringTerms.map((t) => TERM_NAMES[t] ?? `term ${t}`))}, and could not be fitted into one`;
+    case 'short_term_only':
+      return `${w.unitCode} is only offered in summer/winter, which this plan does not schedule`;
+    case 'budget_exhausted':
+      return `${w.unitCodes.length} unit${w.unitCodes.length !== 1 ? 's' : ''} could not be placed within ${maxSemesters} semesters: ${w.unitCodes.join(', ')}`;
+    default:
+      // no_offering_data is grouped and over_capacity is shown on its semester
+      return null;
+  }
+}
 
 function EmptyState({ title, message }: { title: string; message: string }) {
   return (
@@ -53,6 +97,8 @@ export default function PathwayPage() {
     // into the pool so the scheduler can repack them as the single source of
     // truth, and so do failed units (N / SN) so they get rescheduled as retakes.
     const completedForScheduler = getCompletedUnitCodes(allTranscriptRows);
+    // Completed, but a Conceded Pass cannot satisfy a prerequisite
+    const concededPassCodes = getConcededPassUnitCodes(allTranscriptRows);
 
     // Units the student attempted and failed, so the pathway can mark them as retakes.
     const transcriptStates = resolveUnitStates(allTranscriptRows);
@@ -128,6 +174,7 @@ export default function PathwayPage() {
         body: JSON.stringify({
           plannerId: activePlanner.id,
           completedUnitCodes: completedForScheduler,
+          concededPassUnitCodes: concededPassCodes,
           startYear,
           startSemester,
           injectedMinorIds: [...effectiveInjections],
@@ -333,14 +380,30 @@ export default function PathwayPage() {
               </button>
             </div>
 
-            {customPlan && (
+            {customPlan && (() => {
+              const warnings: PlanWarning[] = customPlan.warnings ?? [];
+              const overCapacity = new Map<string, Extract<PlanWarning, { kind: 'over_capacity' }>>();
+              const noOfferingData: string[] = [];
+              const messages: string[] = [];
+              for (const w of warnings) {
+                if (w.kind === 'over_capacity') overCapacity.set(`${w.year}-${w.semester}`, w);
+                else if (w.kind === 'no_offering_data') noOfferingData.push(w.unitCode);
+                else {
+                  const message = describeWarning(w, DEFAULT_SCHEDULER_CONFIG.maxSemesters);
+                  if (message) messages.push(message);
+                }
+              }
+
+              return (
               <div>
                 {customPlan.semesters.length === 0 ? (
                   <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '10px 0' }}>
-                    No semesters could be generated — all remaining units may have unresolvable prerequisite or offering conflicts.
+                    No semesters could be generated. The reasons are listed below.
                   </div>
                 ) : (
-                  customPlan.semesters.map((sem: any) => (
+                  customPlan.semesters.map((sem: any) => {
+                    const capacity = overCapacity.get(`${sem.year}-${sem.semester}`);
+                    return (
                     <div
                       key={`cp-${sem.year}-${sem.semester}`}
                       style={{ marginBottom: 8, border: '1px solid rgba(244,135,113,0.3)', borderRadius: 4, overflow: 'hidden' }}
@@ -352,6 +415,14 @@ export default function PathwayPage() {
                         <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 8 }}>
                           {sem.units.length} unit{sem.units.length !== 1 ? 's' : ''} · Custom
                         </span>
+                        {capacity && (
+                          <span
+                            className={styles.capacityTag}
+                            title={`${capacity.count} standard units, above the normal load of ${capacity.limit}`}
+                          >
+                            ⚠ {capacity.count} units, over the normal load of {capacity.limit}
+                          </span>
+                        )}
                       </div>
                       <div style={{ overflowX: 'auto' }}>
                         <table className={styles.table} style={{ tableLayout: 'fixed', width: '100%' }}>
@@ -406,21 +477,43 @@ export default function PathwayPage() {
                         </table>
                       </div>
                     </div>
-                  ))
+                    );
+                  })
                 )}
 
-                {customPlan.unschedulableUnits.length > 0 && (
-                  <div style={{ fontSize: 11, color: 'var(--accent-orange)', padding: '8px 2px', display: 'flex', alignItems: 'flex-start', gap: 6 }}>
-                    <span>⚠</span>
+                {(messages.length > 0 || noOfferingData.length > 0) && (
+                  <ul className={styles.warningList}>
+                    {messages.map((message) => (
+                      <li key={message} className={styles.warningItem}>
+                        <span aria-hidden="true">⚠</span>
+                        <span>{message}.</span>
+                      </li>
+                    ))}
+                    {noOfferingData.length > 0 && (
+                      <li className={`${styles.warningItem} ${styles.warningInfo}`}>
+                        <span aria-hidden="true">ⓘ</span>
+                        <span>
+                          {listCodes(noOfferingData)} {noOfferingData.length === 1 ? 'has' : 'have'} no offering data,
+                          so {noOfferingData.length === 1 ? 'it' : 'they'} may be placed in a semester{' '}
+                          {noOfferingData.length === 1 ? 'it is' : 'they are'} not available.
+                        </span>
+                      </li>
+                    )}
+                  </ul>
+                )}
+
+                {messages.length === 0 && customPlan.unschedulableUnits.length > 0 && (
+                  <div className={styles.warningItem}>
+                    <span aria-hidden="true">⚠</span>
                     <span>
                       {customPlan.unschedulableUnits.length} unit{customPlan.unschedulableUnits.length !== 1 ? 's' : ''} could
-                      not be automatically scheduled due to prerequisite or semester-offering conflicts:{' '}
-                      {customPlan.unschedulableUnits.map((u: any) => u.code).join(', ')}.
+                      not be scheduled: {customPlan.unschedulableUnits.map((u: any) => u.code).join(', ')}.
                     </span>
                   </div>
                 )}
               </div>
-            )}
+              );
+            })()}
           </div>
         );
       })()}
