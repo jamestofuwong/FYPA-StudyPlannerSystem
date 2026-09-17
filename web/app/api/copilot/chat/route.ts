@@ -1,9 +1,8 @@
 import { NextResponse } from 'next/server';
-import type { ChatMessage, WorkflowContext } from '../../../../core/services/copilot/types';
-import { routeAndExtract } from '../../../../core/services/copilot/copilotService';
-import { formatResponse } from '../../../../core/services/copilot/responseFormatter';
-import { workflowRegistry, allWorkflows } from '../../../../core/services/copilot/workflowRegistry';
-import { scraperStore } from '../../scraper/store';
+import type { ChatMessage, WorkflowContext } from '../../../../../core/services/copilot/types';
+import { routeAndExtract } from '../../../../../core/services/copilot/copilotService';
+import { formatResponse } from '../../../../../core/services/copilot/responseFormatter';
+import { workflowRegistry, allWorkflows } from '../../../../../core/services/copilot/workflowRegistry';
 import { ollamaStore } from '../../ollama/store';
 
 export const runtime = 'nodejs';
@@ -35,10 +34,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'messages array is required' }, { status: 400 });
   }
 
-  // Build workflow context from stores (web layer injects this)
+  // Build workflow context — only web-layer state that core cannot import directly
   const ctx: WorkflowContext = {
-    currentStudent: scraperStore.result,
-    scraperStatus: scraperStore.status,
     ollamaStatus: {
       ollama: ollamaStore.ollama,
       model: ollamaStore.model,

@@ -1,4 +1,6 @@
 import type { Workflow, WorkflowContext, WorkflowResult } from '../types';
+import { searchStudents, fetchEnrollments, fetchDegreeAudit } from '../../portal/portalSessionService';
+import { selectEnrollment } from './enrollmentSelector';
 import { runMatchingPipeline } from '../../matching/matchingService';
 import type { PlannerTemplate, UnitMasterEntry, CourseType } from '../../../shared/types/matching';
 
@@ -21,7 +23,13 @@ function toMatchingCategory(prismaCategory: string): UnitMasterEntry['category']
   }
 }
 
+interface Input {
+  studentId: string;
+  enrollMode?: string;
+}
+
 interface Output {
+  studentId: string;
   studentName: string | null;
   detectedMajor: string | null;
   confidence: number;
@@ -31,25 +39,56 @@ interface Output {
   requiredCredits: number;
 }
 
-export const getStudentMajorWorkflow: Workflow<Record<string, never>, Output> = {
+export const getStudentMajorWorkflow: Workflow<Input, Output> = {
   id: 'get_student_major',
-  description: 'Detects the major (program of study) for the currently loaded student by running the matching algorithm against all planner templates. Use this when the user asks what major a student is in, what program they are enrolled in, or what their detected major is.',
-  params: [],
-  async execute(_params: Record<string, never>, ctx: WorkflowContext): Promise<WorkflowResult<Output>> {
-    if (!ctx.currentStudent) {
-      return { ok: false, error: 'No student data is currently loaded. Please scrape a student first.' };
+  description: 'Detects the major (program of study) for a student by fetching their degree audit from the portal and running the matching algorithm. Use this when the user asks what major a student is in, what program they are enrolled in, or what their detected major is.',
+  params: [
+    {
+      name: 'studentId',
+      type: 'string',
+      description: 'The student ID number (e.g. 102780123)',
+      required: true,
+    },
+    {
+      name: 'enrollMode',
+      type: 'string',
+      description: 'Which enrollment to use: latest, earliest, or mpu. Defaults to latest.',
+      required: false,
+    },
+  ],
+  async execute(params: Input, _ctx: WorkflowContext): Promise<WorkflowResult<Output>> {
+    const mode = params.enrollMode ?? 'latest';
+
+    const matches = searchStudents(params.studentId);
+    const student = matches.find((s) => s.student_id === params.studentId) ?? matches[0] ?? null;
+    if (!student) {
+      return { ok: false, error: `Student "${params.studentId}" not found. Make sure the portal is logged in and the student list is loaded.` };
     }
 
     try {
       const plannerRepository = await import('../../../db/repositories/plannerRepository');
       const { prisma } = await import('../../../db/client');
 
-      const thresholdRow = await prisma.systemConfig.findUnique({ where: { key: 'second_major_threshold' } }).catch(() => null);
+      const [enrollments, thresholdRow, dbPlanners] = await Promise.all([
+        fetchEnrollments(student.db_id),
+        prisma.systemConfig.findUnique({ where: { key: 'second_major_threshold' } }).catch(() => null),
+        plannerRepository.getAllPlannersWithUnits(),
+      ]);
+
+      if (!enrollments.length) {
+        return { ok: false, error: `No enrollments found for student ${params.studentId}.` };
+      }
+
+      const enrollment = selectEnrollment(enrollments, mode);
+      if (!enrollment) {
+        return { ok: false, error: `No enrollment matched mode "${mode}" for student ${params.studentId}.` };
+      }
+
+      const scraped = await fetchDegreeAudit(student.db_id, enrollment.EnrollId, params.studentId);
+
       const secondMajorThreshold = thresholdRow
         ? Math.min(1, Math.max(0, parseFloat(thresholdRow.value)))
         : 0.70;
-
-      const dbPlanners = await plannerRepository.getAllPlannersWithUnits();
 
       // Build unit master table
       const masterMap = new Map<string, { category: string; priority: number }>();
@@ -96,17 +135,14 @@ export const getStudentMajorWorkflow: Workflow<Record<string, never>, Output> = 
         freeElectiveSlotsRequired: p.units.filter((u) => u.category === 'elective').length,
       }));
 
-      const student = ctx.currentStudent;
-      const completedUnitCodes = student.courseList.map((u) => u.courseId);
-
-      // Derive intake year/semester from enrollmentDate (e.g. "2022-03-01")
-      const enrollDate = new Date(student.enrollmentDate);
+      const completedUnitCodes = scraped.courseList.map((u) => u.courseId);
+      const enrollDate = new Date(scraped.enrollmentDate);
       const intakeYear = Number.isNaN(enrollDate.getFullYear()) ? new Date().getFullYear() : enrollDate.getFullYear();
       const intakeSemester: 1 | 2 = (enrollDate.getMonth() + 1) >= 7 ? 2 : 1;
 
       const result = runMatchingPipeline({
         student: {
-          studentID: student.studentId ?? 'unknown',
+          studentID: params.studentId,
           courseType: 'degree',
           intakeYear,
           intakeSemester,
@@ -124,13 +160,14 @@ export const getStudentMajorWorkflow: Workflow<Record<string, never>, Output> = 
       return {
         ok: true,
         data: {
-          studentName: student.studentName ?? null,
+          studentId: params.studentId,
+          studentName: scraped.studentName ?? student.name,
           detectedMajor: payload.primaryMajor?.majorName ?? null,
           confidence: payload.primaryMajor?.matchPct ?? 0,
           status: payload.status,
           secondMajor: payload.secondMajor?.majorName ?? null,
-          completedCredits: student.creditsCompleted,
-          requiredCredits: student.creditsRequired,
+          completedCredits: scraped.creditsCompleted,
+          requiredCredits: scraped.creditsRequired,
         },
       };
     } catch (err) {

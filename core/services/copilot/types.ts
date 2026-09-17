@@ -1,5 +1,3 @@
-import type { ScrapedStudent } from '../../shared/types/student';
-
 export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
@@ -23,9 +21,9 @@ export interface ParamSchema {
   required: boolean;
 }
 
+// Only web-layer state that core services cannot import directly.
+// Portal session state is read via portalSessionService directly inside workflows.
 export interface WorkflowContext {
-  currentStudent: ScrapedStudent | null;
-  scraperStatus: string;
   ollamaStatus: { ollama: string; model: string };
 }
 
