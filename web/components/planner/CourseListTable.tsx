@@ -24,7 +24,7 @@ type CourseListTableProps = {
     yearGroups: YearGroup[];
     emptyMessage?: string;
     editable?: boolean;
-    onUnitEdit?: (unitCode: string, field: keyof PlannerImportUnit, value: string | number | null) => void;
+    onUnitEdit?: (unitCode: string, field: keyof PlannerImportUnit, value: string | number | number[] | null) => void;
     onAddUnit?: (year: number, semester: number, type?: 'core' | 'elective' | 'minor', minorName?: string) => void;
     onDeleteUnit?: (unitCode: string) => void;
     onAddSemester?: (year: number, semester: number, label: string) => void;
@@ -72,6 +72,29 @@ function formatRequisites(requisites: any): string {
             return `${prefix}${c.unit?.unit_code || '?'}`;
         }).join(' & ')
     ).join(' / ');
+}
+
+function formatOfferings(offered_in: any): string {
+  if (!offered_in) return '-';
+  if (Array.isArray(offered_in)) {
+    if (offered_in.length === 0) return '-';
+    return offered_in
+      .slice()
+      .sort((a, b) => a - b)
+      .map((term: number) => {
+        if (term === 1) return 'Sem 1';
+        if (term === 2) return 'Sem 2';
+        if (term === 3) return 'Summer';
+        if (term === 4) return 'Winter';
+        return `Term ${term}`;
+      })
+      .join(', ');
+  }
+  if (offered_in === 1) return 'Sem 1';
+  if (offered_in === 2) return 'Sem 2';
+  if (offered_in === 3) return 'Summer';
+  if (offered_in === 4) return 'Winter';
+  return String(offered_in);
 }
 
 export function getSemesterOrder(intakeMonth: number): number[] {
@@ -297,19 +320,28 @@ export default function CourseListTable({
                                                     <td>
                                                         {editable && onUnitEdit ? (
                                                             <select 
-                                                            value={unit.offered_in ?? ''} 
-                                                            onChange={(e) => {
-                                                                const val = e.target.value;
-                                                                onUnitEdit((unit as any)._id, 'offered_in', val === '' ? null : Number(val));
-                                                            }} 
-                                                            className={styles.editInput}
+                                                                value={
+                                                                    Array.isArray(unit.offered_in) 
+                                                                        ? unit.offered_in.slice().sort().join(',') 
+                                                                        : (unit.offered_in?.toString() ?? '')
+                                                                } 
+                                                                onChange={(e) => {
+                                                                    const val = e.target.value;
+                                                                    const terms = val ? val.split(',').map((n) => parseInt(n.trim(), 10)) : [];
+                                                                    onUnitEdit((unit as any)._id, 'offered_in', terms as any);
+                                                                }} 
+                                                                className={styles.editInput}
                                                             >
-                                                            <option value="">-</option>
-                                                            <option value="1">1</option>
-                                                            <option value="2">2</option>
+                                                                <option value="">-</option>
+                                                                <option value="1">Sem 1</option>
+                                                                <option value="2">Sem 2</option>
+                                                                <option value="1,2">Sem 1 & 2</option>
+                                                                <option value="3">Summer</option>
+                                                                <option value="4">Winter</option>
+                                                                <option value="1,2,3">Sem 1, 2 & Summer</option>
                                                             </select>
                                                         ) : (
-                                                            unit.offered_in || <span className={styles.textMuted}>-</span>
+                                                            formatOfferings(unit.offered_in)
                                                         )}
                                                     </td>
 
@@ -485,19 +517,28 @@ export default function CourseListTable({
                                         <td>
                                             {editable && onUnitEdit ? (
                                                 <select 
-                                                    value={unit.offered_in ?? ''} 
+                                                    value={
+                                                        Array.isArray(unit.offered_in) 
+                                                            ? unit.offered_in.slice().sort().join(',') 
+                                                            : (unit.offered_in?.toString() ?? '')
+                                                    } 
                                                     onChange={(e) => {
                                                         const val = e.target.value;
-                                                        onUnitEdit((unit as any)._id, 'offered_in', val === '' ? null : Number(val));
+                                                        const terms = val ? val.split(',').map((n) => parseInt(n.trim(), 10)) : [];
+                                                        onUnitEdit((unit as any)._id, 'offered_in', terms as any);
                                                     }} 
                                                     className={styles.editInput}
                                                 >
                                                     <option value="">-</option>
-                                                    <option value="1">1</option>
-                                                    <option value="2">2</option>
+                                                    <option value="1">Sem 1</option>
+                                                    <option value="2">Sem 2</option>
+                                                    <option value="1,2">Sem 1 & 2</option>
+                                                    <option value="3">Summer</option>
+                                                    <option value="4">Winter</option>
+                                                    <option value="1,2,3">Sem 1, 2 & Summer</option>
                                                 </select>
                                             ) : (
-                                                unit.offered_in || <span className={styles.textMuted}>-</span>
+                                                formatOfferings(unit.offered_in)
                                             )}
                                         </td>
 
@@ -622,20 +663,29 @@ export default function CourseListTable({
                                     <td>
                                         {editable && onUnitEdit ? (
                                             <select 
-                                                value={unit.offered_in ?? ''} 
+                                                value={
+                                                    Array.isArray(unit.offered_in) 
+                                                        ? unit.offered_in.slice().sort().join(',') 
+                                                        : (unit.offered_in?.toString() ?? '')
+                                                } 
                                                 onChange={(e) => {
                                                     const val = e.target.value;
-                                                    onUnitEdit((unit as any)._id, 'offered_in', val === '' ? null : Number(val));
+                                                    const terms = val ? val.split(',').map((n) => parseInt(n.trim(), 10)) : [];
+                                                    onUnitEdit((unit as any)._id, 'offered_in', terms as any);
                                                 }} 
                                                 className={styles.editInput}
                                             >
                                                 <option value="">-</option>
-                                                <option value="1">1</option>
-                                                <option value="2">2</option>
+                                                <option value="1">Sem 1</option>
+                                                <option value="2">Sem 2</option>
+                                                <option value="1,2">Sem 1 & 2</option>
+                                                <option value="3">Summer</option>
+                                                <option value="4">Winter</option>
+                                                <option value="1,2,3">Sem 1, 2 & Summer</option>
                                             </select>
                                         ) : (
-                                                unit.offered_in || <span className={styles.textMuted}>-</span>
-                                            )}
+                                            formatOfferings(unit.offered_in)
+                                        )}
                                     </td>
 
                                     {/* Delete Action */}

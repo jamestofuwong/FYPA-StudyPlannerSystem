@@ -13,9 +13,11 @@ interface TabMeta {
 
 const TAB_META: Record<PanelId, TabMeta> = {
     dashboard: { id: 'dashboard', icon: '📊', label: 'Dashboard' },
+    pathway: { id: 'pathway', icon: '🧭', label: 'Student Pathway' },
     import: { id: 'import', icon: '📥', label: 'Data Import' },
     scraping: { id: 'scraping', icon: '🕷️', label: 'Data Scraping' },
     planners: { id: 'planners', icon: '✅', label: 'Study Planners' },
+    units: { id: 'units', icon: '📝', label: 'Units' },
     'cloud-sync': { id: 'cloud-sync', icon: '☁️', label: 'Cloud Sync' },
     settings: { id: 'settings', icon: '⚙️', label: 'Settings' },
     'user-guide': { id: 'user-guide', icon: '📖', label: 'User Guide' },
