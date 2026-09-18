@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import styles from './page.module.css';
 import { useToast } from '../../../components/providers/ToastProvider';
+import { useStudentSession } from '../../../components/providers/StudentSessionContext';
 import type { ScrapedStudent, ScrapedCourseListItem } from '../../../../core/shared/types/student';
 
 type Enrollment = { EnrollId: number; EnrollmentDesc: string };
@@ -17,6 +18,7 @@ import {
 } from '../../../../core/shared/constants/grades';
 import { Badge, InlineCode, ProgressBar, type BadgeClass } from '../../../components/common/Primitives';
 import MinorProgressCard from '../../../components/common/MinorProgressCard';
+import { useStudentSession } from '../../../components/providers/StudentSessionContext';
 
 
 // Main component
