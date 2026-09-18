@@ -10,6 +10,7 @@ import {
   resolveUnitStates,
   getCompletedUnitCodes,
   getFailedUnitCodes,
+  getConcededPassUnitCodes,
   findGradeCreditAnomalies,
 } from '@core/shared/constants/grades';
 
@@ -23,10 +24,17 @@ function row(
 }
 
 describe('classifyGrade', () => {
-  test.each(['HD', 'D', 'C', 'P', 'CP', 'SP'])('%s is a pass', (grade) => {
+  test.each(['HD', 'D', 'C', 'P', 'SP'])('%s is a pass', (grade) => {
     expect(classifyGrade(grade)).toBe('pass');
     expect(isPassingGrade(grade)).toBe(true);
     expect(isFailingGrade(grade)).toBe(false);
+  });
+
+  // Credit-bearing, but it cannot satisfy a prerequisite, so it is its own outcome
+  test('CP is a conceded pass, still credit-bearing', () => {
+    expect(classifyGrade('CP')).toBe('conceded_pass');
+    expect(isPassingGrade('CP')).toBe(true);
+    expect(isFailingGrade('CP')).toBe(false);
   });
 
   test.each(['N', 'SN'])('%s is a fail', (grade) => {
@@ -51,7 +59,7 @@ describe('classifyGrade', () => {
   test('normalises casing and surrounding whitespace', () => {
     expect(classifyGrade('  sn ')).toBe('fail');
     expect(classifyGrade('hd')).toBe('pass');
-    expect(classifyGrade(' Cp')).toBe('pass');
+    expect(classifyGrade(' Cp')).toBe('conceded_pass');
     expect(normaliseGrade('  n ')).toBe('N');
     expect(normaliseGrade(null)).toBe('');
     expect(normaliseUnitCode(' cos10009 ')).toBe('COS10009');
@@ -197,7 +205,67 @@ describe('getFailedUnitCodes', () => {
   });
 });
 
+describe('Conceded Pass', () => {
+  test('CP resolves to passed and stays in getCompletedUnitCodes', () => {
+    const rows = [row('COS101', 'CP')];
+    expect(resolveUnitStates(rows).get('COS101')).toBe('passed');
+    expect(getCompletedUnitCodes(rows)).toEqual(['COS101']);
+  });
+
+  test('getConcededPassUnitCodes returns CP units only', () => {
+    const codes = getConcededPassUnitCodes([
+      row('COS101', 'CP'),
+      row('COS102', 'P'),
+      row('COS103', 'N', 'Complete', 0),
+      row(' cos104 ', 'cp'),
+    ]);
+    expect(codes.sort()).toEqual(['COS101', 'COS104']);
+  });
+
+  test('a full pass on the same unit supersedes the CP, in either order', () => {
+    const forward = [row('COS101', 'CP'), row('COS101', 'P')];
+    const reversed = [row('COS101', 'P'), row('COS101', 'CP')];
+    expect(resolveUnitOutcomes(forward).get('COS101')).toBe('pass');
+    expect(resolveUnitOutcomes(reversed).get('COS101')).toBe('pass');
+    expect(getConcededPassUnitCodes(forward)).toEqual([]);
+    expect(getConcededPassUnitCodes(reversed)).toEqual([]);
+  });
+
+  test('CP outranks ungraded and fail', () => {
+    expect(resolveUnitOutcomes([row('U1', 'N'), row('U1', 'CP')]).get('U1')).toBe('conceded_pass');
+    expect(resolveUnitOutcomes([row('U1', 'CP'), row('U1', '')]).get('U1')).toBe('conceded_pass');
+  });
+});
+
 describe('findGradeCreditAnomalies', () => {
+  test('one CP is not an anomaly', () => {
+    expect(findGradeCreditAnomalies([row('U1', 'CP'), row('U2', 'HD')])).toEqual([]);
+  });
+
+  test('more than one CP flags each of them, without throwing', () => {
+    const anomalies = findGradeCreditAnomalies([
+      row('U1', 'CP'),
+      row('U2', 'CP'),
+      row('U3', 'HD'),
+    ]);
+    expect(anomalies.map((a) => a.code)).toEqual(['U1', 'U2']);
+    expect(anomalies[0].reason).toMatch(/at most 1/);
+  });
+
+  test('a CP later passed outright does not count toward the limit', () => {
+    expect(findGradeCreditAnomalies([
+      row('U1', 'CP'),
+      row('U1', 'C'),
+      row('U2', 'CP'),
+    ])).toEqual([]);
+  });
+
+  test('a CP that earned no credit is flagged', () => {
+    const anomalies = findGradeCreditAnomalies([row('U1', 'CP', 'Complete', 0)]);
+    expect(anomalies).toHaveLength(1);
+    expect(anomalies[0]).toMatchObject({ code: 'U1', grade: 'CP', creditsEarned: 0 });
+  });
+
   test('flags a passing grade that earned no credit', () => {
     const anomalies = findGradeCreditAnomalies([row('U1', 'HD', 'Complete', 0)]);
     expect(anomalies).toHaveLength(1);
