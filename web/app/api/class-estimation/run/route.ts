@@ -1,28 +1,9 @@
 import { type NextRequest } from 'next/server';
-import {
-  getStudents,
-  getStatus,
-  fetchEnrollments,
-  fetchDegreeAudit,
-} from '../../../../../core/services/portal/portalSessionService';
+import { getStudents, getStatus } from '../../../../../core/services/portal/portalSessionService';
+import { runScrapeForStudents } from '../../../../../core/services/classEstimation/scrapeOrchestrator';
 
 // Force dynamic so Next.js never caches this streaming response.
 export const dynamic = 'force-dynamic';
-
-type EstimationResult = {
-  student_id: string;
-  name: string;
-  db_id: number;
-  enrollId: number;
-  course: string;
-  courseList: unknown[];
-};
-
-// Store results on globalThis so subsequent steps (matching, unit counting) can use them.
-declare global {
-  // eslint-disable-next-line no-var
-  var __estimationResults: EstimationResult[] | undefined;
-}
 
 export async function GET(req: NextRequest) {
   if (getStatus().sessionStatus !== 'logged-in') {
@@ -57,9 +38,6 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  // Reset previous results
-  globalThis.__estimationResults = [];
-
   const encoder = new TextEncoder();
   let cancelled = false;
 
@@ -71,91 +49,28 @@ export async function GET(req: NextRequest) {
 
       send({ type: 'start', total });
 
-      let completed = 0;
-      let failed = 0;
-      let skipped = 0;
+      const summary = await runScrapeForStudents(
+        students,
+        {
+          onProgress: (current, progressTotal, studentName, phase) =>
+            send({ type: 'progress', current, total: progressTotal, studentName, phase }),
+          onStudentDone: (studentId, studentName, course) =>
+            send({ type: 'student-done', studentId, studentName, course }),
+          onStudentSkip: (studentId, studentName, reason) =>
+            send({ type: 'student-skip', studentId, studentName, reason }),
+          onStudentError: (studentId, studentName, error) =>
+            send({ type: 'student-error', studentId, studentName, error }),
+        },
+        () => cancelled,
+      );
 
-      for (let i = 0; i < students.length; i++) {
-        // Check cancellation at the top of each iteration
-        if (cancelled) break;
-
-        const student = students[i];
-        const current = i + 1;
-
-        // ── Phase 1: fetch enrollment list ──────────────────────────────────
-        send({ type: 'progress', current, total, studentName: student.name, phase: 'enrollments' });
-
-        let enrollments: { EnrollId: number; EnrollmentDesc: string }[];
-        try {
-          enrollments = await fetchEnrollments(student.db_id);
-        } catch (err) {
-          failed++;
-          send({
-            type: 'student-error',
-            studentId: student.student_id,
-            studentName: student.name,
-            error: err instanceof Error ? err.message : 'Failed to fetch enrollments',
-          });
-          continue;
-        }
-
-        if (cancelled) break;
-
-        // Select the latest non-MPU enrollment by highest EnrollId
-        const nonMpu = enrollments.filter(
-          (e) => !e.EnrollmentDesc.toLowerCase().includes('mata pelajaran umum'),
-        );
-        const primary = nonMpu.length > 0
-          ? nonMpu.reduce((a, b) => (a.EnrollId > b.EnrollId ? a : b))
-          : null;
-
-        if (!primary) {
-          skipped++;
-          send({
-            type: 'student-skip',
-            studentId: student.student_id,
-            studentName: student.name,
-            reason: 'No valid (non-MPU) enrollment found',
-          });
-          continue;
-        }
-
-        // ── Phase 2: fetch degree audit ──────────────────────────────────────
-        send({ type: 'progress', current, total, studentName: student.name, phase: 'audit' });
-
-        try {
-          const audit = await fetchDegreeAudit(student.db_id, primary.EnrollId, student.student_id);
-
-          const result: EstimationResult = {
-            student_id: student.student_id,
-            name:       student.name,
-            db_id:      student.db_id,
-            enrollId:   primary.EnrollId,
-            course:     audit.course,
-            courseList: audit.courseList,
-          };
-
-          globalThis.__estimationResults!.push(result);
-          completed++;
-
-          send({
-            type: 'student-done',
-            studentId:   student.student_id,
-            studentName: student.name,
-            course:      audit.course,
-          });
-        } catch (err) {
-          failed++;
-          send({
-            type: 'student-error',
-            studentId:   student.student_id,
-            studentName: student.name,
-            error: err instanceof Error ? err.message : 'Failed to fetch degree audit',
-          });
-        }
-      }
-
-      send({ type: 'complete', completed, failed, skipped, total: completed + failed + skipped });
+      send({
+        type: 'complete',
+        completed: summary.completed,
+        failed: summary.failed,
+        skipped: summary.skipped,
+        total: summary.completed + summary.failed + summary.skipped,
+      });
       controller.close();
     },
 
