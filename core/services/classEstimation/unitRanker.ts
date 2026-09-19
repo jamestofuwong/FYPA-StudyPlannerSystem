@@ -1,6 +1,6 @@
 // ============================================================
 // Ranks and caps a student's eligible candidate units for the semester being estimated. Core and major core
-// units have a real ordering signal, their (year_level, semester) slot on the matched planner's TemplateUnit
+// units have an ordering signal, their (year_level, semester) slot on the matched planner's TemplateUnit
 // rows, so the earliest-owed units are ranked first and only the top loadCap are kept, everything past the
 // cap is dropped for this run rather than carried forward. Prescribed and free elective units are pool-based
 // with no slot data at all (see plannerCandidateResolver.ts), so they're not ranked or capped here at all,

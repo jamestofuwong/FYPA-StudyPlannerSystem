@@ -5,7 +5,11 @@
 // change what "core", "major core", "prescribed", and "free elective" mean to the matching pipeline.
 // ============================================================
 
-import { buildPlannerTemplatesForMatching } from '@core/services/matching/plannerTemplateBuilder';
+import {
+  buildPlannerTemplatesForMatching,
+  getPrescribedPoolCodes,
+  getFreeElectivePoolCodes,
+} from '@core/services/matching/plannerTemplateBuilder';
 
 // A minimal DB planner shape, matching what plannerRepository.getAllPlannersWithUnits() returns.
 function dbPlanner(overrides: any = {}) {
@@ -84,5 +88,30 @@ describe('buildPlannerTemplatesForMatching', () => {
       dbPlanner({ units: [{ unit: null, category: 'core' }] }),
     ] as never);
     expect(planner.requiredCore).toEqual([]);
+  });
+});
+
+// core/services/classEstimation/plannerCandidateResolver.ts imports these two helpers directly instead of
+// re-deriving the same pools with its own copy of this filtering logic, tested here at the source.
+describe('getPrescribedPoolCodes / getFreeElectivePoolCodes', () => {
+  test('getPrescribedPoolCodes flattens every elective_groups pool into one list', () => {
+    const planner = dbPlanner({
+      elective_groups: [
+        { id: 'eg1', units: [{ unit: { unit_code: 'A' } }] },
+        { id: 'eg2', units: [{ unit: { unit_code: 'B' } }, { unit: { unit_code: 'C' } }] },
+      ],
+    });
+    expect(getPrescribedPoolCodes(planner)).toEqual(['A', 'B', 'C']);
+  });
+
+  test('getFreeElectivePoolCodes returns only slotted elective-category TemplateUnit codes', () => {
+    const planner = dbPlanner({
+      units: [
+        { unit: { unit_code: 'FREE1' }, category: 'elective' },
+        { unit: { unit_code: 'CORE1' }, category: 'core' },
+        { unit: null, category: 'elective' },
+      ],
+    });
+    expect(getFreeElectivePoolCodes(planner)).toEqual(['FREE1']);
   });
 });
