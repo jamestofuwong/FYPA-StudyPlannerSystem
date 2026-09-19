@@ -1,129 +1,61 @@
 // ============================================================
 // Forward-looking eligibility check: can this student take unit X in a given future semester.
-// checkRequisites() in core/services/matching/profileBuilder.ts is
-// retrospective only, it flags problems among units already completed.
+// checkRequisites() in core/services/matching/profileBuilder.ts is retrospective only, it flags problems
+// among units already completed.
 //
-// Modeled on the canTake()/isConditionSatisfied() pair in
-// core/services/scheduling/customPlannerScheduler.ts, but reads real DB
-// requisite rows directly (type "unit" or "credit_points", OR-of-AND
-// groups) instead of the matching domain's lossy flat Requisite[], so
-// credit-point requisites are not lost here.
+// This reuses canTake() and mapUnitToSchedulable() from customPlannerScheduler.ts rather than
+// reimplementing them, an earlier version of this file did reimplement its own copy, and got the
+// prerequisite/corequisite distinction wrong in the process (a prerequisite must come from prior
+// completion only, a corequisite can also be satisfied by another unit picked in the same round). Reusing
+// the already-correct, already-used-elsewhere logic avoids repeating that mistake.
 // ============================================================
 
-import * as plannerRepository from '../../db/repositories/plannerRepository';
+import {
+  canTake,
+  mapUnitToSchedulable,
+  type SchedulableUnit,
+  type RawSchedulableUnitRow,
+} from '../scheduling/customPlannerScheduler';
+import { getCachedPlannerById } from './plannerCache';
 
-export type EligibilityRequisiteType = 'prerequisite' | 'corequisite' | 'antirequisite';
+export type { SchedulableUnit };
 
-export interface EligibilityCondition {
-  type: 'unit' | 'credit_points';
-  requisiteType?: EligibilityRequisiteType;   // only for type === 'unit'
-  unitCode?: string;                           // only for type === 'unit'
-  creditPoints?: number;                       // only for type === 'credit_points'
-}
-
-export interface EligibilityUnit {
-  unitCode: string;
-  offeringSemesters: number[];                 // raw offered_in codes, 1 to 4, empty means always available
-  requisiteGroups: EligibilityCondition[][];    // OR of AND
-}
-
-/**
- * Checks whether a unit can be taken in targetOfferedIn given the units the
- * student has already satisfied (completed, in progress, or picked earlier
- * in the same estimation round) and their flat credit total.
- *
- * satisfiedUnitCodes drives both directions of a requisite check:
- * prerequisite/corequisite need the code present, antirequisite needs it
- * absent, mirroring customPlannerScheduler's completed+bucketCodes union.
- */
+// v1 does not resolve corequisites among candidates picked earlier in the same estimation round, that
+// would need the same iterative fixed-point loop buildCustomPlan() uses across multiple semesters, which
+// is out of scope for a single-semester eligibility check. A corequisite is therefore only satisfiable if
+// it's already completed or in progress, same as a prerequisite, until that's built.
 export function isUnitEligible(
-  unit: EligibilityUnit,
-  targetOfferedIn: number,
-  satisfiedUnitCodes: Set<string>,
+  unit: SchedulableUnit,
+  targetOfferedIn: 1 | 2,
+  completedOrInProgress: Set<string>,
   totalCreditsEarned: number,
 ): boolean {
-  if (unit.offeringSemesters.length > 0 && !unit.offeringSemesters.includes(targetOfferedIn)) {
-    return false;
-  }
-  if (unit.requisiteGroups.length === 0) {
-    return true;
-  }
-  return unit.requisiteGroups.some((group) =>
-    group.every((condition) => isConditionSatisfied(condition, satisfiedUnitCodes, totalCreditsEarned))
-  );
-}
-
-function isConditionSatisfied(
-  condition: EligibilityCondition,
-  satisfiedUnitCodes: Set<string>,
-  totalCreditsEarned: number,
-): boolean {
-  if (condition.type === 'credit_points') {
-    return totalCreditsEarned >= (condition.creditPoints ?? 0);
-  }
-
-  if (condition.type === 'unit' && condition.unitCode) {
-    const code = condition.unitCode.toUpperCase();
-    if (condition.requisiteType === 'antirequisite') {
-      return !satisfiedUnitCodes.has(code);
-    }
-    // prerequisite and corequisite both require the code to already be satisfied.
-    return satisfiedUnitCodes.has(code);
-  }
-
-  return false;
-}
-
-// Minimal shape of a planner unit as returned by plannerRepository.getPlannerById(),
-// covering only the fields this module reads.
-type RawPlannerUnit = {
-  unit_code: string;
-  offerings: Array<{ offered_in: number }>;
-  requisite_groups: Array<{
-    conditions: Array<{
-      type: string;
-      requisite_type: string | null;
-      credit_points: unknown;
-      unit: { unit_code: string } | null;
-    }>;
-  }>;
-};
-
-function mapUnitToEligibilityUnit(unit: RawPlannerUnit): EligibilityUnit {
-  return {
-    unitCode: unit.unit_code,
-    offeringSemesters: unit.offerings.map((o) => o.offered_in),
-    requisiteGroups: unit.requisite_groups.map((group) =>
-      group.conditions.map((condition): EligibilityCondition => ({
-        type: condition.type as 'unit' | 'credit_points',
-        requisiteType: (condition.requisite_type ?? undefined) as EligibilityRequisiteType | undefined,
-        unitCode: condition.unit?.unit_code,
-        creditPoints: condition.credit_points != null ? Number(condition.credit_points) : undefined,
-      }))
-    ),
-  };
+  return canTake(unit, targetOfferedIn, completedOrInProgress, new Set(), totalCreditsEarned);
 }
 
 /**
- * Builds a unitCode -> EligibilityUnit lookup for every unit reachable from
- * a specific planner: its slotted TemplateUnit rows and its elective-group
- * pool units, since both are candidate categories for class estimation.
+ * Builds a unitCode -> SchedulableUnit lookup for every unit reachable from a specific planner: its
+ * slotted TemplateUnit rows and its elective-group pool units, since both are candidate categories for
+ * class estimation.
  */
-export async function buildEligibilityUnitsFromPlanner(plannerId: string): Promise<Map<string, EligibilityUnit>> {
-  const planner = await plannerRepository.getPlannerById(plannerId);
-  const eligibilityUnits = new Map<string, EligibilityUnit>();
+export async function buildEligibilityUnitsFromPlanner(plannerId: string): Promise<Map<string, SchedulableUnit>> {
+  const planner = await getCachedPlannerById(plannerId);
+  const eligibilityUnits = new Map<string, SchedulableUnit>();
   if (!planner) return eligibilityUnits;
 
   for (const tu of planner.units) {
     if (!tu.unit) continue;
     if (eligibilityUnits.has(tu.unit.unit_code)) continue;
-    eligibilityUnits.set(tu.unit.unit_code, mapUnitToEligibilityUnit(tu.unit));
+    eligibilityUnits.set(tu.unit.unit_code, mapUnitToSchedulable(tu.unit as RawSchedulableUnitRow, tu.category));
   }
 
   for (const eg of planner.elective_groups) {
     for (const egu of eg.units) {
       if (eligibilityUnits.has(egu.unit.unit_code)) continue;
-      eligibilityUnits.set(egu.unit.unit_code, mapUnitToEligibilityUnit(egu.unit));
+      eligibilityUnits.set(
+        egu.unit.unit_code,
+        mapUnitToSchedulable(egu.unit as RawSchedulableUnitRow, 'prescribed_elective'),
+      );
     }
   }
 

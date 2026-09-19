@@ -27,6 +27,28 @@ type DbPlannerWithUnits = Awaited<ReturnType<
   typeof import('../../db/repositories/plannerRepository').getAllPlannersWithUnits
 >>[number];
 
+// A structural minimum both getAllPlannersWithUnits()'s and getPlannerById()'s per-planner shapes satisfy,
+// so the two pool helpers below work against either without needing their own duplicate copy of this
+// filtering logic. core/services/classEstimation/plannerCandidateResolver.ts uses these directly against a
+// getPlannerById() result, instead of re-deriving the same pools with its own copy of this logic.
+export interface PlannerUnitsSource {
+  units: Array<{ category: string; unit: { unit_code: string } | null }>;
+  elective_groups: Array<{ units: Array<{ unit: { unit_code: string } }> }>;
+}
+
+// The DB's unslotted elective pool (ElectiveGroup/ElectiveGroupUnit), which is what "prescribed" means in
+// the matching pipeline's own scoring, see the note above on category mapping.
+export function getPrescribedPoolCodes(planner: PlannerUnitsSource): string[] {
+  return planner.elective_groups.flatMap((eg) => eg.units.map((egu) => egu.unit.unit_code));
+}
+
+// TemplateUnit rows with category 'elective' that DO carry a year_level/semester slot.
+export function getFreeElectivePoolCodes(planner: PlannerUnitsSource): string[] {
+  return planner.units
+    .filter((u) => u.category === 'elective' && u.unit)
+    .map((u) => u.unit!.unit_code);
+}
+
 export function buildPlannerTemplatesForMatching(dbPlanners: DbPlannerWithUnits[]): PlannerTemplate[] {
   return dbPlanners.map((p) => ({
     plannerID: p.id,
@@ -48,11 +70,7 @@ export function buildPlannerTemplatesForMatching(dbPlanners: DbPlannerWithUnits[
       pool: new Set(eg.units.map((egu) => egu.unit.unit_code)),
       slots: 1,
     })),
-    freeElectivePool: new Set(
-      p.units
-        .filter((u) => u.category === 'elective' && u.unit)
-        .map((u) => u.unit!.unit_code)
-    ),
+    freeElectivePool: new Set(getFreeElectivePoolCodes(p)),
     freeElectiveSlotsRequired: p.units.filter((u) => u.category === 'elective').length,
   }));
 }
