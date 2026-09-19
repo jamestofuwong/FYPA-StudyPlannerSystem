@@ -133,6 +133,8 @@ describe('Dashboard Ultimate Coverage Booster', () => {
       expect(screen.getByText('Test Student')).toBeInTheDocument();
     }, { timeout: 3000 });
 
+    fireEvent.click(screen.getByRole('tab', { name: 'Unit Plan' }));
+
     // TEST UI INTERACTION (Toggle Year)
     const yearHeader = screen.getByText(/YEAR 1/i);
     fireEvent.click(yearHeader); // Toggle closed
@@ -204,6 +206,8 @@ describe('Dashboard Ultimate Coverage Booster', () => {
 
     await waitFor(() => expect(screen.getByText(/Ranked Planners/i)).toBeInTheDocument(), { timeout: 3000 });
 
+    fireEvent.click(screen.getByRole('tab', { name: 'Extended Plan' }));
+
     // TEST CUSTOM PATHWAY GENERATION (Targets lines 1381-1510)
     const generateBtn = screen.getByText(/Generate Custom Pathway/i);
 
@@ -212,6 +216,8 @@ describe('Dashboard Ultimate Coverage Booster', () => {
     });
 
     await screen.findByText(/Extended Study Plan/i, {}, { timeout: 5000 });
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Minors' }));
 
     // TEST MINOR INJECTION (Targets logic around line 1450)
     const includeMinorBtn = screen.getByText(/\+ Include in Custom Plan/i);
@@ -278,13 +284,16 @@ describe('Dashboard Ultimate Coverage Booster', () => {
     fireEvent.change(screen.getByPlaceholderText(/Student ID/i), { target: { value: 'GRAD-OK' } });
     fireEvent.click(screen.getByText('Search'));
 
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Graduation' })).toBeInTheDocument(), { timeout: 4000 });
+    fireEvent.click(screen.getByRole('tab', { name: 'Graduation' }));
+
     // Use a specific matcher to avoid conflict with unit codes
     await waitFor(() => {
-      expect(screen.getByText(/✅ ELIGIBLE/)).toBeInTheDocument();
+      expect(screen.getByText('ELIGIBLE')).toBeInTheDocument();
     }, { timeout: 4000 });
     
     // Verify the green color is applied (Targets Line 1460)
-    const eligibleLabel = screen.getByText(/✅ ELIGIBLE/);
+    const eligibleLabel = screen.getByText('ELIGIBLE');
     expect(eligibleLabel).toHaveStyle('color: var(--accent-green)');
   });
 
@@ -641,7 +650,10 @@ describe('Dashboard Ultimate Coverage Booster', () => {
     fireEvent.change(screen.getByPlaceholderText(/Student ID or name/i), { target: { value: 'TEST-001' } });
     fireEvent.click(screen.getByText('Search'));
 
-    await waitFor(() => expect(screen.getByText(/❌ INELIGIBLE/i)).toBeInTheDocument(), { timeout: 5000 });
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Graduation' })).toBeInTheDocument(), { timeout: 5000 });
+    fireEvent.click(screen.getByRole('tab', { name: 'Graduation' }));
+
+    await waitFor(() => expect(screen.getByText('INELIGIBLE')).toBeInTheDocument(), { timeout: 5000 });
   });
 
   test('Dashboard Graduation: Ineligible due to low credits (< 300 CP)', async () => {
@@ -684,8 +696,11 @@ describe('Dashboard Ultimate Coverage Booster', () => {
     fireEvent.change(screen.getByPlaceholderText(/Student ID or name/i), { target: { value: 'TEST-002' } });
     fireEvent.click(screen.getByText('Search'));
 
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Graduation' })).toBeInTheDocument(), { timeout: 5000 });
+    fireEvent.click(screen.getByRole('tab', { name: 'Graduation' }));
+
     // Component renders: "Credits: 12.5/300 CP"
     await waitFor(() => expect(screen.getByText(/12\.5\/300 CP/i)).toBeInTheDocument(), { timeout: 5000 });
-    expect(screen.getByText(/❌ INELIGIBLE/i)).toBeInTheDocument();
+    expect(screen.getByText('INELIGIBLE')).toBeInTheDocument();
   });
 });
