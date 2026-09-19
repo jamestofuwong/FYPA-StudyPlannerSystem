@@ -3,46 +3,40 @@ import { NextResponse } from 'next/server';
 import { prisma } from '../../../../core/db/client';
 import {
   buildCustomPlan,
+  validateSchedulerConfig,
   type SchedulableUnit,
-  type RequisiteCondition,
 } from '../../../../core/services/scheduling/customPlannerScheduler';
+import { toSchedulableUnit } from '../../../../core/shared/scheduling/schedulableUnit';
 
+// Field extraction for this app's Prisma schema. The student app has its own
+// adapter; the mapping rules they share live in core/shared/scheduling.
 function toSchedulable(
   unit: { unit_code: string; unit_name: string; offerings: { offered_in: number }[]; requisite_groups: any[] },
   category: string
 ): SchedulableUnit {
-  const requisiteGroups: RequisiteCondition[][] = (unit.requisite_groups ?? [])
-    .map((group: any) =>
-      group.conditions
-        .map((c: any): RequisiteCondition | null => {
-          if (c.type === 'credit_points') {
-            return { type: 'credit_points', creditPoints: Number(c.credit_points) };
-          }
-          if (c.type === 'unit' && c.unit !== null) {
-            return {
-              type: 'unit',
-              requisiteType: (c.requisite_type ?? 'prerequisite') as 'prerequisite' | 'corequisite' | 'antirequisite',
-              unitCode: c.unit.unit_code.toUpperCase(),
-            };
-          }
-          return null;
-        })
-        .filter((c: RequisiteCondition | null): c is RequisiteCondition => c !== null)
-    )
-    .filter((g: RequisiteCondition[]) => g.length > 0);
-
-  // Terms 3 (summer) and 4 (winter) are dropped because the scheduler only cycles semesters 1 and 2
-  const offeringSemesters = (unit.offerings ?? [])
-    .map(o => o.offered_in as 1 | 2)
-    .filter(sem => sem === 1 || sem === 2);
-
-  return { code: unit.unit_code, name: unit.unit_name, category, offeringSemesters, requisiteGroups };
+  return toSchedulableUnit({
+    code: unit.unit_code,
+    name: unit.unit_name,
+    category,
+    offeringTerms: (unit.offerings ?? []).map((o) => o.offered_in),
+    requisiteGroups: (unit.requisite_groups ?? []).map((group: any) =>
+      (group.conditions ?? []).map((c: any) => ({
+        type: c.type,
+        unitCode: c.unit?.unit_code ?? null,
+        creditPoints: c.credit_points,
+        requisiteType: c.requisite_type,
+      })),
+    ),
+  });
 }
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { plannerId, completedUnitCodes, startYear, startSemester, injectedMinorIds } = body;
+    const {
+      plannerId, completedUnitCodes, startYear, startSemester, injectedMinorIds,
+      concededPassUnitCodes, config,
+    } = body;
 
     if (
       !plannerId ||
@@ -50,6 +44,18 @@ export async function POST(req: NextRequest) {
       (startSemester !== 1 && startSemester !== 2)
     ) {
       return NextResponse.json({ error: 'Invalid request parameters' }, { status: 400 });
+    }
+
+    const configCheck = validateSchedulerConfig(config);
+    if (!configCheck.ok) {
+      return NextResponse.json({ error: `Invalid scheduler config: ${configCheck.error}` }, { status: 400 });
+    }
+
+    if (
+      concededPassUnitCodes !== undefined &&
+      !(Array.isArray(concededPassUnitCodes) && concededPassUnitCodes.every((c: unknown) => typeof c === 'string'))
+    ) {
+      return NextResponse.json({ error: 'concededPassUnitCodes must be an array of unit codes' }, { status: 400 });
     }
 
     const planner = await prisma.plannerTemplate.findUnique({
@@ -129,7 +135,9 @@ export async function POST(req: NextRequest) {
       completedUnitCodes as string[],
       startYear as number,
       startSemester as 1 | 2,
-      intakeSemester
+      intakeSemester,
+      (concededPassUnitCodes as string[] | undefined) ?? [],
+      configCheck.config
     );
 
     return NextResponse.json({ success: true, data: result });
