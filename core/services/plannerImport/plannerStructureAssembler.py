@@ -138,6 +138,13 @@ def coerce_int(value):
     return None
 
 
+# This takes a raw unit and returns whether it has both placement coordinates because minor membership must not hide a scheduled planner slot.
+def has_scheduled_placement(unit):
+    year_level = coerce_int(unit.get("year_level"))
+    semester = coerce_int(unit.get("semester"))
+    return year_level is not None and year_level > 0 and semester is not None and semester > 0
+
+
 
 def coerce_requirement_cp(value):
     """Preserve integer and decimal credit-point values during final normalisation."""
@@ -375,7 +382,11 @@ def assemble_json(file_name, metadata, requirements, units, elective_sections):
         for minor_unit in group.get("units", []):
             if isinstance(minor_unit, dict) and minor_unit.get("unit_code"):
                 minor_codes.add(str(minor_unit.get("unit_code", "")).strip().upper())
-    regular_electives = [u for u in regular_electives if str(u.get("code", "")).strip().upper() not in minor_codes]
+    regular_electives = [
+        u for u in regular_electives
+        if str(u.get("code", "")).strip().upper() not in minor_codes
+        or has_scheduled_placement(u)
+    ]
 
     prescribed_objs = [unit_obj(u) for u in prescribed]
     elective_objs   = [unit_obj(u) for u in regular_electives]
