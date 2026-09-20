@@ -33,6 +33,39 @@ describe('mapScrapedStudentToRawInput', () => {
     expect(warnings.some((w) => w.includes('enrollmentDate'))).toBe(false);
   });
 
+  // The portal's date is DD/MM/YYYY (dashboard/page.tsx parses it the same way). new Date() rejects that format when the day is above 12
+  // and silently swaps day and month otherwise, so 1 Sep 2023 used to come out as January, semester 1.
+  test.each([
+    ['26/01/2024', 2024, 1],
+    ['15/02/2024', 2024, 1],
+    ['01/09/2023', 2023, 2],
+    ['08/07/2024', 2024, 2],
+    ['1/8/2022', 2022, 2],
+  ])('reads DD/MM/YYYY enrollmentDate %s as year %i, semester %i, with no warning', (enrollmentDate, year, semester) => {
+    const { rawInput, warnings } = mapScrapedStudentToRawInput(scrapedStudent({ enrollmentDate }), 'S1');
+    expect(rawInput.intakeYear).toBe(year);
+    expect(rawInput.intakeSemester).toBe(semester);
+    expect(warnings.some((w) => w.includes('enrollmentDate'))).toBe(false);
+  });
+
+  // A datetime string without a zone is parsed in local time by new Date(), so a boundary date like 1 July shifts to 30 June in UTC.
+  test.each([
+    ['2024-07-01T00:00:00', 2024, 2],
+    ['2024-07-01T00:00:00.000Z', 2024, 2],
+    ['2025-01-01T00:00:00', 2025, 1],
+  ])('reads ISO datetime %s by its written date, independent of timezone', (enrollmentDate, year, semester) => {
+    const { rawInput } = mapScrapedStudentToRawInput(scrapedStudent({ enrollmentDate }), 'S1');
+    expect(rawInput.intakeYear).toBe(year);
+    expect(rawInput.intakeSemester).toBe(semester);
+  });
+
+  // 02/13/2024 can only be MM/DD, guessing would put a real student in the wrong intake, so it should warn instead.
+  test('warns instead of guessing when the middle segment is not a valid month', () => {
+    const { rawInput, warnings } = mapScrapedStudentToRawInput(scrapedStudent({ enrollmentDate: '02/13/2024' }), 'S1');
+    expect(rawInput.intakeYear).toBe(new Date().getUTCFullYear());
+    expect(warnings.some((w) => w.includes('enrollmentDate'))).toBe(true);
+  });
+
   // A malformed or missing enrollmentDate shouldn't crash the mapper, it should fall back to something safe and say so.
   test('falls back to the current year/semester 1 and warns when enrollmentDate is unparseable', () => {
     const { rawInput, warnings } = mapScrapedStudentToRawInput(scrapedStudent({ enrollmentDate: 'not-a-date' }), 'S1');

@@ -25,6 +25,30 @@ export function deriveSemesterFromMonth(month: number): 1 | 2 {
   return month >= 7 ? 2 : 1;
 }
 
+// Reads the year and month straight off the text instead of going through new Date(). The portal's date is
+// DD/MM/YYYY (dashboard/page.tsx parses it the same way), and new Date() rejects that when the day is above 12
+// and silently swaps day and month when it isn't, so 1 Sep 2023 would come out as January. ISO strings are read
+// by their written date too, since new Date() applies the local timezone to one with a time part, which pushes
+// a boundary date like 1 July back into June. A middle segment that isn't a valid month returns null, so the
+// caller warns rather than guessing which of DD/MM and MM/DD was meant.
+export function parseEnrollmentYearMonth(raw: string | null | undefined): { year: number; month: number } | null {
+  const text = (raw ?? '').trim();
+
+  const dayMonthYear = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (dayMonthYear) {
+    const month = parseInt(dayMonthYear[2], 10);
+    return month >= 1 && month <= 12 ? { year: parseInt(dayMonthYear[3], 10), month } : null;
+  }
+
+  const iso = text.match(/^(\d{4})-(\d{2})-\d{2}/);
+  if (iso) {
+    const month = parseInt(iso[2], 10);
+    return month >= 1 && month <= 12 ? { year: parseInt(iso[1], 10), month } : null;
+  }
+
+  return null;
+}
+
 export function mapScrapedStudentToRawInput(
   scraped: ScrapedStudent,
   studentId: string,
@@ -34,14 +58,13 @@ export function mapScrapedStudentToRawInput(
 
   const completedUnitCodes = getCompletedUnitCodes(scraped.courseList);
 
-  const enrollmentDate = new Date(scraped.enrollmentDate);
-  const hasValidEnrollmentDate = !Number.isNaN(enrollmentDate.getTime());
+  const enrollment = parseEnrollmentYearMonth(scraped.enrollmentDate);
 
   let intakeYear: number;
   let intakeSemester: 1 | 2;
-  if (hasValidEnrollmentDate) {
-    intakeYear = enrollmentDate.getUTCFullYear();
-    intakeSemester = deriveSemesterFromMonth(enrollmentDate.getUTCMonth() + 1);
+  if (enrollment) {
+    intakeYear = enrollment.year;
+    intakeSemester = deriveSemesterFromMonth(enrollment.month);
   } else {
     intakeYear = new Date().getUTCFullYear();
     intakeSemester = 1;
