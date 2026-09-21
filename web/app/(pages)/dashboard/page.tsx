@@ -42,6 +42,8 @@ export default function DashboardPage() {
     setInjectedMinors,
     setPlanUnits,
     setPlanIntakeSemester,
+    setPlanCompletedUnits,
+    setPlanRequirements,
     setGeneratedSemesters,
     setIsPlanEdited,
   } = useStudentSession();
@@ -549,6 +551,8 @@ export default function DashboardPage() {
     setInjectedMinors(new Set());
     setPlanUnits([]);
     setPlanIntakeSemester(1);
+    setPlanCompletedUnits([]);
+    setPlanRequirements([]);
     setGeneratedSemesters([]);
     setIsPlanEdited(false);
     setScraperError(null);
@@ -607,6 +611,8 @@ export default function DashboardPage() {
     setInjectedMinors(new Set());
     setPlanUnits([]);
     setPlanIntakeSemester(1);
+    setPlanCompletedUnits([]);
+    setPlanRequirements([]);
     setGeneratedSemesters([]);
     setIsPlanEdited(false);
     setScraperError(null);

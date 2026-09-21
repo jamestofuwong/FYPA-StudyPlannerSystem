@@ -29,6 +29,8 @@ export type SchedulableUnitInput = {
   offeringTerms?: number[];
   /** Groups are OR, conditions within a group are AND. */
   requisiteGroups?: RequisiteConditionInput[][];
+  /** Only some schemas record this. Omitted means the caller derives it. */
+  creditPoints?: number | string | null;
 };
 
 /**
@@ -79,6 +81,7 @@ export function toRequisiteGroups(
 
 export function toSchedulableUnit(input: SchedulableUnitInput): SchedulableUnit {
   const { allOfferingTerms, offeringSemesters } = splitOfferingTerms(input.offeringTerms);
+  const creditPoints = input.creditPoints == null ? undefined : Number(input.creditPoints);
   return {
     code: input.code,
     name: input.name,
@@ -86,5 +89,6 @@ export function toSchedulableUnit(input: SchedulableUnitInput): SchedulableUnit 
     offeringSemesters,
     allOfferingTerms,
     requisiteGroups: toRequisiteGroups(input.requisiteGroups),
+    ...(creditPoints !== undefined && Number.isFinite(creditPoints) ? { creditPoints } : {}),
   };
 }

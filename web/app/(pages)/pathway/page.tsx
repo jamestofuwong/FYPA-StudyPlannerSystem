@@ -20,7 +20,7 @@ import {
   type PlanWarning,
   type SchedulableUnit,
 } from '../../../../core/services/scheduling/customPlannerScheduler';
-import { validatePlan } from '../../../../core/shared/scheduling/planValidator';
+import { carryForwardWarnings, validatePlan } from '../../../../core/shared/scheduling/planValidator';
 import {
   addSemester,
   addUnit,
@@ -29,6 +29,16 @@ import {
 } from '../../../../core/shared/scheduling/planEdits';
 
 const TERM_NAMES: Record<number, string> = { 1: 'Semester 1', 2: 'Semester 2', 3: 'summer', 4: 'winter' };
+
+const CATEGORY_NAMES: Record<string, string> = {
+  core: 'Core units',
+  major: 'Major core units',
+  major_core: 'Major core units',
+  elective: 'Electives',
+  prescribed_elective: 'Prescribed electives',
+  wil: 'Work-Integrated Learning',
+  mpu: 'MPU units',
+};
 
 function listCodes(codes: string[]): string {
   if (codes.length <= 1) return codes.join('');
@@ -67,6 +77,8 @@ function describeWarning(w: PlanWarning, maxSemesters: number): string | null {
       return `${w.unitCode} appears in ${w.positions.length} semesters: ${w.positions.map((p) => `Y${p.year} S${p.semester}`).join(', ')}`;
     case 'compulsory_missing':
       return `${listCodes(w.unitCodes)} ${w.unitCodes.length === 1 ? 'is' : 'are'} required to graduate but ${w.unitCodes.length === 1 ? 'is' : 'are'} not in this plan`;
+    case 'requirement_shortfall':
+      return `${CATEGORY_NAMES[w.category] ?? w.category} total ${w.have} credit points, but ${w.need} are required to graduate`;
     default:
       // over_capacity is shown on the semester it concerns
       return null;
@@ -112,6 +124,8 @@ export default function PathwayPage() {
     injectedMinors, setInjectedMinors,
     planUnits, setPlanUnits,
     planIntakeSemester, setPlanIntakeSemester,
+    planCompletedUnits, setPlanCompletedUnits,
+    planRequirements, setPlanRequirements,
     generatedSemesters, setGeneratedSemesters,
     isPlanEdited, setIsPlanEdited,
   } = useStudentSession();
@@ -236,6 +250,8 @@ export default function PathwayPage() {
         setRetakeUnitCodes(retakeCodes);
         setPlanUnits(data.units ?? []);
         setPlanIntakeSemester(data.intakeSemester === 2 ? 2 : 1);
+        setPlanCompletedUnits(data.completedUnits ?? []);
+        setPlanRequirements(data.requirements ?? []);
         setGeneratedSemesters(data.data.semesters);
         setIsPlanEdited(false);
       } else {
@@ -439,7 +455,11 @@ export default function PathwayPage() {
 
             {customPlan && (() => {
               const semesters: CustomSemesterBucket[] = customPlan.semesters ?? [];
-              const unitData = new Map(planUnits.map((u) => [normaliseCode(u.code), u]));
+              // Completed units are in here too, so the requirement totals can
+              // credit what the student has already passed
+              const unitData = new Map(
+                [...planUnits, ...planCompletedUnits].map((u) => [normaliseCode(u.code), u])
+              );
               const placedCodes = new Set(
                 semesters.flatMap((s) => s.units.map((u) => normaliseCode(u.code)))
               );
@@ -449,16 +469,22 @@ export default function PathwayPage() {
               // warnings. Once edited, the arrangement is the advisor's, so it
               // has to be re-checked.
               const warnings: PlanWarning[] = isPlanEdited
-                ? validatePlan({
-                    semesters,
-                    completedUnitCodes: dashboardData?.completedCodes ?? [],
-                    concededPassUnitCodes: getConcededPassUnitCodes(allTranscriptUnits),
-                    intakeSemester: planIntakeSemester,
-                    requiredUnits: planUnits.filter(
-                      (u) => u.category === 'core' || u.category === 'major_core'
-                    ),
-                    unitData,
-                  })
+                ? [
+                    ...validatePlan({
+                      semesters,
+                      completedUnitCodes: dashboardData?.completedCodes ?? [],
+                      concededPassUnitCodes: getConcededPassUnitCodes(allTranscriptUnits),
+                      intakeSemester: planIntakeSemester,
+                      requiredUnits: planUnits.filter(
+                        (u) => u.category === 'core' || u.category === 'major_core'
+                      ),
+                      unitData,
+                      requirements: planRequirements,
+                    }),
+                    // The generator's findings about units it never placed stay
+                    // true until the advisor places them
+                    ...carryForwardWarnings(customPlan.warnings ?? [], semesters),
+                  ]
                 : customPlan.warnings ?? [];
 
               const overCapacity = new Map<string, Extract<PlanWarning, { kind: 'over_capacity' }>>();
@@ -470,7 +496,10 @@ export default function PathwayPage() {
                   overCapacity.set(`${w.year}-${w.semester}`, w);
                   continue;
                 }
-                const code = UNIT_WARNING_KINDS.has(w.kind) ? warningUnitCode(w) : null;
+                // A warning about a unit that is not in the plan has no row to
+                // sit on, so it belongs in the list below instead of vanishing
+                const unitCode = UNIT_WARNING_KINDS.has(w.kind) ? warningUnitCode(w) : null;
+                const code = unitCode && placedCodes.has(normaliseCode(unitCode)) ? unitCode : null;
                 if (code && message) {
                   const key = normaliseCode(code);
                   byUnit.set(key, [...(byUnit.get(key) ?? []), message]);

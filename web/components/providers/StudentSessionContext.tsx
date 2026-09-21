@@ -9,6 +9,7 @@ import type {
   CustomSemesterBucket,
   SchedulableUnit,
 } from '../../../core/services/scheduling/customPlannerScheduler';
+import type { CategoryRequirement } from '../../../core/shared/scheduling/planValidator';
 
 type LoadedStudent = { student: ScrapedStudent; studentId: string };
 type DataSource = 'scrape' | 'import_xlsx' | 'import_manual' | 'import_paste';
@@ -43,6 +44,12 @@ export type StudentSessionState = {
   /** From the planner's intake month, so the page never re-derives that rule. */
   planIntakeSemester: 1 | 2;
   setPlanIntakeSemester: Dispatch<SetStateAction<1 | 2>>;
+  /** Units the student already passed, which still count toward the totals. */
+  planCompletedUnits: SchedulableUnit[];
+  setPlanCompletedUnits: Dispatch<SetStateAction<SchedulableUnit[]>>;
+  /** Per-category credit point totals the planner requires. */
+  planRequirements: CategoryRequirement[];
+  setPlanRequirements: Dispatch<SetStateAction<CategoryRequirement[]>>;
   /** The scheduler's own output, kept so edits can be reset. */
   generatedSemesters: CustomSemesterBucket[];
   setGeneratedSemesters: Dispatch<SetStateAction<CustomSemesterBucket[]>>;
@@ -69,6 +76,8 @@ export function StudentSessionProvider({ children }: { children: ReactNode }) {
   const [injectedMinors, setInjectedMinors] = useState<Set<string>>(new Set());
   const [planUnits, setPlanUnits] = useState<SchedulableUnit[]>([]);
   const [planIntakeSemester, setPlanIntakeSemester] = useState<1 | 2>(1);
+  const [planCompletedUnits, setPlanCompletedUnits] = useState<SchedulableUnit[]>([]);
+  const [planRequirements, setPlanRequirements] = useState<CategoryRequirement[]>([]);
   const [generatedSemesters, setGeneratedSemesters] = useState<CustomSemesterBucket[]>([]);
   const [isPlanEdited, setIsPlanEdited] = useState(false);
 
@@ -83,6 +92,8 @@ export function StudentSessionProvider({ children }: { children: ReactNode }) {
     setInjectedMinors(new Set());
     setPlanUnits([]);
     setPlanIntakeSemester(1);
+    setPlanCompletedUnits([]);
+    setPlanRequirements([]);
     setGeneratedSemesters([]);
     setIsPlanEdited(false);
   }, [selectedPlannerIdx, dashboardData, manualPlanner]);
@@ -103,6 +114,8 @@ export function StudentSessionProvider({ children }: { children: ReactNode }) {
         injectedMinors, setInjectedMinors,
         planUnits, setPlanUnits,
         planIntakeSemester, setPlanIntakeSemester,
+        planCompletedUnits, setPlanCompletedUnits,
+        planRequirements, setPlanRequirements,
         generatedSemesters, setGeneratedSemesters,
         isPlanEdited, setIsPlanEdited,
       }}

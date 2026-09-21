@@ -140,9 +140,29 @@ export async function POST(req: NextRequest) {
       configCheck.config
     );
 
+    // A null requirement means the planner never recorded one, so it is left
+    // out rather than sent as zero, which would read as "nothing required".
+    const requirements = [
+      { category: 'core', creditPoints: planner.core_cp, unitCount: planner.core_count, planCategories: ['core'] },
+      { category: 'major', creditPoints: planner.major_cp, unitCount: planner.major_count, planCategories: ['major_core'] },
+      { category: 'elective', creditPoints: planner.elective_cp, unitCount: planner.elective_count, planCategories: ['elective', 'prescribed_elective'] },
+      { category: 'wil', creditPoints: planner.wil_cp, unitCount: planner.wil_count, planCategories: ['wil'] },
+    ].filter((r) => r.creditPoints != null);
+
     // The pool is returned so the page can validate edits and offer the same
     // units in its add-unit picker, without asking for them again.
-    return NextResponse.json({ success: true, data: result, units: remainingUnits, intakeSemester });
+    return NextResponse.json({
+      success: true,
+      data: result,
+      units: remainingUnits,
+      intakeSemester,
+      requirements,
+      // Categories for units already completed, which the pool leaves out but
+      // the requirement totals must still count
+      completedUnits: planner.units
+        .filter((tu) => tu.unit !== null && normalizedCompleted.has(tu.unit.unit_code.toUpperCase()))
+        .map((tu) => toSchedulable(tu.unit!, String(tu.category))),
+    });
   } catch (error) {
     console.error('[custom-planner]', error);
     return NextResponse.json({ error: 'Failed to generate custom plan' }, { status: 500 });

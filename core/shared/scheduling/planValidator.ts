@@ -25,6 +25,25 @@ import {
   type SchedulerConfig,
 } from '../../services/scheduling/customPlannerScheduler';
 
+/**
+ * How much a category needs, as the planner records it.
+ *
+ * A unit's own creditPoints wins when the schema has them. Otherwise each unit
+ * is worth creditPoints/unitCount, which makes this a unit count check
+ * expressed in credit points. That is the rule the university applies, and it
+ * is why Work-Integrated Learning needs no special case: one WIL unit against
+ * wil_count 1 and wil_cp 25 is worth 25, not the 12.5 a flat rate would give.
+ */
+export type CategoryRequirement = {
+  /** Requirement key from the planner, e.g. "core", "major", "elective", "wil". */
+  category: string;
+  creditPoints: number;
+  /** Units the planner expects in the category. Null means the total cannot be split. */
+  unitCount?: number | null;
+  /** Unit categories counting toward it. Defaults to the requirement key itself. */
+  planCategories?: string[];
+};
+
 export type ValidatePlanInput = {
   semesters: CustomSemesterBucket[];
   completedUnitCodes: string[];
@@ -34,6 +53,8 @@ export type ValidatePlanInput = {
   requiredUnits?: SchedulableUnit[];
   /** Offering and requisite data for units in the plan, keyed by normalised code. */
   unitData?: Map<string, SchedulableUnit>;
+  /** Per-category totals. Omit to skip the shortfall check. */
+  requirements?: CategoryRequirement[];
   config?: Partial<SchedulerConfig>;
 };
 
@@ -167,6 +188,44 @@ export function validatePlan(input: ValidatePlanInput): PlanWarning[] {
     }
   }
 
+  if (input.requirements) {
+    // A category counts what is placed plus what the student already passed
+    const counted: { category: string; creditPoints?: number }[] = [
+      ...input.semesters.flatMap((bucket) =>
+        bucket.units.map((u) => ({
+          category: u.category,
+          creditPoints: input.unitData?.get(normaliseCode(u.code))?.creditPoints,
+        })),
+      ),
+      ...input.completedUnitCodes
+        .map((code) => input.unitData?.get(normaliseCode(code)))
+        // A completed unit missing from unitData has no known category, so it
+        // cannot be credited to one
+        .filter((unit): unit is SchedulableUnit => unit !== undefined)
+        .map((unit) => ({ category: unit.category, creditPoints: unit.creditPoints })),
+    ];
+
+    for (const requirement of input.requirements) {
+      const planCategories = new Set(requirement.planCategories ?? [requirement.category]);
+      const perUnit = requirement.unitCount && requirement.unitCount > 0
+        ? requirement.creditPoints / requirement.unitCount
+        : cfg.creditPointsPerUnit;
+
+      const have = counted
+        .filter((u) => planCategories.has(u.category))
+        .reduce((total, u) => total + (u.creditPoints ?? perUnit), 0);
+
+      if (have < requirement.creditPoints) {
+        warnings.push({
+          kind: 'requirement_shortfall',
+          category: requirement.category,
+          have,
+          need: requirement.creditPoints,
+        });
+      }
+    }
+  }
+
   if (input.requiredUnits) {
     const planned = new Set(placements.keys());
     const missing = input.requiredUnits
@@ -181,4 +240,31 @@ export function validatePlan(input: ValidatePlanInput): PlanWarning[] {
   }
 
   return warnings;
+}
+
+/**
+ * Warnings the generator raised about units it never placed, kept alive across
+ * edits. validatePlan only sees units that are in the plan, so without this an
+ * edit silently drops the only reminder that a unit still needs arranging.
+ * A unit the advisor has since placed is dropped instead, because validatePlan
+ * now judges it in its new position.
+ */
+export function carryForwardWarnings(
+  generatedWarnings: ReadonlyArray<PlanWarning>,
+  semesters: ReadonlyArray<CustomSemesterBucket>,
+): PlanWarning[] {
+  const placed = new Set(
+    semesters.flatMap((bucket) => bucket.units.map((u) => normaliseCode(u.code))),
+  );
+
+  const carried: PlanWarning[] = [];
+  for (const warning of generatedWarnings) {
+    if (warning.kind === 'short_term_only') {
+      if (!placed.has(normaliseCode(warning.unitCode))) carried.push(warning);
+    } else if (warning.kind === 'budget_exhausted') {
+      const stillUnplaced = warning.unitCodes.filter((code) => !placed.has(normaliseCode(code)));
+      if (stillUnplaced.length > 0) carried.push({ ...warning, unitCodes: stillUnplaced });
+    }
+  }
+  return carried;
 }

@@ -51,6 +51,11 @@ export interface SchedulableUnit {
    * is taken as the full list.
    */
   allOfferingTerms?: number[];
+  /**
+   * Only some schemas record credit points per unit. When absent, callers that
+   * need a value derive one from the planner's category requirement.
+   */
+  creditPoints?: number;
 
   requisiteGroups: RequisiteCondition[][];
 }
@@ -88,6 +93,8 @@ export type PlanWarning =
   | { kind: 'over_capacity'; year: number; semester: 1 | 2; count: number; limit: number }
   /** Required units absent from both the plan and the completed list. Validation only. */
   | { kind: 'compulsory_missing'; unitCodes: string[] }
+  /** A category short of the credit points the planner requires. Validation only. */
+  | { kind: 'requirement_shortfall'; category: string; have: number; need: number }
   /** The same unit sitting in more than one semester. Validation only. */
   | { kind: 'duplicate_placement'; unitCode: string; positions: { year: number; semester: 1 | 2 }[] };
 
