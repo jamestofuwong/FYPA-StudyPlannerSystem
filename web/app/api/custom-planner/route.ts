@@ -140,7 +140,9 @@ export async function POST(req: NextRequest) {
       configCheck.config
     );
 
-    return NextResponse.json({ success: true, data: result });
+    // The pool is returned so the page can validate edits and offer the same
+    // units in its add-unit picker, without asking for them again.
+    return NextResponse.json({ success: true, data: result, units: remainingUnits, intakeSemester });
   } catch (error) {
     console.error('[custom-planner]', error);
     return NextResponse.json({ error: 'Failed to generate custom plan' }, { status: 500 });

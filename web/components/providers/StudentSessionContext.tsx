@@ -5,6 +5,10 @@ import {
   type Dispatch, type ReactNode, type SetStateAction,
 } from 'react';
 import type { ScrapedStudent } from '../../../core/shared/types/student';
+import type {
+  CustomSemesterBucket,
+  SchedulableUnit,
+} from '../../../core/services/scheduling/customPlannerScheduler';
 
 type LoadedStudent = { student: ScrapedStudent; studentId: string };
 type DataSource = 'scrape' | 'import_xlsx' | 'import_manual' | 'import_paste';
@@ -33,6 +37,17 @@ export type StudentSessionState = {
   setRetakeUnitCodes: Dispatch<SetStateAction<Set<string>>>;
   injectedMinors: Set<string>;
   setInjectedMinors: Dispatch<SetStateAction<Set<string>>>;
+  /** Offering and requisite data for every unit the plan could contain. */
+  planUnits: SchedulableUnit[];
+  setPlanUnits: Dispatch<SetStateAction<SchedulableUnit[]>>;
+  /** From the planner's intake month, so the page never re-derives that rule. */
+  planIntakeSemester: 1 | 2;
+  setPlanIntakeSemester: Dispatch<SetStateAction<1 | 2>>;
+  /** The scheduler's own output, kept so edits can be reset. */
+  generatedSemesters: CustomSemesterBucket[];
+  setGeneratedSemesters: Dispatch<SetStateAction<CustomSemesterBucket[]>>;
+  isPlanEdited: boolean;
+  setIsPlanEdited: Dispatch<SetStateAction<boolean>>;
 };
 
 const StudentSessionContext = createContext<StudentSessionState | null>(null);
@@ -52,6 +67,10 @@ export function StudentSessionProvider({ children }: { children: ReactNode }) {
   // Units in the generated pathway that are repeat attempts after a failed grade
   const [retakeUnitCodes, setRetakeUnitCodes] = useState<Set<string>>(new Set());
   const [injectedMinors, setInjectedMinors] = useState<Set<string>>(new Set());
+  const [planUnits, setPlanUnits] = useState<SchedulableUnit[]>([]);
+  const [planIntakeSemester, setPlanIntakeSemester] = useState<1 | 2>(1);
+  const [generatedSemesters, setGeneratedSemesters] = useState<CustomSemesterBucket[]>([]);
+  const [isPlanEdited, setIsPlanEdited] = useState(false);
 
   // Switching planner discards the custom plan built for the previous one. This runs
   // here rather than in a page so that revisiting a page does not clear the plan.
@@ -62,6 +81,10 @@ export function StudentSessionProvider({ children }: { children: ReactNode }) {
     setCustomPlanStart(null);
     setRetakeUnitCodes(new Set());
     setInjectedMinors(new Set());
+    setPlanUnits([]);
+    setPlanIntakeSemester(1);
+    setGeneratedSemesters([]);
+    setIsPlanEdited(false);
   }, [selectedPlannerIdx, dashboardData, manualPlanner]);
 
   return (
@@ -78,6 +101,10 @@ export function StudentSessionProvider({ children }: { children: ReactNode }) {
         customPlanStart, setCustomPlanStart,
         retakeUnitCodes, setRetakeUnitCodes,
         injectedMinors, setInjectedMinors,
+        planUnits, setPlanUnits,
+        planIntakeSemester, setPlanIntakeSemester,
+        generatedSemesters, setGeneratedSemesters,
+        isPlanEdited, setIsPlanEdited,
       }}
     >
       {children}

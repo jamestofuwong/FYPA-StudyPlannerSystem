@@ -40,6 +40,10 @@ export default function DashboardPage() {
     customPlanStart, setCustomPlanStart,
     setRetakeUnitCodes,
     setInjectedMinors,
+    setPlanUnits,
+    setPlanIntakeSemester,
+    setGeneratedSemesters,
+    setIsPlanEdited,
   } = useStudentSession();
   const [openYears, setOpenYears] = useState<Set<string>>(new Set());
   const [internalLoading, setInternalLoading] = useState(false);
@@ -543,6 +547,10 @@ export default function DashboardPage() {
     setCustomPlanStart(null);
     setRetakeUnitCodes(new Set());
     setInjectedMinors(new Set());
+    setPlanUnits([]);
+    setPlanIntakeSemester(1);
+    setGeneratedSemesters([]);
+    setIsPlanEdited(false);
     setScraperError(null);
     setInternalLoading(true);
     try {
@@ -597,6 +605,10 @@ export default function DashboardPage() {
     setCustomPlanStart(null);
     setRetakeUnitCodes(new Set());
     setInjectedMinors(new Set());
+    setPlanUnits([]);
+    setPlanIntakeSemester(1);
+    setGeneratedSemesters([]);
+    setIsPlanEdited(false);
     setScraperError(null);
     // REQ-SEC-101: no sessionStorage to remove, data was never persisted
     showToast('Student data cleared.', 'info');
