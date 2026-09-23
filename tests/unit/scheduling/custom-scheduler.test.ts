@@ -1,5 +1,6 @@
 import {
   buildCustomPlan,
+  mapUnitToSchedulable,
   DEFAULT_SCHEDULER_CONFIG,
   validateSchedulerConfig,
   type PlanWarning,
@@ -352,6 +353,77 @@ describe('Custom Planner Scheduler', () => {
     });
   });
 
+  // mapUnitToSchedulable converts a raw DB unit row into the SchedulableUnit shape canTake() understands.
+  // It used to be a private, untested toSchedulable() inline in web/app/api/custom-planner/route.ts, moved
+  // here and exported so both that route and core/services/classEstimation/eligibilityEngine.ts share one
+  // mapping instead of two copies. These tests cover what was previously untested.
+  describe('mapUnitToSchedulable', () => {
+    test('maps a plain unit row with no requisites', () => {
+      const result = mapUnitToSchedulable(
+        { unit_code: 'COS10009', unit_name: 'Intro', offerings: [{ offered_in: 1 }], requisite_groups: [] },
+        'core',
+      );
+      expect(result).toEqual({
+        code: 'COS10009', name: 'Intro', category: 'core', offeringSemesters: [1], requisiteGroups: [],
+      });
+    });
+
+    test('drops summer/winter offering terms (3, 4), canTake only cycles semesters 1 and 2', () => {
+      const result = mapUnitToSchedulable(
+        { unit_code: 'U1', unit_name: 'X', offerings: [{ offered_in: 1 }, { offered_in: 3 }, { offered_in: 4 }], requisite_groups: [] },
+        'core',
+      );
+      expect(result.offeringSemesters).toEqual([1]);
+    });
+
+    test('defaults requisite_type to prerequisite when missing, and uppercases the related unit code', () => {
+      const result = mapUnitToSchedulable(
+        {
+          unit_code: 'U1', unit_name: 'X', offerings: [],
+          requisite_groups: [{ conditions: [{ type: 'unit', requisite_type: null, credit_points: null, unit: { unit_code: 'base' } }] }],
+        },
+        'core',
+      );
+      expect(result.requisiteGroups).toEqual([[{ type: 'unit', requisiteType: 'prerequisite', unitCode: 'BASE' }]]);
+    });
+
+    test('maps a credit_points condition', () => {
+      const result = mapUnitToSchedulable(
+        {
+          unit_code: 'U1', unit_name: 'X', offerings: [],
+          requisite_groups: [{ conditions: [{ type: 'credit_points', requisite_type: null, credit_points: 50, unit: null }] }],
+        },
+        'core',
+      );
+      expect(result.requisiteGroups).toEqual([[{ type: 'credit_points', creditPoints: 50 }]]);
+    });
+
+    test('drops a condition pointing to a null unit relation', () => {
+      const result = mapUnitToSchedulable(
+        {
+          unit_code: 'U1', unit_name: 'X', offerings: [],
+          requisite_groups: [{ conditions: [{ type: 'unit', requisite_type: 'prerequisite', credit_points: null, unit: null }] }],
+        },
+        'core',
+      );
+      expect(result.requisiteGroups).toEqual([]);
+    });
+
+    // Without this filter, a group that becomes empty after dropping invalid conditions would make the
+    // unit trivially eligible via that group (every() on an empty array is vacuously true), instead of
+    // being ignored as the broken data it is.
+    test('drops a group left with no valid conditions, instead of leaving it as an always-satisfied empty group', () => {
+      const result = mapUnitToSchedulable(
+        {
+          unit_code: 'U1', unit_name: 'X', offerings: [],
+          requisite_groups: [
+            { conditions: [{ type: 'unit', requisite_type: 'prerequisite', credit_points: null, unit: null }] },
+            { conditions: [{ type: 'unit', requisite_type: 'prerequisite', credit_points: null, unit: { unit_code: 'BASE' } }] },
+          ],
+        },
+        'core',
+      );
+      expect(result.requisiteGroups).toEqual([[{ type: 'unit', requisiteType: 'prerequisite', unitCode: 'BASE' }]]);
   const warningsOf = <K extends PlanWarning['kind']>(
     result: ReturnType<typeof buildCustomPlan>,
     kind: K,

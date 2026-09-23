@@ -3,9 +3,9 @@ import { NextResponse } from 'next/server';
 import { prisma } from '../../../../core/db/client';
 import {
   buildCustomPlan,
+  mapUnitToSchedulable,
   validateSchedulerConfig,
   type SchedulableUnit,
-  type RequisiteCondition,
 } from '../../../../core/services/scheduling/customPlannerScheduler';
 
 function toSchedulable(
@@ -102,7 +102,7 @@ export async function POST(req: NextRequest) {
     // The core pool is all planner units the student has not yet completed/enrolled in
     const remainingUnits: SchedulableUnit[] = planner.units
       .filter((tu) => tu.unit !== null && !normalizedCompleted.has(tu.unit.unit_code.toUpperCase()))
-      .map((tu) => toSchedulable(tu.unit!, String(tu.category)));
+      .map((tu) => mapUnitToSchedulable(tu.unit!, String(tu.category)));
 
     // Minor injection
     const minorIds: string[] = Array.isArray(injectedMinorIds) ? injectedMinorIds : [];
@@ -134,7 +134,7 @@ export async function POST(req: NextRequest) {
         for (const mu of minor.units) {
           const code = mu.unit.unit_code.toUpperCase();
           if (poolCodes.has(code)) continue;
-          remainingUnits.push(toSchedulable(mu.unit, 'minor'));
+          remainingUnits.push(mapUnitToSchedulable(mu.unit, 'minor'));
           poolCodes.add(code);
         }
       }
