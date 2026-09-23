@@ -25,7 +25,7 @@ interface OllamaStatus {
 
 type SetupState = 'checking' | 'ollama-unavailable' | 'model-unavailable' | 'pulling' | 'ready';
 
-const WINDOW_SIZE = 10;
+const WINDOW_SIZE = 6;
 const COPILOT_MODEL = 'qwen2.5:3b';
 const STORAGE_KEY = 'copilot_conversations';
 const ACTIVE_KEY = 'copilot_active_id';
@@ -72,10 +72,12 @@ export default function CopilotPage() {
   const [loading, setLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [streamingContent, setStreamingContent] = useState<string | null>(null);
+  const [elapsed, setElapsed] = useState(0);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const elapsedRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Load from localStorage on mount ──────────────────────────────────────
   useEffect(() => {
