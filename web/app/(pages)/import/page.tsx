@@ -48,23 +48,36 @@ function flattenUnits(planner: PlannerImportPlanner | null): PlannerImportUnit[]
   if (!planner) return [];
   const c = planner.categories ?? {};
   const eg = c.elective_groups ?? {};
+  
+  const toArray = (o: unknown): number[] => {
+    if (Array.isArray(o)) return o.map(Number).filter(Boolean);
+    if (typeof o === 'number') return [o];
+    return [];
+  };
+
+  const mapUnit = (u: PlannerImportUnit, cat?: string) => ({
+    ...u,
+    category: (cat ?? u.category ?? 'core') as any,
+    offered_in: toArray(u.offered_in),
+  });
+
   const minorUnits = (c.minor_groups ?? []).flatMap(minor => 
     minor.units.map(unit => ({ 
-      ...unit, 
-      category: 'elective',
+      ...mapUnit(unit, 'elective'), 
       minor_name: minor.minor_name,
       year_level: null, 
       semester: null 
     }))
   );
+
   return [
-    ...(c.core_units ?? []),
-    ...(c.major_units ?? []),
-    ...(c.mpu_group ?? []),
-    ...(eg.prescribed_elective ?? []),
-    ...(eg.elective ?? []),
+    ...(c.core_units ?? []).map(u => mapUnit(u, 'core')),
+    ...(c.major_units ?? []).map(u => mapUnit(u, 'major_core')),
+    ...(c.mpu_group ?? []).map(u => mapUnit(u, 'mpu')),
+    ...(eg.prescribed_elective ?? []).map(u => mapUnit(u, 'prescribed_elective')),
+    ...(eg.elective ?? []).map(u => mapUnit(u, 'elective')),
     ...minorUnits,
-    ...(c.wil_group ?? []),
+    ...(c.wil_group ?? []).map(u => mapUnit(u, 'wil')),
   ];
 }
 
@@ -162,29 +175,54 @@ export default function ImportPage() {
   }
 }, [planner]);
 
-  // Parse intake month from string
-  function parseIntakeMonth(intake: string): number {
-    const lower = intake?.toLowerCase().trim() || '';
-    
-    const firstMonth = lower.split('/')[0].trim();
-    
-    const months: Record<string, number> = {
-      january: 1, jan: 1,
-      february: 2, feb: 2,
-      march: 3, mar: 3,
-      april: 4, apr: 4,
-      may: 5,
-      june: 6, jun: 6,
-      july: 7, jul: 7,
-      august: 8, aug: 8,
-      september: 9, sep: 9, sept: 9,
-      october: 10, oct: 10,
-      november: 11, nov: 11,
-      december: 12, dec: 12,
-    };
-    
-    return months[firstMonth] || 0;
+ // Parse intake month from string
+function parseIntakeMonth(intake: string): number {
+  const lower = intake?.toLowerCase().trim() || '';
+  if (!lower) return 2; // Default fallback to Feb/Mar (Semester 1)
+
+  // 1. Explicit keyword checks
+  if (lower.includes('feb') || lower.includes('mar')) {
+    return 2; // February/March intake = Sem 1
   }
+  if (lower.includes('aug') || lower.includes('sep')) {
+    return 8; // August/September intake = Sem 2
+  }
+  if (lower.includes('summer')) {
+    return 11; // November/Summer term
+  }
+  if (lower.includes('winter')) {
+    return 6; // June/Winter term
+  }
+
+  // 2. Check for semester keywords
+  const semMatch = lower.match(/semester\s*(\d)/i);
+  if (semMatch) {
+    const sem = parseInt(semMatch[1], 10);
+    return sem === 1 ? 2 : sem === 2 ? 8 : 2;
+  }
+
+  // 3. Fallback month dictionary search
+  const months: Array<[string, number]> = [
+    ['january', 1], ['jan', 1],
+    ['february', 2], ['feb', 2],
+    ['march', 3], ['mar', 3],
+    ['april', 4], ['apr', 4],
+    ['may', 5],
+    ['june', 6], ['jun', 6],
+    ['july', 7], ['jul', 7],
+    ['august', 8], ['aug', 8],
+    ['september', 9], ['sept', 9], ['sep', 9],
+    ['october', 10], ['oct', 10],
+    ['november', 11], ['nov', 11],
+    ['december', 12], ['dec', 12],
+  ];
+
+  for (const [key, val] of months) {
+    if (lower.includes(key)) return val;
+  }
+
+  return 0;
+}
 
   // Group units by year and semester
   const yearGroups = useMemo(() => {
@@ -283,7 +321,7 @@ export default function ImportPage() {
   const handleUnitEdit = (
     id: string, 
     field: keyof PlannerImportUnit, 
-    value: string | number | null
+    value: string | number | number[] | null
   ) => {
     setEditableUnits(prev => 
       prev.map(unit => 
@@ -299,7 +337,7 @@ export default function ImportPage() {
       unit_name: '',
       category: type === 'core' ? 'core' : 'elective',
       prerequisite: null,
-      offered_in: null,
+      offered_in: semester ? [semester] : [],
       year_level: year || null,
       semester: semester || null,
       minor_name: minorName || null,

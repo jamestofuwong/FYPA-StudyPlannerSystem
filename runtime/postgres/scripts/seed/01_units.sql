@@ -98,55 +98,93 @@ INSERT INTO units (unit_code, unit_name) VALUES
 -- Units offered only in Semester 1
 SELECT add_unit_offering('COS20015', 1);
 SELECT add_unit_offering('COS20083', 1);
-
 SELECT add_unit_offering('COS30018', 1);
 SELECT add_unit_offering('COS30043', 1);
-SELECT add_unit_offering('COS30047', 1);
+SELECT add_unit_offering('COS30081', 1);
+SELECT add_unit_offering('COS40007', 1);
 
+SELECT add_unit_offering('ICT30010', 1);
 
+SELECT add_unit_offering('STA10003', 1);
+
+SELECT add_unit_offering('SWE30011', 1);
 SELECT add_unit_offering('SWE40006', 1);
 
-
 SELECT add_unit_offering('TNE10005', 1);
+SELECT add_unit_offering('TNE20002', 1);
+SELECT add_unit_offering('TNE20003', 1);
+SELECT add_unit_offering('TNE30012', 1);
+
 
 -- Units offered only in Semester 2
 SELECT add_unit_offering('COS10082', 2);
-
 SELECT add_unit_offering('COS20028', 2);
 SELECT add_unit_offering('COS20030', 2);
-
 SELECT add_unit_offering('COS30008', 2);
-SELECT add_unit_offering('COS30017', 2);
 SELECT add_unit_offering('COS30020', 2);
+SELECT add_unit_offering('COS30041', 2);
 SELECT add_unit_offering('COS30045', 2);
 SELECT add_unit_offering('COS30082', 2);
+SELECT add_unit_offering('COS40003', 2);
 
+
+SELECT add_unit_offering('INF30020', 2);
 
 SELECT add_unit_offering('SWE30009', 2);
-
+SELECT add_unit_offering('SWE30012', 2);
 
 SELECT add_unit_offering('TNE30009', 2);
+
+
+-- Units offered only in Winter Term
+SELECT add_unit_offering('ICT20016*Optional', 4);
+
 
 -- Units offered in both Semester 1 and Semester 2
 SELECT add_unit_offering('COS10003', 1); SELECT add_unit_offering('COS10003', 2);
 SELECT add_unit_offering('COS10004', 1); SELECT add_unit_offering('COS10004', 2);
 SELECT add_unit_offering('COS10009', 1); SELECT add_unit_offering('COS10009', 2);
+SELECT add_unit_offering('COS10011', 1); SELECT add_unit_offering('COS10011', 2);
 SELECT add_unit_offering('COS10022', 1); SELECT add_unit_offering('COS10022', 2);
 SELECT add_unit_offering('COS10025', 1); SELECT add_unit_offering('COS10025', 2);
 SELECT add_unit_offering('COS10026', 1); SELECT add_unit_offering('COS10026', 2);
-
+SELECT add_unit_offering('COS20001', 1); SELECT add_unit_offering('COS20001', 2);
 SELECT add_unit_offering('COS20007', 1); SELECT add_unit_offering('COS20007', 2);
-
+SELECT add_unit_offering('COS20019', 1); SELECT add_unit_offering('COS20019', 2);
+SELECT add_unit_offering('COS20031', 1); SELECT add_unit_offering('COS20031', 2);
+SELECT add_unit_offering('COS30015', 1); SELECT add_unit_offering('COS30015', 2);
+SELECT add_unit_offering('COS30017', 1); SELECT add_unit_offering('COS30017', 2);
+SELECT add_unit_offering('COS30019', 1); SELECT add_unit_offering('COS30019', 2);
+SELECT add_unit_offering('COS30047', 1); SELECT add_unit_offering('COS30047', 2);
 SELECT add_unit_offering('COS30049', 1); SELECT add_unit_offering('COS30049', 2);
-
 SELECT add_unit_offering('COS40005', 1); SELECT add_unit_offering('COS40005', 2);
 SELECT add_unit_offering('COS40006', 1); SELECT add_unit_offering('COS40006', 2);
 
-
+SELECT add_unit_offering('ICT30005', 1); SELECT add_unit_offering('ICT30005', 2);
 SELECT add_unit_offering('INF10024', 1); SELECT add_unit_offering('INF10024', 2);
 
+SELECT add_unit_offering('MGT10010', 1); SELECT add_unit_offering('MGT10010', 2);
+SELECT add_unit_offering('MPU3142', 1); SELECT add_unit_offering('MPU3142', 2);
+SELECT add_unit_offering('MPU3143', 1); SELECT add_unit_offering('MPU3143', 2);
+SELECT add_unit_offering('MPU3182', 1); SELECT add_unit_offering('MPU3182', 2);
+SELECT add_unit_offering('MPU3183', 1); SELECT add_unit_offering('MPU3183', 2);
+SELECT add_unit_offering('MPU3192', 1); SELECT add_unit_offering('MPU3192', 2);
+SELECT add_unit_offering('MPU3193', 1); SELECT add_unit_offering('MPU3193', 2);
+SELECT add_unit_offering('MPU3272', 1); SELECT add_unit_offering('MPU3272', 2);
+SELECT add_unit_offering('MPU3273', 1); SELECT add_unit_offering('MPU3273', 2);
+SELECT add_unit_offering('MPU3412', 1); SELECT add_unit_offering('MPU3412', 2);
+
+SELECT add_unit_offering('SWE20001', 1); SELECT add_unit_offering('SWE20001', 2);
+SELECT add_unit_offering('SWE30003', 1); SELECT add_unit_offering('SWE30003', 2);
+SELECT add_unit_offering('SWE40001', 1); SELECT add_unit_offering('SWE40001', 2);
+SELECT add_unit_offering('SWE40002', 1); SELECT add_unit_offering('SWE40002', 2);
 
 SELECT add_unit_offering('TNE10006', 1); SELECT add_unit_offering('TNE10006', 2);
 
 
-SELECT add_unit_offering('SWE30003', 1); SELECT add_unit_offering('SWE30003', 2);
+-- Units offered in both Summer and Winter Term
+SELECT add_unit_offering('MPU3212', 3); SELECT add_unit_offering('MPU3212', 4);
+
+
+SELECT add_unit_offering('ICT20016', 3); SELECT add_unit_offering('ICT20016', 4);
+SELECT add_unit_offering('ICT20016', 2);

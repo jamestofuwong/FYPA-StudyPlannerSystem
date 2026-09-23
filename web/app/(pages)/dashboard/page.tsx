@@ -3,9 +3,10 @@
 import { useState, useEffect, useRef } from 'react';
 import styles from './page.module.css';
 import { useToast } from '../../../components/providers/ToastProvider';
-import { usePortalAuth } from '../../../components/providers/PortalAuthContext';
-import { useScraperContext } from '../../../components/providers/ScraperContext';
+import { useStudentSession } from '../../../components/providers/StudentSessionContext';
 import type { ScrapedStudent, ScrapedCourseListItem } from '../../../../core/shared/types/student';
+
+type Enrollment = { EnrollId: number; EnrollmentDesc: string };
 import ExportModal from '../../../components/ExportModal';
 import type { ExportInput } from '../../../../core/shared/types/export';
 import {
@@ -15,64 +16,40 @@ import {
   normaliseUnitCode,
   resolveUnitStates,
 } from '../../../../core/shared/constants/grades';
-
-
-// Helper sub-components
-
-type BadgeClass = 'badgeGreen' | 'badgeBlue' | 'badgeYellow' | 'badgeOrange' | 'badgeRed' | 'badgePurple';
-
-function Badge({ label, cls }: { label: string; cls: BadgeClass }) {
-  const purpleStyle = cls === 'badgePurple'
-    ? { background: 'rgba(197,134,192,0.2)', color: 'var(--accent-purple)', border: '1px solid rgba(197,134,192,0.3)' }
-    : undefined;
-  return (
-    <span
-      className={cls !== 'badgePurple' ? `${styles.badge} ${styles[cls]}` : styles.badge}
-      style={purpleStyle}
-    >
-      {label}
-    </span>
-  );
-}
-
-function InlineCode({ children, red }: { children: React.ReactNode; red?: boolean }) {
-  return (
-    <code className={styles.code} style={red ? { color: 'var(--accent-red)' } : undefined}>
-      {children}
-    </code>
-  );
-}
-
-function ProgressBar({ pct, color }: { pct: number; color: string }) {
-  return (
-    <div className={styles.progressWrap}>
-      <div className={styles.progressBar} style={{ width: `${pct}%`, background: color }} />
-    </div>
-  );
-}
+import { Badge, InlineCode, ProgressBar, type BadgeClass } from '../../../components/common/Primitives';
 
 // Main component
 
 export default function DashboardPage() {
   const { showToast } = useToast();
-  const { isLoggedIn, isPortalLoading, openLoginModal } = usePortalAuth();
-  const { fetchStudentSuggestions, phase: scraperPhase } = useScraperContext();
+  const [portalSessionStatus, setPortalSessionStatus] = useState<'idle' | 'login-pending' | 'logged-in' | 'login-error'>('idle');
+  const [selectedStudentDbId, setSelectedStudentDbId] = useState<number | null>(null);
+  const [enrollmentsList, setEnrollmentsList] = useState<Enrollment[]>([]);
   const [studentIdInput, setStudentIdInput] = useState('');
-  const [scrapedStudent, setScrapedStudent] = useState<{ student: ScrapedStudent; studentId: string } | null>(null);
-  const [studentLoaded, setStudentLoaded] = useState(false);
+  const {
+    scrapedStudent, setScrapedStudent,
+    studentLoaded, setStudentLoaded,
+    dashboardData, setDashboardData,
+    selectedPlannerIdx, setSelectedPlannerIdx,
+    manualPlanner, setManualPlanner,
+    isImported, setIsImported,
+    dataSource, setDataSource,
+    customPlan, setCustomPlan,
+    customPlanStart, setCustomPlanStart,
+    retakeUnitCodes, setRetakeUnitCodes,
+    injectedMinors, setInjectedMinors,
+  } = useStudentSession();
   const [openYears, setOpenYears] = useState<Set<string>>(new Set());
-  const [dashboardData, setDashboardData] = useState<any>(null);
   const [internalLoading, setInternalLoading] = useState(false);
   const [scraperApiStatus, setScraperApiStatus] = useState<string>('idle');
   const [showExportModal, setShowExportModal] = useState(false);
   const [enrollmentMode, setEnrollmentMode] = useState<'latest' | 'earliest' | 'mpu'>('latest');
-  const [selectedPlannerIdx, setSelectedPlannerIdx] = useState(0); // -1 = manual planner active
   const [resultTab, setResultTab] = useState<'analytics' | 'graduation' | 'units' | 'minors' | 'pathway'>('analytics');
-  const [manualPlanner, setManualPlanner] = useState<any>(null);
+  const [customPlanLoading, setCustomPlanLoading] = useState(false);
   const [showPlannerPicker, setShowPlannerPicker] = useState(false);
   const [plannerPickerSearch, setPlannerPickerSearch] = useState('');
   const [allPlanners, setAllPlanners] = useState<any[] | null>(null);
-  const [suggestions, setSuggestions] = useState<{ text: string; id: string; name: string }[]>([]);
+  const [suggestions, setSuggestions] = useState<{ text: string; id: string; name: string; db_id?: number }[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedStudentName, setSelectedStudentName] = useState('');
   const suggestionsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -87,26 +64,18 @@ export default function DashboardPage() {
   const [showUnitSuggestions, setShowUnitSuggestions] = useState(false);
   const unitSuggestionsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [pasteText, setPasteText] = useState('');
-  const [dataSource, setDataSource] = useState<'scrape' | 'import_xlsx' | 'import_manual' | 'import_paste'>('scrape');
-  const [isImported, setIsImported] = useState(false);
-  const [customPlan, setCustomPlan] = useState<any>(null);
-  const [customPlanStart, setCustomPlanStart] = useState<{ year: number; semester: 1 | 2 } | null>(null);
-  // Units in the generated pathway that are repeat attempts after a failed grade
-  const [retakeUnitCodes, setRetakeUnitCodes] = useState<Set<string>>(new Set());
-  const [customPlanLoading, setCustomPlanLoading] = useState(false);
-  const [injectedMinors, setInjectedMinors] = useState<Set<string>>(new Set());
   // REQ-FUN-105: track last scrape error message for retry UI
   const [scraperError, setScraperError] = useState<string | null>(null);
 
   // REQ-SEC-101: no sessionStorage restore. Student data must live in RAM only
 
-  // Poll scraper status on mount so the dashboard reflects initializing state
-  // even before the user clicks Search.
+  // Poll scraper status on mount to reflect portal session state.
   useEffect(() => {
     const poll = async () => {
       const res = await fetch('/api/scraper/status').catch(() => null);
       if (!res?.ok) return;
       const data = await res.json();
+      setPortalSessionStatus(data.sessionStatus ?? 'idle');
       setScraperApiStatus((prev) => (prev === 'scraping' || prev === 'pending' ? prev : data.status));
     };
     poll();
@@ -115,10 +84,6 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    setCustomPlan(null);
-    setCustomPlanStart(null);
-    setRetakeUnitCodes(new Set());
-    setInjectedMinors(new Set());
     setResultTab('analytics');
     const planner = selectedPlannerIdx === -1 ? manualPlanner : dashboardData?.planners?.[selectedPlannerIdx];
     if (!planner?.units) return;
@@ -127,35 +92,54 @@ export default function DashboardPage() {
   }, [selectedPlannerIdx, dashboardData, manualPlanner]);
 
   const loading = internalLoading;
-  const isInitializing = scraperApiStatus === 'initializing';
+  const isInitializing = false;
   const isScraping = scraperApiStatus === 'scraping';
-  const isWaitingForList = scraperApiStatus === 'pending' || isInitializing;
-  const isDisabled = !isLoggedIn || isPortalLoading || isInitializing || loading;
+  const isWaitingForList = false;
+  const isLoggedIn = portalSessionStatus === 'logged-in';
+  const isDisabled = !isLoggedIn || loading;
 
-  // Polls /api/scraper/status until the scraper bot finishes (or errors/times out).
-  const pollScraperResult = async (): Promise<ScrapedStudent | null> => {
-    const TIMEOUT_MS = 120_000;
-    const INTERVAL_MS = 1_000;
-    const deadline = Date.now() + TIMEOUT_MS;
-
-    while (Date.now() < deadline) {
-      await new Promise<void>((r) => globalThis.setTimeout(r, INTERVAL_MS));
-      const res = await fetch('/api/scraper/status').catch(() => null);
-      if (!res?.ok) continue;
-      const data: { status: string; result: ScrapedStudent | null; error: string | null } = await res.json();
-      setScraperApiStatus(data.status);
-      if (data.status === 'done' && data.result) return data.result;
-      if (data.status === 'error') {
-        const msg = data.error ?? 'Scrape failed. The portal may be unavailable or the student was not found.';
-        showToast(msg, 'error');
-        setScraperError(msg);
-        return null;
-      }
+  // Fetches degree audit via the portal API pipeline for a given enrollment.
+  const fetchViaPortal = async (dbId: number, studentNumber: string, enrollID: number): Promise<ScrapedStudent | null> => {
+    const res = await fetch('/api/scraper/portal-fetch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dbId, enrollID, studentNumber }),
+    }).catch(() => null);
+    if (!res?.ok) {
+      const errBody = await res?.json().catch(() => null);
+      const msg = errBody?.error ?? 'Failed to reach portal API.';
+      showToast(msg, 'error');
+      setScraperError(msg);
+      return null;
     }
-    const timeoutMsg = 'Scrape timed out. The portal may be slow — please retry or enter data manually.';
-    showToast(timeoutMsg, 'error');
-    setScraperError(timeoutMsg);
-    return null;
+    const data = await res.json();
+    if (!data.ok) {
+      const msg = data.error ?? 'Failed to fetch degree audit.';
+      showToast(msg, 'error');
+      setScraperError(msg);
+      return null;
+    }
+    return data.student as ScrapedStudent;
+  };
+
+  // Returns the MPU enrollment if one exists (must include "Mata Pelajaran Umum").
+  const getMpuEnrollment = (enrollments: Enrollment[]): Enrollment | null =>
+    enrollments.find((e) =>
+      e.EnrollmentDesc.toLowerCase().includes('mata pelajaran umum')
+    ) ?? null;
+
+  // Returns the primary enrollment for the selected mode.
+  // For latest/earliest, MPU enrollments are excluded from comparison.
+  const getPrimaryEnrollment = (enrollments: Enrollment[], mode: 'latest' | 'earliest' | 'mpu'): Enrollment | null => {
+    if (enrollments.length === 0) return null;
+    if (mode === 'mpu') return getMpuEnrollment(enrollments);
+    const nonMpu = enrollments.filter((e) =>
+      !e.EnrollmentDesc.toLowerCase().includes('mata pelajaran umum')
+    );
+    if (nonMpu.length === 0) return null;
+    if (mode === 'latest')   return nonMpu.reduce((a, b) => a.EnrollId > b.EnrollId ? a : b);
+    if (mode === 'earliest') return nonMpu.reduce((a, b) => a.EnrollId < b.EnrollId ? a : b);
+    return nonMpu[0];
   };
 
   // Called after scraping completes, with the mapped student data.
@@ -283,26 +267,31 @@ export default function DashboardPage() {
       });
   };
 
-  // Scrapes the MPU enrollment for a student if it exists and the current enrollment is not MPU.
-  // Returns the MPU courseList so it can be used to supplement completedCodes for matching.
-  const fetchMpuCourseList = async (id: string, mainStudent: ScrapedStudent): Promise<any[]> => {
-    const isAlreadyMpu = (mainStudent.selectedEnrollment ?? '').includes('Mata Pelajaran Umum');
-    if (isAlreadyMpu) return [];
-    const mpuOption = mainStudent.enrollmentOptions?.find((o) => o.text.includes('Mata Pelajaran Umum'));
-    if (!mpuOption) return [];
-    const startRes = await fetch('/api/scraper/start', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ studentId: id, enrollmentMode: 'by-text', enrollmentText: mpuOption.text }),
-    }).catch(() => null);
-    if (!startRes?.ok) return [];
-    const mpuStudent = await pollScraperResult();
+  // Fetches the MPU enrollment's courseList if one exists and is different from the already-selected enrollment.
+  const fetchMpuCourseList = async (dbId: number, studentNumber: string, enrollments: Enrollment[], selectedEnrollId: number): Promise<any[]> => {
+    const mpuEnrollment = getMpuEnrollment(enrollments);
+    if (!mpuEnrollment || mpuEnrollment.EnrollId === selectedEnrollId) return [];
+    const mpuStudent = await fetchViaPortal(dbId, studentNumber, mpuEnrollment.EnrollId);
     return mpuStudent?.courseList ?? [];
   };
 
-  const handleSwitchEnrollment = (enrollmentText: string) => {
+  // Portal degree-audit records have no display name or enrolment list.
+  // Those come from the student search and enrollment endpoints.
+  const annotateScrapedStudent = (
+    student: ScrapedStudent,
+    enrollments: Enrollment[],
+    selected: Enrollment,
+    name: string,
+  ): ScrapedStudent => ({
+    ...student,
+    studentName: student.studentName || name || undefined,
+    enrollmentOptions: enrollments.map((e) => ({ text: e.EnrollmentDesc })),
+    selectedEnrollment: selected.EnrollmentDesc,
+  });
+
+  const handleSwitchEnrollment = async (enrollmentText: string) => {
     const id = studentIdInput.trim();
-    if (!id) return;
+    if (!id || !selectedStudentDbId) return;
     setSuggestions([]);
     setShowSuggestions(false);
     setSelectedStudentName('');
@@ -314,19 +303,19 @@ export default function DashboardPage() {
     setManualPlanner(null);
     setShowPlannerPicker(false);
     setInternalLoading(true);
-    fetch('/api/scraper/start', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ studentId: id, enrollmentMode: 'by-text', enrollmentText }),
-    }).then(async (startRes) => {
-      if (!startRes.ok) { showToast('Failed to queue scrape.', 'error'); setInternalLoading(false); return; }
-      const scraped = await pollScraperResult();
-      if (!scraped) { setInternalLoading(false); return; }
-      setScrapedStudent({ student: scraped, studentId: id });
-      const mpuCourseList = await fetchMpuCourseList(id, scraped);
-      await fetchDashboardData(id, scraped, mpuCourseList);
+    try {
+      const target = enrollmentsList.find((e) => e.EnrollmentDesc === enrollmentText);
+      if (!target) { showToast('Enrollment not found.', 'error'); return; }
+      const scraped = await fetchViaPortal(selectedStudentDbId, id, target.EnrollId);
+      if (!scraped) return;
+      const isMpuTarget = target.EnrollmentDesc.toLowerCase().includes('mata pelajaran umum');
+      const mpuCourseList = isMpuTarget ? [] : await fetchMpuCourseList(selectedStudentDbId, id, enrollmentsList, target.EnrollId);
+      const annotated = annotateScrapedStudent(scraped, enrollmentsList, target, selectedStudentName);
+      setScrapedStudent({ student: annotated, studentId: id });
+      await fetchDashboardData(id, annotated, mpuCourseList);
+    } finally {
       setInternalLoading(false);
-    }).catch(() => { showToast('Failed to fetch data.', 'error'); setInternalLoading(false); });
+    }
   };
 
   const openPlannerPicker = async () => {
@@ -358,22 +347,34 @@ export default function DashboardPage() {
   const handleInputChange = (value: string) => {
     setStudentIdInput(value);
     setSelectedStudentName('');
+    setSelectedStudentDbId(null);
     if (suggestionsTimerRef.current) clearTimeout(suggestionsTimerRef.current);
-    if (!value.trim() || scraperPhase !== 'ready') {
+    if (!value.trim() || portalSessionStatus !== 'logged-in') {
       setSuggestions([]);
       setShowSuggestions(false);
       return;
     }
     suggestionsTimerRef.current = setTimeout(async () => {
-      const opts = await fetchStudentSuggestions(value.trim());
-      setSuggestions(opts);
-      setShowSuggestions(opts.length > 0);
+      try {
+        const res = await fetch(`/api/scraper/portal-students/search?q=${encodeURIComponent(value.trim())}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const opts = (data.results ?? []).map((r: { student_id: string; name: string; db_id: number }) => ({
+          text: r.student_id,
+          id:   r.student_id,
+          name: r.name,
+          db_id: r.db_id,
+        }));
+        setSuggestions(opts);
+        setShowSuggestions(opts.length > 0);
+      } catch { /* ignore */ }
     }, 300);
   };
 
-  const handleSelectSuggestion = (id: string, name: string) => {
+  const handleSelectSuggestion = (id: string, name: string, dbId?: number) => {
     setStudentIdInput(id);
     setSelectedStudentName(name);
+    setSelectedStudentDbId(dbId ?? null);
     setSuggestions([]);
     setShowSuggestions(false);
   };
@@ -547,7 +548,6 @@ export default function DashboardPage() {
     if (!id) { showToast('Enter a Student ID.', 'error'); return; }
     setSuggestions([]);
     setShowSuggestions(false);
-    setSelectedStudentName('');
     setStudentLoaded(false);
     setScrapedStudent(null);
     setDashboardData(null);
@@ -561,25 +561,81 @@ export default function DashboardPage() {
     setCustomPlanStart(null);
     setRetakeUnitCodes(new Set());
     setInjectedMinors(new Set());
-    setScraperError(null); // REQ-FUN-105: clear previous error on new search
+    setScraperError(null);
     setInternalLoading(true);
     try {
-      const startRes = await fetch('/api/scraper/start', {
+      // Portal fetches need the CampusNexus database id, not just the student number.
+      // A picked suggestion already has it; a typed id is resolved from the loaded list.
+      let dbId = selectedStudentDbId;
+      let studentName = selectedStudentName;
+      if (!dbId) {
+        const searchRes = await fetch(`/api/scraper/portal-students/search?q=${encodeURIComponent(id)}`).catch(() => null);
+        if (!searchRes?.ok) {
+          const errBody = await searchRes?.json().catch(() => null);
+          const msg = errBody?.error ?? 'Could not look up that student. Log in on the Scraper page and wait for the student list to load.';
+          showToast(msg, 'error');
+          setScraperError(msg);
+          return;
+        }
+        const searchData = await searchRes.json();
+        const results: { student_id: string; name: string; db_id: number }[] = searchData.results ?? [];
+        const match = results.find((r) => r.student_id === id) ?? (results.length === 1 ? results[0] : null);
+        if (!match?.db_id) {
+          const msg = 'Select a student from the suggestions.';
+          showToast(msg, 'error');
+          setScraperError(msg);
+          return;
+        }
+        dbId = match.db_id;
+        studentName = match.name ?? '';
+        setSelectedStudentDbId(dbId);
+        setSelectedStudentName(studentName);
+      }
+
+      // 1. Fetch enrollment list for this student
+      const enrollRes = await fetch('/api/scraper/portal-enrollments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ studentId: id, enrollmentMode }),
-      });
-      if (!startRes.ok) {
-        showToast('Failed to queue scrape. Is the server running?', 'error');
+        body: JSON.stringify({ dbId }),
+      }).catch(() => null);
+      if (!enrollRes?.ok) {
+        const errBody = await enrollRes?.json().catch(() => null);
+        const msg = errBody?.error ?? 'Failed to fetch enrollments.';
+        showToast(msg, 'error');
+        setScraperError(msg);
         return;
       }
-      const student = await pollScraperResult();
+      const enrollData = await enrollRes.json();
+      const enrollments: Enrollment[] = enrollData.enrollments ?? [];
+      if (enrollments.length === 0) {
+        const msg = enrollData.error ?? 'No enrollments found for this student.';
+        showToast(msg, 'error');
+        setScraperError(msg);
+        return;
+      }
+      setEnrollmentsList(enrollments);
+
+      // 2. Auto-select primary enrollment based on mode
+      const selected = getPrimaryEnrollment(enrollments, enrollmentMode);
+      if (!selected) {
+        const msg = `No ${enrollmentMode} enrollment found.`;
+        showToast(msg, 'error');
+        setScraperError(msg);
+        return;
+      }
+
+      // 3. Fetch degree audit for primary enrollment
+      const student = await fetchViaPortal(dbId, id, selected.EnrollId);
       if (!student) return;
-      // Show identity card immediately (matching is still running)
-      setScrapedStudent({ student, studentId: id });
-      // Supplements completedCodes for matching
-      const mpuCourseList = await fetchMpuCourseList(id, student);
-      await fetchDashboardData(id, student, mpuCourseList);
+
+      // 4. For latest/earliest, also fetch and merge MPU courseList
+      const mpuCourseList = enrollmentMode !== 'mpu'
+        ? await fetchMpuCourseList(dbId, id, enrollments, selected.EnrollId)
+        : [];
+
+      const annotated = annotateScrapedStudent(student, enrollments, selected, studentName);
+      setScrapedStudent({ student: annotated, studentId: id });
+      await fetchDashboardData(id, annotated, mpuCourseList);
     } finally {
       setInternalLoading(false);
     }
@@ -588,6 +644,9 @@ export default function DashboardPage() {
   const handleClear = () => {
     setStudentLoaded(false);
     setStudentIdInput('');
+    setSelectedStudentDbId(null);
+    setSelectedStudentName('');
+    setEnrollmentsList([]);
     setScrapedStudent(null);
     setDashboardData(null);
     setScraperApiStatus('idle');
@@ -613,32 +672,23 @@ export default function DashboardPage() {
 
     const courseList: any[] = scrapedStudent?.student?.courseList ?? [];
     const mpuCourseList: any[] = dashboardData.mpuCourseList ?? [];
-
     const allTranscriptRows = [...courseList, ...mpuCourseList];
 
     // Only exclude passed and in-progress units. Future pre-enrollments go back
-    // into the pool so the scheduler can repack them as the single source of
-    // truth, and so do failed units (N / SN) so they get rescheduled as retakes.
+    // into the pool so the scheduler can repack them, and failed units are rescheduled as retakes.
     const completedForScheduler = getCompletedUnitCodes(allTranscriptRows);
-
-    // Units the student attempted and failed, so the pathway can mark them as retakes.
     const transcriptStates = resolveUnitStates(allTranscriptRows);
     const retakeCodes = new Set(
       [...transcriptStates].filter(([, state]) => state === 'must_retake').map(([code]) => code)
     );
 
     const plannerUnits: any[] = activePlanner.units ?? [];
-
-    // Anchor start semester on Current units only.
-    // Using max(Complete ∪ Current) would jump past Year 3 Sem 2 if the
-    // student completed any out-of-sequence unit that the planner places there.
     const currentOnlyCodes = new Set(
       courseList
         .filter((u: any) => u.status === 'Current')
         .map((u: any) => u.courseId?.trim().toUpperCase())
         .filter(Boolean)
     );
-
     const activeTermUnits = plannerUnits.filter(
       (u: any) => u.unit && currentOnlyCodes.has(u.unit.unit_code?.trim().toUpperCase())
     );
@@ -647,7 +697,6 @@ export default function DashboardPage() {
     let startSemester: 1 | 2 = 1;
 
     if (activeTermUnits.length > 0) {
-      // Start immediately after the semester the student is currently enrolled in
       const maxYear = Math.max(...activeTermUnits.map((u: any) => u.year_level));
       const maxSemInYear = Math.max(
         ...activeTermUnits.filter((u: any) => u.year_level === maxYear).map((u: any) => u.semester)
@@ -660,8 +709,6 @@ export default function DashboardPage() {
         startSemester = 1;
       }
     } else {
-      // No Current units, so fall back to the semester after the last passed unit.
-      // Passed only: a failed unit must not push the start semester forward.
       const courseListStates = resolveUnitStates(courseList);
       const completeCodes = new Set(
         [...courseListStates].filter(([, state]) => state === 'passed').map(([code]) => code)
@@ -677,7 +724,6 @@ export default function DashboardPage() {
         startYear = maxSemInYear === 1 ? maxYear : maxYear + 1;
         startSemester = maxSemInYear === 1 ? 2 : 1;
       } else {
-        // Student has no history at all, so start from the planner's first slot
         const allYearSems = [...new Set(plannerUnits.map((u: any) => `${u.year_level}-${u.semester}`))].sort();
         if (allYearSems.length > 0) {
           const [y, s] = (allYearSems[0] as string).split('-');
@@ -720,7 +766,6 @@ export default function DashboardPage() {
     const next = new Set(injectedMinors);
     if (next.has(minorId)) next.delete(minorId); else next.add(minorId);
     setInjectedMinors(next);
-    // If a plan is already showing, regenerate immediately with the new set
     if (customPlan) generateCustomPlan(next);
   };
 
@@ -740,7 +785,12 @@ export default function DashboardPage() {
             }}
             onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
             onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
-            placeholder={!isLoggedIn ? 'Log in to proceed' : isPortalLoading ? 'Logging in to portal…' : isInitializing ? 'Waiting for scraper…' : 'Student ID or name'}
+            placeholder={
+              portalSessionStatus === 'idle'          ? 'Log in to portal via Scraper page' :
+              portalSessionStatus === 'login-pending' ? 'Logging in to portal…' :
+              portalSessionStatus === 'login-error'   ? 'Portal login failed — retry in Scraper page' :
+              'Student ID or name'
+            }
             disabled={isDisabled}
           />
           {selectedStudentName && (
@@ -752,7 +802,7 @@ export default function DashboardPage() {
                 <div
                   key={i}
                   className={styles.suggestionItem}
-                  onMouseDown={(e) => { e.preventDefault(); handleSelectSuggestion(s.id, s.name); }}
+                  onMouseDown={(e) => { e.preventDefault(); handleSelectSuggestion(s.id, s.name, s.db_id); }}
                 >
                   <span className={styles.suggestionId}>{s.id}</span>
                   {s.name && <span className={styles.suggestionName}>{s.name}</span>}
@@ -921,30 +971,22 @@ export default function DashboardPage() {
       )}
 
       {/* Loading states */}
-      {!isLoggedIn && !isPortalLoading && (
+      {!isLoggedIn && portalSessionStatus !== 'login-pending' && (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '60px 20px', textAlign: 'center' }}>
           <div style={{ fontSize: 48, opacity: 0.25 }}>🔒</div>
           <div style={{ fontSize: 14, fontWeight: 600, marginTop: 12 }}>Log in to proceed</div>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4, marginBottom: 14 }}>Connect to the student portal to search for students.</div>
-          <button className={styles.btnPrimary} onClick={openLoginModal}>Log in to Portal</button>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>Log in to the student portal via the Scraper page to search for students.</div>
         </div>
       )}
 
-      {isPortalLoading && (
+      {portalSessionStatus === 'login-pending' && (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '60px 20px', textAlign: 'center' }}>
           <div className={styles.spinner} />
           <div style={{ fontSize: 14, fontWeight: 600, marginTop: 12 }}>Logging in to portal...</div>
         </div>
       )}
 
-      {!isPortalLoading && isWaitingForList && (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '60px 20px', textAlign: 'center' }}>
-          <div className={styles.spinner} />
-          <div style={{ fontSize: 14, fontWeight: 600, marginTop: 12 }}>Loading student list...</div>
-        </div>
-      )}
-
-      {!isPortalLoading && isScraping && !scrapedStudent && (
+      {loading && !scrapedStudent && (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '60px 20px', textAlign: 'center' }}>
           <div className={styles.spinner} />
           <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 12 }}>Retrieving data...</div>
@@ -952,7 +994,7 @@ export default function DashboardPage() {
       )}
 
       {/* Scrape error / retry panel (REQ-FUN-105) */}
-      {isLoggedIn && !loading && !studentLoaded && scraperApiStatus === 'error' && scraperError && !isWaitingForList && (
+      {isLoggedIn && !loading && !studentLoaded && scraperError && (
         <div style={{ border: '1px solid rgba(244,135,113,0.5)', borderRadius: 4, padding: '16px 18px', marginBottom: 14, background: 'rgba(244,135,113,0.07)' }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent-red)', marginBottom: 6 }}>Scrape Failed</div>
           <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>{scraperError}</div>
@@ -975,7 +1017,7 @@ export default function DashboardPage() {
       )}
 
       {/* Empty state */}
-      {isLoggedIn && !isPortalLoading && !loading && !studentLoaded && !isWaitingForList && !scraperError && (
+      {isLoggedIn && !loading && !studentLoaded && !scraperError && (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '60px 20px', textAlign: 'center' }}>
           <div style={{ fontSize: 48, opacity: 0.25 }}>🎓</div>
           <div style={{ fontSize: 14, fontWeight: 600 }}>Enter a Student ID to begin</div>
