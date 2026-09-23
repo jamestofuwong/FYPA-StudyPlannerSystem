@@ -1,7 +1,7 @@
 import type { ChatMessage, RouteResult, Workflow } from './types';
+import { OLLAMA_URL, COPILOT_MODEL } from '../../config/ollama';
 
-export const OLLAMA_URL = 'http://127.0.0.1:11435';
-export const COPILOT_MODEL = 'qwen2.5:3b';
+export { OLLAMA_URL, COPILOT_MODEL };
 
 // ---------------------------------------------------------------------------
 // Pre-filter: score workflows against user message and keep top N candidates.
