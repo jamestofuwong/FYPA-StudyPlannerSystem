@@ -17,8 +17,6 @@ import {
   resolveUnitStates,
 } from '../../../../core/shared/constants/grades';
 import { Badge, InlineCode, ProgressBar, type BadgeClass } from '../../../components/common/Primitives';
-import MinorProgressCard from '../../../components/common/MinorProgressCard';
-
 
 // Main component
 
@@ -38,17 +36,16 @@ export default function DashboardPage() {
     dataSource, setDataSource,
     customPlan, setCustomPlan,
     customPlanStart, setCustomPlanStart,
-    setRetakeUnitCodes,
-    setInjectedMinors,
+    retakeUnitCodes, setRetakeUnitCodes,
+    injectedMinors, setInjectedMinors,
   } = useStudentSession();
   const [openYears, setOpenYears] = useState<Set<string>>(new Set());
   const [internalLoading, setInternalLoading] = useState(false);
   const [scraperApiStatus, setScraperApiStatus] = useState<string>('idle');
   const [showExportModal, setShowExportModal] = useState(false);
   const [enrollmentMode, setEnrollmentMode] = useState<'latest' | 'earliest' | 'mpu'>('latest');
-  const [selectedPlannerIdx, setSelectedPlannerIdx] = useState(0); // -1 = manual planner active
   const [resultTab, setResultTab] = useState<'analytics' | 'graduation' | 'units' | 'minors' | 'pathway'>('analytics');
-  const [manualPlanner, setManualPlanner] = useState<any>(null);
+  const [customPlanLoading, setCustomPlanLoading] = useState(false);
   const [showPlannerPicker, setShowPlannerPicker] = useState(false);
   const [plannerPickerSearch, setPlannerPickerSearch] = useState('');
   const [allPlanners, setAllPlanners] = useState<any[] | null>(null);
@@ -87,10 +84,6 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    setCustomPlan(null);
-    setCustomPlanStart(null);
-    setRetakeUnitCodes(new Set());
-    setInjectedMinors(new Set());
     setResultTab('analytics');
     const planner = selectedPlannerIdx === -1 ? manualPlanner : dashboardData?.planners?.[selectedPlannerIdx];
     if (!planner?.units) return;
@@ -113,7 +106,10 @@ export default function DashboardPage() {
       body: JSON.stringify({ dbId, enrollID, studentNumber }),
     }).catch(() => null);
     if (!res?.ok) {
-      showToast('Failed to reach portal API.', 'error');
+      const errBody = await res?.json().catch(() => null);
+      const msg = errBody?.error ?? 'Failed to reach portal API.';
+      showToast(msg, 'error');
+      setScraperError(msg);
       return null;
     }
     const data = await res.json();
@@ -279,6 +275,20 @@ export default function DashboardPage() {
     return mpuStudent?.courseList ?? [];
   };
 
+  // Portal degree-audit records have no display name or enrolment list.
+  // Those come from the student search and enrollment endpoints.
+  const annotateScrapedStudent = (
+    student: ScrapedStudent,
+    enrollments: Enrollment[],
+    selected: Enrollment,
+    name: string,
+  ): ScrapedStudent => ({
+    ...student,
+    studentName: student.studentName || name || undefined,
+    enrollmentOptions: enrollments.map((e) => ({ text: e.EnrollmentDesc })),
+    selectedEnrollment: selected.EnrollmentDesc,
+  });
+
   const handleSwitchEnrollment = async (enrollmentText: string) => {
     const id = studentIdInput.trim();
     if (!id || !selectedStudentDbId) return;
@@ -298,10 +308,11 @@ export default function DashboardPage() {
       if (!target) { showToast('Enrollment not found.', 'error'); return; }
       const scraped = await fetchViaPortal(selectedStudentDbId, id, target.EnrollId);
       if (!scraped) return;
-      setScrapedStudent({ student: scraped, studentId: id });
       const isMpuTarget = target.EnrollmentDesc.toLowerCase().includes('mata pelajaran umum');
       const mpuCourseList = isMpuTarget ? [] : await fetchMpuCourseList(selectedStudentDbId, id, enrollmentsList, target.EnrollId);
-      await fetchDashboardData(id, scraped, mpuCourseList);
+      const annotated = annotateScrapedStudent(scraped, enrollmentsList, target, selectedStudentName);
+      setScrapedStudent({ student: annotated, studentId: id });
+      await fetchDashboardData(id, annotated, mpuCourseList);
     } finally {
       setInternalLoading(false);
     }
@@ -535,7 +546,6 @@ export default function DashboardPage() {
   const handleSearch = async () => {
     const id = studentIdInput.trim();
     if (!id) { showToast('Enter a Student ID.', 'error'); return; }
-    if (!selectedStudentDbId) { showToast('Select a student from the suggestions.', 'error'); return; }
     setSuggestions([]);
     setShowSuggestions(false);
     setStudentLoaded(false);
@@ -554,33 +564,78 @@ export default function DashboardPage() {
     setScraperError(null);
     setInternalLoading(true);
     try {
+      // Portal fetches need the CampusNexus database id, not just the student number.
+      // A picked suggestion already has it; a typed id is resolved from the loaded list.
+      let dbId = selectedStudentDbId;
+      let studentName = selectedStudentName;
+      if (!dbId) {
+        const searchRes = await fetch(`/api/scraper/portal-students/search?q=${encodeURIComponent(id)}`).catch(() => null);
+        if (!searchRes?.ok) {
+          const errBody = await searchRes?.json().catch(() => null);
+          const msg = errBody?.error ?? 'Could not look up that student. Log in on the Scraper page and wait for the student list to load.';
+          showToast(msg, 'error');
+          setScraperError(msg);
+          return;
+        }
+        const searchData = await searchRes.json();
+        const results: { student_id: string; name: string; db_id: number }[] = searchData.results ?? [];
+        const match = results.find((r) => r.student_id === id) ?? (results.length === 1 ? results[0] : null);
+        if (!match?.db_id) {
+          const msg = 'Select a student from the suggestions.';
+          showToast(msg, 'error');
+          setScraperError(msg);
+          return;
+        }
+        dbId = match.db_id;
+        studentName = match.name ?? '';
+        setSelectedStudentDbId(dbId);
+        setSelectedStudentName(studentName);
+      }
+
       // 1. Fetch enrollment list for this student
       const enrollRes = await fetch('/api/scraper/portal-enrollments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dbId: selectedStudentDbId }),
+        body: JSON.stringify({ dbId }),
       }).catch(() => null);
-      if (!enrollRes?.ok) { showToast('Failed to fetch enrollments.', 'error'); return; }
+      if (!enrollRes?.ok) {
+        const errBody = await enrollRes?.json().catch(() => null);
+        const msg = errBody?.error ?? 'Failed to fetch enrollments.';
+        showToast(msg, 'error');
+        setScraperError(msg);
+        return;
+      }
       const enrollData = await enrollRes.json();
       const enrollments: Enrollment[] = enrollData.enrollments ?? [];
-      if (enrollments.length === 0) { showToast('No enrollments found for this student.', 'error'); return; }
+      if (enrollments.length === 0) {
+        const msg = enrollData.error ?? 'No enrollments found for this student.';
+        showToast(msg, 'error');
+        setScraperError(msg);
+        return;
+      }
       setEnrollmentsList(enrollments);
 
       // 2. Auto-select primary enrollment based on mode
       const selected = getPrimaryEnrollment(enrollments, enrollmentMode);
-      if (!selected) { showToast(`No ${enrollmentMode} enrollment found.`, 'error'); return; }
+      if (!selected) {
+        const msg = `No ${enrollmentMode} enrollment found.`;
+        showToast(msg, 'error');
+        setScraperError(msg);
+        return;
+      }
 
       // 3. Fetch degree audit for primary enrollment
-      const student = await fetchViaPortal(selectedStudentDbId, id, selected.EnrollId);
+      const student = await fetchViaPortal(dbId, id, selected.EnrollId);
       if (!student) return;
 
       // 4. For latest/earliest, also fetch and merge MPU courseList
       const mpuCourseList = enrollmentMode !== 'mpu'
-        ? await fetchMpuCourseList(selectedStudentDbId, id, enrollments, selected.EnrollId)
+        ? await fetchMpuCourseList(dbId, id, enrollments, selected.EnrollId)
         : [];
 
-      setScrapedStudent({ student, studentId: id });
-      await fetchDashboardData(id, student, mpuCourseList);
+      const annotated = annotateScrapedStudent(student, enrollments, selected, studentName);
+      setScrapedStudent({ student: annotated, studentId: id });
+      await fetchDashboardData(id, annotated, mpuCourseList);
     } finally {
       setInternalLoading(false);
     }
@@ -608,6 +663,110 @@ export default function DashboardPage() {
     setScraperError(null);
     // REQ-SEC-101: no sessionStorage to remove, data was never persisted
     showToast('Student data cleared.', 'info');
+  };
+
+  const generateCustomPlan = async (overrideInjections?: Set<string>) => {
+    const effectiveInjections = overrideInjections ?? injectedMinors;
+    const activePlanner = selectedPlannerIdx === -1 ? manualPlanner : dashboardData?.planners?.[selectedPlannerIdx];
+    if (!activePlanner || !dashboardData) return;
+
+    const courseList: any[] = scrapedStudent?.student?.courseList ?? [];
+    const mpuCourseList: any[] = dashboardData.mpuCourseList ?? [];
+    const allTranscriptRows = [...courseList, ...mpuCourseList];
+
+    // Only exclude passed and in-progress units. Future pre-enrollments go back
+    // into the pool so the scheduler can repack them, and failed units are rescheduled as retakes.
+    const completedForScheduler = getCompletedUnitCodes(allTranscriptRows);
+    const transcriptStates = resolveUnitStates(allTranscriptRows);
+    const retakeCodes = new Set(
+      [...transcriptStates].filter(([, state]) => state === 'must_retake').map(([code]) => code)
+    );
+
+    const plannerUnits: any[] = activePlanner.units ?? [];
+    const currentOnlyCodes = new Set(
+      courseList
+        .filter((u: any) => u.status === 'Current')
+        .map((u: any) => u.courseId?.trim().toUpperCase())
+        .filter(Boolean)
+    );
+    const activeTermUnits = plannerUnits.filter(
+      (u: any) => u.unit && currentOnlyCodes.has(u.unit.unit_code?.trim().toUpperCase())
+    );
+
+    let startYear = 1;
+    let startSemester: 1 | 2 = 1;
+
+    if (activeTermUnits.length > 0) {
+      const maxYear = Math.max(...activeTermUnits.map((u: any) => u.year_level));
+      const maxSemInYear = Math.max(
+        ...activeTermUnits.filter((u: any) => u.year_level === maxYear).map((u: any) => u.semester)
+      );
+      if (maxSemInYear === 1) {
+        startYear = maxYear;
+        startSemester = 2;
+      } else {
+        startYear = maxYear + 1;
+        startSemester = 1;
+      }
+    } else {
+      const courseListStates = resolveUnitStates(courseList);
+      const completeCodes = new Set(
+        [...courseListStates].filter(([, state]) => state === 'passed').map(([code]) => code)
+      );
+      const completedPlannerUnits = plannerUnits.filter(
+        (u: any) => u.unit && completeCodes.has(u.unit.unit_code?.trim().toUpperCase())
+      );
+      if (completedPlannerUnits.length > 0) {
+        const maxYear = Math.max(...completedPlannerUnits.map((u: any) => u.year_level));
+        const maxSemInYear = Math.max(
+          ...completedPlannerUnits.filter((u: any) => u.year_level === maxYear).map((u: any) => u.semester)
+        );
+        startYear = maxSemInYear === 1 ? maxYear : maxYear + 1;
+        startSemester = maxSemInYear === 1 ? 2 : 1;
+      } else {
+        const allYearSems = [...new Set(plannerUnits.map((u: any) => `${u.year_level}-${u.semester}`))].sort();
+        if (allYearSems.length > 0) {
+          const [y, s] = (allYearSems[0] as string).split('-');
+          startYear = parseInt(y);
+          startSemester = parseInt(s) as 1 | 2;
+        }
+      }
+    }
+
+    setCustomPlanLoading(true);
+    try {
+      const res = await fetch('/api/custom-planner', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          plannerId: activePlanner.id,
+          completedUnitCodes: completedForScheduler,
+          startYear,
+          startSemester,
+          injectedMinorIds: [...effectiveInjections],
+        }),
+      });
+      if (!res.ok) { showToast('Failed to generate custom pathway.', 'error'); return; }
+      const data = await res.json();
+      if (data.success) {
+        setCustomPlan(data.data);
+        setCustomPlanStart({ year: startYear, semester: startSemester });
+        setRetakeUnitCodes(retakeCodes);
+      } else {
+        showToast('Failed to generate custom pathway.', 'error');
+      }
+    } catch {
+      showToast('Failed to generate custom pathway.', 'error');
+    } finally {
+      setCustomPlanLoading(false);
+    }
+  };
+
+  const toggleMinorInjection = (minorId: string) => {
+    const next = new Set(injectedMinors);
+    if (next.has(minorId)) next.delete(minorId); else next.add(minorId);
+    setInjectedMinors(next);
+    if (customPlan) generateCustomPlan(next);
   };
 
   return (
@@ -1630,6 +1789,12 @@ export default function DashboardPage() {
                 [...(scrapedStudent?.student?.courseList ?? []), ...(dashboardData?.mpuCourseList ?? [])]
               )
             );
+
+            // How many free elective slots the student still needs to fill
+            const remainingElectiveSlots = (activePlanner?.units ?? []).filter(
+              (u: any) => u.category === 'elective' &&
+                (u.unit === null || !doneCodes.has(u.unit?.unit_code?.toUpperCase()))
+            ).length;
 
             return (
               <div>
