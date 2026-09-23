@@ -1,6 +1,6 @@
 import type { ChatMessage, WorkflowContext } from '../../../../../core/services/copilot/types';
 import { routeAndExtract } from '../../../../../core/services/copilot/copilotService';
-import { formatResponse } from '../../../../../core/services/copilot/responseFormatter';
+import { streamResponse } from '../../../../../core/services/copilot/responseFormatter';
 import { workflowRegistry, allWorkflows } from '../../../../../core/services/copilot/workflowRegistry';
 import { ollamaStore } from '../../ollama/store';
 import { getStatus } from '../../../../../core/services/portal/portalSessionService';
@@ -121,17 +121,19 @@ export async function POST(req: Request) {
           return;
         }
 
-        // ── Phase 3: Format Response ────────────────────────────────────────
+        // ── Phase 3: Stream Response ────────────────────────────────────────
         emit({ type: 'status', message: 'Generating response…' });
 
-        let reply: string;
         try {
-          reply = await formatResponse(messages, workflow, result);
+          let full = '';
+          for await (const token of streamResponse(messages, workflow, result)) {
+            full += token;
+            emit({ type: 'token', content: token });
+          }
+          emit({ type: 'reply', content: full, workflowId: route.workflowId });
         } catch {
-          reply = `Here is what I found:\n\`\`\`\n${JSON.stringify(result.data, null, 2)}\n\`\`\``;
+          emit({ type: 'reply', content: `Here is what I found:\n\`\`\`\n${JSON.stringify(result.data, null, 2)}\n\`\`\``, workflowId: route.workflowId });
         }
-
-        emit({ type: 'reply', content: reply, workflowId: route.workflowId });
         controller.close();
       } catch {
         emit({ type: 'reply', content: 'An unexpected error occurred. Please try again.' });

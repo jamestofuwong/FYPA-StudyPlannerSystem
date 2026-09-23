@@ -36,6 +36,7 @@ export default function CopilotPage() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [streamingContent, setStreamingContent] = useState<string | null>(null);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -141,9 +142,14 @@ export default function CopilotPage() {
             const event = JSON.parse(line) as { type: string; message?: string; content?: string; workflowId?: string };
             if (event.type === 'status') {
               setStatusMessage(event.message ?? null);
+              setStreamingContent(null);
+            } else if (event.type === 'token') {
+              setStatusMessage(null);
+              setStreamingContent((prev) => (prev ?? '') + (event.content ?? ''));
             } else if (event.type === 'reply') {
               setMessages([...next, { role: 'assistant', content: event.content ?? 'No response received.', workflowId: event.workflowId }]);
               setStatusMessage(null);
+              setStreamingContent(null);
             }
           } catch { /* ignore malformed chunks */ }
         }
@@ -151,6 +157,7 @@ export default function CopilotPage() {
     } catch {
       setMessages([...next, { role: 'assistant', content: 'Failed to reach the AI service. Check that Ollama is running.' }]);
       setStatusMessage(null);
+      setStreamingContent(null);
     } finally {
       setLoading(false);
       inputRef.current?.focus();
@@ -247,7 +254,9 @@ export default function CopilotPage() {
             {loading && (
               <div className={`${styles.message} ${styles.messageAssistant}`}>
                 <div className={styles.messageBubble}>
-                  {statusMessage ? (
+                  {streamingContent !== null ? (
+                    <pre className={styles.messageText}>{streamingContent}</pre>
+                  ) : statusMessage ? (
                     <div className={styles.statusLine}>
                       <span className={styles.statusDot} />
                       <span className={styles.statusText}>{statusMessage}</span>
