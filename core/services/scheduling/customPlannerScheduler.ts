@@ -205,6 +205,53 @@ export function standardLimitFor(cfg: SchedulerConfig, year: number, slotSemeste
 /** Empty offeringSemesters means unrestricted, so an unknown offering never blocks placement. */
 export function isOfferedIn(unit: SchedulableUnit, calendarTerm: 1 | 2): boolean {
   return unit.offeringSemesters.length === 0 || unit.offeringSemesters.includes(calendarTerm);
+// Raw shape of a unit as returned by Prisma's nested planner/minor includes
+// (see web/app/api/custom-planner/route.ts and plannerRepository.getPlannerById()),
+// covering only the fields mapUnitToSchedulable reads.
+export interface RawSchedulableUnitRow {
+  unit_code: string;
+  unit_name: string;
+  offerings: Array<{ offered_in: number }>;
+  requisite_groups: Array<{
+    conditions: Array<{
+      type: string;
+      requisite_type: string | null;
+      credit_points: unknown;
+      unit: { unit_code: string } | null;
+    }>;
+  }>;
+}
+
+// Converts a raw DB unit row into the SchedulableUnit shape canTake() understands. Extracted from what used
+// to be a private toSchedulable() inline in web/app/api/custom-planner/route.ts, so both that route and
+// core/services/classEstimation/eligibilityEngine.ts share one mapping instead of two copies drifting apart.
+export function mapUnitToSchedulable(unit: RawSchedulableUnitRow, category: string): SchedulableUnit {
+  const requisiteGroups: RequisiteCondition[][] = (unit.requisite_groups ?? [])
+    .map((group) =>
+      group.conditions
+        .map((c): RequisiteCondition | null => {
+          if (c.type === 'credit_points') {
+            return { type: 'credit_points', creditPoints: Number(c.credit_points) };
+          }
+          if (c.type === 'unit' && c.unit !== null) {
+            return {
+              type: 'unit',
+              requisiteType: (c.requisite_type ?? 'prerequisite') as 'prerequisite' | 'corequisite' | 'antirequisite',
+              unitCode: c.unit.unit_code.toUpperCase(),
+            };
+          }
+          return null;
+        })
+        .filter((c): c is RequisiteCondition => c !== null)
+    )
+    .filter((g) => g.length > 0);
+
+  // Terms 3 (summer) and 4 (winter) are dropped, since canTake only cycles semesters 1 and 2.
+  const offeringSemesters = (unit.offerings ?? [])
+    .map((o) => o.offered_in as 1 | 2)
+    .filter((sem) => sem === 1 || sem === 2);
+
+  return { code: unit.unit_code, name: unit.unit_name, category, offeringSemesters, requisiteGroups };
 }
 
 export function buildCustomPlan(
@@ -337,7 +384,7 @@ export function buildCustomPlan(
   };
 }
 
-function canTake(
+export function canTake(
   unit: SchedulableUnit,
   calendarTerm: 1 | 2,
   completed: Set<string>,

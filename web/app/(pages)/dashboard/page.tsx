@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import styles from './page.module.css';
 import { useToast } from '../../../components/providers/ToastProvider';
+import { useStudentSession } from '../../../components/providers/StudentSessionContext';
 import type { ScrapedStudent, ScrapedCourseListItem } from '../../../../core/shared/types/student';
 
 type Enrollment = { EnrollId: number; EnrollmentDesc: string };
@@ -17,7 +18,6 @@ import {
 } from '../../../../core/shared/constants/grades';
 import { Badge, InlineCode, ProgressBar, type BadgeClass } from '../../../components/common/Primitives';
 import MinorProgressCard from '../../../components/common/MinorProgressCard';
-import { useStudentSession } from '../../../components/providers/StudentSessionContext';
 
 
 // Main component
@@ -46,6 +46,9 @@ export default function DashboardPage() {
   const [scraperApiStatus, setScraperApiStatus] = useState<string>('idle');
   const [showExportModal, setShowExportModal] = useState(false);
   const [enrollmentMode, setEnrollmentMode] = useState<'latest' | 'earliest' | 'mpu'>('latest');
+  const [selectedPlannerIdx, setSelectedPlannerIdx] = useState(0); // -1 = manual planner active
+  const [resultTab, setResultTab] = useState<'analytics' | 'graduation' | 'units' | 'minors' | 'pathway'>('analytics');
+  const [manualPlanner, setManualPlanner] = useState<any>(null);
   const [showPlannerPicker, setShowPlannerPicker] = useState(false);
   const [plannerPickerSearch, setPlannerPickerSearch] = useState('');
   const [allPlanners, setAllPlanners] = useState<any[] | null>(null);
@@ -84,6 +87,11 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
+    setCustomPlan(null);
+    setCustomPlanStart(null);
+    setRetakeUnitCodes(new Set());
+    setInjectedMinors(new Set());
+    setResultTab('analytics');
     const planner = selectedPlannerIdx === -1 ? manualPlanner : dashboardData?.planners?.[selectedPlannerIdx];
     if (!planner?.units) return;
     const keys = new Set<string>(planner.units.map((u: any) => `${u.year_level}-${u.semester}`));
@@ -976,6 +984,8 @@ export default function DashboardPage() {
         const totalCredits = matchPayload.totalCredits || 0;
         const missingCoreCount = matchPayload.unmatchedCore?.length || 0;
         const isGraduationReady = missingCoreCount === 0 && totalCredits >= 300;
+        const activeMatchPlanner = selectedPlannerIdx === -1 ? manualPlanner : dashboardData?.planners?.[selectedPlannerIdx];
+        const hasMinors = (activeMatchPlanner?.minors ?? []).length > 0;
 
         return (
           <div>
@@ -1023,78 +1033,71 @@ export default function DashboardPage() {
             );
           })()}
 
-          {/* Ranked Planners selector */}
+          {/* Ranked Planners as tabs */}
           <div className={styles.sectionTitle}>Ranked Planners</div>
-          {dashboardData.match.rankedPlanners.slice(0, 3).map((ranked: any, idx: number) => {
-            const planner = dashboardData.planners[idx];
-            const isSelected = selectedPlannerIdx === idx;
-            const rankColor = idx === 0 ? 'var(--accent-blue)' : idx === 1 ? 'var(--accent-yellow)' : 'var(--accent-orange)';
-            return (
-              <div
-                key={ranked.plannerID}
-                onClick={() => setSelectedPlannerIdx(idx)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 12,
-                  padding: '10px 14px',
-                  background: isSelected ? 'var(--active-bg)' : 'var(--card-bg)',
-                  border: `1px solid ${isSelected ? 'var(--active-highlight)' : 'var(--panel-border)'}`,
-                  borderRadius: 4, marginBottom: 6, cursor: 'pointer', transition: 'all 0.1s',
-                }}
-              >
-                <div style={{ fontSize: 11, fontWeight: 700, color: rankColor, fontFamily: 'var(--font-mono)', width: 20, flexShrink: 0 }}>#{idx + 1}</div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600 }}>{ranked.majorName || '—'}</div>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                    {[
-                      planner?.course?.name,
-                      planner?.intake_year,
-                      planner?.intake_month != null
-                        ? new Date(2000, planner.intake_month - 1).toLocaleString('default', { month: 'long' })
-                        : null,
-                    ].filter(Boolean).join(' · ')}
-                  </div>
-                </div>
-                <div style={{ width: 120, flexShrink: 0 }}>
-                  <ProgressBar pct={ranked.matchPct} color={rankColor} />
-                </div>
-                <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: rankColor, width: 38, textAlign: 'right', flexShrink: 0 }}>
-                  {ranked.matchPct}%
-                </div>
-              </div>
-            );
-          })}
-
-          {/* Manual planner row */}
-          {manualPlanner && (() => {
-            const isSelected = selectedPlannerIdx === -1;
-            const label = [manualPlanner.major?.name, manualPlanner.course?.name, manualPlanner.intake_year,
-              manualPlanner.intake_month != null
-                ? new Date(2000, manualPlanner.intake_month - 1).toLocaleString('default', { month: 'long' })
-                : null,
-            ].filter(Boolean).join(' · ');
-            return (
-              <div
-                onClick={() => setSelectedPlannerIdx(-1)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px',
-                  background: isSelected ? 'var(--active-bg)' : 'var(--card-bg)',
-                  border: `1px solid ${isSelected ? 'var(--active-highlight)' : 'var(--panel-border)'}`,
-                  borderRadius: 4, marginBottom: 6, cursor: 'pointer', transition: 'all 0.1s',
-                }}
-              >
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent-purple)', fontFamily: 'var(--font-mono)', width: 20, flexShrink: 0 }}>M</div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600 }}>{manualPlanner.major?.name ?? manualPlanner.course?.name ?? '—'}</div>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{label}</div>
-                </div>
+          <div className={styles.plannerTabBar} role="tablist" aria-label="Ranked majors">
+            {dashboardData.match.rankedPlanners.slice(0, 3).map((ranked: any, idx: number) => {
+              const planner = dashboardData.planners[idx];
+              const isSelected = selectedPlannerIdx === idx;
+              const rankColor = idx === 0 ? 'var(--accent-blue)' : idx === 1 ? 'var(--accent-yellow)' : 'var(--accent-orange)';
+              const meta = [
+                planner?.course?.name,
+                planner?.intake_year,
+                planner?.intake_month != null
+                  ? new Date(2000, planner.intake_month - 1).toLocaleString('default', { month: 'long' })
+                  : null,
+              ].filter(Boolean).join(' · ');
+              return (
                 <button
-                  className={styles.btnDanger}
-                  style={{ fontSize: 11, padding: '2px 8px' }}
-                  onClick={(e) => { e.stopPropagation(); setManualPlanner(null); if (selectedPlannerIdx === -1) setSelectedPlannerIdx(0); }}
-                >✕</button>
-              </div>
-            );
-          })()}
+                  key={ranked.plannerID}
+                  type="button"
+                  role="tab"
+                  aria-selected={isSelected}
+                  className={`${styles.plannerTab} ${isSelected ? styles.plannerTabActive : ''}`}
+                  onClick={() => setSelectedPlannerIdx(idx)}
+                >
+                  <div className={styles.plannerTabTop}>
+                    <span className={styles.plannerTabRank} style={{ color: rankColor }}>#{idx + 1}</span>
+                    <span className={styles.plannerTabPct} style={{ color: rankColor }}>{ranked.matchPct}%</span>
+                  </div>
+                  <div className={styles.plannerTabName}>{ranked.majorName || '—'}</div>
+                  {meta && <div className={styles.plannerTabMeta}>{meta}</div>}
+                  <ProgressBar pct={ranked.matchPct} color={rankColor} />
+                </button>
+              );
+            })}
+
+            {manualPlanner && (() => {
+              const isSelected = selectedPlannerIdx === -1;
+              const meta = [
+                manualPlanner.course?.name,
+                manualPlanner.intake_year,
+                manualPlanner.intake_month != null
+                  ? new Date(2000, manualPlanner.intake_month - 1).toLocaleString('default', { month: 'long' })
+                  : null,
+              ].filter(Boolean).join(' · ');
+              return (
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={isSelected}
+                  className={`${styles.plannerTab} ${isSelected ? styles.plannerTabActive : ''}`}
+                  onClick={() => setSelectedPlannerIdx(-1)}
+                >
+                  <div className={styles.plannerTabTop}>
+                    <span className={styles.plannerTabRank} style={{ color: 'var(--accent-purple)' }}>M</span>
+                    <span
+                      className={styles.btnDanger}
+                      style={{ fontSize: 11, padding: '2px 8px' }}
+                      onClick={(e) => { e.stopPropagation(); setManualPlanner(null); if (selectedPlannerIdx === -1) setSelectedPlannerIdx(0); }}
+                    >✕</span>
+                  </div>
+                  <div className={styles.plannerTabName}>{manualPlanner.major?.name ?? manualPlanner.course?.name ?? '—'}</div>
+                  {meta && <div className={styles.plannerTabMeta}>{meta}</div>}
+                </button>
+              );
+            })()}
+          </div>
 
           {/* Planner picker */}
           <div style={{ marginBottom: 12 }}>
@@ -1160,9 +1163,60 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {/* Fast Analytics */}
-          <div className={styles.sectionTitle}>Analytics & Graduation Check</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 12 }}>
+          <div className={styles.resultTabBar} role="tablist" aria-label="Match result views">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={resultTab === 'analytics'}
+              className={`${styles.resultTab} ${resultTab === 'analytics' ? styles.resultTabActive : ''}`}
+              onClick={() => setResultTab('analytics')}
+            >
+              Analytics
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={resultTab === 'graduation'}
+              className={`${styles.resultTab} ${resultTab === 'graduation' ? styles.resultTabActive : ''}`}
+              onClick={() => setResultTab('graduation')}
+            >
+              Graduation
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={resultTab === 'units'}
+              className={`${styles.resultTab} ${resultTab === 'units' ? styles.resultTabActive : ''}`}
+              onClick={() => setResultTab('units')}
+            >
+              Unit Plan
+            </button>
+            {hasMinors && (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={resultTab === 'minors'}
+                className={`${styles.resultTab} ${resultTab === 'minors' ? styles.resultTabActive : ''}`}
+                onClick={() => setResultTab('minors')}
+              >
+                Minors
+              </button>
+            )}
+            <button
+              type="button"
+              role="tab"
+              aria-selected={resultTab === 'pathway'}
+              className={`${styles.resultTab} ${resultTab === 'pathway' ? styles.resultTabActive : ''}`}
+              onClick={() => setResultTab('pathway')}
+            >
+              Extended Plan
+            </button>
+          </div>
+
+          {resultTab === 'analytics' && (
+          <div className={styles.resultTabPanel}>
+          <div className={styles.sectionTitle}>Analytics</div>
+          <div className={styles.analyticsGrid}>
 
             {/* Not Yet Taken */}
             {(() => {
@@ -1199,24 +1253,33 @@ export default function DashboardPage() {
             const electiveCount = notTaken.filter((u: any) => u.category !== 'core').length;
 
             return (
-              <div style={{ background: 'var(--card-bg)', border: '1px solid var(--panel-border)', borderRadius: 4, padding: '12px 14px' }}>
-                <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Not Yet Taken</div>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 8 }}>
-                  <span style={{ fontSize: 20, fontWeight: 700 }}>{notTaken.length}</span>
-                  <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Core: {coreCount} · Elective: {electiveCount}</span>
-                </div>
-                <div style={{ maxHeight: 120, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 3 }}>
-                  {notTaken.length === 0 ? (
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>All planner units taken.</div>
-                  ) : notTaken.map((u: any) => (
-                    <div key={u.code} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
-                      <InlineCode red={u.category === 'core'}>{u.code}</InlineCode>
-                      <span style={{ color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
-                        {u.name} <span style={{ fontSize: '9px', opacity: 0.6 }}>[Sem {u.offering}]</span>
-                      </span>
+              <div className={`${styles.insightCard} ${styles.insightOrange}`}>
+                <div className={styles.insightHead}>
+                  <div>
+                    <div className={styles.statLabel}>Not Yet Taken</div>
+                    <div className={styles.insightValueRow}>
+                      <span className={styles.statValue}>{notTaken.length}</span>
+                      <span className={styles.statSub}>unit{notTaken.length !== 1 ? 's' : ''} remaining</span>
                     </div>
-                  ))}
+                  </div>
+                  <div className={styles.insightPills}>
+                    <span className={`${styles.pill} ${styles.pillRed}`}>Core {coreCount}</span>
+                    <span className={`${styles.pill} ${styles.pillMuted}`}>Elective {electiveCount}</span>
+                  </div>
                 </div>
+                {notTaken.length === 0 ? (
+                  <div className={styles.insightEmpty}>All planner units taken.</div>
+                ) : (
+                  <div className={styles.insightList}>
+                    {notTaken.map((u: any) => (
+                      <div key={u.code} className={styles.insightRow}>
+                        <InlineCode red={u.category === 'core'}>{u.code}</InlineCode>
+                        <span className={styles.insightRowName}>{u.name}</span>
+                        <span className={styles.insightRowMeta}>Sem {u.offering}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             );
           })()}
@@ -1233,30 +1296,46 @@ export default function DashboardPage() {
               });
               const totalCredits = currentlyEnrolled.reduce((sum: number, c: any) => sum + (c.credits || 0), 0);
               return (
-                <div style={{ background: 'var(--card-bg)', border: '1px solid var(--panel-border)', borderRadius: 4, padding: '12px 14px' }}>
-                  <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Currently Enrolled</div>
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 8 }}>
-                    <span style={{ fontSize: 20, fontWeight: 700 }}>{currentlyEnrolled.length}</span>
-                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{totalCredits} credits this term</span>
-                  </div>
-                  <div style={{ maxHeight: 120, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 3 }}>
-                    {currentlyEnrolled.length === 0 ? (
-                      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>No units currently enrolled.</div>
-                    ) : currentlyEnrolled.map((c: any) => (
-                      <div key={c.courseId} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
-                        <InlineCode>{c.courseId}</InlineCode>
-                        <span style={{ color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{c.courseTitle}</span>
+                <div className={`${styles.insightCard} ${styles.insightBlue}`}>
+                  <div className={styles.insightHead}>
+                    <div>
+                      <div className={styles.statLabel}>Currently Enrolled</div>
+                      <div className={styles.insightValueRow}>
+                        <span className={styles.statValue}>{currentlyEnrolled.length}</span>
+                        <span className={styles.statSub}>{totalCredits} credits this term</span>
                       </div>
-                    ))}
+                    </div>
+                    <div className={styles.insightPills}>
+                      <span className={`${styles.pill} ${styles.pillBlue}`}>In progress</span>
+                    </div>
                   </div>
+                  {currentlyEnrolled.length === 0 ? (
+                    <div className={styles.insightEmpty}>No units currently enrolled.</div>
+                  ) : (
+                    <div className={styles.insightList}>
+                      {currentlyEnrolled.map((c: any) => (
+                        <div key={c.courseId} className={styles.insightRow}>
+                          <InlineCode>{c.courseId}</InlineCode>
+                          <span className={styles.insightRowName}>{c.courseTitle}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             })()}
+          </div>
+          </div>
+          )}
 
-            {/* Graduation Status */}
-            {(() => {
+          {resultTab === 'graduation' && (
+          <div className={styles.resultTabPanel}>
+          <div className={styles.sectionTitle}>Graduation Check</div>
+          {(() => {
               const activePlanner = selectedPlannerIdx === -1 ? manualPlanner : dashboardData?.planners?.[selectedPlannerIdx];
-              if (!activePlanner) return null;
+              if (!activePlanner) return (
+                <div className={styles.gradMuted}>Select a planner to run the graduation check.</div>
+              );
 
               const transcriptStates = resolveUnitStates(
                   [...(scrapedStudent?.student?.courseList ?? []), ...(dashboardData?.mpuCourseList ?? [])]
@@ -1275,55 +1354,99 @@ export default function DashboardPage() {
               const prescribedMissing = (activePlanner?.units ?? [])
                 .filter((u: any) => u.unit !== null && u.category === 'prescribed_elective' && !transcriptCodes.has(u.unit.unit_code?.toUpperCase()));
 
-              const isEligible = (coreMissing.length + prescribedMissing.length === 0) && creditsCompleted >= creditsRequired;
+              const creditsOk = creditsCompleted >= creditsRequired;
+              const isEligible = (coreMissing.length + prescribedMissing.length === 0) && creditsOk;
+              const creditPct = Math.min((creditsCompleted / creditsRequired) * 100, 100);
               
               return (
-                <div style={{ background: 'var(--card-bg)', border: `1px solid ${isEligible ? 'var(--accent-green)' : 'var(--accent-purple)'}`, borderRadius: 4, padding: '12px 14px' }}>
-                  <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Graduation Check</div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: isEligible ? 'var(--accent-green)' : 'var(--accent-red)', marginBottom: 8 }}>
-                    {isEligible ? '✅ ELIGIBLE' : '❌ INELIGIBLE'}
-                  </div>
-                  
-                  <div style={{ fontSize: '10px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      <div>
-                          <div style={{ color: coreMissing.length === 0 ? 'var(--accent-green)' : 'inherit' }}>
-                              {coreMissing.length === 0 ? '●' : '○'} Core & Major: {coreMissing.length === 0 ? 'Fulfilled' : <span style={{ fontWeight: 600 }}>{coreMissing.length} Remaining</span>}
-                          </div>
-                          {coreMissing.length > 0 && (
-                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4, marginLeft: 12 }}>
-                                  {coreMissing.map((u: any) => (
-                                      <InlineCode key={u.unit?.unit_code} red={true}>{u.unit?.unit_code}</InlineCode>
-                                  ))}
-                              </div>
-                          )}
-                      </div>
-
-                      <div>
-                          <div style={{ color: prescribedMissing.length === 0 ? 'var(--accent-green)' : 'inherit' }}>
-                              {prescribedMissing.length === 0 ? '●' : '○'} Prescribed Electives: {prescribedMissing.length === 0 ? 'Fulfilled' : <span style={{ fontWeight: 600 }}>{prescribedMissing.length} Remaining</span>}
-                          </div>
-                          {prescribedMissing.length > 0 && (
-                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4, marginLeft: 12 }}>
-                                  {prescribedMissing.map((u: any) => (
-                                      <InlineCode key={u.unit?.unit_code} red={false}>{u.unit?.unit_code}</InlineCode>
-                                  ))}
-                              </div>
-                          )}
-                      </div>
-
-                      <div style={{ fontSize:'12px', color: creditsCompleted >= creditsRequired ? 'var(--accent-green)' : 'var(--text-muted)' }}>
-                          {creditsCompleted >= creditsRequired ? '●' : '○'} Credits: {creditsCompleted}/{creditsRequired} CP
-                      </div>
+                <div className={styles.gradStack}>
+                <div className={`${styles.gradCard} ${isEligible ? styles.gradCardOk : ''}`}>
+                  <div className={styles.gradHead}>
+                    <div
+                      className={styles.gradTitle}
+                      style={{ color: isEligible ? 'var(--accent-green)' : 'var(--accent-red)' }}
+                    >
+                      {isEligible ? 'ELIGIBLE' : 'INELIGIBLE'}
+                    </div>
+                    <p className={styles.gradLead}>
+                      {isEligible
+                        ? 'Core, prescribed electives, and credit requirements are met for this planner.'
+                        : 'One or more graduation requirements are still outstanding against this planner.'}
+                    </p>
                   </div>
 
-                  <div style={{ marginTop: 10 }}>
-                    <ProgressBar pct={Math.min((creditsCompleted / creditsRequired) * 100, 100)} color="var(--accent-purple)" />
+                  <div className={styles.gradBody}>
+                    <div className={styles.gradReq}>
+                      <div className={styles.gradReqTop}>
+                        <span className={styles.gradReqLabel}>Credits</span>
+                        <span className={`${styles.gradReqValue} ${creditsOk ? styles.gradOk : styles.gradWarn}`}>
+                          {creditsCompleted}/{creditsRequired} CP
+                        </span>
+                      </div>
+                      <div className={styles.gradBar}>
+                        <ProgressBar pct={creditPct} color={creditsOk ? 'var(--accent-green)' : 'var(--accent-purple)'} />
+                      </div>
+                    </div>
                   </div>
+                </div>
+
+                    <div className={styles.gradReqRow}>
+                    <div className={`${styles.insightCard} ${coreMissing.length === 0 ? styles.insightGreen : styles.insightRed}`}>
+                      <div className={styles.gradReqTop}>
+                        <span className={styles.gradReqLabel}>Core & Major</span>
+                        <span className={`${styles.gradReqValue} ${coreMissing.length === 0 ? styles.gradOk : styles.gradBad}`}>
+                          {coreMissing.length === 0 ? 'Fulfilled' : `${coreMissing.length} Remaining`}
+                        </span>
+                      </div>
+                      {coreMissing.length === 0 ? (
+                        <div className={styles.insightEmpty}>All core and major units completed.</div>
+                      ) : (
+                        <div className={styles.insightList}>
+                          {coreMissing.map((u: any) => (
+                            <div key={u.unit?.unit_code} className={styles.insightRow}>
+                              <InlineCode red={true}>{u.unit?.unit_code}</InlineCode>
+                              <span className={styles.insightRowName}>{u.unit?.unit_name || '—'}</span>
+                              {u.semester != null && (
+                                <span className={styles.insightRowMeta}>Sem {u.semester}</span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className={`${styles.insightCard} ${prescribedMissing.length === 0 ? styles.insightGreen : styles.insightYellow}`}>
+                      <div className={styles.gradReqTop}>
+                        <span className={styles.gradReqLabel}>Prescribed Electives</span>
+                        <span className={`${styles.gradReqValue} ${prescribedMissing.length === 0 ? styles.gradOk : styles.gradWarn}`}>
+                          {prescribedMissing.length === 0 ? 'Fulfilled' : `${prescribedMissing.length} Remaining`}
+                        </span>
+                      </div>
+                      {prescribedMissing.length === 0 ? (
+                        <div className={styles.insightEmpty}>All prescribed electives completed.</div>
+                      ) : (
+                        <div className={styles.insightList}>
+                          {prescribedMissing.map((u: any) => (
+                            <div key={u.unit?.unit_code} className={styles.insightRow}>
+                              <InlineCode red={false}>{u.unit?.unit_code}</InlineCode>
+                              <span className={styles.insightRowName}>{u.unit?.unit_name || '—'}</span>
+                              {u.semester != null && (
+                                <span className={styles.insightRowMeta}>Sem {u.semester}</span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    </div>
                 </div>
               );
           })()}
           </div>
+          )}
 
+          {resultTab === 'units' && (
+          <div className={styles.resultTabPanel}>
           {/* Units Outside Planner */}
           {(() => {
             const activePlanner = selectedPlannerIdx === -1 ? manualPlanner : dashboardData?.planners?.[selectedPlannerIdx];
@@ -1491,7 +1614,11 @@ export default function DashboardPage() {
               </div>
             );
           })}
+          </div>
+          )}
 
+          {resultTab === 'minors' && hasMinors && (
+          <div className={styles.resultTabPanel}>
           {/* Minors & Specializations */}
           {(() => {
             const activePlanner = selectedPlannerIdx === -1 ? manualPlanner : dashboardData?.planners?.[selectedPlannerIdx];
@@ -1507,12 +1634,241 @@ export default function DashboardPage() {
             return (
               <div>
                 <div className={styles.sectionTitle} style={{ marginTop: 20 }}>Minors & Specializations</div>
-                {minors.map((minor: any) => (
-                  <MinorProgressCard key={minor.id} minor={minor} doneCodes={doneCodes} />
-                ))}
+                {minors.map((minor: any) => {
+                  const total: number = minor.units.length;
+                  const done: number = minor.units.filter(
+                    (mu: any) => doneCodes.has(mu.unit?.unit_code?.trim().toUpperCase())
+                  ).length;
+                  const missing: number = total - done;
+                  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+                  const isInjected = injectedMinors.has(minor.id);
+                  const wouldExceedCredits = missing > 0 && remainingElectiveSlots === 0;
+
+                  return (
+                    <div
+                      key={minor.id}
+                      style={{
+                        background: 'var(--card-bg)',
+                        border: `1px solid ${isInjected ? 'rgba(197,134,192,0.6)' : 'rgba(197,134,192,0.3)'}`,
+                        borderRadius: 4,
+                        padding: '12px 14px',
+                        marginBottom: 10,
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 600 }}>{minor.name}</div>
+                          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                            {done}/{total} units · {pct}% progress
+                            {missing > 0 && (
+                              <span style={{ color: 'var(--accent-orange)', marginLeft: 6 }}>{missing} remaining</span>
+                            )}
+                          </div>
+                        </div>
+                        {missing > 0 && (
+                          <button
+                            className={isInjected ? styles.btnDanger : styles.btnSecondary}
+                            style={{ fontSize: 11, whiteSpace: 'nowrap', flexShrink: 0 }}
+                            onClick={() => toggleMinorInjection(minor.id)}
+                            disabled={customPlanLoading}
+                          >
+                            {isInjected ? '✕ Remove from Plan' : '+ Include in Custom Plan'}
+                          </button>
+                        )}
+                        {missing === 0 && (
+                          <span style={{ fontSize: 11, color: 'var(--accent-green)', fontWeight: 600 }}>✓ Complete</span>
+                        )}
+                      </div>
+                      <ProgressBar pct={pct} color={pct === 100 ? 'var(--accent-green)' : 'var(--accent-yellow)'} />
+                      {isInjected && (
+                        <div style={{ fontSize: 10, color: 'var(--accent-purple)', marginTop: 6 }}>
+                          {missing} missing unit{missing !== 1 ? 's' : ''} will be injected into the custom pathway.
+                        </div>
+                      )}
+                      {wouldExceedCredits && (
+                        <div style={{ fontSize: 10, color: 'var(--accent-orange)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <span>⚠</span>
+                          <span>
+                            {isInjected
+                              ? 'No free elective slots remain — these units will exceed standard degree credits (extra units added to pathway).'
+                              : 'Note: No free elective slots remain. Including this minor will exceed standard degree credits.'}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             );
           })()}
+          </div>
+          )}
+
+          {resultTab === 'pathway' && (
+          <div className={styles.resultTabPanel}>
+          {/* Custom Study Pathway */}
+          {(() => {
+            const activePlanner = selectedPlannerIdx === -1 ? manualPlanner : dashboardData?.planners?.[selectedPlannerIdx];
+            if (!activePlanner) return null;
+
+            const allTranscriptUnits = [
+              ...(scrapedStudent?.student?.courseList ?? []),
+              ...(dashboardData?.mpuCourseList ?? []),
+            ];
+
+            const transcriptStates = resolveUnitStates(allTranscriptUnits);
+            const completeCodes = new Set(
+              [...transcriptStates].filter(([, state]) => state === 'passed').map(([code]) => code)
+            );
+            const currentCodes = new Set(
+              [...transcriptStates].filter(([, state]) => state === 'in_progress').map(([code]) => code)
+            );
+            // Units that are neither complete nor actively enrolled = truly unplanned
+            const takenCodes = new Set([...completeCodes, ...currentCodes]);
+
+            const isReqUnit = (u: any) =>
+              u.unit !== null &&
+              (u.category === 'core' || u.category === 'major_core' || u.category === 'prescribed_elective');
+
+            const unplannedUnits = (activePlanner?.units ?? []).filter(
+              (u: any) => isReqUnit(u) && !takenCodes.has(u.unit.unit_code?.toUpperCase())
+            );
+            const inProgressUnits = (activePlanner?.units ?? []).filter(
+              (u: any) => isReqUnit(u) && currentCodes.has(u.unit.unit_code?.toUpperCase())
+            );
+
+            // Minor units the student has opted-in to but hasn't taken yet
+            const injectedMinorMissingCount = (activePlanner?.minors ?? [])
+              .filter((m: any) => injectedMinors.has(m.id))
+              .reduce((sum: number, m: any) => {
+                const missingFromMinor = m.units.filter(
+                  (mu: any) => !takenCodes.has(mu.unit?.unit_code?.trim().toUpperCase())
+                ).length;
+                return sum + missingFromMinor;
+              }, 0);
+
+            const totalUnplanned = unplannedUnits.length + injectedMinorMissingCount;
+            if (totalUnplanned === 0) return null;
+
+            return (
+              <div>
+                <div className={styles.sectionTitle} style={{ marginTop: 20 }}>Extended Study Plan</div>
+
+                <div style={{ background: 'var(--card-bg)', border: '1px solid rgba(244,135,113,0.35)', borderRadius: 4, padding: '12px 14px', marginBottom: 12 }}>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>
+                    <span style={{ fontWeight: 600, color: 'var(--accent-orange)' }}>{totalUnplanned}</span> unplanned unit{totalUnplanned !== 1 ? 's' : ''}
+                    {inProgressUnits.length > 0 && (
+                      <span style={{ color: 'var(--accent-green)' }}> · {inProgressUnits.length} in progress this semester</span>
+                    )}.{' '}
+                    Generate a custom pathway to complete this degree.
+                  </div>
+                  <button
+                    className={styles.btnPrimary}
+                    style={{ fontSize: 12 }}
+                    onClick={() => generateCustomPlan()}
+                    disabled={customPlanLoading}
+                  >
+                    {customPlanLoading
+                      ? 'Generating…'
+                      : customPlan
+                      ? 'Regenerate Pathway'
+                      : 'Generate Custom Pathway'}
+                  </button>
+                </div>
+
+                {customPlan && (
+                  <div>
+                    {customPlan.semesters.length === 0 ? (
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '10px 0' }}>
+                        No semesters could be generated — all remaining units may have unresolvable prerequisite or offering conflicts.
+                      </div>
+                    ) : (
+                      customPlan.semesters.map((sem: any) => (
+                        <div
+                          key={`cp-${sem.year}-${sem.semester}`}
+                          style={{ marginBottom: 8, border: '1px solid rgba(244,135,113,0.3)', borderRadius: 4, overflow: 'hidden' }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'rgba(244,135,113,0.06)' }}>
+                            <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--accent-orange)' }}>
+                              YEAR {sem.year} · SEM {sem.semester}
+                            </span>
+                            <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 8 }}>
+                              {sem.units.length} unit{sem.units.length !== 1 ? 's' : ''} · Custom
+                            </span>
+                          </div>
+                          <div style={{ overflowX: 'auto' }}>
+                            <table className={styles.table} style={{ tableLayout: 'fixed', width: '100%' }}>
+                              <colgroup>
+                                <col style={{ width: 110 }} />
+                                <col style={{ width: 'auto' }} />
+                                <col style={{ width: 200 }} />
+                              </colgroup>
+                              <thead>
+                                <tr><th>Unit Code</th><th>Unit Name</th><th>Type</th></tr>
+                              </thead>
+                              <tbody>
+                                {sem.units.map((u: any) => (
+                                  <tr key={u.code}>
+                                    <td>
+                                      <InlineCode red={u.category === 'core' || u.category === 'major_core'}>
+                                        {u.code}
+                                      </InlineCode>
+                                    </td>
+                                    <td>
+                                      {u.name}
+                                      {retakeUnitCodes.has(normaliseUnitCode(u.code)) && (
+                                        <span
+                                          title="Previously attempted and failed — this is a repeat attempt."
+                                          style={{
+                                            marginLeft: 6,
+                                            fontSize: 9,
+                                            fontFamily: 'var(--font-mono)',
+                                            color: 'var(--accent-orange)',
+                                            letterSpacing: '0.05em',
+                                          }}
+                                        >
+                                          RETAKE
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td>
+                                      <Badge
+                                        label={u.category === 'minor' ? 'minor elective' : u.category.replace(/_/g, ' ')}
+                                        cls={
+                                          u.category === 'core' ? 'badgeRed' :
+                                          u.category === 'major_core' ? 'badgeOrange' :
+                                          u.category === 'mpu' ? 'badgeBlue' :
+                                          u.category === 'minor' ? 'badgeYellow' :
+                                          'badgePurple'
+                                        }
+                                      />
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      ))
+                    )}
+
+                    {customPlan.unschedulableUnits.length > 0 && (
+                      <div style={{ fontSize: 11, color: 'var(--accent-orange)', padding: '8px 2px', display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+                        <span>⚠</span>
+                        <span>
+                          {customPlan.unschedulableUnits.length} unit{customPlan.unschedulableUnits.length !== 1 ? 's' : ''} could
+                          not be automatically scheduled due to prerequisite or semester-offering conflicts:{' '}
+                          {customPlan.unschedulableUnits.map((u: any) => u.code).join(', ')}.
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+          </div>
+          )}
 
           </div>
         );
