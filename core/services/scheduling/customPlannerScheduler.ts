@@ -85,7 +85,11 @@ export type PlanWarning =
   | { kind: 'short_term_only'; unitCode: string; offeringTerms: number[] }
   | { kind: 'budget_exhausted'; unitCodes: string[] }
   /** limit is the student's normal load: the configured cap, never above the standard full-time load. */
-  | { kind: 'over_capacity'; year: number; semester: 1 | 2; count: number; limit: number };
+  | { kind: 'over_capacity'; year: number; semester: 1 | 2; count: number; limit: number }
+  /** Required units absent from both the plan and the completed list. Validation only. */
+  | { kind: 'compulsory_missing'; unitCodes: string[] }
+  /** The same unit sitting in more than one semester. Validation only. */
+  | { kind: 'duplicate_placement'; unitCode: string; positions: { year: number; semester: 1 | 2 }[] };
 
 export interface CustomPlanResult {
   semesters: CustomSemesterBucket[];
@@ -166,15 +170,41 @@ export function validateSchedulerConfig(input: unknown): ConfigValidation {
   return { ok: true, config: input as Partial<SchedulerConfig> };
 }
 
-function normaliseCode(code: string): string {
+export function normaliseCode(code: string): string {
   return code.trim().toUpperCase();
 }
 
-function offeringTermsOf(unit: SchedulableUnit): number[] {
+export function offeringTermsOf(unit: SchedulableUnit): number[] {
   const terms = unit.allOfferingTerms ?? unit.offeringSemesters;
   return [...new Set(terms)].sort((a, b) => a - b);
 }
 
+/**
+ * Slot semesters count from the student's intake, offering terms are calendar
+ * terms. For a September intake the two are swapped. Terms 3 and 4 are never
+ * scheduled, so they never reach this.
+ */
+export function calendarTermFor(slotSemester: 1 | 2, intakeSemester: 1 | 2): 1 | 2 {
+  return intakeSemester === 1 ? slotSemester : (slotSemester === 1 ? 2 : 1);
+}
+
+export function resolveSchedulerConfig(config: Partial<SchedulerConfig> = {}): SchedulerConfig {
+  return { ...DEFAULT_SCHEDULER_CONFIG, ...config };
+}
+
+/** The student's normal load: the configured cap, never above the standard full-time load. */
+export function normalLoadFor(cfg: SchedulerConfig): number {
+  return Math.min(cfg.maxStandardPerSemester, DEFAULT_SCHEDULER_CONFIG.maxStandardPerSemester);
+}
+
+/** How many standard units may be placed in one slot, after any per-semester override. */
+export function standardLimitFor(cfg: SchedulerConfig, year: number, slotSemester: 1 | 2): number {
+  return cfg.perSemesterOverrides?.[`${year}-${slotSemester}`] ?? cfg.maxStandardPerSemester;
+}
+
+/** Empty offeringSemesters means unrestricted, so an unknown offering never blocks placement. */
+export function isOfferedIn(unit: SchedulableUnit, calendarTerm: 1 | 2): boolean {
+  return unit.offeringSemesters.length === 0 || unit.offeringSemesters.includes(calendarTerm);
 // Raw shape of a unit as returned by Prisma's nested planner/minor includes
 // (see web/app/api/custom-planner/route.ts and plannerRepository.getPlannerById()),
 // covering only the fields mapUnitToSchedulable reads.
@@ -233,8 +263,8 @@ export function buildCustomPlan(
   concededPassUnitCodes: string[] = [],
   config: Partial<SchedulerConfig> = DEFAULT_SCHEDULER_CONFIG
 ): CustomPlanResult {
-  const cfg: SchedulerConfig = { ...DEFAULT_SCHEDULER_CONFIG, ...config };
-  const normalLoad = Math.min(cfg.maxStandardPerSemester, DEFAULT_SCHEDULER_CONFIG.maxStandardPerSemester);
+  const cfg: SchedulerConfig = resolveSchedulerConfig(config);
+  const normalLoad = normalLoadFor(cfg);
 
   const concededPass = new Set(concededPassUnitCodes.map(normaliseCode));
   // A Conceded Pass is still a completed unit, even if the caller only listed it once
@@ -262,9 +292,8 @@ export function buildCustomPlan(
 
   for (let i = 0; i < cfg.maxSemesters && pool.length > 0; i++) {
     const totalCredits = completed.size * cfg.creditPointsPerUnit;
-    // currentSem counts from the student's intake; offerings are calendar terms
-    const calendarTerm: 1 | 2 = intakeSemester === 1 ? currentSem : (currentSem === 1 ? 2 : 1);
-    const standardLimit = cfg.perSemesterOverrides?.[`${currentYear}-${currentSem}`] ?? cfg.maxStandardPerSemester;
+    const calendarTerm = calendarTermFor(currentSem, intakeSemester);
+    const standardLimit = standardLimitFor(cfg, currentYear, currentSem);
 
     const bucketCodes = new Set<string>();
     const toPlace: SchedulableUnit[] = [];
@@ -363,7 +392,7 @@ export function canTake(
   bucketCodes: Set<string>,
   totalCredits: number
 ): boolean {
-  if (unit.offeringSemesters.length > 0 && !unit.offeringSemesters.includes(calendarTerm)) return false;
+  if (!isOfferedIn(unit, calendarTerm)) return false;
   if (unit.requisiteGroups.length === 0) return true;
   return unit.requisiteGroups.some((group) =>
     group.every((condition) =>
@@ -372,7 +401,7 @@ export function canTake(
   );
 }
 
-function isConditionSatisfied(
+export function isConditionSatisfied(
   condition: RequisiteCondition,
   completed: Set<string>,
   concededPass: Set<string>,
