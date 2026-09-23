@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import styles from './page.module.css';
+import type { EstimationPreview } from '../../../../core/services/classEstimation/estimationPreview';
 
 type SessionStatus = 'idle' | 'login-pending' | 'logged-in' | 'login-error';
 type RunStatus = 'idle' | 'running' | 'done' | 'error';
@@ -43,6 +44,13 @@ export default function ClassEstimationPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [minId, setMinId] = useState('');
   const [maxId, setMaxId] = useState('');
+
+  // Defaults to the semester after the current one: Jul-Dec is semester 2, so next is 1, otherwise next is 2.
+  const [previewTerm, setPreviewTerm] = useState<'1' | '2'>(new Date().getMonth() + 1 >= 7 ? '1' : '2');
+  const [previewStatus, setPreviewStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
+  const [preview, setPreview] = useState<EstimationPreview | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const esRef = useRef<EventSource | null>(null);
   const logEndRef = useRef<HTMLDivElement | null>(null);
@@ -153,6 +161,33 @@ export default function ClassEstimationPage() {
       esRef.current = null;
     };
   }, [minId, maxId]);
+
+  const runPreview = async () => {
+    setPreviewStatus('loading');
+    setPreviewError(null);
+    setCopied(false);
+    try {
+      const res = await fetch(`/api/class-estimation/preview?term=${previewTerm}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? `Request failed (${res.status})`);
+      setPreview(data as EstimationPreview);
+      setPreviewStatus('done');
+    } catch (err) {
+      setPreview(null);
+      setPreviewError(err instanceof Error ? err.message : 'Preview failed');
+      setPreviewStatus('error');
+    }
+  };
+
+  const copyPreview = async () => {
+    if (!preview) return;
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(preview, null, 2));
+      setCopied(true);
+    } catch {
+      setPreviewError('Could not copy to the clipboard');
+    }
+  };
 
   const isLoggedIn = sessionStatus === 'logged-in';
   const isRunning  = runStatus === 'running';
@@ -321,6 +356,106 @@ export default function ClassEstimationPage() {
           </div>
         </div>
       )}
+
+      {/* ── Pipeline preview (Phases 0-3, diagnostic) ────────────────────────── */}
+      <div className={styles.card}>
+        <div className={styles.sectionTitle}>Pipeline Preview</div>
+        <p className={styles.hintText}>
+          Runs matching, candidate resolution, eligibility and ranking over the students the last run scraped.
+          Nothing is saved. Try it on a small ID range first.
+        </p>
+
+        <div className={styles.actionRow}>
+          <select
+            className={`${styles.rangeInput} ${styles.termSelect}`}
+            value={previewTerm}
+            onChange={(e) => setPreviewTerm(e.target.value as '1' | '2')}
+            disabled={previewStatus === 'loading' || isRunning}
+          >
+            <option value="1">Target: Semester 1</option>
+            <option value="2">Target: Semester 2</option>
+          </select>
+          <button
+            className={styles.btnPrimary}
+            disabled={previewStatus === 'loading' || isRunning}
+            onClick={runPreview}
+          >
+            {previewStatus === 'loading' ? 'Running…' : 'Run Preview'}
+          </button>
+          {preview && (
+            <button className={styles.btnSecondary} onClick={copyPreview}>
+              {copied ? 'Copied' : 'Copy JSON'}
+            </button>
+          )}
+        </div>
+
+        {previewError && <div className={styles.errorBox} style={{ marginTop: 12 }}>{previewError}</div>}
+
+        {preview && (
+          <>
+            <div className={styles.summaryGrid} style={{ marginTop: 16 }}>
+              {([
+                ['Students', preview.summary.students],
+                ['With planner', preview.summary.withPlanner],
+                ['No major', preview.summary.noMajorOrPlanner],
+                ['Errors', preview.summary.errors],
+                ['Candidates', preview.summary.totalCandidates],
+                ['Eligible', preview.summary.totalEligible],
+                ['Picked', preview.summary.totalPicked],
+              ] as const).map(([label, value]) => (
+                <div className={styles.summaryItem} key={label}>
+                  <span className={styles.summaryValue} style={{ color: 'var(--text-primary)' }}>
+                    {value.toLocaleString()}
+                  </span>
+                  <span className={styles.summaryLabel}>{label}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className={styles.previewNotes}>
+              <div>
+                Not eligible: {preview.summary.ineligibleByReason['not-offered-in-term']} not offered this semester,{' '}
+                {preview.summary.ineligibleByReason['requisites-unmet']} requisites unmet,{' '}
+                {preview.summary.ineligibleByReason['not-in-planner']} not in planner
+              </div>
+              <div>
+                Eligible only because the unit has no offering data: {preview.summary.eligibleWithoutOfferingData}
+              </div>
+              {preview.summary.plannerCounts.map((p) => (
+                <div key={p.plannerId}>
+                  {p.students} × {p.majorName} ({p.intakeYear} S{p.intakeSemester})
+                </div>
+              ))}
+              {Object.entries(preview.summary.mappingWarningCounts).map(([warning, n]) => (
+                <div key={warning}>⚠ {n} × {warning}</div>
+              ))}
+            </div>
+
+            <div className={styles.previewList}>
+              {preview.students.slice(0, 200).map((s) => (
+                <details key={s.studentId} className={styles.previewRow}>
+                  <summary>
+                    <span>{s.name} ({s.studentId})</span>
+                    <span className={styles.previewMeta}>
+                      {s.error
+                        ? `error: ${s.error}`
+                        : s.planner
+                          ? `${s.planner.majorName} ${s.planner.matchPct.toFixed(0)}% · ${s.candidateCount} candidates → ${s.eligibleCount} eligible → ${s.picked.length} picked`
+                          : `no major detected (${s.matchStatus ?? 'n/a'})`}
+                    </span>
+                  </summary>
+                  <pre className={styles.previewPre}>{JSON.stringify(s, null, 2)}</pre>
+                </details>
+              ))}
+              {preview.students.length > 200 && (
+                <p className={styles.hintText}>
+                  Showing the first 200 of {preview.students.length.toLocaleString()} students. Copy JSON includes all of them.
+                </p>
+              )}
+            </div>
+          </>
+        )}
+      </div>
 
       {/* ── Log ──────────────────────────────────────────────────────────────── */}
       {log.length > 0 && (
