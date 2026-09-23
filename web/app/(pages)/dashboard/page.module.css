@@ -447,3 +447,304 @@
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+
+/* Match result tabs */
+.plannerTabBar {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  margin-bottom: 10px;
+  padding-bottom: 2px;
+}
+.plannerTab {
+  flex: 1 1 0;
+  min-width: 140px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  background: var(--card-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  font-family: inherit;
+  transition: border-color 0.1s, background 0.1s;
+}
+.plannerTab:hover {
+  border-color: var(--accent-blue);
+}
+.plannerTabActive {
+  background: var(--active-bg);
+  border-color: var(--active-highlight);
+}
+.plannerTabTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.plannerTabRank {
+  font-size: 11px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+}
+.plannerTabPct {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+.plannerTabName {
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.plannerTabMeta {
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resultTabBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  border-bottom: 1px solid var(--panel-border);
+  margin: 16px 0 14px;
+}
+.resultTab {
+  appearance: none;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  padding: 8px 14px;
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-weight: 500;
+}
+.resultTab:hover {
+  color: var(--text-primary);
+}
+.resultTabActive {
+  color: var(--accent-blue);
+  border-bottom-color: var(--accent-blue);
+  font-weight: 600;
+}
+.resultTabPanel {
+  min-height: 160px;
+}
+
+/* Analytics + Graduation */
+.analyticsGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 12px;
+  align-items: stretch;
+}
+@media (max-width: 860px) {
+  .analyticsGrid { grid-template-columns: 1fr; }
+}
+
+.insightCard {
+  background: var(--card-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 4px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  min-height: 280px;
+}
+.insightOrange { border-top: 2px solid var(--accent-orange); }
+.insightBlue { border-top: 2px solid var(--accent-blue); }
+.insightRed { border-top: 2px solid var(--accent-red); }
+.insightYellow { border-top: 2px solid var(--accent-yellow); }
+.insightGreen { border-top: 2px solid var(--accent-green); }
+
+.insightHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.insightValueRow {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-top: 4px;
+}
+.insightPills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+.pill {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 3px 8px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+.pillRed {
+  background: rgba(244,135,113,0.15);
+  color: var(--accent-red);
+  border: 1px solid rgba(244,135,113,0.3);
+}
+.pillMuted {
+  background: var(--surface-bg);
+  color: var(--text-muted);
+  border: 1px solid var(--panel-border);
+}
+.pillBlue {
+  background: rgba(86,156,214,0.15);
+  color: var(--accent-blue);
+  border: 1px solid rgba(86,156,214,0.3);
+}
+
+.insightList {
+  flex: 1;
+  min-height: 0;
+  max-height: 320px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-right: 2px;
+}
+.insightRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border-radius: 3px;
+  background: var(--surface-bg);
+  font-size: 12px;
+}
+.insightRowName {
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+.insightRowMeta {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.insightEmpty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
+  border: 1px dashed var(--panel-border);
+  border-radius: 4px;
+  padding: 24px 12px;
+}
+
+.gradStack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.gradCard {
+  background: var(--card-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.gradCardOk { border-left: 3px solid var(--accent-green); }
+
+.gradHead {
+  padding: 16px 20px 14px;
+}
+.gradTitle {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+.gradLead {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.gradBody {
+  padding: 0 20px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.gradReq {
+  padding-top: 12px;
+  border-top: 1px solid var(--panel-border);
+}
+.gradReqRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  align-items: stretch;
+}
+.gradReqRow .insightCard {
+  min-height: 180px;
+}
+@media (max-width: 860px) {
+  .gradReqRow { grid-template-columns: 1fr; }
+}
+.gradReqTop {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.gradReqLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.gradReqValue {
+  font-size: 12px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.gradOk { color: var(--accent-green); }
+.gradWarn { color: var(--accent-orange); }
+.gradBad { color: var(--accent-red); }
+.gradReq .insightList {
+  margin-top: 8px;
+  flex: none;
+  max-height: 240px;
+}
+
+.gradBar {
+  margin-top: 8px;
+}
+.gradBar .progressWrap {
+  height: 6px;
+  border-radius: 3px;
+}
+
+.gradMuted {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 16px 0;
+}

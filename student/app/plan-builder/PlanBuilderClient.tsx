@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useRef, useEffect, useMemo } from 'react'
-import { COURSE_OPTIONS } from '@student/lib/data/courses-mock'
 import { MOCK_UNITS } from '@student/lib/data/units-mock'
 import { generatePlan } from '@student/lib/plan-builder'
 import type { GenerationResult } from '@student/lib/plan-builder'
@@ -12,23 +11,24 @@ import ElectivePool from '@student/components/ElectivePool/ElectivePool'
 import styles from './PlanBuilderClient.module.css'
 
 const YEAR_WORDS = ['One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight']
-const UNIT_LEVELS = [1, 2, 3, 4]
 
-/** Discipline prefixes used to surface likely units for the selected course. */
-const COURSE_UNIT_PREFIXES: Record<string, string[]> = {
-  bcs:  ['COS', 'SWE', 'INF', 'TNE', 'MTH', 'STA', 'FTE'],
-  bbus: ['BUS', 'ACC', 'ECO', 'MGT', 'FIN', 'HRM', 'STA', 'INF'],
-  beng: ['MTH', 'COS', 'TNE'],
+function prefixesForCourse(courseName: string): string[] {
+  const n = courseName.toLowerCase()
+  if (n.includes('computer') || n.includes('computing') || n.includes('information technology')) {
+    return ['COS', 'SWE', 'INF', 'TNE', 'MTH', 'STA', 'FTE']
+  }
+  if (n.includes('business')) {
+    return ['BUS', 'ACC', 'ECO', 'MGT', 'FIN', 'HRM', 'STA', 'INF']
+  }
+  if (n.includes('engineer')) {
+    return ['MTH', 'COS', 'TNE']
+  }
+  return []
 }
 
-function unitLevel(code: string): number {
-  const match = code.match(/\d/)
-  return match ? parseInt(match[0], 10) : 0
-}
-
-function matchesCourse(code: string, courseId: string): boolean {
-  const prefixes = COURSE_UNIT_PREFIXES[courseId]
-  if (!prefixes) return false
+function matchesCourse(code: string, courseName: string): boolean {
+  const prefixes = prefixesForCourse(courseName)
+  if (prefixes.length === 0) return false
   return prefixes.some(p => code.startsWith(p))
 }
 
@@ -55,36 +55,55 @@ interface CompletedSemester {
 const DRAFT_KEY = 'plan-builder-draft'
 
 interface PlanBuilderDraft {
-  intake: string
-  courseId: string
-  majorId: string
-  secondMajorId: string
+  selectedCourseId: string
+  selectedPlannerId: string
+  intakeYear: number
+  intakeMonth: number
   completedSemesters: CompletedSemester[]
+}
+
+function parseCompletedSemesters(raw: unknown): CompletedSemester[] {
+  if (!Array.isArray(raw)) return [{ id: 'sem-1', unitCodes: [] }]
+  const completedSemesters = raw
+    .filter((s): s is CompletedSemester =>
+      Boolean(s) && typeof s.id === 'string' && Array.isArray(s.unitCodes),
+    )
+    .map(s => ({
+      id: s.id,
+      unitCodes: s.unitCodes.filter((code): code is string => typeof code === 'string'),
+    }))
+  return completedSemesters.length > 0
+    ? completedSemesters
+    : [{ id: 'sem-1', unitCodes: [] }]
 }
 
 function readDraft(): PlanBuilderDraft | null {
   try {
     const raw = sessionStorage.getItem(DRAFT_KEY)
     if (!raw) return null
-    const data = JSON.parse(raw) as Partial<PlanBuilderDraft>
-    if (typeof data.intake !== 'string' || typeof data.courseId !== 'string') return null
-    if (!Array.isArray(data.completedSemesters)) return null
-    const completedSemesters = data.completedSemesters
-      .filter((s): s is CompletedSemester =>
-        Boolean(s) && typeof s.id === 'string' && Array.isArray(s.unitCodes),
-      )
-      .map(s => ({
-        id: s.id,
-        unitCodes: s.unitCodes.filter((code): code is string => typeof code === 'string'),
-      }))
+    const data = JSON.parse(raw) as Partial<PlanBuilderDraft> & {
+      completedSemesters?: unknown
+    }
+    const completedSemesters = parseCompletedSemesters(data.completedSemesters)
+    const currentYear = new Date().getFullYear()
+
+    if (typeof data.selectedCourseId === 'string') {
+      return {
+        selectedCourseId: data.selectedCourseId,
+        selectedPlannerId: typeof data.selectedPlannerId === 'string' ? data.selectedPlannerId : '',
+        intakeYear: typeof data.intakeYear === 'number' ? data.intakeYear : currentYear,
+        intakeMonth: typeof data.intakeMonth === 'number' ? data.intakeMonth : 3,
+        completedSemesters,
+      }
+    }
+
+    // Older drafts used a combined intake string and mock course ids — keep units only.
     return {
-      intake: data.intake,
-      courseId: data.courseId,
-      majorId: typeof data.majorId === 'string' ? data.majorId : '',
-      secondMajorId: typeof data.secondMajorId === 'string' ? data.secondMajorId : '',
-      completedSemesters: completedSemesters.length > 0
-        ? completedSemesters
-        : [{ id: 'sem-1', unitCodes: [] }],
+      selectedCourseId: '',
+      selectedPlannerId: '',
+      intakeYear: currentYear,
+      intakeMonth: 3,
+      completedSemesters,
     }
   } catch {
     return null
@@ -154,10 +173,12 @@ export default function PlanBuilderClient({ plannerOptions }: Props) {
   useEffect(() => {
     const draft = readDraft()
     if (draft) {
-      setIntake(draft.intake)
-      setCourseId(draft.courseId)
-      setMajorId(draft.majorId)
-      setSecondMajorId(draft.secondMajorId)
+      const course = plannerOptions.find(c => c.courseId === draft.selectedCourseId)
+      const plannerOk = course?.majors.some(m => m.plannerId === draft.selectedPlannerId)
+      setSelectedCourseId(course ? course.courseId : '')
+      setSelectedPlannerId(plannerOk ? draft.selectedPlannerId : '')
+      setIntakeYear(draft.intakeYear)
+      setIntakeMonth(draft.intakeMonth)
       setCompletedSemesters(draft.completedSemesters)
       semCounter.current = nextSemCounter(draft.completedSemesters)
     }
@@ -166,8 +187,14 @@ export default function PlanBuilderClient({ plannerOptions }: Props) {
 
   useEffect(() => {
     if (!draftReady) return
-    writeDraft({ intake, courseId, majorId, secondMajorId, completedSemesters })
-  }, [draftReady, intake, courseId, majorId, secondMajorId, completedSemesters])
+    writeDraft({
+      selectedCourseId,
+      selectedPlannerId,
+      intakeYear,
+      intakeMonth,
+      completedSemesters,
+    })
+  }, [draftReady, selectedCourseId, selectedPlannerId, intakeYear, intakeMonth, completedSemesters])
 
   function handleCourseChange(id: string) {
     setSelectedCourseId(id)
@@ -222,13 +249,14 @@ export default function PlanBuilderClient({ plannerOptions }: Props) {
     })
   }, [allCompletedCodes, addQuery])
 
+  const courseName = selectedCourse?.courseName ?? ''
   const suggestedAddUnits = useMemo(
-    () => courseId ? filteredAddUnits.filter(u => matchesCourse(u.code, courseId)) : filteredAddUnits,
-    [filteredAddUnits, courseId],
+    () => courseName ? filteredAddUnits.filter(u => matchesCourse(u.code, courseName)) : filteredAddUnits,
+    [filteredAddUnits, courseName],
   )
   const otherAddUnits = useMemo(
-    () => courseId ? filteredAddUnits.filter(u => !matchesCourse(u.code, courseId)) : [],
-    [filteredAddUnits, courseId],
+    () => courseName ? filteredAddUnits.filter(u => !matchesCourse(u.code, courseName)) : [],
+    [filteredAddUnits, courseName],
   )
 
   // Close inline search on outside click
@@ -297,8 +325,8 @@ export default function PlanBuilderClient({ plannerOptions }: Props) {
           </div>
 
           <div
-            className={`${styles.field} ${!courseId ? styles.fieldHidden : ''}`}
-            aria-hidden={!courseId}
+            className={`${styles.field} ${!selectedCourseId ? styles.fieldHidden : ''}`}
+            aria-hidden={!selectedCourseId}
           >
             <label className={styles.label} htmlFor="major">
               Major
@@ -306,10 +334,10 @@ export default function PlanBuilderClient({ plannerOptions }: Props) {
             <select
               id="major"
               className={styles.select}
-              value={majorId}
-              onChange={e => { setMajorId(e.target.value); setResult(null); setError(null) }}
-              disabled={!courseId}
-              tabIndex={courseId ? 0 : -1}
+              value={selectedPlannerId}
+              onChange={e => { setSelectedPlannerId(e.target.value); setResult(null); setError(null) }}
+              disabled={!selectedCourseId}
+              tabIndex={selectedCourseId ? 0 : -1}
             >
               <option value="">Select a major…</option>
               {majors.map(m => (
@@ -318,21 +346,13 @@ export default function PlanBuilderClient({ plannerOptions }: Props) {
             </select>
           </div>
 
-          <div
-            className={`${styles.field} ${!courseId ? styles.fieldHidden : ''}`}
-            aria-hidden={!courseId}
-          >
-            <label className={styles.label} htmlFor="secondMajor">
-              Second Major
-              <span className={styles.fieldHint}> — optional</span>
-            </label>
+          <div className={styles.field}>
+            <label className={styles.label} htmlFor="intakeMonth">Intake Month</label>
             <select
               id="intakeMonth"
               className={styles.select}
-              value={secondMajorId}
-              onChange={e => setSecondMajorId(e.target.value)}
-              disabled={!courseId || !majorId || secondMajors.length === 0}
-              tabIndex={courseId ? 0 : -1}
+              value={intakeMonth}
+              onChange={e => setIntakeMonth(Number(e.target.value))}
             >
               {MONTH_OPTIONS.map(m => (
                 <option key={m.value} value={m.value}>{m.label}</option>
@@ -436,10 +456,10 @@ export default function PlanBuilderClient({ plannerOptions }: Props) {
 
                     {filteredAddUnits.length > 0 ? (
                       <ul className={styles.addDropdown} role="listbox" aria-label="Units you can add">
-                        {courseId && suggestedAddUnits.length > 0 && otherAddUnits.length > 0 && (
+                        {courseName && suggestedAddUnits.length > 0 && otherAddUnits.length > 0 && (
                           <li className={styles.addDropdownGroup} role="presentation">Suggested for your course</li>
                         )}
-                        {(courseId ? suggestedAddUnits : filteredAddUnits).map(u => (
+                        {(courseName ? suggestedAddUnits : filteredAddUnits).map(u => (
                           <li
                             key={u.code}
                             className={styles.addDropdownItem}
