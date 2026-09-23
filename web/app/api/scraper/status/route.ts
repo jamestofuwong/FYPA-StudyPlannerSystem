@@ -1,15 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { scraperStore, type ScraperQueueStatus } from '../store';
+import { getStatus } from '../../../../../core/services/portal/portalSessionService';
 
-// Dashboard polls this to know when scraping is done.
+// Dashboard polls this to know the current scraper and portal session state.
 export async function GET() {
   return NextResponse.json({
-    status: scraperStore.status,
-    studentId: scraperStore.studentId,
+    // Legacy DOM scraper state
+    status:         scraperStore.status,
+    studentId:      scraperStore.studentId,
     enrollmentMode: scraperStore.enrollmentMode,
     enrollmentText: scraperStore.enrollmentText,
-    result: scraperStore.result,
-    error: scraperStore.error,
+    result:         scraperStore.result,
+    error:          scraperStore.error,
+    // Portal API session state
+    ...getStatus(),
   });
 }
 
@@ -24,7 +28,6 @@ export async function PUT(req: NextRequest) {
   }
 
   const { status, error } = body as { status?: ScraperQueueStatus; error?: string };
-
   if (status) scraperStore.status = status;
   if (status === 'scraping') scraperStore.studentId = null; // claimed — clear pending slot
   if (error) scraperStore.error = error;

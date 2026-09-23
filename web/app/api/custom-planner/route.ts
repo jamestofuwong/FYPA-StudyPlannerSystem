@@ -3,12 +3,13 @@ import { NextResponse } from 'next/server';
 import { prisma } from '../../../../core/db/client';
 import {
   buildCustomPlan,
+  mapUnitToSchedulable,
+  validateSchedulerConfig,
   type SchedulableUnit,
-  type RequisiteCondition,
 } from '../../../../core/services/scheduling/customPlannerScheduler';
 
 function toSchedulable(
-  unit: { unit_code: string; unit_name: string; offerings: { semester: number }[]; requisite_groups: any[] },
+  unit: { unit_code: string; unit_name: string; offerings: { offered_in: number }[]; requisite_groups: any[] },
   category: string
 ): SchedulableUnit {
   const requisiteGroups: RequisiteCondition[][] = (unit.requisite_groups ?? [])
@@ -31,17 +32,21 @@ function toSchedulable(
     )
     .filter((g: RequisiteCondition[]) => g.length > 0);
 
-  const offeringSemesters = (unit.offerings ?? [])
-    .map(offering => offering.semester as 1 | 2)
-    .filter(sem => sem === 1 || sem === 2);
+  const allOfferingTerms = [...new Set((unit.offerings ?? []).map(o => o.offered_in))].sort((a, b) => a - b);
+  // The scheduler only cycles semesters 1 and 2. A unit offered only in summer (3)
+  // or winter (4) keeps its terms in allOfferingTerms so it is reported, not placed.
+  const offeringSemesters = allOfferingTerms.filter((term): term is 1 | 2 => term === 1 || term === 2);
 
-  return { code: unit.unit_code, name: unit.unit_name, category, offeringSemesters, requisiteGroups };
+  return { code: unit.unit_code, name: unit.unit_name, category, offeringSemesters, allOfferingTerms, requisiteGroups };
 }
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { plannerId, completedUnitCodes, startYear, startSemester, injectedMinorIds } = body;
+    const {
+      plannerId, completedUnitCodes, startYear, startSemester, injectedMinorIds,
+      concededPassUnitCodes, config,
+    } = body;
 
     if (
       !plannerId ||
@@ -49,6 +54,18 @@ export async function POST(req: NextRequest) {
       (startSemester !== 1 && startSemester !== 2)
     ) {
       return NextResponse.json({ error: 'Invalid request parameters' }, { status: 400 });
+    }
+
+    const configCheck = validateSchedulerConfig(config);
+    if (!configCheck.ok) {
+      return NextResponse.json({ error: `Invalid scheduler config: ${configCheck.error}` }, { status: 400 });
+    }
+
+    if (
+      concededPassUnitCodes !== undefined &&
+      !(Array.isArray(concededPassUnitCodes) && concededPassUnitCodes.every((c: unknown) => typeof c === 'string'))
+    ) {
+      return NextResponse.json({ error: 'concededPassUnitCodes must be an array of unit codes' }, { status: 400 });
     }
 
     const planner = await prisma.plannerTemplate.findUnique({
@@ -73,6 +90,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Planner not found' }, { status: 404 });
     }
 
+    if (planner.intake_month == null) {
+      console.warn(`[custom-planner] planner ${plannerId} has no intake_month, assuming a Feb/Mar intake`);
+    }
+    const intakeSemester: 1 | 2 = (planner.intake_month ?? 1) >= 7 ? 2 : 1;
+
     const normalizedCompleted = new Set(
       (completedUnitCodes as string[]).map((c) => c.trim().toUpperCase())
     );
@@ -80,7 +102,7 @@ export async function POST(req: NextRequest) {
     // The core pool is all planner units the student has not yet completed/enrolled in
     const remainingUnits: SchedulableUnit[] = planner.units
       .filter((tu) => tu.unit !== null && !normalizedCompleted.has(tu.unit.unit_code.toUpperCase()))
-      .map((tu) => toSchedulable(tu.unit!, String(tu.category)));
+      .map((tu) => mapUnitToSchedulable(tu.unit!, String(tu.category)));
 
     // Minor injection
     const minorIds: string[] = Array.isArray(injectedMinorIds) ? injectedMinorIds : [];
@@ -112,7 +134,7 @@ export async function POST(req: NextRequest) {
         for (const mu of minor.units) {
           const code = mu.unit.unit_code.toUpperCase();
           if (poolCodes.has(code)) continue;
-          remainingUnits.push(toSchedulable(mu.unit, 'minor'));
+          remainingUnits.push(mapUnitToSchedulable(mu.unit, 'minor'));
           poolCodes.add(code);
         }
       }
@@ -122,7 +144,10 @@ export async function POST(req: NextRequest) {
       remainingUnits,
       completedUnitCodes as string[],
       startYear as number,
-      startSemester as 1 | 2
+      startSemester as 1 | 2,
+      intakeSemester,
+      (concededPassUnitCodes as string[] | undefined) ?? [],
+      configCheck.config
     );
 
     return NextResponse.json({ success: true, data: result });
