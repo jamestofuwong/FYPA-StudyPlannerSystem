@@ -3,6 +3,7 @@ import { routeAndExtract } from '../../../../../core/services/copilot/copilotSer
 import { formatResponse } from '../../../../../core/services/copilot/responseFormatter';
 import { workflowRegistry, allWorkflows } from '../../../../../core/services/copilot/workflowRegistry';
 import { ollamaStore } from '../../ollama/store';
+import { getStatus } from '../../../../../core/services/portal/portalSessionService';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -96,6 +97,15 @@ export async function POST(req: Request) {
         const stillMissing = validateParams(workflow, route.params);
         if (stillMissing.length > 0) {
           emit({ type: 'reply', content: `I need a bit more information to continue. Could you provide: ${stillMissing.join(', ')}?` });
+          controller.close();
+          return;
+        }
+
+        // ── Portal session check ────────────────────────────────────────────
+        // Workflows that include a studentId param require live portal data.
+        const needsPortal = workflow.params.some((p) => p.name === 'studentId');
+        if (needsPortal && getStatus().sessionStatus !== 'logged-in') {
+          emit({ type: 'reply', content: 'This requires access to the student portal. Please log in to the portal first, then try again.' });
           controller.close();
           return;
         }
