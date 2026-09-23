@@ -74,14 +74,15 @@ model UnitRequisiteGroup {
 }
 
 model UnitRequisiteCondition {
-  id             String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  group_id       String             @db.Uuid
-  group          UnitRequisiteGroup @relation(fields: [group_id], references: [id], onDelete: Cascade)
-  type           String             @db.VarChar(20)
-  unit_id        String?            @db.Uuid
-  unit           Unit?              @relation("RequisiteUnit", fields: [unit_id], references: [id], onDelete: Cascade)
-  credit_points  Decimal?           @db.Decimal(5, 1)
-  requisite_type String?            @db.VarChar(20)
+  id                 String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  group_id           String             @db.Uuid
+  group              UnitRequisiteGroup @relation(fields: [group_id], references: [id], onDelete: Cascade)
+  type               String             @db.VarChar(20)
+  unit_id            String?            @db.Uuid
+  unit               Unit?              @relation("RequisiteUnit", fields: [unit_id], references: [id], onDelete: Cascade)
+  credit_points      Decimal?           @db.Decimal(5, 1)
+  requisite_type     String?            @db.VarChar(20)
+  external_requisite String?            @db.VarChar(255)
 
   @@map("unit_requisite_conditions")
 }

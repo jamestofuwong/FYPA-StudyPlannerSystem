@@ -644,7 +644,8 @@ export async function savePlannerFromImport(planner: PlannerImportPlanner) {
                 ? unitByCode.get(cond.unit_code)?.id ?? null
                 : null,
               credit_points: cond.type === 'credit_points' ? cond.credit_points ?? null : null,
-              requisite_type: cond.requisite_type ?? null,
+              external_requisite: cond.type === 'external' ? (cond as any).external_requisite ?? null : null, // 👈 PASS THIS
+              requisite_type: cond.type === 'credit_points' ? null : (cond.requisite_type ?? null),
             },
           });
         }
@@ -711,6 +712,7 @@ export async function exportPlannerAsImport(templateId: string): Promise<Planner
           type: c.type,
           unit: c.unit ? { unit_code: c.unit.unit_code } : null,
           credit_points: c.credit_points != null ? Number(c.credit_points) : null,
+          external_requisite: c.external_requisite ?? null,
           requisite_type: c.requisite_type ?? null,
         })),
       })) ?? null,
@@ -731,6 +733,7 @@ export async function exportPlannerAsImport(templateId: string): Promise<Planner
           type: c.type,
           unit: c.unit ? { unit_code: c.unit.unit_code } : null,
           credit_points: c.credit_points != null ? Number(c.credit_points) : null,
+          external_requisite: c.external_requisite ?? null,
           requisite_type: c.requisite_type ?? null,
         })),
       })) ?? null,

@@ -66,14 +66,17 @@ function formatRequisites(requisites: any): string {
         g.conditions.map((c: any) => {
             // Format credit points
             if (c.type === 'credit_points') return `${c.credit_points}cp`;
-            // Add prefix if co/anti, else just the unit code
-            const prefix = c.requisite_type === 'corequisite' ? 'Co: ' :
-                            c.requisite_type === 'antirequisite' ? 'Anti: ' : '';
-            return `${prefix}${c.unit?.unit_code || '?'}`;
-        }).join(' & ')
-    ).join(' / ');
-}
 
+            // Format external qualification (e.g. "VCE Maths or equivalent") 👈 ADD THIS!
+            if (c.type === 'external') return c.external_requisite || 'External Requirement';
+
+            // Normal unit code
+            const prefix = c.requisite_type === 'corequisite' ? 'Co: ' :
+                           c.requisite_type === 'antirequisite' ? 'Anti: ' : '';
+            return `${prefix}${c.unit?.unit_code || c.unit_code || '?'}`;
+        }).filter(Boolean).join(' & ')
+    ).filter(Boolean).join(' / ');
+}
 function formatOfferings(offered_in: any): string {
   if (!offered_in) return '-';
   if (Array.isArray(offered_in)) {
