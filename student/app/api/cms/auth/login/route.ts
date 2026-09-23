@@ -8,8 +8,8 @@ import {
   refreshExpiresAt,
   ACCESS_COOKIE,
   REFRESH_COOKIE,
-  ACCESS_MAX_AGE,
-  REFRESH_MAX_AGE,
+  ACCESS_COOKIE_OPTIONS,
+  REFRESH_COOKIE_OPTIONS,
 } from '@/lib/cms/auth'
 
 export async function POST(req: NextRequest) {
@@ -40,17 +40,7 @@ export async function POST(req: NextRequest) {
   })
 
   const res = NextResponse.json({ ok: true })
-  res.cookies.set(ACCESS_COOKIE, accessToken, {
-    httpOnly: true,
-    sameSite: 'lax',
-    path: '/',
-    maxAge: ACCESS_MAX_AGE,
-  })
-  res.cookies.set(REFRESH_COOKIE, refreshToken, {
-    httpOnly: true,
-    sameSite: 'lax',
-    path: '/',
-    maxAge: REFRESH_MAX_AGE,
-  })
+  res.cookies.set(ACCESS_COOKIE, accessToken, ACCESS_COOKIE_OPTIONS)
+  res.cookies.set(REFRESH_COOKIE, refreshToken, REFRESH_COOKIE_OPTIONS)
   return res
 }

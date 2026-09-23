@@ -7,6 +7,24 @@ export const REFRESH_COOKIE = 'cms_refresh'
 export const ACCESS_MAX_AGE = 15 * 60        // 15 minutes
 export const REFRESH_MAX_AGE = 7 * 24 * 60 * 60 // 7 days
 
+const IS_PRODUCTION = process.env.NODE_ENV === 'production'
+
+export const ACCESS_COOKIE_OPTIONS = {
+  httpOnly: true,
+  sameSite: 'lax' as const,
+  path: '/',
+  maxAge: ACCESS_MAX_AGE,
+  secure: IS_PRODUCTION,
+}
+
+export const REFRESH_COOKIE_OPTIONS = {
+  httpOnly: true,
+  sameSite: 'lax' as const,
+  path: '/',
+  maxAge: REFRESH_MAX_AGE,
+  secure: IS_PRODUCTION,
+}
+
 export interface JwtPayload {
   sub: string
   email: string
