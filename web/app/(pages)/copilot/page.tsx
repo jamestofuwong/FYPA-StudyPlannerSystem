@@ -209,6 +209,8 @@ export default function CopilotPage() {
     updateMessages(activeId, next);
     setInput('');
     setLoading(true);
+    setElapsed(0);
+    elapsedRef.current = setInterval(() => setElapsed((s) => s + 1), 1000);
 
     const nonWelcome = next.filter((_, i) => i > 0);
     const windowed = nonWelcome.slice(-WINDOW_SIZE);
@@ -256,7 +258,9 @@ export default function CopilotPage() {
       setStatusMessage(null);
       setStreamingContent(null);
     } finally {
+      if (elapsedRef.current) { clearInterval(elapsedRef.current); elapsedRef.current = null; }
       setLoading(false);
+      setElapsed(0);
       inputRef.current?.focus();
     }
   }
@@ -374,7 +378,7 @@ export default function CopilotPage() {
                     ) : statusMessage ? (
                       <div className={styles.statusLine}>
                         <span className={styles.statusDot} />
-                        <span className={styles.statusText}>{statusMessage}</span>
+                        <span className={styles.statusText}>{statusMessage}{elapsed > 0 ? ` ${elapsed}s` : ''}</span>
                       </div>
                     ) : (
                       <div className={styles.typingIndicator}>
