@@ -196,6 +196,7 @@ export async function routeAndExtract(
   try {
     rawId = await callOllama(routingPrompt);
   } catch (err) {
+    console.error('[Copilot] Ollama routing call failed:', err);
     throw new Error(`Ollama routing call failed: ${err}`);
   }
 
@@ -218,7 +219,7 @@ export async function routeAndExtract(
 
   // Step 3: Extract params via regex
   const { params, missingParams } = extractParamsRegex(lastUserMessage, workflow);
-  console.log('[Copilot] Extracted params:', JSON.stringify(params), '| missing:', missingParams);
+  console.log('[Copilot] Extracted params:', Object.keys(params).join(', ') || '(none)', '| missing:', missingParams);
 
   return {
     canHandle: true,

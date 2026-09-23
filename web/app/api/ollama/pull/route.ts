@@ -67,7 +67,7 @@ export async function POST() {
   ollamaStore.pullError = null;
 
   // Fire-and-forget — progress tracked in ollamaStore
-  runPull().catch(console.error);
+  runPull().catch((err) => console.error('[Ollama] runPull threw unexpectedly:', err));
 
   return NextResponse.json({ started: true, message: `Pulling ${OLLAMA_MODEL}...` });
 }

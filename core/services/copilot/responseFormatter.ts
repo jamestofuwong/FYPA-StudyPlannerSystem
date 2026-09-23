@@ -30,10 +30,12 @@ ${JSON.stringify(data, null, 2)}`;
   });
 
   if (!response.ok) {
+    console.error('[Copilot] Ollama stream request failed: HTTP', response.status);
     throw new Error(`Ollama returned ${response.status}`);
   }
 
   if (!response.body) {
+    console.error('[Copilot] Ollama response had no body: HTTP', response.status);
     throw new Error('No response body from Ollama');
   }
 
@@ -42,48 +44,53 @@ ${JSON.stringify(data, null, 2)}`;
   let thinkBuffer = '';
   let inThink = false;
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
 
-    const lines = decoder.decode(value, { stream: true }).split('\n');
-    for (const line of lines) {
-      if (!line.trim()) continue;
-      try {
-        const chunk = JSON.parse(line) as { message?: { content?: string }; done?: boolean };
-        const token = chunk.message?.content ?? '';
-        if (!token) continue;
+      const lines = decoder.decode(value, { stream: true }).split('\n');
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const chunk = JSON.parse(line) as { message?: { content?: string }; done?: boolean };
+          const token = chunk.message?.content ?? '';
+          if (!token) continue;
 
-        // Strip <think>…</think> spans that span multiple tokens
-        if (inThink) {
-          thinkBuffer += token;
-          const end = thinkBuffer.indexOf('</think>');
-          if (end !== -1) {
-            thinkBuffer = '';
-            inThink = false;
+          // Strip <think>…</think> spans that span multiple tokens
+          if (inThink) {
+            thinkBuffer += token;
+            const end = thinkBuffer.indexOf('</think>');
+            if (end !== -1) {
+              thinkBuffer = '';
+              inThink = false;
+            }
+            continue;
           }
-          continue;
-        }
 
-        const combined = token;
-        const startIdx = combined.indexOf('<think>');
-        if (startIdx !== -1) {
-          const before = combined.slice(0, startIdx);
-          if (before) yield before;
-          thinkBuffer = combined.slice(startIdx + 7);
-          inThink = true;
-          const end = thinkBuffer.indexOf('</think>');
-          if (end !== -1) {
-            thinkBuffer = '';
-            inThink = false;
+          const combined = token;
+          const startIdx = combined.indexOf('<think>');
+          if (startIdx !== -1) {
+            const before = combined.slice(0, startIdx);
+            if (before) yield before;
+            thinkBuffer = combined.slice(startIdx + 7);
+            inThink = true;
+            const end = thinkBuffer.indexOf('</think>');
+            if (end !== -1) {
+              thinkBuffer = '';
+              inThink = false;
+            }
+            continue;
           }
-          continue;
-        }
 
-        yield token;
-      } catch {
-        // Partial JSON line — ignore
+          yield token;
+        } catch {
+          // Partial JSON line — ignore
+        }
       }
     }
+  } catch (err) {
+    console.error('[Copilot] Stream read error from Ollama:', err);
+    throw err;
   }
 }

@@ -66,14 +66,25 @@ export async function POST(req: Request) {
         // ── Phase 1: Route & Extract ────────────────────────────────────────
         emit({ type: 'status', message: 'Thinking…' });
 
+        // If the model is cold (not yet loaded in memory), the first Ollama
+        // call can stall for several seconds. Emit a dedicated message after
+        // 3 s so the user knows the app hasn't frozen.
+        const coldStartTimer = setTimeout(
+          () => emit({ type: 'status', message: 'Warming up AI model…' }),
+          3000,
+        );
+
         let route;
         try {
           route = await routeAndExtract(messages, allWorkflows);
-        } catch {
+        } catch (err) {
+          clearTimeout(coldStartTimer);
+          console.error('[Copilot] routeAndExtract failed:', err);
           emit({ type: 'reply', content: 'The AI service is currently unavailable. Make sure Ollama is running and the model is ready.' });
           controller.close();
           return;
         }
+        clearTimeout(coldStartTimer);
 
         if (!route.canHandle) {
           emit({ type: 'reply', content: CANNOT_HANDLE });
@@ -116,6 +127,7 @@ export async function POST(req: Request) {
         const result = await workflow.execute(route.params, ctx);
 
         if (!result.ok) {
+          console.warn(`[Copilot] Workflow "${route.workflowId}" returned error:`, result.error);
           emit({ type: 'reply', content: `I wasn't able to complete that. ${result.error}` });
           controller.close();
           return;
@@ -131,11 +143,13 @@ export async function POST(req: Request) {
             emit({ type: 'token', content: token });
           }
           emit({ type: 'reply', content: full, workflowId: route.workflowId });
-        } catch {
+        } catch (err) {
+          console.error(`[Copilot] streamResponse failed for workflow "${route.workflowId}":`, err);
           emit({ type: 'reply', content: `Here is what I found:\n\`\`\`\n${JSON.stringify(result.data, null, 2)}\n\`\`\``, workflowId: route.workflowId });
         }
         controller.close();
-      } catch {
+      } catch (err) {
+        console.error('[Copilot] Unhandled error in chat stream:', err);
         emit({ type: 'reply', content: 'An unexpected error occurred. Please try again.' });
         controller.close();
       }
