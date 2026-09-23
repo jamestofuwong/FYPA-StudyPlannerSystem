@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '../../../../core/db/client';
 import {
   buildCustomPlan,
+  validateSchedulerConfig,
   type SchedulableUnit,
   type RequisiteCondition,
 } from '../../../../core/services/scheduling/customPlannerScheduler';
@@ -31,18 +32,21 @@ function toSchedulable(
     )
     .filter((g: RequisiteCondition[]) => g.length > 0);
 
-  // Terms 3 (summer) and 4 (winter) are dropped because the scheduler only cycles semesters 1 and 2
-  const offeringSemesters = (unit.offerings ?? [])
-    .map(o => o.offered_in as 1 | 2)
-    .filter(sem => sem === 1 || sem === 2);
+  const allOfferingTerms = [...new Set((unit.offerings ?? []).map(o => o.offered_in))].sort((a, b) => a - b);
+  // The scheduler only cycles semesters 1 and 2. A unit offered only in summer (3)
+  // or winter (4) keeps its terms in allOfferingTerms so it is reported, not placed.
+  const offeringSemesters = allOfferingTerms.filter((term): term is 1 | 2 => term === 1 || term === 2);
 
-  return { code: unit.unit_code, name: unit.unit_name, category, offeringSemesters, requisiteGroups };
+  return { code: unit.unit_code, name: unit.unit_name, category, offeringSemesters, allOfferingTerms, requisiteGroups };
 }
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { plannerId, completedUnitCodes, startYear, startSemester, injectedMinorIds } = body;
+    const {
+      plannerId, completedUnitCodes, startYear, startSemester, injectedMinorIds,
+      concededPassUnitCodes, config,
+    } = body;
 
     if (
       !plannerId ||
@@ -50,6 +54,18 @@ export async function POST(req: NextRequest) {
       (startSemester !== 1 && startSemester !== 2)
     ) {
       return NextResponse.json({ error: 'Invalid request parameters' }, { status: 400 });
+    }
+
+    const configCheck = validateSchedulerConfig(config);
+    if (!configCheck.ok) {
+      return NextResponse.json({ error: `Invalid scheduler config: ${configCheck.error}` }, { status: 400 });
+    }
+
+    if (
+      concededPassUnitCodes !== undefined &&
+      !(Array.isArray(concededPassUnitCodes) && concededPassUnitCodes.every((c: unknown) => typeof c === 'string'))
+    ) {
+      return NextResponse.json({ error: 'concededPassUnitCodes must be an array of unit codes' }, { status: 400 });
     }
 
     const planner = await prisma.plannerTemplate.findUnique({
@@ -129,7 +145,9 @@ export async function POST(req: NextRequest) {
       completedUnitCodes as string[],
       startYear as number,
       startSemester as 1 | 2,
-      intakeSemester
+      intakeSemester,
+      (concededPassUnitCodes as string[] | undefined) ?? [],
+      configCheck.config
     );
 
     return NextResponse.json({ success: true, data: result });

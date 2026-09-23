@@ -2,17 +2,34 @@
 // students who need more time than the standard template.
 //
 // Rules:
-//  - Max 4 standard units per semester
-//  - Max 1 MPU unit per semester
+//  - Standard and MPU units per semester are capped (SchedulerConfig)
 //  - Requisites must be satisfied before/alongside a unit
+//  - A Conceded Pass counts as taken and earns credit, but cannot satisfy a
+//    prerequisite or corequisite (Swinburne Conceded Pass form, May 2023)
 //  - Units are only placed in semesters they are offered in, per their
 //    unit_offerings rows (calendar terms). A unit with no rows is
 //    available in any semester.
+//  - Only semesters 1 and 2 are scheduled. A unit offered solely in summer
+//    or winter is reported, never placed in an ordinary semester.
+//
+// Pure function: no database, clock or globals. Anything it cannot place is
+// returned in unschedulableUnits with a warning saying why.
 
-const MAX_STANDARD_PER_SEM = 4;
-const MAX_MPU_PER_SEM = 1;
-const MAX_SEMESTERS = 20;
-const CREDIT_POINTS_PER_UNIT = 12.5;
+export interface SchedulerConfig {
+  maxStandardPerSemester: number;
+  maxMpuPerSemester: number;
+  maxSemesters: number;
+  creditPointsPerUnit: number;
+  /** Per-semester overrides of maxStandardPerSemester, keyed "year-semester", e.g. "3-1": 5 */
+  perSemesterOverrides?: Record<string, number>;
+}
+
+export const DEFAULT_SCHEDULER_CONFIG: SchedulerConfig = {
+  maxStandardPerSemester: 4,
+  maxMpuPerSemester: 1,
+  maxSemesters: 20,
+  creditPointsPerUnit: 12.5,
+};
 
 export interface RequisiteCondition {
   type: 'unit' | 'credit_points';
@@ -26,7 +43,14 @@ export interface SchedulableUnit {
   code: string;
   name: string;
   category: string;
+  /** The placeable subset of the unit's offering terms. Empty means no restriction. */
   offeringSemesters: (1 | 2)[];
+  /**
+   * Raw offering terms from unit_offerings, 1-4. Empty means no data recorded.
+   * Callers that predate this field may omit it, in which case offeringSemesters
+   * is taken as the full list.
+   */
+  allOfferingTerms?: number[];
 
   requisiteGroups: RequisiteCondition[][];
 }
@@ -43,9 +67,112 @@ export interface CustomSemesterBucket {
   units: ScheduledUnit[];
 }
 
+export type PlanWarning =
+  | {
+      kind: 'requisite_violation';
+      unitCode: string;
+      /** Prerequisite or corequisite codes that were never satisfied. */
+      missing: string[];
+      /** The subset of missing held only as a Conceded Pass. */
+      concededPass?: string[];
+      /** Antirequisites already taken, which rule this unit out. */
+      conflictsWith?: string[];
+      /** Credit points required that the plan can never reach. */
+      creditPointsNeeded?: number;
+    }
+  | { kind: 'not_offered'; unitCode: string; offeringTerms: number[] }
+  | { kind: 'no_offering_data'; unitCode: string }
+  | { kind: 'short_term_only'; unitCode: string; offeringTerms: number[] }
+  | { kind: 'budget_exhausted'; unitCodes: string[] }
+  /** limit is the student's normal load: the configured cap, never above the standard full-time load. */
+  | { kind: 'over_capacity'; year: number; semester: 1 | 2; count: number; limit: number };
+
 export interface CustomPlanResult {
   semesters: CustomSemesterBucket[];
+  /** Kept for compatibility. warnings says why each one was not placed. */
   unschedulableUnits: ScheduledUnit[];
+  warnings: PlanWarning[];
+}
+
+type ConfigValidation =
+  | { ok: true; config: Partial<SchedulerConfig> }
+  | { ok: false; error: string };
+
+const CONFIG_KEYS: ReadonlySet<string> = new Set([
+  'maxStandardPerSemester',
+  'maxMpuPerSemester',
+  'maxSemesters',
+  'creditPointsPerUnit',
+  'perSemesterOverrides',
+]);
+
+const MAX_SEMESTERS_LIMIT = 40;
+const OVERRIDE_KEY = /^\d{1,4}-[12]$/;
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isPositiveInteger(value: unknown): value is number {
+  return Number.isInteger(value) && (value as number) >= 1;
+}
+
+/**
+ * Checks an untrusted config (e.g. from a request body). Unknown fields are
+ * rejected rather than ignored so a typo cannot silently fall back to a default.
+ */
+export function validateSchedulerConfig(input: unknown): ConfigValidation {
+  if (input === undefined || input === null) return { ok: true, config: {} };
+  if (!isPlainObject(input)) return { ok: false, error: 'config must be an object' };
+
+  for (const key of Object.keys(input)) {
+    if (!CONFIG_KEYS.has(key)) return { ok: false, error: `config.${key} is not a recognised field` };
+  }
+
+  const { maxStandardPerSemester, maxMpuPerSemester, maxSemesters, creditPointsPerUnit, perSemesterOverrides } = input;
+
+  if (maxStandardPerSemester !== undefined && !isPositiveInteger(maxStandardPerSemester)) {
+    return { ok: false, error: 'config.maxStandardPerSemester must be a positive integer' };
+  }
+  if (maxMpuPerSemester !== undefined && !isPositiveInteger(maxMpuPerSemester)) {
+    return { ok: false, error: 'config.maxMpuPerSemester must be a positive integer' };
+  }
+  if (
+    maxSemesters !== undefined &&
+    !(isPositiveInteger(maxSemesters) && maxSemesters <= MAX_SEMESTERS_LIMIT)
+  ) {
+    return { ok: false, error: `config.maxSemesters must be an integer from 1 to ${MAX_SEMESTERS_LIMIT}` };
+  }
+  if (
+    creditPointsPerUnit !== undefined &&
+    !(typeof creditPointsPerUnit === 'number' && Number.isFinite(creditPointsPerUnit) && creditPointsPerUnit > 0)
+  ) {
+    return { ok: false, error: 'config.creditPointsPerUnit must be a number greater than 0' };
+  }
+  if (perSemesterOverrides !== undefined) {
+    if (!isPlainObject(perSemesterOverrides)) {
+      return { ok: false, error: 'config.perSemesterOverrides must be an object' };
+    }
+    for (const [key, value] of Object.entries(perSemesterOverrides)) {
+      if (!OVERRIDE_KEY.test(key)) {
+        return { ok: false, error: `config.perSemesterOverrides key "${key}" must be "year-semester", e.g. "3-1"` };
+      }
+      if (!isPositiveInteger(value)) {
+        return { ok: false, error: `config.perSemesterOverrides["${key}"] must be a positive integer` };
+      }
+    }
+  }
+
+  return { ok: true, config: input as Partial<SchedulerConfig> };
+}
+
+function normaliseCode(code: string): string {
+  return code.trim().toUpperCase();
+}
+
+function offeringTermsOf(unit: SchedulableUnit): number[] {
+  const terms = unit.allOfferingTerms ?? unit.offeringSemesters;
+  return [...new Set(terms)].sort((a, b) => a - b);
 }
 
 export function buildCustomPlan(
@@ -53,41 +180,63 @@ export function buildCustomPlan(
   completedUnitCodes: string[],
   startYear: number,
   startSemester: 1 | 2,
-  intakeSemester: 1 | 2 = 1
+  intakeSemester: 1 | 2 = 1,
+  concededPassUnitCodes: string[] = [],
+  config: Partial<SchedulerConfig> = DEFAULT_SCHEDULER_CONFIG
 ): CustomPlanResult {
-  const completed = new Set(completedUnitCodes.map((c) => c.trim().toUpperCase()));
-  const pool: SchedulableUnit[] = [...remainingUnits];
+  const cfg: SchedulerConfig = { ...DEFAULT_SCHEDULER_CONFIG, ...config };
+  const normalLoad = Math.min(cfg.maxStandardPerSemester, DEFAULT_SCHEDULER_CONFIG.maxStandardPerSemester);
+
+  const concededPass = new Set(concededPassUnitCodes.map(normaliseCode));
+  // A Conceded Pass is still a completed unit, even if the caller only listed it once
+  const completed = new Set([...completedUnitCodes.map(normaliseCode), ...concededPass]);
+
+  const warnings: PlanWarning[] = [];
+  const unplaceable = new Set<SchedulableUnit>();
+  const pool: SchedulableUnit[] = [];
+  for (const unit of remainingUnits) {
+    const terms = offeringTermsOf(unit);
+    if (terms.length > 0 && unit.offeringSemesters.length === 0) {
+      unplaceable.add(unit);
+      warnings.push({ kind: 'short_term_only', unitCode: unit.code, offeringTerms: terms });
+    } else {
+      pool.push(unit);
+    }
+  }
+
   const semesters: CustomSemesterBucket[] = [];
 
   let currentYear = startYear;
   let currentSem: 1 | 2 = startSemester;
   let consecutiveIdle = 0;
+  let blocked = false;
 
-  for (let i = 0; i < MAX_SEMESTERS && pool.length > 0; i++) {
-    const totalCredits = completed.size * CREDIT_POINTS_PER_UNIT;
+  for (let i = 0; i < cfg.maxSemesters && pool.length > 0; i++) {
+    const totalCredits = completed.size * cfg.creditPointsPerUnit;
     // currentSem counts from the student's intake; offerings are calendar terms
     const calendarTerm: 1 | 2 = intakeSemester === 1 ? currentSem : (currentSem === 1 ? 2 : 1);
-
+    const standardLimit = cfg.perSemesterOverrides?.[`${currentYear}-${currentSem}`] ?? cfg.maxStandardPerSemester;
 
     const bucketCodes = new Set<string>();
     const toPlace: SchedulableUnit[] = [];
 
+    // Repeats so a corequisite placed later in the pass can unlock an earlier unit
     let changed = true;
     while (changed) {
       changed = false;
       for (const unit of pool) {
-        if (bucketCodes.has(unit.code.toUpperCase())) continue;
+        if (bucketCodes.has(normaliseCode(unit.code))) continue;
 
         const isMpu = unit.category === 'mpu';
         const standardCount = toPlace.filter((u) => u.category !== 'mpu').length;
         const mpuCount = toPlace.filter((u) => u.category === 'mpu').length;
 
-        if (isMpu && mpuCount >= MAX_MPU_PER_SEM) continue;
-        if (!isMpu && standardCount >= MAX_STANDARD_PER_SEM) continue;
+        if (isMpu && mpuCount >= cfg.maxMpuPerSemester) continue;
+        if (!isMpu && standardCount >= standardLimit) continue;
 
-        if (canTake(unit, calendarTerm, completed, bucketCodes, totalCredits)) {
+        if (canTake(unit, calendarTerm, completed, concededPass, bucketCodes, totalCredits)) {
           toPlace.push(unit);
-          bucketCodes.add(unit.code.toUpperCase());
+          bucketCodes.add(normaliseCode(unit.code));
           changed = true;
         }
       }
@@ -95,18 +244,35 @@ export function buildCustomPlan(
 
     if (toPlace.length === 0) {
       consecutiveIdle++;
-      if (consecutiveIdle >= 2) break;
+      if (consecutiveIdle >= 2) {
+        blocked = true;
+        break;
+      }
     } else {
       consecutiveIdle = 0;
       for (const unit of toPlace) {
-        completed.add(unit.code.toUpperCase());
+        completed.add(normaliseCode(unit.code));
         pool.splice(pool.indexOf(unit), 1);
+        if (offeringTermsOf(unit).length === 0) {
+          warnings.push({ kind: 'no_offering_data', unitCode: unit.code });
+        }
       }
       semesters.push({
         year: currentYear,
         semester: currentSem,
         units: toPlace.map((u) => ({ code: u.code, name: u.name, category: u.category })),
       });
+
+      const standardPlaced = toPlace.filter((u) => u.category !== 'mpu').length;
+      if (standardPlaced > normalLoad) {
+        warnings.push({
+          kind: 'over_capacity',
+          year: currentYear,
+          semester: currentSem,
+          count: standardPlaced,
+          limit: normalLoad,
+        });
+      }
     }
 
     if (currentSem === 1) {
@@ -117,9 +283,26 @@ export function buildCustomPlan(
     }
   }
 
+  if (pool.length > 0) {
+    const pooledCodes = new Set(pool.map((u) => normaliseCode(u.code)));
+    const outOfTime: string[] = [];
+    for (const unit of pool) {
+      unplaceable.add(unit);
+      const reason = explainUnplaced(unit, blocked, completed, concededPass, pooledCodes, cfg.creditPointsPerUnit);
+      if (reason) warnings.push(reason);
+      else outOfTime.push(unit.code);
+    }
+    if (outOfTime.length > 0) {
+      warnings.push({ kind: 'budget_exhausted', unitCodes: outOfTime });
+    }
+  }
+
   return {
     semesters,
-    unschedulableUnits: pool.map((u) => ({ code: u.code, name: u.name, category: u.category })),
+    unschedulableUnits: remainingUnits
+      .filter((u) => unplaceable.has(u))
+      .map((u) => ({ code: u.code, name: u.name, category: u.category })),
+    warnings,
   };
 }
 
@@ -127,19 +310,23 @@ function canTake(
   unit: SchedulableUnit,
   calendarTerm: 1 | 2,
   completed: Set<string>,
+  concededPass: Set<string>,
   bucketCodes: Set<string>,
   totalCredits: number
 ): boolean {
   if (unit.offeringSemesters.length > 0 && !unit.offeringSemesters.includes(calendarTerm)) return false;
   if (unit.requisiteGroups.length === 0) return true;
   return unit.requisiteGroups.some((group) =>
-    group.every((condition) => isConditionSatisfied(condition, completed, bucketCodes, totalCredits))
+    group.every((condition) =>
+      isConditionSatisfied(condition, completed, concededPass, bucketCodes, totalCredits)
+    )
   );
 }
 
 function isConditionSatisfied(
   condition: RequisiteCondition,
   completed: Set<string>,
+  concededPass: Set<string>,
   bucketCodes: Set<string>,
   totalCredits: number
 ): boolean {
@@ -148,17 +335,115 @@ function isConditionSatisfied(
   }
 
   if (condition.type === 'unit' && condition.unitCode) {
-    const code = condition.unitCode.toUpperCase();
+    const code = normaliseCode(condition.unitCode);
+    const satisfiesRequisite = completed.has(code) && !concededPass.has(code);
     switch (condition.requisiteType) {
       case 'corequisite':
-        return completed.has(code) || bucketCodes.has(code);
+        return satisfiesRequisite || bucketCodes.has(code);
       case 'antirequisite':
+        // A Conceded Pass still counts as having taken the unit
         return !completed.has(code) && !bucketCodes.has(code);
       case 'prerequisite':
       default:
-        return completed.has(code);
+        return satisfiesRequisite;
     }
   }
 
   return false;
+}
+
+type GroupAssessment = {
+  impossible: boolean;
+  missing: string[];
+  concededPass: string[];
+  conflictsWith: string[];
+  creditPointsNeeded?: number;
+  /** Codes still in the unplaced pool that this group waits on. */
+  waitingOn: string[];
+};
+
+/**
+ * Why a unit was left in the pool. Returns null when nothing rules it out,
+ * meaning it only ran out of semesters. A condition counts as impossible when
+ * nothing left in the plan could ever satisfy it: the required unit is neither
+ * completed nor pooled, is held only as a Conceded Pass, an antirequisite is
+ * already taken, or the reachable credit total falls short.
+ */
+function explainUnplaced(
+  unit: SchedulableUnit,
+  blocked: boolean,
+  completed: Set<string>,
+  concededPass: Set<string>,
+  pooledCodes: Set<string>,
+  creditPointsPerUnit: number
+): PlanWarning | null {
+  const ownCode = normaliseCode(unit.code);
+  const reachableCredits = (completed.size + pooledCodes.size - (pooledCodes.has(ownCode) ? 1 : 0)) * creditPointsPerUnit;
+
+  const assessments: GroupAssessment[] = unit.requisiteGroups.map((group) => {
+    const a: GroupAssessment = { impossible: false, missing: [], concededPass: [], conflictsWith: [], waitingOn: [] };
+    for (const condition of group) {
+      if (condition.type === 'credit_points') {
+        const needed = condition.creditPoints ?? 0;
+        if (reachableCredits < needed) {
+          a.impossible = true;
+          a.creditPointsNeeded = needed;
+        }
+        continue;
+      }
+      if (condition.type !== 'unit' || !condition.unitCode) {
+        a.impossible = true;
+        continue;
+      }
+      const code = normaliseCode(condition.unitCode);
+      if (condition.requisiteType === 'antirequisite') {
+        if (completed.has(code)) {
+          a.impossible = true;
+          a.conflictsWith.push(code);
+        }
+        continue;
+      }
+      if (concededPass.has(code)) {
+        a.impossible = true;
+        a.missing.push(code);
+        a.concededPass.push(code);
+      } else if (completed.has(code)) {
+        continue;
+      } else if (pooledCodes.has(code)) {
+        a.waitingOn.push(code);
+      } else {
+        a.impossible = true;
+        a.missing.push(code);
+      }
+    }
+    return a;
+  });
+
+  const toWarning = (a: GroupAssessment, missing: string[]): PlanWarning => ({
+    kind: 'requisite_violation',
+    unitCode: unit.code,
+    missing,
+    ...(a.concededPass.length > 0 ? { concededPass: a.concededPass } : {}),
+    ...(a.conflictsWith.length > 0 ? { conflictsWith: a.conflictsWith } : {}),
+    ...(a.creditPointsNeeded !== undefined ? { creditPointsNeeded: a.creditPointsNeeded } : {}),
+  });
+
+  const problemSize = (a: GroupAssessment) =>
+    a.missing.length + a.conflictsWith.length + (a.creditPointsNeeded !== undefined ? 1 : 0);
+
+  if (assessments.length > 0 && assessments.every((a) => a.impossible)) {
+    // Report the alternative closest to being satisfiable
+    const best = [...assessments].sort((x, y) => problemSize(x) - problemSize(y))[0];
+    return toWarning(best, best.missing);
+  }
+
+  if (!blocked) return null;
+
+  // Stalled, but only behind other unplaced units: name the ones it waits on
+  const waiting = assessments
+    .filter((a) => !a.impossible && a.waitingOn.length > 0)
+    .sort((x, y) => x.waitingOn.length - y.waitingOn.length)[0];
+  if (waiting) return toWarning(waiting, waiting.waitingOn);
+
+  return { kind: 'not_offered', unitCode: unit.code, offeringTerms: offeringTermsOf(unit) };
 }
