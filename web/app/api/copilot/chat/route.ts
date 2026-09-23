@@ -1,4 +1,3 @@
-import { NextResponse } from 'next/server';
 import type { ChatMessage, WorkflowContext } from '../../../../../core/services/copilot/types';
 import { routeAndExtract } from '../../../../../core/services/copilot/copilotService';
 import { formatResponse } from '../../../../../core/services/copilot/responseFormatter';
@@ -21,20 +20,32 @@ function validateParams(
     .map((p) => p.name);
 }
 
+function workflowLabel(id: string): string {
+  return id
+    .split('_')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+}
+
 export async function POST(req: Request) {
   let body: { messages?: ChatMessage[] };
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    return new Response(
+      JSON.stringify({ type: 'reply', content: 'Invalid JSON body' }) + '\n',
+      { status: 400, headers: { 'Content-Type': 'application/x-ndjson' } }
+    );
   }
 
   const messages = body.messages;
   if (!Array.isArray(messages) || messages.length === 0) {
-    return NextResponse.json({ error: 'messages array is required' }, { status: 400 });
+    return new Response(
+      JSON.stringify({ type: 'reply', content: 'messages array is required' }) + '\n',
+      { status: 400, headers: { 'Content-Type': 'application/x-ndjson' } }
+    );
   }
 
-  // Build workflow context — only web-layer state that core cannot import directly
   const ctx: WorkflowContext = {
     ollamaStatus: {
       ollama: ollamaStore.ollama,
@@ -42,55 +53,87 @@ export async function POST(req: Request) {
     },
   };
 
-  // ── Phase 1: Route & Extract ──────────────────────────────────────────────
-  let route;
-  try {
-    route = await routeAndExtract(messages, allWorkflows);
-  } catch {
-    return NextResponse.json({
-      reply: 'The AI service is currently unavailable. Make sure Ollama is running and the model is ready.',
-    });
-  }
+  const encoder = new TextEncoder();
 
-  if (!route.canHandle) {
-    return NextResponse.json({ reply: CANNOT_HANDLE });
-  }
+  const stream = new ReadableStream({
+    async start(controller) {
+      function emit(data: object) {
+        controller.enqueue(encoder.encode(JSON.stringify(data) + '\n'));
+      }
 
-  if (route.missingParams.length > 0) {
-    return NextResponse.json({
-      reply: `To do that, I need a bit more information. Could you provide: ${route.missingParams.join(', ')}?`,
-    });
-  }
+      try {
+        // ── Phase 1: Route & Extract ────────────────────────────────────────
+        emit({ type: 'status', message: 'Thinking…' });
 
-  const workflow = workflowRegistry.get(route.workflowId!);
-  if (!workflow) {
-    return NextResponse.json({ reply: CANNOT_HANDLE });
-  }
+        let route;
+        try {
+          route = await routeAndExtract(messages, allWorkflows);
+        } catch {
+          emit({ type: 'reply', content: 'The AI service is currently unavailable. Make sure Ollama is running and the model is ready.' });
+          controller.close();
+          return;
+        }
 
-  // Safety net: re-validate params after routing
-  const stillMissing = validateParams(workflow, route.params);
-  if (stillMissing.length > 0) {
-    return NextResponse.json({
-      reply: `I need a bit more information to continue. Could you provide: ${stillMissing.join(', ')}?`,
-    });
-  }
+        if (!route.canHandle) {
+          emit({ type: 'reply', content: CANNOT_HANDLE });
+          controller.close();
+          return;
+        }
 
-  // ── Phase 2: Execute Workflow ─────────────────────────────────────────────
-  const result = await workflow.execute(route.params, ctx);
+        if (route.missingParams.length > 0) {
+          emit({ type: 'reply', content: `To do that, I need a bit more information. Could you provide: ${route.missingParams.join(', ')}?` });
+          controller.close();
+          return;
+        }
 
-  if (!result.ok) {
-    return NextResponse.json({
-      reply: `I wasn't able to complete that. ${result.error}`,
-    });
-  }
+        const workflow = workflowRegistry.get(route.workflowId!);
+        if (!workflow) {
+          emit({ type: 'reply', content: CANNOT_HANDLE });
+          controller.close();
+          return;
+        }
 
-  // ── Phase 3: Format Response ──────────────────────────────────────────────
-  let reply: string;
-  try {
-    reply = await formatResponse(messages, workflow, result);
-  } catch {
-    reply = `Here is what I found:\n\`\`\`\n${JSON.stringify(result.data, null, 2)}\n\`\`\``;
-  }
+        const stillMissing = validateParams(workflow, route.params);
+        if (stillMissing.length > 0) {
+          emit({ type: 'reply', content: `I need a bit more information to continue. Could you provide: ${stillMissing.join(', ')}?` });
+          controller.close();
+          return;
+        }
 
-  return NextResponse.json({ reply });
+        // ── Phase 2: Execute Workflow ───────────────────────────────────────
+        emit({ type: 'status', message: `Calling ${workflowLabel(route.workflowId!)}…` });
+
+        const result = await workflow.execute(route.params, ctx);
+
+        if (!result.ok) {
+          emit({ type: 'reply', content: `I wasn't able to complete that. ${result.error}` });
+          controller.close();
+          return;
+        }
+
+        // ── Phase 3: Format Response ────────────────────────────────────────
+        emit({ type: 'status', message: 'Generating response…' });
+
+        let reply: string;
+        try {
+          reply = await formatResponse(messages, workflow, result);
+        } catch {
+          reply = `Here is what I found:\n\`\`\`\n${JSON.stringify(result.data, null, 2)}\n\`\`\``;
+        }
+
+        emit({ type: 'reply', content: reply, workflowId: route.workflowId });
+        controller.close();
+      } catch {
+        emit({ type: 'reply', content: 'An unexpected error occurred. Please try again.' });
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'application/x-ndjson',
+      'Cache-Control': 'no-cache',
+    },
+  });
 }

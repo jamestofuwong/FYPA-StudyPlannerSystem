@@ -96,6 +96,50 @@
   font-size: 10px;
   color: var(--text-muted);
   letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.workflowTag {
+  font-size: 9px;
+  font-family: monospace;
+  color: var(--text-muted);
+  background: var(--panel-border);
+  border: 1px solid var(--panel-border);
+  border-radius: 3px;
+  padding: 1px 5px;
+  letter-spacing: 0.3px;
+  opacity: 0.7;
+}
+
+/* Status line (workflow progress) */
+.statusLine {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+}
+
+.statusDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent-blue, #3b82f6);
+  flex-shrink: 0;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.statusText {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-style: italic;
+  letter-spacing: 0.2px;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.4; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1.1); }
 }
 
 /* Typing indicator */

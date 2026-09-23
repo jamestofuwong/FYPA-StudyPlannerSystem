@@ -6,6 +6,7 @@ import styles from './page.module.css';
 interface Message {
   role: 'user' | 'assistant';
   content: string;
+  workflowId?: string;
 }
 
 interface OllamaStatus {
@@ -34,6 +35,7 @@ export default function CopilotPage() {
   const [messages, setMessages] = useState<Message[]>([WELCOME]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -120,11 +122,35 @@ export default function CopilotPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages: windowed }),
       });
-      const data = await res.json() as { reply?: string; error?: string };
-      const reply = data.reply ?? data.error ?? 'No response received.';
-      setMessages([...next, { role: 'assistant', content: reply }]);
+
+      if (!res.body) throw new Error('No response body');
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const event = JSON.parse(line) as { type: string; message?: string; content?: string; workflowId?: string };
+            if (event.type === 'status') {
+              setStatusMessage(event.message ?? null);
+            } else if (event.type === 'reply') {
+              setMessages([...next, { role: 'assistant', content: event.content ?? 'No response received.', workflowId: event.workflowId }]);
+              setStatusMessage(null);
+            }
+          } catch { /* ignore malformed chunks */ }
+        }
+      }
     } catch {
       setMessages([...next, { role: 'assistant', content: 'Failed to reach the AI service. Check that Ollama is running.' }]);
+      setStatusMessage(null);
     } finally {
       setLoading(false);
       inputRef.current?.focus();
@@ -210,15 +236,27 @@ export default function CopilotPage() {
                 <div className={styles.messageBubble}>
                   <pre className={styles.messageText}>{msg.content}</pre>
                 </div>
-                <div className={styles.messageRole}>{msg.role === 'user' ? 'You' : 'Copilot'}</div>
+                <div className={styles.messageRole}>
+                  {msg.role === 'user' ? 'You' : 'Copilot'}
+                  {msg.role === 'assistant' && msg.workflowId && (
+                    <span className={styles.workflowTag}>{msg.workflowId}</span>
+                  )}
+                </div>
               </div>
             ))}
             {loading && (
               <div className={`${styles.message} ${styles.messageAssistant}`}>
                 <div className={styles.messageBubble}>
-                  <div className={styles.typingIndicator}>
-                    <span /><span /><span />
-                  </div>
+                  {statusMessage ? (
+                    <div className={styles.statusLine}>
+                      <span className={styles.statusDot} />
+                      <span className={styles.statusText}>{statusMessage}</span>
+                    </div>
+                  ) : (
+                    <div className={styles.typingIndicator}>
+                      <span /><span /><span />
+                    </div>
+                  )}
                 </div>
                 <div className={styles.messageRole}>Copilot</div>
               </div>
