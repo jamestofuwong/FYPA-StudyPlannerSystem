@@ -1,5 +1,13 @@
 import type { NextConfig } from "next";
 
+const REQUIRED_ENV_VARS = ['DATABASE_URL', 'CMS_JWT_SECRET'] as const
+
+for (const key of REQUIRED_ENV_VARS) {
+  if (!process.env[key]) {
+    throw new Error(`Missing required environment variable: ${key}`)
+  }
+}
+
 const securityHeaders = [
   { key: 'X-Frame-Options', value: 'DENY' },
   { key: 'X-Content-Type-Options', value: 'nosniff' },
