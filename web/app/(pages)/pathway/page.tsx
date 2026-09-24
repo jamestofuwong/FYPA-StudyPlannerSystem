@@ -465,27 +465,35 @@ export default function PathwayPage() {
               );
               const unplacedUnits = planUnits.filter((u) => !placedCodes.has(normaliseCode(u.code)));
 
+              const validation = validatePlan({
+                semesters,
+                completedUnitCodes: dashboardData?.completedCodes ?? [],
+                concededPassUnitCodes: getConcededPassUnitCodes(allTranscriptUnits),
+                intakeSemester: planIntakeSemester,
+                requiredUnits: planUnits.filter(
+                  (u) => u.category === 'core' || u.category === 'major_core'
+                ),
+                unitData,
+                requirements: planRequirements,
+              });
+
               // A freshly generated plan already carries the scheduler's own
               // warnings. Once edited, the arrangement is the advisor's, so it
               // has to be re-checked.
               const warnings: PlanWarning[] = isPlanEdited
                 ? [
-                    ...validatePlan({
-                      semesters,
-                      completedUnitCodes: dashboardData?.completedCodes ?? [],
-                      concededPassUnitCodes: getConcededPassUnitCodes(allTranscriptUnits),
-                      intakeSemester: planIntakeSemester,
-                      requiredUnits: planUnits.filter(
-                        (u) => u.category === 'core' || u.category === 'major_core'
-                      ),
-                      unitData,
-                      requirements: planRequirements,
-                    }),
+                    ...validation,
                     // The generator's findings about units it never placed stay
                     // true until the advisor places them
                     ...carryForwardWarnings(customPlan.warnings ?? [], semesters),
                   ]
-                : customPlan.warnings ?? [];
+                : [
+                    ...(customPlan.warnings ?? []),
+                    // The scheduler places what it is given and never counts the
+                    // total, so a plan short of a category's credit points comes
+                    // out clean. That shortfall is worth saying before any edit.
+                    ...validation.filter((w) => w.kind === 'requirement_shortfall'),
+                  ];
 
               const overCapacity = new Map<string, Extract<PlanWarning, { kind: 'over_capacity' }>>();
               const byUnit = new Map<string, string[]>();
@@ -606,6 +614,20 @@ export default function PathwayPage() {
                                       }}
                                     >
                                       RETAKE
+                                    </span>
+                                  )}
+                                  {u.recommended && (
+                                    <span
+                                      title="Not named by the planner — chosen from its elective groups to fill an empty elective slot."
+                                      style={{
+                                        marginLeft: 6,
+                                        fontSize: 9,
+                                        fontFamily: 'var(--font-mono)',
+                                        color: 'var(--accent-purple)',
+                                        letterSpacing: '0.05em',
+                                      }}
+                                    >
+                                      RECOMMENDED
                                     </span>
                                   )}
                                   {unitMessages.map((message) => (

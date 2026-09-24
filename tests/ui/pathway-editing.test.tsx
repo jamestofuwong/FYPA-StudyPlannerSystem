@@ -278,3 +278,61 @@ describe('pathway editing', () => {
     expect(screen.queryByText('edited')).toBeNull();
   });
 });
+
+// The planner behind these asks for two electives but names only E1; the other is
+// an empty slot the route fills from the planner's elective groups.
+describe('recommended electives', () => {
+  const RECOMMENDED = planUnit('REC1', 'Recommended Elective', 'elective', { recommended: true });
+
+  function mockPlan(withRecommendation: boolean) {
+    const pool = [...PLAN_UNITS.filter((u) => u.code !== 'E2'), ...(withRecommendation ? [RECOMMENDED] : [])];
+    const plan = generatedPlan();
+    plan.semesters[1].units = [
+      { code: 'ADV', name: 'Advanced Programming', category: 'core' },
+      { code: 'E1', name: 'Elective One', category: 'elective' },
+      ...(withRecommendation
+        ? [{ code: 'REC1', name: 'Recommended Elective', category: 'elective', recommended: true } as never]
+        : []),
+    ];
+
+    global.fetch = jest.fn((url: string) => {
+      if (String(url).includes('/api/custom-planner')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            success: true,
+            data: plan,
+            units: pool,
+            intakeSemester: 1,
+            requirements: REQUIREMENTS,
+            completedUnits: [],
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    }) as unknown as typeof fetch;
+  }
+
+  test('a filled elective slot is tagged and leaves no elective shortfall', async () => {
+    mockPlan(true);
+    render(<Harness />);
+    await generate();
+
+    const row = screen.getByText('REC1').closest('tr') as HTMLElement;
+    expect(within(row).getByText('RECOMMENDED')).toBeTruthy();
+    // The named elective was never a recommendation
+    expect(within(screen.getByText('E1').closest('tr') as HTMLElement).queryByText('RECOMMENDED')).toBeNull();
+
+    expect(screen.queryByText(/Electives total/i)).toBeNull();
+  });
+
+  test('an unfilled elective slot reports the shortfall without any edit', async () => {
+    mockPlan(false);
+    render(<Harness />);
+    await generate();
+
+    const shortfall = await screen.findByText(/Electives total .* credit points, but 25 are required/i);
+    expect(shortfall.textContent).toMatch(/12\.5/);
+    expect(screen.queryByText('edited')).toBeNull();
+  });
+});

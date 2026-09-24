@@ -6,7 +6,19 @@ import {
   validateSchedulerConfig,
   type SchedulableUnit,
 } from '../../../../core/services/scheduling/customPlannerScheduler';
+import { recommendElectives } from '../../../../core/shared/scheduling/electiveSlots';
 import { toSchedulableUnit } from '../../../../core/shared/scheduling/schedulableUnit';
+
+/** Planner categories that count toward the elective requirement. */
+const ELECTIVE_CATEGORIES = ['elective', 'prescribed_elective'];
+
+/** The nested include every schedulable unit needs, used for planner and elective-group rows alike. */
+const UNIT_INCLUDE = {
+  offerings: true,
+  requisite_groups: {
+    include: { conditions: { include: { unit: true } } },
+  },
+} as const;
 
 // Field extraction for this app's Prisma schema. The student app has its own
 // adapter; the mapping rules they share live in core/shared/scheduling.
@@ -28,6 +40,36 @@ function toSchedulable(
       })),
     ),
   });
+}
+
+/**
+ * How many elective slots still have to be filled.
+ *
+ * The planner's elective_count is the number of electives the degree requires,
+ * so what is left is that number less the electives already passed and the ones
+ * the planner names in the pool. A planner that never recorded a count falls
+ * back to its own empty slots, which is what the count would have described.
+ */
+function countElectiveSlotsNeeded(
+  planner: { elective_count: number | null; units: { unit: { unit_code: string } | null; category: unknown }[] },
+  completedCodes: Set<string>,
+  pool: SchedulableUnit[],
+): number {
+  const isElective = (category: unknown) => ELECTIVE_CATEGORIES.includes(String(category));
+
+  if (planner.elective_count == null) {
+    return planner.units.filter((tu) => tu.unit === null && isElective(tu.category)).length;
+  }
+
+  const completedElectives = planner.units.filter(
+    (tu) =>
+      tu.unit !== null &&
+      isElective(tu.category) &&
+      completedCodes.has(tu.unit.unit_code.toUpperCase()),
+  ).length;
+  const pooledElectives = pool.filter((u) => isElective(u.category)).length;
+
+  return planner.elective_count - completedElectives - pooledElectives;
 }
 
 export async function POST(req: NextRequest) {
@@ -61,17 +103,11 @@ export async function POST(req: NextRequest) {
     const planner = await prisma.plannerTemplate.findUnique({
       where: { id: plannerId },
       include: {
-        units: {
-          include: {
-            unit: {
-              include: {
-                offerings: true,
-                requisite_groups: {
-                  include: { conditions: { include: { unit: true } } },
-                },
-              },
-            },
-          },
+        units: { include: { unit: { include: UNIT_INCLUDE } } },
+        // Candidates for the planner's empty elective slots
+        elective_groups: {
+          orderBy: { created_at: 'asc' },
+          include: { units: { include: { unit: { include: UNIT_INCLUDE } } } },
         },
       },
     });
@@ -99,20 +135,7 @@ export async function POST(req: NextRequest) {
     if (minorIds.length > 0) {
       const minors = await prisma.minor.findMany({
         where: { id: { in: minorIds } },
-        include: {
-          units: {
-            include: {
-              unit: {
-                include: {
-                  offerings: true,
-                  requisite_groups: {
-                    include: { conditions: { include: { unit: true } } },
-                  },
-                },
-              },
-            },
-          },
-        },
+        include: { units: { include: { unit: { include: UNIT_INCLUDE } } } },
       });
 
       const poolCodes = new Set([
@@ -128,6 +151,24 @@ export async function POST(req: NextRequest) {
           poolCodes.add(code);
         }
       }
+    }
+
+    // A planner records some electives as a slot with no unit_id, which the pool
+    // above drops because there is nothing to place. Count how many of those the
+    // student still owes and pick real units for them, or the plan comes out
+    // short of the elective requirement with nothing on screen to say why.
+    const electiveSlotsNeeded = countElectiveSlotsNeeded(planner, normalizedCompleted, remainingUnits);
+    const recommended = recommendElectives({
+      needed: electiveSlotsNeeded,
+      // One source per elective group, in the order the planner lists them.
+      candidateSources: planner.elective_groups.map((group) =>
+        group.units.map((gu) => toSchedulable(gu.unit, 'elective')),
+      ),
+      completedUnitCodes: [...normalizedCompleted],
+      alreadyPlannedCodes: remainingUnits.map((u) => u.code),
+    });
+    for (const unit of recommended) {
+      remainingUnits.push({ ...unit, category: 'elective', recommended: true });
     }
 
     const result = buildCustomPlan(

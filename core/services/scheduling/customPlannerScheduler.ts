@@ -56,6 +56,12 @@ export interface SchedulableUnit {
    * need a value derive one from the planner's category requirement.
    */
   creditPoints?: number;
+  /**
+   * Set on units the planner never named, added to fill an empty elective slot.
+   * The scheduler treats them like any other unit; it only carries the flag
+   * through so the UI can say the choice was a recommendation, not a requirement.
+   */
+  recommended?: boolean;
 
   requisiteGroups: RequisiteCondition[][];
 }
@@ -64,6 +70,8 @@ export interface ScheduledUnit {
   code: string;
   name: string;
   category: string;
+  /** Carried from the pool. See SchedulableUnit.recommended. */
+  recommended?: boolean;
 }
 
 export interface CustomSemesterBucket {
@@ -347,7 +355,7 @@ export function buildCustomPlan(
       semesters.push({
         year: currentYear,
         semester: currentSem,
-        units: toPlace.map((u) => ({ code: u.code, name: u.name, category: u.category })),
+        units: toPlace.map((u) => toScheduled(u)),
       });
 
       const standardPlaced = toPlace.filter((u) => u.category !== 'mpu').length;
@@ -388,8 +396,18 @@ export function buildCustomPlan(
     semesters,
     unschedulableUnits: remainingUnits
       .filter((u) => unplaceable.has(u))
-      .map((u) => ({ code: u.code, name: u.name, category: u.category })),
+      .map((u) => toScheduled(u)),
     warnings,
+  };
+}
+
+/** Narrows a pool unit to what the plan reports, keeping the recommended flag only when set. */
+function toScheduled(unit: SchedulableUnit): ScheduledUnit {
+  return {
+    code: unit.code,
+    name: unit.name,
+    category: unit.category,
+    ...(unit.recommended ? { recommended: true } : {}),
   };
 }
 

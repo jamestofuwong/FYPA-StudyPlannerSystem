@@ -15,7 +15,12 @@ import {
 } from '../../services/scheduling/customPlannerScheduler';
 
 /** Anything carrying the three fields a placed unit needs. */
-export type PlaceableUnit = { code: string; name: string; category: string };
+export type PlaceableUnit = {
+  code: string;
+  name: string;
+  category: string;
+  recommended?: boolean;
+};
 
 function copy(semesters: ReadonlyArray<CustomSemesterBucket>): CustomSemesterBucket[] {
   return semesters.map((bucket) => ({ ...bucket, units: [...bucket.units] }));
@@ -62,7 +67,14 @@ export function addUnit(
   const code = normaliseCode(unit.code);
   if (findPlaced(semesters, code)) return moveUnit(semesters, code, year, semester);
 
-  const placed: ScheduledUnit = { code: unit.code, name: unit.name, category: unit.category };
+  const placed: ScheduledUnit = {
+    code: unit.code,
+    name: unit.name,
+    category: unit.category,
+    // A re-added unit stays a recommendation; the advisor moving it does not
+    // make it something the planner asked for
+    ...(unit.recommended ? { recommended: true } : {}),
+  };
   return semesters.map((bucket) =>
     bucket.year === year && bucket.semester === semester
       ? { ...bucket, units: [...bucket.units, placed] }
