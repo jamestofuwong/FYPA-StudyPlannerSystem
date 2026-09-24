@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import {
-  verifyPassword,
+  safeVerifyPassword,
   signAccessToken,
   generateRefreshToken,
   hashToken,
@@ -50,7 +50,8 @@ export async function POST(req: NextRequest) {
   }
 
   const user = await prisma.cmsUser.findUnique({ where: { email } })
-  if (!user || !(await verifyPassword(password, user.password_hash))) {
+  const passwordValid = await safeVerifyPassword(password, user?.password_hash ?? null)
+  if (!user || !passwordValid) {
     return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 })
   }
 
