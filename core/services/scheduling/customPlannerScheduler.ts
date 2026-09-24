@@ -61,6 +61,12 @@ export interface SchedulableUnit {
    * rather than a requirement.
    */
   recommended?: boolean;
+  /**
+   * Set on units an advisor added from the catalogue rather than the planner.
+   * Recorded as an elective, since the planner says nothing about a unit it
+   * never listed. Carried through so the UI can mark the row.
+   */
+  outsidePlanner?: boolean;
 
   requisiteGroups: RequisiteCondition[][];
 }
@@ -71,6 +77,8 @@ export interface ScheduledUnit {
   category: string;
   /** Carried from the pool. See SchedulableUnit.recommended. */
   recommended?: boolean;
+  /** Carried from the pool. See SchedulableUnit.outsidePlanner. */
+  outsidePlanner?: boolean;
 }
 
 export interface CustomSemesterBucket {
@@ -400,13 +408,14 @@ export function buildCustomPlan(
   };
 }
 
-/** Keeps the recommended flag out of the result unless it is set. */
+/** Keeps the optional flags out of the result unless they are set. */
 function toScheduled(unit: SchedulableUnit): ScheduledUnit {
   return {
     code: unit.code,
     name: unit.name,
     category: unit.category,
     ...(unit.recommended ? { recommended: true } : {}),
+    ...(unit.outsidePlanner ? { outsidePlanner: true } : {}),
   };
 }
 

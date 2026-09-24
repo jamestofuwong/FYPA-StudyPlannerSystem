@@ -41,6 +41,7 @@ export default function DashboardPage() {
     setPlanUnits,
     setPlanIntakeSemester,
     setPlanCompletedUnits,
+    setPlanExtraUnits,
     setPlanRequirements,
     setGeneratedSemesters,
     setIsPlanEdited,
@@ -570,6 +571,7 @@ export default function DashboardPage() {
     setPlanUnits([]);
     setPlanIntakeSemester(1);
     setPlanCompletedUnits([]);
+    setPlanExtraUnits([]);
     setPlanRequirements([]);
     setGeneratedSemesters([]);
     setIsPlanEdited(false);
@@ -675,6 +677,7 @@ export default function DashboardPage() {
     setPlanUnits([]);
     setPlanIntakeSemester(1);
     setPlanCompletedUnits([]);
+    setPlanExtraUnits([]);
     setPlanRequirements([]);
     setGeneratedSemesters([]);
     setIsPlanEdited(false);

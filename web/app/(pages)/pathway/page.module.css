@@ -53,6 +53,23 @@
 .addUnitSelect:disabled { opacity: 0.5; cursor: not-allowed; }
 .removeBtn { background: rgba(244,135,113,0.15); color: var(--accent-red); border: 1px solid rgba(244,135,113,0.3); border-radius: 3px; font-size: 10px; line-height: 1; padding: 3px 6px; cursor: pointer; }
 .removeBtn:hover { background: rgba(244,135,113,0.3); }
+.catalogueBtn { background: var(--surface-bg); color: var(--text-primary); border: 1px solid var(--panel-border); border-radius: 3px; font-size: 10px; padding: 3px 8px; cursor: pointer; white-space: nowrap; }
+.catalogueBtn:hover { border-color: var(--accent-blue); color: var(--accent-blue); }
+
+.cataloguePanel { border-top: 1px solid var(--panel-border); background: var(--surface-bg); padding: 8px 12px; }
+.catalogueControls { display: flex; gap: 8px; margin-bottom: 8px; }
+.catalogueSearch { flex: 1; min-width: 0; background: var(--main-bg); color: var(--text-primary); border: 1px solid var(--panel-border); border-radius: 3px; font-size: 11px; padding: 4px 8px; }
+.catalogueSearch:focus { outline: none; border-color: var(--accent-blue); }
+.catalogueFilter { background: var(--main-bg); color: var(--text-primary); border: 1px solid var(--panel-border); border-radius: 3px; font-size: 11px; padding: 4px 6px; cursor: pointer; }
+
+.catalogueList { list-style: none; margin: 0; padding: 0; max-height: 220px; overflow-y: auto; }
+.catalogueItem { display: flex; align-items: baseline; gap: 8px; width: 100%; text-align: left; background: none; border: none; border-radius: 3px; padding: 4px 6px; cursor: pointer; font-family: var(--font-sans); font-size: 11px; color: var(--text-primary); }
+.catalogueItem:hover { background: rgba(0,122,204,0.15); }
+.catalogueCode { font-family: var(--font-mono); font-size: 10px; color: var(--accent-blue); flex: 0 0 auto; }
+.catalogueName { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.catalogueHint { margin-left: auto; flex: 0 0 auto; font-size: 10px; color: var(--accent-orange); }
+.catalogueEmpty { font-size: 11px; color: var(--text-muted); padding: 6px 2px; }
+
 .rowFlagged { background: rgba(244,135,113,0.1) !important; }
 .rowWarning { font-size: 10px; color: var(--accent-orange); margin-top: 3px; white-space: normal; }
 

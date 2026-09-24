@@ -11,37 +11,7 @@ import {
   countElectiveSlotsNeeded,
   recommendElectives,
 } from '../../../../core/shared/scheduling/electiveSlots';
-import { toSchedulableUnit } from '../../../../core/shared/scheduling/schedulableUnit';
-
-/** The nested include every schedulable unit needs, used for planner and elective-group rows alike. */
-const UNIT_INCLUDE = {
-  offerings: true,
-  requisite_groups: {
-    include: { conditions: { include: { unit: true } } },
-  },
-} as const;
-
-// Field extraction for this app's Prisma schema. The student app has its own
-// adapter; the mapping rules they share live in core/shared/scheduling.
-function toSchedulable(
-  unit: { unit_code: string; unit_name: string; offerings: { offered_in: number }[]; requisite_groups: any[] },
-  category: string
-): SchedulableUnit {
-  return toSchedulableUnit({
-    code: unit.unit_code,
-    name: unit.unit_name,
-    category,
-    offeringTerms: (unit.offerings ?? []).map((o) => o.offered_in),
-    requisiteGroups: (unit.requisite_groups ?? []).map((group: any) =>
-      (group.conditions ?? []).map((c: any) => ({
-        type: c.type,
-        unitCode: c.unit?.unit_code ?? null,
-        creditPoints: c.credit_points,
-        requisiteType: c.requisite_type,
-      })),
-    ),
-  });
-}
+import { UNIT_INCLUDE, toSchedulable } from './unitMapping';
 
 export async function POST(req: NextRequest) {
   try {

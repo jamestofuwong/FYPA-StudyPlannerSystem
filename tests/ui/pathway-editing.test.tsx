@@ -103,13 +103,36 @@ function Seed({ completedCodes = [] as string[] }) {
   return null;
 }
 
+// Mirrors the plan-related half of the dashboard's Clear, which is where an
+// advisor actually clears a loaded student.
+function ClearControl() {
+  const session = useStudentSession();
+  return (
+    <button
+      onClick={() => {
+        session.setCustomPlan(null);
+        session.setPlanUnits([]);
+        session.setPlanCompletedUnits([]);
+        session.setPlanExtraUnits([]);
+        session.setPlanRequirements([]);
+        session.setGeneratedSemesters([]);
+        session.setIsPlanEdited(false);
+      }}
+    >
+      Clear student
+    </button>
+  );
+}
+
 const Harness = ({
   showPage = true,
   completedCodes = [] as string[],
-}: { showPage?: boolean; completedCodes?: string[] }) => (
+  withClear = false,
+}: { showPage?: boolean; completedCodes?: string[]; withClear?: boolean }) => (
   <ToastProvider>
     <StudentSessionProvider>
       <Seed completedCodes={completedCodes} />
+      {withClear && <ClearControl />}
       {showPage && <PathwayPage />}
     </StudentSessionProvider>
   </ToastProvider>
@@ -387,5 +410,159 @@ describe('completed elective-group units', () => {
 
     const shortfall = await screen.findByText(/Electives total .* credit points, but 25 are required/i);
     expect(shortfall.textContent).toMatch(/12\.5/);
+  });
+});
+// The catalogue offers units that are on no planner, including units from
+// another discipline. SWE units are the Software Engineering case.
+describe('adding units from outside the planner', () => {
+  const CATALOGUE = [
+    { ...planUnit('SWE30009', 'Software Testing', 'elective'), outsidePlanner: true, prefix: 'SWE' },
+    { ...planUnit('SWE20004', 'Technical Software Development', 'elective'), outsidePlanner: true, prefix: 'SWE' },
+    { ...planUnit('COS30043', 'Interface Design', 'elective'), outsidePlanner: true, prefix: 'COS' },
+  ];
+
+  beforeEach(() => {
+    const planFetch = global.fetch as unknown as jest.Mock;
+    global.fetch = jest.fn((url: string, init?: any) => {
+      if (String(url).includes('/api/custom-planner/catalogue')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ success: true, units: CATALOGUE, prefixes: ['COS', 'SWE'] }),
+        });
+      }
+      return planFetch(url, init);
+    }) as unknown as typeof fetch;
+  });
+
+  const openCatalogue = async () => {
+    await act(async () => {
+      fireEvent.click(screen.getAllByText('+ Add from catalogue')[0]);
+    });
+    return screen.findByLabelText('Search the unit catalogue');
+  };
+
+  test('adding a unit from the catalogue places it with an OUTSIDE PLANNER tag', async () => {
+    render(<Harness />);
+    await generate();
+    await openCatalogue();
+
+    fireEvent.click(screen.getByText('SWE30009'));
+
+    const row = (await screen.findByText('SWE30009')).closest('tr') as HTMLElement;
+    expect(within(row).getByText('OUTSIDE PLANNER')).toBeTruthy();
+    // It landed in the first semester, the one whose picker was opened
+    expect(row.closest('div')?.textContent).toContain('SWE30009');
+    expect(screen.getByText('edited')).toBeTruthy();
+    // A planner unit is not tagged
+    expect(within(screen.getByText('C1').closest('tr') as HTMLElement).queryByText('OUTSIDE PLANNER')).toBeNull();
+  });
+
+  test('an added unit survives leaving the page and coming back', async () => {
+    const { rerender } = render(<Harness />);
+    await generate();
+    await openCatalogue();
+    fireEvent.click(screen.getByText('SWE30009'));
+    await screen.findByText('OUTSIDE PLANNER');
+
+    rerender(<Harness showPage={false} />);
+    expect(screen.queryByText('SWE30009')).toBeNull();
+    rerender(<Harness showPage />);
+
+    await screen.findByText('INTRO');
+    const row = screen.getByText('SWE30009').closest('tr') as HTMLElement;
+    expect(within(row).getByText('OUTSIDE PLANNER')).toBeTruthy();
+  });
+
+  test('Clear removes it', async () => {
+    render(<Harness withClear />);
+    await generate();
+    await openCatalogue();
+    fireEvent.click(screen.getByText('SWE30009'));
+    await screen.findByText('OUTSIDE PLANNER');
+
+    await act(async () => { fireEvent.click(screen.getByText('Clear student')); });
+
+    expect(screen.queryByText('SWE30009')).toBeNull();
+    expect(screen.queryByText('OUTSIDE PLANNER')).toBeNull();
+  });
+
+  test('searching and filtering by SWE narrows the list', async () => {
+    render(<Harness />);
+    await generate();
+    const search = await openCatalogue();
+
+    expect(screen.getByText('COS30043')).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText('Filter by unit code prefix'), { target: { value: 'SWE' } });
+    await waitFor(() => expect(screen.queryByText('COS30043')).toBeNull());
+    expect(screen.getByText('SWE30009')).toBeTruthy();
+    expect(screen.getByText('SWE20004')).toBeTruthy();
+
+    fireEvent.change(search, { target: { value: 'testing' } });
+    await waitFor(() => expect(screen.queryByText('SWE20004')).toBeNull());
+    expect(screen.getByText('SWE30009')).toBeTruthy();
+
+    fireEvent.change(search, { target: { value: 'nothing matches this' } });
+    expect(await screen.findByText('No units match that search.')).toBeTruthy();
+  });
+
+  test('the catalogue is not fetched until the picker is opened', async () => {
+    render(<Harness />);
+    await generate();
+
+    const catalogueCalls = () =>
+      (global.fetch as unknown as jest.Mock).mock.calls.filter((c) => String(c[0]).includes('/catalogue'));
+    expect(catalogueCalls()).toHaveLength(0);
+
+    await openCatalogue();
+    expect(catalogueCalls()).toHaveLength(1);
+  });
+});
+
+// The route only knows the planner template. Recommended electives and injected
+// minor units reach the pool another way, and the picker beside the catalogue
+// already offers them.
+describe('the catalogue does not repeat what the pool already offers', () => {
+  test('a unit in the plan pool is left out of the catalogue list', async () => {
+    const pooled = { ...planUnit('COS30043', 'Interface Design', 'elective'), recommended: true };
+    const planFetch = global.fetch as unknown as jest.Mock;
+    global.fetch = jest.fn((url: string, init?: any) => {
+      if (String(url).includes('/api/custom-planner/catalogue')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            success: true,
+            prefixes: ['COS', 'SWE'],
+            units: [
+              { ...pooled, outsidePlanner: true, prefix: 'COS' },
+              { ...planUnit('SWE30009', 'Software Testing', 'elective'), outsidePlanner: true, prefix: 'SWE' },
+            ],
+          }),
+        });
+      }
+      if (String(url).includes('/api/custom-planner')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            success: true,
+            data: generatedPlan(),
+            units: [...PLAN_UNITS, pooled],
+            intakeSemester: 1,
+            requirements: REQUIREMENTS,
+            completedUnits: [],
+          }),
+        });
+      }
+      return planFetch(url, init);
+    }) as unknown as typeof fetch;
+
+    render(<Harness />);
+    await generate();
+    await act(async () => { fireEvent.click(screen.getAllByText('+ Add from catalogue')[0]); });
+    await screen.findByLabelText('Search the unit catalogue');
+
+    // Offered by the planner picker, so not offered again here
+    expect(screen.getByText('SWE30009')).toBeTruthy();
+    expect(screen.queryByText('COS30043')).toBeNull();
   });
 });

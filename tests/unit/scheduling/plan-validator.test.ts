@@ -501,6 +501,66 @@ describe('validatePlan', () => {
       expect(kinds(warnings)).not.toContain('requirement_shortfall');
     });
   });
+
+  // A unit the advisor added from the catalogue is on no planner, so the page
+  // has to put it in unitData itself. These cover what that buys.
+  describe('units added from outside the planner', () => {
+    const outside = unit('SWE30009', {
+      category: 'elective',
+      outsidePlanner: true,
+      requisiteGroups: [[prereq('COS20007')]],
+    });
+    const gate = unit('COS20007');
+
+    test('its requisites are checked once it is in unitData', () => {
+      const warnings = validatePlan({
+        // Placed a semester before the prerequisite it depends on
+        semesters: [bucket(2024, 1, outside), bucket(2024, 2, gate)],
+        completedUnitCodes: [],
+        unitData: unitData([outside, gate]),
+      });
+
+      expect(warnings).toContainEqual({
+        kind: 'requisite_violation',
+        unitCode: 'SWE30009',
+        missing: ['COS20007'],
+      });
+    });
+
+    test('without it in unitData the requisite is never checked', () => {
+      const warnings = validatePlan({
+        semesters: [bucket(2024, 1, outside), bucket(2024, 2, gate)],
+        completedUnitCodes: [],
+        unitData: unitData([gate]),
+      });
+
+      expect(kinds(warnings)).not.toContain('requisite_violation');
+      expect(warnings).toContainEqual({ kind: 'no_offering_data', unitCode: 'SWE30009' });
+    });
+
+    test('it counts toward the elective requirement', () => {
+      const requirement = [
+        { category: 'elective', creditPoints: 25, unitCount: 2, planCategories: ['elective', 'prescribed_elective'] },
+      ];
+      const oneElective = unit('E1', { category: 'elective' });
+
+      const short = validatePlan({
+        semesters: [bucket(2024, 1, oneElective)],
+        completedUnitCodes: [],
+        unitData: unitData([oneElective]),
+        requirements: requirement,
+      });
+      expect(short).toContainEqual({ kind: 'requirement_shortfall', category: 'elective', have: 12.5, need: 25 });
+
+      const whole = validatePlan({
+        semesters: [bucket(2024, 1, oneElective), bucket(2024, 2, outside)],
+        completedUnitCodes: ['COS20007'],
+        unitData: unitData([oneElective, outside]),
+        requirements: requirement,
+      });
+      expect(kinds(whole)).not.toContain('requirement_shortfall');
+    });
+  });
 });
 
 describe('carryForwardWarnings', () => {

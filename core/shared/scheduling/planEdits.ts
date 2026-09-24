@@ -20,6 +20,7 @@ export type PlaceableUnit = {
   name: string;
   category: string;
   recommended?: boolean;
+  outsidePlanner?: boolean;
 };
 
 function copy(semesters: ReadonlyArray<CustomSemesterBucket>): CustomSemesterBucket[] {
@@ -74,6 +75,7 @@ export function addUnit(
     // A re-added unit stays a recommendation; the advisor moving it does not
     // make it something the planner asked for
     ...(unit.recommended ? { recommended: true } : {}),
+    ...(unit.outsidePlanner ? { outsidePlanner: true } : {}),
   };
   return semesters.map((bucket) =>
     bucket.year === year && bucket.semester === semester

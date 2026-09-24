@@ -21,6 +21,7 @@ import {
   type SchedulableUnit,
 } from '../../../../core/services/scheduling/customPlannerScheduler';
 import { carryForwardWarnings, validatePlan } from '../../../../core/shared/scheduling/planValidator';
+import type { CatalogueUnit } from '../../api/custom-planner/catalogue/route';
 import {
   addSemester,
   addUnit,
@@ -163,11 +164,22 @@ export default function PathwayPage() {
     planUnits, setPlanUnits,
     planIntakeSemester, setPlanIntakeSemester,
     planCompletedUnits, setPlanCompletedUnits,
+    planExtraUnits, setPlanExtraUnits,
     planRequirements, setPlanRequirements,
     generatedSemesters, setGeneratedSemesters,
     isPlanEdited, setIsPlanEdited,
   } = useStudentSession();
   const [customPlanLoading, setCustomPlanLoading] = useState(false);
+
+  // Catalogue state. The units are fetched the first time a picker is opened,
+  // not with the plan, which is already a large response.
+  const [catalogue, setCatalogue] = useState<CatalogueUnit[]>([]);
+  const [cataloguePrefixes, setCataloguePrefixes] = useState<string[]>([]);
+  const [catalogueLoading, setCatalogueLoading] = useState(false);
+  const [catalogueLoaded, setCatalogueLoaded] = useState(false);
+  const [openCatalogueSlot, setOpenCatalogueSlot] = useState<string | null>(null);
+  const [catalogueSearch, setCatalogueSearch] = useState('');
+  const [cataloguePrefix, setCataloguePrefix] = useState('ALL');
 
   /** Regenerating throws away hand edits, so make the advisor say so first. */
   const confirmDiscardEdits = () =>
@@ -176,6 +188,36 @@ export default function PathwayPage() {
   const applyEdit = (next: CustomSemesterBucket[]) => {
     setCustomPlan({ ...customPlan, semesters: next });
     setIsPlanEdited(true);
+  };
+
+  const openCatalogue = async (slot: string) => {
+    if (openCatalogueSlot === slot) {
+      setOpenCatalogueSlot(null);
+      return;
+    }
+    setOpenCatalogueSlot(slot);
+    if (catalogueLoaded || catalogueLoading) return;
+
+    const activePlanner = selectedPlannerIdx === -1 ? manualPlanner : dashboardData?.planners?.[selectedPlannerIdx];
+    setCatalogueLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (activePlanner?.id) params.set('plannerId', String(activePlanner.id));
+      const completed: string[] = dashboardData?.completedCodes ?? [];
+      if (completed.length > 0) params.set('completed', completed.join(','));
+
+      const res = await fetch(`/api/custom-planner/catalogue?${params.toString()}`);
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error ?? 'Failed to load the catalogue');
+      setCatalogue(data.units ?? []);
+      setCataloguePrefixes(data.prefixes ?? []);
+      setCatalogueLoaded(true);
+    } catch {
+      showToast('Could not load the unit catalogue.', 'error');
+      setOpenCatalogueSlot(null);
+    } finally {
+      setCatalogueLoading(false);
+    }
   };
 
   const resetToGenerated = () => {
@@ -495,9 +537,11 @@ export default function PathwayPage() {
             {customPlan && (() => {
               const semesters: CustomSemesterBucket[] = customPlan.semesters ?? [];
               // Completed units are in here too, so the requirement totals can
-              // credit what the student has already passed
+              // credit what the student has already passed. Catalogue units are
+              // on no planner, so without them validatePlan would report every
+              // one as no_offering_data and never check its requisites.
               const unitData = new Map(
-                [...planUnits, ...planCompletedUnits].map((u) => [normaliseCode(u.code), u])
+                [...planUnits, ...planCompletedUnits, ...planExtraUnits].map((u) => [normaliseCode(u.code), u])
               );
               const placedCodes = new Set(
                 semesters.flatMap((s) => s.units.map((u) => normaliseCode(u.code)))
@@ -577,6 +621,48 @@ export default function PathwayPage() {
                 if (unit) applyEdit(addUnit(semesters, unit, bucket.year, bucket.semester));
               };
 
+              const addFromCatalogue = (unit: CatalogueUnit, bucket: CustomSemesterBucket) => {
+                // Kept in the session as well as the plan, so validatePlan can
+                // still read its offerings and requisites after the edit.
+                setPlanExtraUnits((current) =>
+                  current.some((u) => normaliseCode(u.code) === normaliseCode(unit.code))
+                    ? current
+                    : [...current, unit]
+                );
+                applyEdit(addUnit(semesters, unit, bucket.year, bucket.semester));
+                setOpenCatalogueSlot(null);
+                setCatalogueSearch('');
+              };
+
+              // The route drops units the planner template names, but the pool
+              // also holds recommended electives and injected minor units, which
+              // the picker beside this one already offers. Filtering on the pool
+              // covers all three without the route having to know about them.
+              const pooledCodes = new Set(planUnits.map((u) => normaliseCode(u.code)));
+
+              const catalogueMatches = (term: 1 | 2) => {
+                const query = catalogueSearch.trim().toLowerCase();
+                return catalogue
+                  .filter((u) => cataloguePrefix === 'ALL' || u.prefix === cataloguePrefix)
+                  .filter((u) => !placedCodes.has(normaliseCode(u.code)))
+                  .filter((u) => !pooledCodes.has(normaliseCode(u.code)))
+                  .filter(
+                    (u) =>
+                      query === '' ||
+                      u.code.toLowerCase().includes(query) ||
+                      u.name.toLowerCase().includes(query)
+                  )
+                  .map((u) => ({
+                    unit: u,
+                    offered:
+                      u.offeringSemesters.length === 0
+                        ? 'offering unknown'
+                        : u.offeringSemesters.includes(term)
+                          ? ''
+                          : 'not offered this term',
+                  }));
+              };
+
               const moveUnitToSlot = (code: string, slot: string) => {
                 const [year, semester] = slot.split('-').map(Number);
                 applyEdit(moveUnit(semesters, code, year, semester as 1 | 2));
@@ -592,7 +678,8 @@ export default function PathwayPage() {
                   semesters
                   .filter((sem) => sem.units.some((u) => u.category !== 'mpu') || isPlanEdited)
                   .map((sem) => {
-                    const capacity = overCapacity.get(`${sem.year}-${sem.semester}`);
+                    const slotKey = `${sem.year}-${sem.semester}`;
+                    const capacity = overCapacity.get(slotKey);
                     const calendarTerm = calendarTermFor(sem.semester, planIntakeSemester);
                     return (
                     <div
@@ -636,7 +723,64 @@ export default function PathwayPage() {
                             );
                           })}
                         </select>
+                        <button
+                          type="button"
+                          className={styles.catalogueBtn}
+                          onClick={() => openCatalogue(slotKey)}
+                          title="Add a unit that is not on this planner, including units from another course"
+                        >
+                          + Add from catalogue
+                        </button>
                       </div>
+                      {openCatalogueSlot === slotKey && (
+                        <div className={styles.cataloguePanel}>
+                          {catalogueLoading ? (
+                            <div className={styles.catalogueEmpty}>Loading units…</div>
+                          ) : (
+                            <>
+                              <div className={styles.catalogueControls}>
+                                <input
+                                  className={styles.catalogueSearch}
+                                  type="search"
+                                  value={catalogueSearch}
+                                  placeholder="Search by code or name"
+                                  aria-label="Search the unit catalogue"
+                                  onChange={(e) => setCatalogueSearch(e.target.value)}
+                                />
+                                <select
+                                  className={styles.catalogueFilter}
+                                  value={cataloguePrefix}
+                                  aria-label="Filter by unit code prefix"
+                                  onChange={(e) => setCataloguePrefix(e.target.value)}
+                                >
+                                  <option value="ALL">All prefixes</option>
+                                  {cataloguePrefixes.map((p) => (
+                                    <option key={p} value={p}>{p}</option>
+                                  ))}
+                                </select>
+                              </div>
+                              <ul className={styles.catalogueList}>
+                                {catalogueMatches(calendarTerm).map(({ unit, offered }) => (
+                                  <li key={unit.code}>
+                                    <button
+                                      type="button"
+                                      className={styles.catalogueItem}
+                                      onClick={() => addFromCatalogue(unit, sem)}
+                                    >
+                                      <span className={styles.catalogueCode}>{unit.code}</span>
+                                      <span className={styles.catalogueName}>{unit.name}</span>
+                                      {offered && <span className={styles.catalogueHint}>· {offered}</span>}
+                                    </button>
+                                  </li>
+                                ))}
+                              </ul>
+                              {catalogueMatches(calendarTerm).length === 0 && (
+                                <div className={styles.catalogueEmpty}>No units match that search.</div>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      )}
                       <div style={{ overflowX: 'auto' }}>
                         <table className={styles.table} style={{ tableLayout: 'fixed', width: '100%' }}>
                           <colgroup>
@@ -688,6 +832,20 @@ export default function PathwayPage() {
                                       }}
                                     >
                                       RECOMMENDED
+                                    </span>
+                                  )}
+                                  {u.outsidePlanner && (
+                                    <span
+                                      title="Added from the catalogue, not on this planner. Counted as an elective."
+                                      style={{
+                                        marginLeft: 6,
+                                        fontSize: 9,
+                                        fontFamily: 'var(--font-mono)',
+                                        color: 'var(--accent-blue)',
+                                        letterSpacing: '0.05em',
+                                      }}
+                                    >
+                                      OUTSIDE PLANNER
                                     </span>
                                   )}
                                   {unitMessages.map((message) => (
