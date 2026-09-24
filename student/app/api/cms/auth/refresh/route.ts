@@ -12,40 +12,45 @@ import {
 } from '@/lib/cms/auth'
 
 export async function POST(req: NextRequest) {
-  const refreshToken = req.cookies.get(REFRESH_COOKIE)?.value
-  if (!refreshToken) return NextResponse.json({ error: 'No refresh token' }, { status: 401 })
+  try {
+    const refreshToken = req.cookies.get(REFRESH_COOKIE)?.value
+    if (!refreshToken) return NextResponse.json({ error: 'No refresh token' }, { status: 401 })
 
-  const stored = await prisma.cmsRefreshToken.findFirst({
-    where: {
-      token_hash: hashToken(refreshToken),
-      expires_at: { gt: new Date() },
-    },
-    include: { user: true },
-  })
-
-  if (!stored) return NextResponse.json({ error: 'Invalid or expired refresh token' }, { status: 401 })
-
-  // Rotate: delete old, create new
-  const newRefreshToken = generateRefreshToken()
-  await prisma.$transaction([
-    prisma.cmsRefreshToken.delete({ where: { id: stored.id } }),
-    prisma.cmsRefreshToken.create({
-      data: {
-        user_id: stored.user.id,
-        token_hash: hashToken(newRefreshToken),
-        expires_at: refreshExpiresAt(),
+    const stored = await prisma.cmsRefreshToken.findFirst({
+      where: {
+        token_hash: hashToken(refreshToken),
+        expires_at: { gt: new Date() },
       },
-    }),
-  ])
+      include: { user: true },
+    })
 
-  const accessToken = await signAccessToken({
-    sub: stored.user.id,
-    email: stored.user.email,
-    name: stored.user.name,
-  })
+    if (!stored) return NextResponse.json({ error: 'Invalid or expired refresh token' }, { status: 401 })
 
-  const res = NextResponse.json({ ok: true })
-  res.cookies.set(ACCESS_COOKIE, accessToken, ACCESS_COOKIE_OPTIONS)
-  res.cookies.set(REFRESH_COOKIE, newRefreshToken, REFRESH_COOKIE_OPTIONS)
-  return res
+    // Rotate: delete old, create new
+    const newRefreshToken = generateRefreshToken()
+    await prisma.$transaction([
+      prisma.cmsRefreshToken.delete({ where: { id: stored.id } }),
+      prisma.cmsRefreshToken.create({
+        data: {
+          user_id: stored.user.id,
+          token_hash: hashToken(newRefreshToken),
+          expires_at: refreshExpiresAt(),
+        },
+      }),
+    ])
+
+    const accessToken = await signAccessToken({
+      sub: stored.user.id,
+      email: stored.user.email,
+      name: stored.user.name,
+    })
+
+    const res = NextResponse.json({ ok: true })
+    res.cookies.set(ACCESS_COOKIE, accessToken, ACCESS_COOKIE_OPTIONS)
+    res.cookies.set(REFRESH_COOKIE, newRefreshToken, REFRESH_COOKIE_OPTIONS)
+    return res
+  } catch (err) {
+    console.error('[API] POST /api/cms/auth/refresh failed:', err)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
 }

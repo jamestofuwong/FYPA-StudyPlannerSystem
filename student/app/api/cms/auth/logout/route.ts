@@ -3,15 +3,20 @@ import { prisma } from '@/lib/prisma'
 import { ACCESS_COOKIE, REFRESH_COOKIE, hashToken } from '@/lib/cms/auth'
 
 export async function POST(req: NextRequest) {
-  const refreshToken = req.cookies.get(REFRESH_COOKIE)?.value
-  if (refreshToken) {
-    await prisma.cmsRefreshToken.deleteMany({
-      where: { token_hash: hashToken(refreshToken) },
-    })
-  }
+  try {
+    const refreshToken = req.cookies.get(REFRESH_COOKIE)?.value
+    if (refreshToken) {
+      await prisma.cmsRefreshToken.deleteMany({
+        where: { token_hash: hashToken(refreshToken) },
+      })
+    }
 
-  const res = NextResponse.json({ ok: true })
-  res.cookies.delete(ACCESS_COOKIE)
-  res.cookies.delete(REFRESH_COOKIE)
-  return res
+    const res = NextResponse.json({ ok: true })
+    res.cookies.delete(ACCESS_COOKIE)
+    res.cookies.delete(REFRESH_COOKIE)
+    return res
+  } catch (err) {
+    console.error('[API] POST /api/cms/auth/logout failed:', err)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
 }
