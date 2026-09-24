@@ -212,6 +212,8 @@ export function standardLimitFor(cfg: SchedulerConfig, year: number, slotSemeste
 /** Empty offeringSemesters means unrestricted, so an unknown offering never blocks placement. */
 export function isOfferedIn(unit: SchedulableUnit, calendarTerm: 1 | 2): boolean {
   return unit.offeringSemesters.length === 0 || unit.offeringSemesters.includes(calendarTerm);
+}
+
 // Raw shape of a unit as returned by Prisma's nested planner/minor includes
 // (see web/app/api/custom-planner/route.ts and plannerRepository.getPlannerById()),
 // covering only the fields mapUnitToSchedulable reads.

@@ -424,6 +424,9 @@ describe('Custom Planner Scheduler', () => {
         'core',
       );
       expect(result.requisiteGroups).toEqual([[{ type: 'unit', requisiteType: 'prerequisite', unitCode: 'BASE' }]]);
+    });
+  });
+
   const warningsOf = <K extends PlanWarning['kind']>(
     result: ReturnType<typeof buildCustomPlan>,
     kind: K,
