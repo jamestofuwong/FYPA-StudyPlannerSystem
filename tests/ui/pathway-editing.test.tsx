@@ -73,7 +73,7 @@ const generatedPlan = () => ({
   warnings: GENERATED_WARNINGS,
 });
 
-function Seed() {
+function Seed({ completedCodes = [] as string[] }) {
   const session = useStudentSession();
   useEffect(() => {
     session.setStudentLoaded(true);
@@ -82,7 +82,7 @@ function Seed() {
       student: { courseList: [], selectedEnrollment: 'BA-CS' } as never,
     });
     session.setDashboardData({
-      completedCodes: [],
+      completedCodes,
       mpuCourseList: [],
       planners: [{
         id: 'p1',
@@ -103,10 +103,13 @@ function Seed() {
   return null;
 }
 
-const Harness = ({ showPage = true }: { showPage?: boolean }) => (
+const Harness = ({
+  showPage = true,
+  completedCodes = [] as string[],
+}: { showPage?: boolean; completedCodes?: string[] }) => (
   <ToastProvider>
     <StudentSessionProvider>
-      <Seed />
+      <Seed completedCodes={completedCodes} />
       {showPage && <PathwayPage />}
     </StudentSessionProvider>
   </ToastProvider>
@@ -334,5 +337,55 @@ describe('recommended electives', () => {
     const shortfall = await screen.findByText(/Electives total .* credit points, but 25 are required/i);
     expect(shortfall.textContent).toMatch(/12\.5/);
     expect(screen.queryByText('edited')).toBeNull();
+  });
+});
+
+// GRP1 is a unit the planner offers only as an elective-group candidate, never
+// as a named planner unit. Taking an elective that way is normal, so a student
+// who passed it has met that part of the requirement.
+describe('completed elective-group units', () => {
+  function mockPlan(creditTheGroupUnit: boolean) {
+    const plan = generatedPlan();
+    plan.semesters[1].units = [
+      { code: 'ADV', name: 'Advanced Programming', category: 'core' },
+      { code: 'E1', name: 'Elective One', category: 'elective' },
+    ];
+
+    global.fetch = jest.fn((url: string) => {
+      if (String(url).includes('/api/custom-planner')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            success: true,
+            data: plan,
+            units: PLAN_UNITS.filter((u) => u.code !== 'E2'),
+            intakeSemester: 1,
+            requirements: REQUIREMENTS,
+            completedUnits: creditTheGroupUnit
+              ? [planUnit('GRP1', 'Group Elective', 'elective')]
+              : [],
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    }) as unknown as typeof fetch;
+  }
+
+  test('a completed elective-group unit is credited, so a met requirement shows no shortfall', async () => {
+    mockPlan(true);
+    render(<Harness completedCodes={['GRP1']} />);
+    await generate();
+
+    // One elective in the plan plus the one already passed is the two required
+    expect(screen.queryByText(/Electives total/i)).toBeNull();
+  });
+
+  test('the same plan is short when the completed group unit is not reported', async () => {
+    mockPlan(false);
+    render(<Harness completedCodes={['GRP1']} />);
+    await generate();
+
+    const shortfall = await screen.findByText(/Electives total .* credit points, but 25 are required/i);
+    expect(shortfall.textContent).toMatch(/12\.5/);
   });
 });

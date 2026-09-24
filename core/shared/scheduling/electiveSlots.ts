@@ -1,18 +1,92 @@
-// Chooses units to fill a planner's empty elective slots.
-//
 // A planner records some electives as placeholders: a template_units row with no
 // unit_id, saying "an elective goes here" without naming one. The route drops
-// those rows when it builds the pool, so a generated plan came out short of the
-// elective requirement. This picks real units for those slots out of the
-// planner's elective groups.
+// those rows when it builds the pool, so without this a plan comes up short of
+// the elective requirement. This counts what is missing and picks real units for
+// it out of the planner's elective groups.
 //
-// Pure function: no database, clock or globals. It only ever returns units it
-// was handed, so it can never invent a unit that is not on the planner.
+// Pure functions: no database, clock or globals. Nothing here invents a unit
+// that is not already on the planner.
 
 import {
   normaliseCode,
+  type CustomPlanResult,
   type SchedulableUnit,
 } from '../../services/scheduling/customPlannerScheduler';
+
+/** Planner categories that count toward the elective requirement. */
+export const ELECTIVE_CATEGORIES: ReadonlyArray<string> = ['elective', 'prescribed_elective'];
+
+export interface ElectiveSlotsNeededInput {
+  /** The planner's recorded elective requirement. Null falls back to its empty slots. */
+  electiveCount: number | null;
+  /** One row per planner template unit. A null unitCode is an empty slot. */
+  plannerUnits: { category: string; unitCode: string | null }[];
+  /** Every unit code the planner's elective groups offer as a candidate. */
+  electiveGroupCodes: string[];
+  completedUnitCodes: string[];
+  /** The pool as it stands before any recommendation is added to it. */
+  pool: { code: string; category: string }[];
+  /** Pooled codes the scheduler proved it can never place. See blockedByRequisites. */
+  blockedUnitCodes?: string[];
+}
+
+/**
+ * How many elective slots still have to be filled.
+ *
+ * A planner that never recorded an elective_count falls back to its own empty
+ * slots, which is what the count would have described.
+ */
+export function countElectiveSlotsNeeded(input: ElectiveSlotsNeededInput): number {
+  const isElective = (category: string) => ELECTIVE_CATEGORIES.includes(category);
+
+  if (input.electiveCount == null) {
+    return input.plannerUnits.filter((row) => row.unitCode === null && isElective(row.category))
+      .length;
+  }
+
+  const completed = new Set((input.completedUnitCodes ?? []).map(normaliseCode));
+  const blocked = new Set((input.blockedUnitCodes ?? []).map(normaliseCode));
+
+  // Taking an elective from one of the planner's groups is the normal way to do
+  // it, so a passed unit counts whether the planner named it or only offered it
+  // as a candidate. A set, because a unit can be both.
+  const completedElectives = new Set<string>();
+  for (const row of input.plannerUnits) {
+    if (row.unitCode === null || !isElective(row.category)) continue;
+    const code = normaliseCode(row.unitCode);
+    if (completed.has(code)) completedElectives.add(code);
+  }
+  for (const candidate of input.electiveGroupCodes ?? []) {
+    const code = normaliseCode(candidate);
+    if (completed.has(code)) completedElectives.add(code);
+  }
+
+  // An elective the scheduler can never place fills no slot, so it leaves one
+  // for a recommendation that can be placed.
+  const pooledElectives = input.pool.filter(
+    (unit) => isElective(unit.category) && !blocked.has(normaliseCode(unit.code)),
+  ).length;
+
+  return input.electiveCount - completedElectives.size - pooledElectives;
+}
+
+/**
+ * Codes the scheduler left unplaced because of a requisite it can never satisfy.
+ *
+ * Only requisite_violation counts. A unit held back because it is offered in
+ * summer alone, or because the plan ran out of semesters, is still a unit the
+ * plan means to include, so those reasons free no slot.
+ */
+export function blockedByRequisites(result: CustomPlanResult): string[] {
+  const violated = new Set(
+    result.warnings
+      .filter((w) => w.kind === 'requisite_violation')
+      .map((w) => normaliseCode(w.unitCode)),
+  );
+  return result.unschedulableUnits
+    .map((unit) => normaliseCode(unit.code))
+    .filter((code) => violated.has(code));
+}
 
 export interface RecommendElectivesInput {
   /** How many slots are still empty. Zero or less returns nothing. */
@@ -28,10 +102,9 @@ export interface RecommendElectivesInput {
  *
  * Sources are consulted in order and an earlier source is exhausted before a
  * later one is touched, so the caller expresses priority by ordering the lists.
- * Within one source the order is: units that can be placed in a normal semester
- * first, then units whose prerequisites are already met, then the order the
- * source listed them in. Nothing already completed or already in the plan is
- * returned, and no unit is returned twice.
+ * Within one source: units placeable in a normal semester first, then those
+ * whose prerequisites are already met, then source order. Nothing completed or
+ * already planned comes back, and no unit comes back twice.
  *
  * Units come back exactly as they were passed in. Stamping a category or a
  * `recommended` flag is the caller's job, so a caller filling something other

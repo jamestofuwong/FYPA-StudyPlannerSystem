@@ -6,11 +6,12 @@ import {
   validateSchedulerConfig,
   type SchedulableUnit,
 } from '../../../../core/services/scheduling/customPlannerScheduler';
-import { recommendElectives } from '../../../../core/shared/scheduling/electiveSlots';
+import {
+  blockedByRequisites,
+  countElectiveSlotsNeeded,
+  recommendElectives,
+} from '../../../../core/shared/scheduling/electiveSlots';
 import { toSchedulableUnit } from '../../../../core/shared/scheduling/schedulableUnit';
-
-/** Planner categories that count toward the elective requirement. */
-const ELECTIVE_CATEGORIES = ['elective', 'prescribed_elective'];
 
 /** The nested include every schedulable unit needs, used for planner and elective-group rows alike. */
 const UNIT_INCLUDE = {
@@ -40,36 +41,6 @@ function toSchedulable(
       })),
     ),
   });
-}
-
-/**
- * How many elective slots still have to be filled.
- *
- * The planner's elective_count is the number of electives the degree requires,
- * so what is left is that number less the electives already passed and the ones
- * the planner names in the pool. A planner that never recorded a count falls
- * back to its own empty slots, which is what the count would have described.
- */
-function countElectiveSlotsNeeded(
-  planner: { elective_count: number | null; units: { unit: { unit_code: string } | null; category: unknown }[] },
-  completedCodes: Set<string>,
-  pool: SchedulableUnit[],
-): number {
-  const isElective = (category: unknown) => ELECTIVE_CATEGORIES.includes(String(category));
-
-  if (planner.elective_count == null) {
-    return planner.units.filter((tu) => tu.unit === null && isElective(tu.category)).length;
-  }
-
-  const completedElectives = planner.units.filter(
-    (tu) =>
-      tu.unit !== null &&
-      isElective(tu.category) &&
-      completedCodes.has(tu.unit.unit_code.toUpperCase()),
-  ).length;
-  const pooledElectives = pool.filter((u) => isElective(u.category)).length;
-
-  return planner.elective_count - completedElectives - pooledElectives;
 }
 
 export async function POST(req: NextRequest) {
@@ -125,6 +96,25 @@ export async function POST(req: NextRequest) {
       (completedUnitCodes as string[]).map((c) => c.trim().toUpperCase())
     );
 
+    // Units the planner names outright, and the completed ones among them. A
+    // named unit keeps its own category even where an elective group repeats it.
+    const namedCodes = new Set(
+      planner.units.filter((tu) => tu.unit !== null).map((tu) => tu.unit!.unit_code.toUpperCase()),
+    );
+    const namedCompleted = planner.units.filter(
+      (tu) => tu.unit !== null && normalizedCompleted.has(tu.unit.unit_code.toUpperCase()),
+    );
+
+    // Every unit the planner's elective groups offer, deduplicated in case two
+    // groups list the same one
+    const electiveGroupUnits = [
+      ...new Map(
+        planner.elective_groups.flatMap((group) =>
+          group.units.map((gu) => [gu.unit.unit_code.toUpperCase(), gu.unit] as const),
+        ),
+      ).values(),
+    ];
+
     // The core pool is all planner units the student has not yet completed/enrolled in
     const remainingUnits: SchedulableUnit[] = planner.units
       .filter((tu) => tu.unit !== null && !normalizedCompleted.has(tu.unit.unit_code.toUpperCase()))
@@ -153,11 +143,38 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const schedule = (pool: SchedulableUnit[]) =>
+      buildCustomPlan(
+        pool,
+        completedUnitCodes as string[],
+        startYear as number,
+        startSemester as 1 | 2,
+        intakeSemester,
+        (concededPassUnitCodes as string[] | undefined) ?? [],
+        configCheck.config
+      );
+
     // A planner records some electives as a slot with no unit_id, which the pool
     // above drops because there is nothing to place. Count how many of those the
-    // student still owes and pick real units for them, or the plan comes out
-    // short of the elective requirement with nothing on screen to say why.
-    const electiveSlotsNeeded = countElectiveSlotsNeeded(planner, normalizedCompleted, remainingUnits);
+    // student still owes and pick real units for them.
+    //
+    // The pool is scheduled twice on purpose: whether an elective already in the
+    // pool fills its slot is only knowable after a run, since one blocked by a
+    // requisite is never placed and leaves its slot to a recommendation. The
+    // first run answers that and is discarded; the second is the plan returned.
+    const probe = schedule(remainingUnits);
+    const electiveSlotsNeeded = countElectiveSlotsNeeded({
+      electiveCount: planner.elective_count,
+      plannerUnits: planner.units.map((tu) => ({
+        category: String(tu.category),
+        unitCode: tu.unit?.unit_code ?? null,
+      })),
+      electiveGroupCodes: electiveGroupUnits.map((u) => u.unit_code),
+      completedUnitCodes: [...normalizedCompleted],
+      pool: remainingUnits,
+      blockedUnitCodes: blockedByRequisites(probe),
+    });
+
     const recommended = recommendElectives({
       needed: electiveSlotsNeeded,
       // One source per elective group, in the order the planner lists them.
@@ -171,15 +188,7 @@ export async function POST(req: NextRequest) {
       remainingUnits.push({ ...unit, category: 'elective', recommended: true });
     }
 
-    const result = buildCustomPlan(
-      remainingUnits,
-      completedUnitCodes as string[],
-      startYear as number,
-      startSemester as 1 | 2,
-      intakeSemester,
-      (concededPassUnitCodes as string[] | undefined) ?? [],
-      configCheck.config
-    );
+    const result = recommended.length > 0 ? schedule(remainingUnits) : probe;
 
     // A null requirement means the planner never recorded one, so it is left
     // out rather than sent as zero, which would read as "nothing required".
@@ -199,10 +208,19 @@ export async function POST(req: NextRequest) {
       intakeSemester,
       requirements,
       // Categories for units already completed, which the pool leaves out but
-      // the requirement totals must still count
-      completedUnits: planner.units
-        .filter((tu) => tu.unit !== null && normalizedCompleted.has(tu.unit.unit_code.toUpperCase()))
-        .map((tu) => toSchedulable(tu.unit!, String(tu.category))),
+      // the requirement totals must still count. A unit the planner only offers
+      // as an elective candidate is an elective the student has taken, so it is
+      // listed too, or the elective total comes up short.
+      completedUnits: [
+        ...namedCompleted.map((tu) => toSchedulable(tu.unit!, String(tu.category))),
+        ...electiveGroupUnits
+          .filter(
+            (unit) =>
+              normalizedCompleted.has(unit.unit_code.toUpperCase()) &&
+              !namedCodes.has(unit.unit_code.toUpperCase()),
+          )
+          .map((unit) => toSchedulable(unit, 'elective')),
+      ],
     });
   } catch (error) {
     console.error('[custom-planner]', error);

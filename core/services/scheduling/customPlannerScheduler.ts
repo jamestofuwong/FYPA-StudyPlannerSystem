@@ -47,8 +47,7 @@ export interface SchedulableUnit {
   offeringSemesters: (1 | 2)[];
   /**
    * Raw offering terms from unit_offerings, 1-4. Empty means no data recorded.
-   * Callers that predate this field may omit it, in which case offeringSemesters
-   * is taken as the full list.
+   * Optional: where a caller omits it, offeringSemesters is the full list.
    */
   allOfferingTerms?: number[];
   /**
@@ -58,8 +57,8 @@ export interface SchedulableUnit {
   creditPoints?: number;
   /**
    * Set on units the planner never named, added to fill an empty elective slot.
-   * The scheduler treats them like any other unit; it only carries the flag
-   * through so the UI can say the choice was a recommendation, not a requirement.
+   * Carried through untouched, so the UI can mark the choice as a recommendation
+   * rather than a requirement.
    */
   recommended?: boolean;
 
@@ -401,7 +400,7 @@ export function buildCustomPlan(
   };
 }
 
-/** Narrows a pool unit to what the plan reports, keeping the recommended flag only when set. */
+/** Keeps the recommended flag out of the result unless it is set. */
 function toScheduled(unit: SchedulableUnit): ScheduledUnit {
   return {
     code: unit.code,
