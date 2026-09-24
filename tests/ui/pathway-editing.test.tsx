@@ -34,6 +34,11 @@ const PLAN_UNITS: SchedulableUnit[] = [
   planUnit('E1', 'Elective One', 'elective'),
   planUnit('E2', 'Elective Two', 'elective'),
   planUnit('MPU3212', 'Bahasa Kebangsaan A', 'mpu', { offeringSemesters: [], allOfferingTerms: [3, 4] }),
+  // Winter only and not MPU, so its warning is shown rather than suppressed
+  planUnit('ICT20016*Optional', 'Professional Experience', 'wil', {
+    offeringSemesters: [],
+    allOfferingTerms: [4],
+  }),
 ];
 
 const REQUIREMENTS = [
@@ -42,9 +47,11 @@ const REQUIREMENTS = [
   { category: 'elective', creditPoints: 25, unitCount: 2, planCategories: ['elective', 'prescribed_elective'] },
 ];
 
-// MPU3212 is summer/winter only, so the scheduler reports it instead of placing it
+// Both are summer/winter only, so the scheduler reports them instead of placing
+// them. Only the non-MPU one reaches the screen.
 const GENERATED_WARNINGS = [
   { kind: 'short_term_only' as const, unitCode: 'MPU3212', offeringTerms: [3, 4] },
+  { kind: 'short_term_only' as const, unitCode: 'ICT20016*Optional', offeringTerms: [4] },
 ];
 
 const generatedPlan = () => ({
@@ -69,7 +76,10 @@ const generatedPlan = () => ({
       ],
     },
   ],
-  unschedulableUnits: [{ code: 'MPU3212', name: 'Bahasa Kebangsaan A', category: 'mpu' }],
+  unschedulableUnits: [
+    { code: 'MPU3212', name: 'Bahasa Kebangsaan A', category: 'mpu' },
+    { code: 'ICT20016*Optional', name: 'Professional Experience', category: 'wil' },
+  ],
   warnings: GENERATED_WARNINGS,
 });
 
@@ -237,21 +247,21 @@ describe('pathway editing', () => {
     render(<Harness />);
     await generate();
 
-    expect(screen.getByText(/MPU3212 is only offered in summer\/winter/i)).toBeTruthy();
+    expect(screen.getByText(/ICT20016\*Optional is only offered in summer\/winter/i)).toBeTruthy();
 
     fireEvent.click(screen.getByLabelText('Remove C1'));
 
-    expect(screen.getByText(/MPU3212 is only offered in summer\/winter/i)).toBeTruthy();
+    expect(screen.getByText(/ICT20016\*Optional is only offered in summer\/winter/i)).toBeTruthy();
   });
 
   test('placing the summer/winter unit replaces the carried warning', async () => {
     render(<Harness />);
     await generate();
 
-    fireEvent.change(pickers()[0], { target: { value: 'MPU3212' } });
+    fireEvent.change(pickers()[0], { target: { value: 'ICT20016*Optional' } });
 
     await waitFor(() => {
-      const row = screen.getByText('MPU3212').closest('tr');
+      const row = screen.getByText('ICT20016*Optional').closest('tr');
       expect(within(row as HTMLElement).getByText(/only offered in summer\/winter/i)).toBeTruthy();
     });
   });
@@ -564,5 +574,167 @@ describe('the catalogue does not repeat what the pool already offers', () => {
     // Offered by the planner picker, so not offered again here
     expect(screen.getByText('SWE30009')).toBeTruthy();
     expect(screen.queryByText('COS30043')).toBeNull();
+  });
+});
+
+// Slots count from the intake, offering terms are calendar terms, and for a
+// September intake the two are swapped. The header names the months so the two
+// countings can never be read as the same thing.
+describe('terms named by month', () => {
+  const mockWithIntake = (intakeSemester: 1 | 2) => {
+    global.fetch = jest.fn((url: string) => {
+      if (String(url).includes('/api/custom-planner')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            success: true,
+            data: generatedPlan(),
+            units: PLAN_UNITS,
+            intakeSemester,
+            requirements: REQUIREMENTS,
+            completedUnits: [],
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    }) as unknown as typeof fetch;
+  };
+
+  const headerOf = (slot: 1 | 2) =>
+    screen.getByText((_, el) => {
+      const text = el?.textContent ?? '';
+      return el?.tagName === 'SPAN' && text.startsWith('YEAR 1') && text.includes(`SEM ${slot}`);
+    }).textContent ?? '';
+
+  test('a September intake shows slot 1 as Aug/Sep and slot 2 as Feb/Mar', async () => {
+    mockWithIntake(2);
+    render(<Harness />);
+    await generate();
+
+    expect(headerOf(1)).toContain('Aug/Sep');
+    expect(headerOf(2)).toContain('Feb/Mar');
+  });
+
+  test('a February intake shows slot 1 as Feb/Mar and slot 2 as Aug/Sep', async () => {
+    mockWithIntake(1);
+    render(<Harness />);
+    await generate();
+
+    expect(headerOf(1)).toContain('Feb/Mar');
+    expect(headerOf(2)).toContain('Aug/Sep');
+  });
+
+  test('no warning anywhere says "Semester 1" or "Semester 2"', async () => {
+    mockWithIntake(2);
+    render(<Harness />);
+    await generate();
+
+    // Stir up as many warnings as one plan can hold
+    fireEvent.click(screen.getByLabelText('Remove C1'));
+    fireEvent.change(pickers()[0], { target: { value: 'ICT20016*Optional' } });
+
+    await waitFor(() => expect(screen.getByText('ICT20016*Optional')).toBeTruthy());
+
+    const warningText = [
+      ...document.querySelectorAll('[class*="warningItem"], [class*="rowWarning"]'),
+    ].map((el) => el.textContent ?? '').join(' | ');
+
+    expect(warningText.length).toBeGreaterThan(0);
+    expect(warningText).not.toMatch(/Semester [12]/);
+  });
+
+  test('a unit placed by hand in a term it does not run says so, not "could not be fitted"', async () => {
+    // Aug/Sep only. Slot 2 of a September intake is a Feb/Mar term.
+    const augSepOnly = planUnit('COS10082', 'Applied Analytics', 'elective', {
+      offeringSemesters: [2],
+      allOfferingTerms: [2],
+    });
+    global.fetch = jest.fn((url: string) => {
+      if (String(url).includes('/api/custom-planner')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            success: true,
+            data: generatedPlan(),
+            units: [...PLAN_UNITS, augSepOnly],
+            intakeSemester: 2,
+            requirements: REQUIREMENTS,
+            completedUnits: [],
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    }) as unknown as typeof fetch;
+
+    render(<Harness />);
+    await generate();
+
+    // pickers()[1] is the slot-2 card, a Feb/Mar term for this student
+    fireEvent.change(pickers()[1], { target: { value: 'COS10082' } });
+
+    const row = (await screen.findByText('COS10082')).closest('tr') as HTMLElement;
+    expect(
+      within(row).getByText(/only runs in Aug\/Sep, but Y1 S2 is a Feb\/Mar term for this student/i),
+    ).toBeTruthy();
+    expect(within(row).queryByText(/could not be fitted into one/i)).toBeNull();
+  });
+});
+
+describe('electives beyond the requirement', () => {
+  const mockPlan = (extraElectives: string[]) => {
+    const extras = extraElectives.map((c) => planUnit(c, `Extra ${c}`, 'elective'));
+    const plan = generatedPlan();
+    plan.semesters[1].units = [
+      ...plan.semesters[1].units,
+      ...extras.map((u) => ({ code: u.code, name: u.name, category: u.category })),
+    ];
+    global.fetch = jest.fn((url: string) => {
+      if (String(url).includes('/api/custom-planner')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            success: true,
+            data: plan,
+            units: [...PLAN_UNITS, ...extras],
+            intakeSemester: 1,
+            requirements: REQUIREMENTS,
+            completedUnits: [],
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    }) as unknown as typeof fetch;
+  };
+
+  test('one elective past the requirement shows the excess message on a fresh plan', async () => {
+    mockPlan(['X1']);
+    render(<Harness />);
+    await generate();
+
+    const excess = await screen.findByText(/Electives total 37.5 credit points, 12.5 more than the 25 required/i);
+    expect(excess).toBeTruthy();
+    expect(screen.queryByText(/Electives total .* but .* required to graduate/i)).toBeNull();
+    expect(screen.queryByText('edited')).toBeNull();
+  });
+
+  test('a fresh plan that meets the requirement shows neither excess nor shortfall', async () => {
+    mockPlan([]);
+    render(<Harness />);
+    await generate();
+
+    expect(screen.queryByText(/Electives total/i)).toBeNull();
+  });
+
+  test('adding one more elective by hand raises the excess', async () => {
+    mockPlan([]);
+    render(<Harness />);
+    await generate();
+
+    expect(screen.queryByText(/Electives total/i)).toBeNull();
+
+    fireEvent.change(pickers()[0], { target: { value: 'C4' } });
+    // C4 is core, so the elective total is untouched
+    await waitFor(() => expect(screen.getByText('edited')).toBeTruthy());
+    expect(screen.queryByText(/Electives total/i)).toBeNull();
   });
 });

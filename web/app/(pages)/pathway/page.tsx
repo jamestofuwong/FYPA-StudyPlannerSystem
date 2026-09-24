@@ -29,7 +29,17 @@ import {
   removeUnit,
 } from '../../../../core/shared/scheduling/planEdits';
 
-const TERM_NAMES: Record<number, string> = { 1: 'Semester 1', 2: 'Semester 2', 3: 'summer', 4: 'winter' };
+/**
+ * Calendar terms named by the months they run in.
+ *
+ * "Semester 2" is ambiguous on this page: the header counts slots from the
+ * student's intake, while an offering term is a calendar term, and for a
+ * September intake the two are swapped. Months belong to neither counting, so
+ * they say the same thing to every reader.
+ */
+const TERM_MONTHS: Record<number, string> = { 1: 'Feb/Mar', 2: 'Aug/Sep', 3: 'summer', 4: 'winter' };
+
+const monthsOf = (term: number) => TERM_MONTHS[term] ?? `term ${term}`;
 
 const CATEGORY_NAMES: Record<string, string> = {
   core: 'Core units',
@@ -46,7 +56,7 @@ function listCodes(codes: string[]): string {
   return `${codes.slice(0, -1).join(', ')} and ${codes[codes.length - 1]}`;
 }
 
-function describeWarning(w: PlanWarning, maxSemesters: number): string | null {
+function describeWarning(w: PlanWarning, maxSemesters: number, intakeSemester: 1 | 2): string | null {
   switch (w.kind) {
     case 'requisite_violation': {
       const parts: string[] = [];
@@ -66,8 +76,19 @@ function describeWarning(w: PlanWarning, maxSemesters: number): string | null {
       }
       return `${w.unitCode} ${parts.length > 0 ? parts.join('; ') : 'has requisites that cannot be met'}`;
     }
-    case 'not_offered':
-      return `${w.unitCode} is only offered in ${listCodes(w.offeringTerms.map((t) => TERM_NAMES[t] ?? `term ${t}`))}, and could not be fitted into one`;
+    case 'not_offered': {
+      const runsIn = listCodes(w.offeringTerms.map(monthsOf));
+      // placedIn means an advisor put it there by hand, so the scheduler's
+      // "could not be fitted" wording would be wrong.
+      if (w.placedIn) {
+        const slotMonths = monthsOf(calendarTermFor(w.placedIn.semester, intakeSemester));
+        return `${w.unitCode} only runs in ${runsIn}, but Y${w.placedIn.year} S${w.placedIn.semester} is a ${slotMonths} term for this student`;
+      }
+      const noSuchTerm = w.offeringTerms.length === 1
+        ? `no ${runsIn} term was available`
+        : 'none of those terms was available';
+      return `${w.unitCode} only runs in ${runsIn}, and ${noSuchTerm} within the plan`;
+    }
     case 'short_term_only':
       return `${w.unitCode} is only offered in summer/winter, which this plan does not schedule`;
     case 'budget_exhausted':
@@ -80,20 +101,13 @@ function describeWarning(w: PlanWarning, maxSemesters: number): string | null {
       return `${listCodes(w.unitCodes)} ${w.unitCodes.length === 1 ? 'is' : 'are'} required to graduate but ${w.unitCodes.length === 1 ? 'is' : 'are'} not in this plan`;
     case 'requirement_shortfall':
       return `${CATEGORY_NAMES[w.category] ?? w.category} total ${w.have} credit points, but ${w.need} are required to graduate`;
+    case 'requirement_excess':
+      return `${CATEGORY_NAMES[w.category] ?? w.category} total ${w.have} credit points, ${w.have - w.need} more than the ${w.need} required`;
     default:
       // over_capacity is shown on the semester it concerns
       return null;
   }
 }
-
-/** Warnings that belong on a unit's row rather than under the plan. */
-const UNIT_WARNING_KINDS = new Set<PlanWarning['kind']>([
-  'requisite_violation',
-  'not_offered',
-  'short_term_only',
-  'no_offering_data',
-  'duplicate_placement',
-]);
 
 function warningUnitCode(w: PlanWarning): string | null {
   return 'unitCode' in w ? w.unitCode : null;
@@ -577,7 +591,9 @@ export default function PathwayPage() {
                     // The scheduler places what it is given and never counts the
                     // total, so a plan short of a category's credit points comes
                     // out clean. That shortfall is worth saying before any edit.
-                    ...validation.filter((w) => w.kind === 'requirement_shortfall'),
+                    ...validation.filter(
+                      (w) => w.kind === 'requirement_shortfall' || w.kind === 'requirement_excess',
+                    ),
                   ];
 
               const overCapacity = new Map<string, Extract<PlanWarning, { kind: 'over_capacity' }>>();
@@ -600,7 +616,7 @@ export default function PathwayPage() {
                 }
 
                 // Normal warning handling continues below...
-                const message = describeWarning(w, DEFAULT_SCHEDULER_CONFIG.maxSemesters);
+                const message = describeWarning(w, DEFAULT_SCHEDULER_CONFIG.maxSemesters, planIntakeSemester);
                 if (w.kind === 'over_capacity') {
                   overCapacity.set(`${w.year}-${w.semester}`, w);
                   continue;
@@ -688,7 +704,7 @@ export default function PathwayPage() {
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'rgba(244,135,113,0.06)' }}>
                         <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--accent-orange)' }}>
-                          YEAR {sem.year} · SEM {sem.semester}
+                          YEAR {sem.year} · SEM {sem.semester} · {monthsOf(calendarTerm)}
                         </span>
                         <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 8 }}>
                           {sem.units.filter((u) => u.category !== 'mpu').length} units · Custom

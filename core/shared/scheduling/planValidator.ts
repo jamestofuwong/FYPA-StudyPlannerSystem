@@ -151,7 +151,13 @@ export function validatePlan(input: ValidatePlanInput): PlanWarning[] {
       } else if (data.offeringSemesters.length === 0) {
         warnings.push({ kind: 'short_term_only', unitCode: scheduled.code, offeringTerms: terms });
       } else if (!isOfferedIn(data, calendarTerm)) {
-        warnings.push({ kind: 'not_offered', unitCode: scheduled.code, offeringTerms: terms });
+        warnings.push({
+          kind: 'not_offered',
+          unitCode: scheduled.code,
+          offeringTerms: terms,
+          // The slot it was put in, so the reader can be told which term that is
+          placedIn: { year: bucket.year, semester: bucket.semester },
+        });
       }
 
       if (data.requisiteGroups.length > 0) {
@@ -215,9 +221,18 @@ export function validatePlan(input: ValidatePlanInput): PlanWarning[] {
         .filter((u) => planCategories.has(u.category))
         .reduce((total, u) => total + (u.creditPoints ?? perUnit), 0);
 
+      // Short, exact or in excess, decided from one total so the two can never
+      // both fire for the same category.
       if (have < requirement.creditPoints) {
         warnings.push({
           kind: 'requirement_shortfall',
+          category: requirement.category,
+          have,
+          need: requirement.creditPoints,
+        });
+      } else if (have > requirement.creditPoints) {
+        warnings.push({
+          kind: 'requirement_excess',
           category: requirement.category,
           have,
           need: requirement.creditPoints,

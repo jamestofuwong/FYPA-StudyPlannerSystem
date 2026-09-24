@@ -223,7 +223,8 @@ describe('validatePlan', () => {
         completedUnitCodes: [],
         unitData: unitData(units),
       })).toEqual([
-        { kind: 'not_offered', unitCode: 'SEM2-ONLY', offeringTerms: [2] },
+        // placedIn names the slot, so the page can say which term that slot is
+        { kind: 'not_offered', unitCode: 'SEM2-ONLY', offeringTerms: [2], placedIn: { year: 2024, semester: 1 } },
       ]);
     });
 
@@ -275,7 +276,7 @@ describe('validatePlan', () => {
         intakeSemester: 2,
         unitData: unitData(units),
       })).toEqual([
-        { kind: 'not_offered', unitCode: 'SEM2-ONLY', offeringTerms: [2] },
+        { kind: 'not_offered', unitCode: 'SEM2-ONLY', offeringTerms: [2], placedIn: { year: 2024, semester: 2 } },
       ]);
     });
   });
@@ -499,6 +500,68 @@ describe('validatePlan', () => {
         unitData: unitData(all),
       });
       expect(kinds(warnings)).not.toContain('requirement_shortfall');
+    });
+
+    // The mirror of the shortfall, read off the same total, so a category is
+    // short, exact or in excess and never two of those at once.
+    describe('requirement excess', () => {
+      const electiveOnly = [
+        { category: 'elective', creditPoints: 25, unitCount: 2, planCategories: ['elective', 'prescribed_elective'] },
+      ];
+      const extra = ['X1', 'X2'].map((c) => unit(c, { category: 'elective' }));
+      const check = (...placed: SchedulableUnit[]) =>
+        validatePlan({
+          semesters: [bucket(2024, 1, ...placed)],
+          completedUnitCodes: [],
+          unitData: unitData([...all, ...extra]),
+          requirements: electiveOnly,
+        });
+
+      test('one elective past the requirement is reported as excess', () => {
+        expect(check(...electives, extra[0])).toEqual([
+          { kind: 'requirement_excess', category: 'elective', have: 37.5, need: 25 },
+        ]);
+      });
+
+      test('two past the requirement reports the whole difference', () => {
+        expect(check(...electives, ...extra)).toEqual([
+          { kind: 'requirement_excess', category: 'elective', have: 50, need: 25 },
+        ]);
+      });
+
+      test('an exact total reports neither excess nor shortfall', () => {
+        expect(check(...electives)).toEqual([]);
+      });
+
+      test('a short total reports only the shortfall', () => {
+        const warnings = check(electives[0]);
+        expect(warnings).toEqual([
+          { kind: 'requirement_shortfall', category: 'elective', have: 12.5, need: 25 },
+        ]);
+        expect(kinds(warnings)).not.toContain('requirement_excess');
+      });
+
+      test('a category the planner never recorded is skipped for excess too', () => {
+        // The route leaves null requirements out, so nothing to compare against
+        const warnings = validatePlan({
+          semesters: [bucket(2024, 1, ...electives, ...extra)],
+          completedUnitCodes: [],
+          unitData: unitData([...all, ...extra]),
+          requirements: [requirements[0]],
+        });
+        expect(kinds(warnings)).not.toContain('requirement_excess');
+      });
+
+      test('completed units count toward the excess, as they do the shortfall', () => {
+        expect(validatePlan({
+          semesters: [bucket(2024, 1, ...electives)],
+          completedUnitCodes: ['X1'],
+          unitData: unitData([...all, ...extra]),
+          requirements: electiveOnly,
+        })).toEqual([
+          { kind: 'requirement_excess', category: 'elective', have: 37.5, need: 25 },
+        ]);
+      });
     });
   });
 

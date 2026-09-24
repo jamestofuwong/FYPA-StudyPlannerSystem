@@ -100,7 +100,17 @@ export type PlanWarning =
       /** Credit points required that the plan can never reach. */
       creditPointsNeeded?: number;
     }
-  | { kind: 'not_offered'; unitCode: string; offeringTerms: number[] }
+  /**
+   * placedIn is set only by validatePlan, for a unit an advisor put in a term it
+   * does not run. buildCustomPlan leaves it unset, because a unit it could not
+   * place sits in no slot at all. The two read very differently to an advisor.
+   */
+  | {
+      kind: 'not_offered';
+      unitCode: string;
+      offeringTerms: number[];
+      placedIn?: { year: number; semester: 1 | 2 };
+    }
   | { kind: 'no_offering_data'; unitCode: string }
   | { kind: 'short_term_only'; unitCode: string; offeringTerms: number[] }
   | { kind: 'budget_exhausted'; unitCodes: string[] }
@@ -110,6 +120,8 @@ export type PlanWarning =
   | { kind: 'compulsory_missing'; unitCodes: string[] }
   /** A category short of the credit points the planner requires. Validation only. */
   | { kind: 'requirement_shortfall'; category: string; have: number; need: number }
+  /** A category past the credit points the planner requires. Validation only. */
+  | { kind: 'requirement_excess'; category: string; have: number; need: number }
   /** The same unit sitting in more than one semester. Validation only. */
   | { kind: 'duplicate_placement'; unitCode: string; positions: { year: number; semester: 1 | 2 }[] };
 

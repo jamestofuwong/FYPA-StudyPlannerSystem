@@ -27,6 +27,8 @@ const CATALOGUE = [
   row('SWE20004', 'Technical Software Development'),
   row('SWE30009', 'Software Testing', [2]),
   // Offered in winter alone, so it must keep allOfferingTerms to stay recognisable
+  row('ICT20016', 'Professional Experience', [4]),
+  // Never offered: the catalogue drops every MPU unit
   row('MPU3212', 'Bahasa Kebangsaan A', [4]),
 ];
 
@@ -46,7 +48,7 @@ describe('GET /api/custom-planner/catalogue', () => {
     const { status, body } = await call();
 
     expect(status).toBe(200);
-    const winterOnly = body.units.find((u: any) => u.code === 'MPU3212');
+    const winterOnly = body.units.find((u: any) => u.code === 'ICT20016');
     expect(winterOnly.allOfferingTerms).toEqual([4]);
     expect(winterOnly.offeringSemesters).toEqual([]);
 
@@ -76,19 +78,29 @@ describe('GET /api/custom-planner/catalogue', () => {
 
     const { body } = await call('?plannerId=p1');
 
-    expect(body.units.map((u: any) => u.code)).toEqual(['COS30015', 'SWE20004', 'MPU3212']);
+    expect(body.units.map((u: any) => u.code)).toEqual(['COS30015', 'SWE20004', 'ICT20016']);
   });
 
   test('excludes completed units, matching on code case and spacing', async () => {
     const { body } = await call('?completed=' + encodeURIComponent(' cos10009 ,SWE20004'));
 
-    expect(body.units.map((u: any) => u.code)).toEqual(['COS30015', 'SWE30009', 'MPU3212']);
+    expect(body.units.map((u: any) => u.code)).toEqual(['COS30015', 'SWE30009', 'ICT20016']);
   });
 
   test('reports the prefixes present so the page can offer them as a filter', async () => {
     const { body } = await call();
 
-    expect(body.prefixes).toEqual(['COS', 'MPU', 'SWE']);
+    expect(body.prefixes).toEqual(['COS', 'ICT', 'SWE']);
+  });
+
+  // MPU units belong in the Remaining MPU Units table, never in a semester
+  test('offers no MPU unit, and does not list MPU as a prefix', async () => {
+    const { body } = await call();
+
+    expect(body.units.map((u: any) => u.code)).not.toContain('MPU3212');
+    expect(body.units.some((u: any) => u.code.startsWith('MPU'))).toBe(false);
+    expect(body.units.some((u: any) => u.prefix === 'MPU')).toBe(false);
+    expect(body.prefixes).not.toContain('MPU');
   });
 
   test('filtering by the SWE prefix leaves only Software Engineering units', async () => {

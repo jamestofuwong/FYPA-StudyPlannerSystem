@@ -52,6 +52,11 @@ export async function GET(req: NextRequest) {
 
     const units: CatalogueUnit[] = rows
       .filter((row) => !excluded.has(normaliseCode(row.unit_code)))
+      // MPU units are never added to a semester. The catalogue already drops
+      // everything the student's own planner names, so any MPU left here is from
+      // a different MPU generation, and students follow their own planner's set.
+      // They belong in the Remaining MPU Units table, not in the plan.
+      .filter((row) => unitPrefix(row.unit_code) !== 'MPU')
       .map((row) => ({
         ...toSchedulable(row, 'elective'),
         outsidePlanner: true,
