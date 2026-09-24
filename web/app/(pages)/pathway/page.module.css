@@ -55,3 +55,49 @@
 .removeBtn:hover { background: rgba(244,135,113,0.3); }
 .rowFlagged { background: rgba(244,135,113,0.1) !important; }
 .rowWarning { font-size: 10px; color: var(--accent-orange); margin-top: 3px; white-space: normal; }
+
+/* MPU Section Styling */
+.mpuSection {
+  margin-top: 24px;
+  border-top: 1px solid var(--panel-border);
+  padding-top: 16px;
+}
+
+.mpuHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.mpuSubtitle {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.mpuEmptyAlert {
+  padding: 12px 14px;
+  background: rgba(78, 201, 176, 0.08);
+  border-radius: 4px;
+  border: 1px solid rgba(78, 201, 176, 0.25);
+  font-size: 12px;
+  color: var(--accent-green);
+}
+
+.mpuTableWrap {
+  overflow-x: auto;
+  background: var(--card-bg);
+  border: 1px solid rgba(86, 156, 214, 0.3);
+  border-radius: 4px;
+}
+
+.statusInProgress {
+  font-size: 11px;
+  color: var(--accent-green);
+  font-weight: 500;
+}
+
+.statusPending {
+  font-size: 11px;
+  color: var(--accent-orange);
+}

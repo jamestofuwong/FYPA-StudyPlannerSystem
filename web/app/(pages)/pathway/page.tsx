@@ -110,6 +110,44 @@ function EmptyState({ title, message }: { title: string; message: string }) {
   );
 }
 
+// Helper to calculate the student's remaining MPU units
+function getRemainingMpuUnits(activePlanner: any, dashboardData: any, takenCodes: Set<string>) {
+  // 1. Get the MPU units specifically required by the selected degree planner
+  const plannerMpuUnits = (activePlanner?.units ?? [])
+    .filter((tu: any) => tu.category === 'mpu' && tu.unit)
+    .map((tu: any) => ({
+      code: tu.unit.unit_code?.trim().toUpperCase(),
+      name: tu.unit.unit_name,
+    }));
+
+  // If the planner defines specific MPU units, use those exact ones!
+  let mpuList = plannerMpuUnits;
+
+  // Fallback only if the planner didn't list any MPU units
+  if (mpuList.length === 0) {
+    mpuList = (dashboardData?.mpuCourseList ?? [])
+      .filter((u: any) => u.courseId)
+      .map((u: any) => ({
+        code: u.courseId.trim().toUpperCase(),
+        name: u.courseTitle || 'MPU Unit',
+      }));
+  }
+
+  // De-duplicate by code
+  const mpuMap = new Map<string, string>();
+  mpuList.forEach((u: any) => {
+    if (u.code && !mpuMap.has(u.code)) {
+      mpuMap.set(u.code, u.name);
+    }
+  });
+
+  // Return only untaken MPU units
+  return Array.from(mpuMap.entries())
+    .filter(([code]) => !takenCodes.has(code))
+    .map(([code, name]) => ({ code, name }));
+}
+
+
 export default function PathwayPage() {
   const { showToast } = useToast();
   const {
@@ -402,7 +440,8 @@ export default function PathwayPage() {
 
         const isReqUnit = (u: any) =>
           u.unit !== null &&
-          (u.category === 'core' || u.category === 'major_core' || u.category === 'prescribed_elective');
+          u.category !== 'mpu' &&
+          (u.category === 'core' || u.category === 'major_core' || u.category === 'prescribed_elective' || u.category === 'elective');
 
         const unplannedUnits = (activePlanner?.units ?? []).filter(
           (u: any) => isReqUnit(u) && !takenCodes.has(u.unit.unit_code?.toUpperCase())
@@ -463,7 +502,9 @@ export default function PathwayPage() {
               const placedCodes = new Set(
                 semesters.flatMap((s) => s.units.map((u) => normaliseCode(u.code)))
               );
-              const unplacedUnits = planUnits.filter((u) => !placedCodes.has(normaliseCode(u.code)));
+              const unplacedUnits = planUnits.filter(
+                (u) => u.category !== 'mpu' && !placedCodes.has(normaliseCode(u.code))
+              );
 
               const validation = validatePlan({
                 semesters,
@@ -499,6 +540,22 @@ export default function PathwayPage() {
               const byUnit = new Map<string, string[]>();
               const messages: string[] = [];
               for (const w of warnings) {
+                // Identify which unit this warning is about (if any)
+                const unitCode = warningUnitCode(w);
+                const targetCode = unitCode ? normaliseCode(unitCode) : null;
+                const targetUnit = targetCode ? unitData.get(targetCode) : null;
+
+                // Suppress all warnings for MPU units
+                if (
+                  (targetUnit && targetUnit.category === 'mpu') ||
+                  (targetCode && targetCode.startsWith('MPU')) ||
+                  ('category' in w && (w as any).category === 'mpu') ||
+                  ('unitCodes' in w && (w as any).unitCodes?.every((c: string) => c.startsWith('MPU')))
+                ) {
+                  continue; // Skip this warning completely
+                }
+
+                // Normal warning handling continues below...
                 const message = describeWarning(w, DEFAULT_SCHEDULER_CONFIG.maxSemesters);
                 if (w.kind === 'over_capacity') {
                   overCapacity.set(`${w.year}-${w.semester}`, w);
@@ -506,7 +563,6 @@ export default function PathwayPage() {
                 }
                 // A warning about a unit that is not in the plan has no row to
                 // sit on, so it belongs in the list below instead of vanishing
-                const unitCode = UNIT_WARNING_KINDS.has(w.kind) ? warningUnitCode(w) : null;
                 const code = unitCode && placedCodes.has(normaliseCode(unitCode)) ? unitCode : null;
                 if (code && message) {
                   const key = normaliseCode(code);
@@ -533,7 +589,9 @@ export default function PathwayPage() {
                     No semesters could be generated. The reasons are listed below.
                   </div>
                 ) : (
-                  semesters.map((sem) => {
+                  semesters
+                  .filter((sem) => sem.units.some((u) => u.category !== 'mpu') || isPlanEdited)
+                  .map((sem) => {
                     const capacity = overCapacity.get(`${sem.year}-${sem.semester}`);
                     const calendarTerm = calendarTermFor(sem.semester, planIntakeSemester);
                     return (
@@ -546,7 +604,7 @@ export default function PathwayPage() {
                           YEAR {sem.year} · SEM {sem.semester}
                         </span>
                         <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 8 }}>
-                          {sem.units.length} unit{sem.units.length !== 1 ? 's' : ''} · Custom
+                          {sem.units.filter((u) => u.category !== 'mpu').length} units · Custom
                         </span>
                         {capacity && (
                           <span
@@ -591,7 +649,9 @@ export default function PathwayPage() {
                             <tr><th>Unit Code</th><th>Unit Name</th><th>Type</th><th>Edit</th></tr>
                           </thead>
                           <tbody>
-                            {sem.units.map((u) => {
+                            {sem.units
+                            .filter((u) => u.category !== 'mpu')
+                            .map((u) => {
                               const unitMessages = byUnit.get(normaliseCode(u.code)) ?? [];
                               return (
                               <tr key={u.code} className={unitMessages.length > 0 ? styles.rowFlagged : undefined}>
@@ -675,7 +735,7 @@ export default function PathwayPage() {
                               </tr>
                               );
                             })}
-                            {sem.units.length === 0 && (
+                            {sem.units.filter((u) => u.category !== 'mpu').length === 0 && (
                               <tr>
                                 <td colSpan={4} style={{ color: 'var(--text-muted)', fontSize: 11 }}>
                                   No units in this semester yet.
@@ -721,15 +781,91 @@ export default function PathwayPage() {
                   </ul>
                 )}
 
-                {!isPlanEdited && messages.length === 0 && customPlan.unschedulableUnits.length > 0 && (
-                  <div className={styles.warningItem}>
-                    <span aria-hidden="true">⚠</span>
-                    <span>
-                      {customPlan.unschedulableUnits.length} unit{customPlan.unschedulableUnits.length !== 1 ? 's' : ''} could
-                      not be scheduled: {customPlan.unschedulableUnits.map((u: any) => u.code).join(', ')}.
-                    </span>
-                  </div>
-                )}
+                {(() => {
+                  // Filter out any MPU units from unschedulable units list
+                  const nonMpuUnschedulable = (customPlan.unschedulableUnits ?? []).filter(
+                    (u: any) => u.category !== 'mpu' && !u.code?.toUpperCase().startsWith('MPU')
+                  );
+
+                  if (!isPlanEdited && messages.length === 0 && nonMpuUnschedulable.length > 0) {
+                    return (
+                      <div className={styles.warningItem}>
+                        <span aria-hidden="true">⚠</span>
+                        <span>
+                          {nonMpuUnschedulable.length} unit{nonMpuUnschedulable.length !== 1 ? 's' : ''} could
+                          not be scheduled: {nonMpuUnschedulable.map((u: any) => u.code).join(', ')}.
+                        </span>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
+
+                {/* Remaining MPU units */}
+                {(() => {
+                  const remainingMpus = getRemainingMpuUnits(activePlanner, dashboardData, takenCodes);
+
+                  return (
+                    <div className={styles.mpuSection}>
+                      <div className={styles.mpuHeader}>
+                        <div className={styles.sectionTitle} style={{ margin: 0, fontSize: 13 }}>
+                          Remaining MPU Units ({remainingMpus.length})
+                        </div>
+                        <span className={styles.mpuSubtitle}>
+                          Available in all semesters · Can be taken alongside degree units
+                        </span>
+                      </div>
+
+                      {remainingMpus.length === 0 ? (
+                        <div className={styles.mpuEmptyAlert}>
+                          ✓ All required MPU units have been completed or are currently in progress!
+                        </div>
+                      ) : (
+                        <div className={styles.mpuTableWrap}>
+                          <table className={styles.table} style={{ tableLayout: 'fixed', width: '100%' }}>
+                            <colgroup>
+                              <col style={{ width: 120 }} />
+                              <col style={{ width: 'auto' }} />
+                              <col style={{ width: 140 }} />
+                              <col style={{ width: 140 }} />
+                            </colgroup>
+                            <thead>
+                              <tr>
+                                <th>Unit Code</th>
+                                <th>Unit Title</th>
+                                <th>Type</th>
+                                <th>Status</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {remainingMpus.map((mpu) => {
+                                const isCurrent = currentCodes.has(mpu.code);
+                                return (
+                                  <tr key={mpu.code}>
+                                    <td>
+                                      <InlineCode>{mpu.code}</InlineCode>
+                                    </td>
+                                    <td style={{ whiteSpace: 'normal' }}>{mpu.name}</td>
+                                    <td>
+                                      <Badge label="MPU" cls="badgeBlue" />
+                                    </td>
+                                    <td>
+                                      {isCurrent ? (
+                                        <span className={styles.statusInProgress}>● In Progress</span>
+                                      ) : (
+                                        <span className={styles.statusPending}>Pending</span>
+                                      )}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
               );
             })()}
