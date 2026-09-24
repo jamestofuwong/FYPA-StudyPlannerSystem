@@ -12,6 +12,7 @@ import {
   REFRESH_COOKIE_OPTIONS,
 } from '@/lib/cms/auth'
 import { checkRateLimit, resetRateLimit } from '@/lib/cms/rateLimit'
+import { LoginSchema } from '@/lib/cms/schemas'
 
 function getIp(req: NextRequest): string {
   return (
@@ -22,11 +23,12 @@ function getIp(req: NextRequest): string {
 }
 
 export async function POST(req: NextRequest) {
-  const { email, password } = await req.json()
-
-  if (!email || !password) {
-    return NextResponse.json({ error: 'Email and password are required' }, { status: 400 })
+  const body = await req.json()
+  const parsed = LoginSchema.safeParse(body)
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.errors[0]?.message ?? 'Invalid request' }, { status: 400 })
   }
+  const { email, password } = parsed.data
 
   const ip = getIp(req)
   const ipKey = `ip:${ip}`
