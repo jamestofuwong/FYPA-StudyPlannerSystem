@@ -188,3 +188,26 @@ SELECT add_unit_offering('MPU3212', 3); SELECT add_unit_offering('MPU3212', 4);
 
 SELECT add_unit_offering('ICT20016', 3); SELECT add_unit_offering('ICT20016', 4);
 SELECT add_unit_offering('ICT20016', 2);
+
+-- ======================================================================================================================
+-- Deactivate the old units and link them to their replacements
+-- ======================================================================================================================
+UPDATE units
+SET is_active = FALSE,
+    replaced_by_unit_id = (SELECT id FROM units WHERE unit_code = 'MPU3142')
+WHERE unit_code = 'MPU3143';
+
+UPDATE units
+SET is_active = FALSE,
+    replaced_by_unit_id = (SELECT id FROM units WHERE unit_code = 'MPU3182')
+WHERE unit_code = 'MPU3183';
+
+UPDATE units
+SET is_active = FALSE,
+    replaced_by_unit_id = (SELECT id FROM units WHERE unit_code = 'MPU3192')
+WHERE unit_code = 'MPU3193';
+
+UPDATE units
+SET is_active = FALSE,
+    replaced_by_unit_id = (SELECT id FROM units WHERE unit_code = 'MPU3272')
+WHERE unit_code = 'MPU3273';

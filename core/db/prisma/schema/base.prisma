@@ -41,6 +41,10 @@ model Unit {
   id                   String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   unit_code            String                   @unique @db.VarChar(20)
   unit_name            String                   @db.VarChar(255)
+  is_active            Boolean                  @default(true)
+  replaced_by_unit_id  String?                  @db.Uuid
+  replaced_by          Unit?                    @relation("UnitReplacement", fields: [replaced_by_unit_id], references: [id], onDelete: SetNull)
+  replaces_units       Unit[]                   @relation("UnitReplacement")
   created_at           DateTime                 @default(now()) @db.Timestamptz
   updated_at           DateTime                 @default(now()) @updatedAt @db.Timestamptz
   offerings            UnitOffering[]

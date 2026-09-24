@@ -39,13 +39,17 @@ CREATE TABLE majors (
 CREATE INDEX idx_majors_course ON majors(course_id);
 
 CREATE TABLE units (
-    id            UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
-    unit_code     VARCHAR(20)   NOT NULL UNIQUE,
-    unit_name     VARCHAR(255)  NOT NULL,
-    created_at    TIMESTAMPTZ   NOT NULL DEFAULT now(),
-    updated_at    TIMESTAMPTZ   NOT NULL DEFAULT now()
+    id                  UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
+    unit_code           VARCHAR(20)   NOT NULL UNIQUE,
+    unit_name           VARCHAR(255)  NOT NULL,
+    is_active           BOOLEAN       NOT NULL DEFAULT TRUE,
+    replaced_by_unit_id UUID          NULL REFERENCES units(id) ON DELETE SET NULL,
+    created_at          TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    updated_at          TIMESTAMPTZ   NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_units_code ON units(unit_code);
+CREATE INDEX idx_units_active ON units(is_active);
+CREATE INDEX idx_units_replaced_by ON units(replaced_by_unit_id);
 
 CREATE TABLE unit_offerings (
     unit_id     UUID          NOT NULL REFERENCES units(id) ON DELETE CASCADE,
