@@ -565,6 +565,48 @@ describe('validatePlan', () => {
     });
   });
 
+  // BA-CS AI September 2023 after the prescribed-elective policy change. The
+  // blocked COS30015 is compulsory, so no recommendation replaces it and the
+  // plan really is one elective short.
+  describe('the test student, with a compulsory elective blocked', () => {
+    const passed = ['COS10003', 'COS30045'];
+    const placedElectives = ['COS10022', 'SWE30009', 'REC1', 'REC2', 'REC3'].map((c) =>
+      unit(c, { category: c.startsWith('REC') ? 'elective' : 'prescribed_elective' }),
+    );
+    const blockedCompulsory = unit('COS30015', { category: 'prescribed_elective' });
+    const completedElectives = passed.map((c) => unit(c, { category: 'elective' }));
+    const electiveRequirement = [
+      { category: 'elective', creditPoints: 100, unitCount: 8, planCategories: ['elective', 'prescribed_elective'] },
+    ];
+
+    test('seven electives against a requirement of eight is a shortfall, not an excess', () => {
+      const warnings = validatePlan({
+        // COS30015 is never placed, so it contributes nothing
+        semesters: [bucket(2026, 1, ...placedElectives)],
+        completedUnitCodes: passed,
+        unitData: unitData([...placedElectives, ...completedElectives, blockedCompulsory]),
+        requirements: electiveRequirement,
+      });
+
+      expect(warnings.filter((w) => w.kind === 'requirement_shortfall')).toEqual([
+        { kind: 'requirement_shortfall', category: 'elective', have: 87.5, need: 100 },
+      ]);
+      expect(kinds(warnings)).not.toContain('requirement_excess');
+    });
+
+    test('placing the blocked unit would close the gap, which is why it is not replaced', () => {
+      const warnings = validatePlan({
+        semesters: [bucket(2026, 1, ...placedElectives), bucket(2026, 2, blockedCompulsory)],
+        completedUnitCodes: passed,
+        unitData: unitData([...placedElectives, ...completedElectives, blockedCompulsory]),
+        requirements: electiveRequirement,
+      });
+
+      expect(kinds(warnings)).not.toContain('requirement_shortfall');
+      expect(kinds(warnings)).not.toContain('requirement_excess');
+    });
+  });
+
   // A unit the advisor added from the catalogue is on no planner, so the page
   // has to put it in unitData itself. These cover what that buys.
   describe('units added from outside the planner', () => {

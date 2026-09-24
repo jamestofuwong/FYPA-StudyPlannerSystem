@@ -61,10 +61,15 @@ export function countElectiveSlotsNeeded(input: ElectiveSlotsNeededInput): numbe
     if (completed.has(code)) completedElectives.add(code);
   }
 
-  // An elective the scheduler can never place fills no slot, so it leaves one
-  // for a recommendation that can be placed.
+  // A plain elective the scheduler can never place fills no slot, so it leaves
+  // one for a recommendation that can be placed. A prescribed elective is
+  // compulsory and cannot be substituted, so a blocked one still occupies its
+  // slot: the student has to take that unit itself, and replacing it would hide
+  // the fact that the plan does not graduate them.
   const pooledElectives = input.pool.filter(
-    (unit) => isElective(unit.category) && !blocked.has(normaliseCode(unit.code)),
+    (unit) =>
+      isElective(unit.category) &&
+      !(unit.category === 'elective' && blocked.has(normaliseCode(unit.code))),
   ).length;
 
   return input.electiveCount - completedElectives.size - pooledElectives;

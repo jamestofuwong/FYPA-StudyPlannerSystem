@@ -738,3 +738,80 @@ describe('electives beyond the requirement', () => {
     expect(screen.queryByText(/Electives total/i)).toBeNull();
   });
 });
+
+// Every prescribed elective is treated as compulsory: the seed records no star,
+// so the safe reading is that all of them are required.
+describe('prescribed electives are compulsory', () => {
+  const PRESCRIBED = planUnit('SWE30009', 'Software Testing', 'prescribed_elective');
+  const SPARE = planUnit('E3', 'Elective Three', 'elective');
+
+  beforeEach(() => {
+    const plan = generatedPlan();
+    plan.semesters[1].units = [
+      ...plan.semesters[1].units,
+      { code: 'SWE30009', name: 'Software Testing', category: 'prescribed_elective' },
+    ];
+    global.fetch = jest.fn((url: string) => {
+      if (String(url).includes('/api/custom-planner')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            success: true,
+            data: plan,
+            units: [...PLAN_UNITS, PRESCRIBED, SPARE],
+            intakeSemester: 1,
+            requirements: [
+              { category: 'core', creditPoints: 62.5, unitCount: 5, planCategories: ['core'] },
+              { category: 'elective', creditPoints: 37.5, unitCount: 3, planCategories: ['elective', 'prescribed_elective'] },
+            ],
+            completedUnits: [],
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    }) as unknown as typeof fetch;
+  });
+
+  test('removing a prescribed elective reports it as compulsory missing', async () => {
+    render(<Harness />);
+    await generate();
+
+    expect(screen.queryByText(/required to graduate/i)).toBeNull();
+
+    fireEvent.click(screen.getByLabelText('Remove SWE30009'));
+
+    const missing = await screen.findByText(/required to graduate but .* not in this plan/i);
+    expect(missing.textContent).toMatch(/SWE30009/);
+  });
+
+  test('replacing it with another elective does not silence the warning', async () => {
+    render(<Harness />);
+    await generate();
+
+    fireEvent.click(screen.getByLabelText('Remove SWE30009'));
+    await screen.findByText(/required to graduate but .* not in this plan/i);
+
+    // The credit total adds up again, but the compulsory unit is still missing
+    fireEvent.change(pickers()[1], { target: { value: 'E3' } });
+
+    await waitFor(() => expect(screen.getByText('E3')).toBeTruthy());
+    expect(screen.queryByText(/Electives total/i)).toBeNull();
+    const missing = screen.getByText(/required to graduate but .* not in this plan/i);
+    expect(missing.textContent).toMatch(/SWE30009/);
+  });
+
+  test('a plain elective removed and replaced raises nothing', async () => {
+    render(<Harness />);
+    await generate();
+
+    fireEvent.click(screen.getByLabelText('Remove E1'));
+    fireEvent.change(pickers()[1], { target: { value: 'E3' } });
+
+    await waitFor(() => expect(screen.getByText('E3')).toBeTruthy());
+    // C4 is core and deliberately unplaced, so its own warning stands; the
+    // swapped-out elective raises none of its own
+    const compulsory = screen.queryAllByText(/required to graduate but .* not in this plan/i);
+    expect(compulsory.map((el) => el.textContent ?? '').join(' ')).not.toMatch(/E1/);
+    expect(screen.queryByText(/Electives total/i)).toBeNull();
+  });
+});

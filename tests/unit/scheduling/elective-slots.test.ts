@@ -312,8 +312,37 @@ describe('countElectiveSlotsNeeded', () => {
     expect(countElectiveSlotsNeeded({ ...baseline, completedUnitCodes: ['XFER100'] })).toBe(4);
   });
 
-  test('a pooled elective blocked by a requisite does not reduce what is needed', () => {
-    expect(countElectiveSlotsNeeded({ ...baseline, blockedUnitCodes: ['COS30015'] })).toBe(5);
+  // A plain elective can be swapped for another, so a blocked one frees its
+  // slot. A prescribed elective is compulsory: the student has to take that
+  // unit itself, so a blocked one keeps its slot and the shortfall stands.
+  describe('a blocked unit only frees a slot when it can be substituted', () => {
+    const withPlainElective = {
+      ...baseline,
+      pool: [...baseline.pool, { code: 'COS30045', category: 'elective' }],
+      electiveGroupCodes: GROUP_CODES.filter((c) => c !== 'COS30045'),
+    };
+
+    test('a blocked plain elective frees its slot for a recommendation', () => {
+      // Five pooled electives, one of them blocked and replaceable
+      expect(countElectiveSlotsNeeded(withPlainElective)).toBe(3);
+      expect(
+        countElectiveSlotsNeeded({ ...withPlainElective, blockedUnitCodes: ['COS30045'] }),
+      ).toBe(4);
+    });
+
+    test('a blocked prescribed elective frees nothing', () => {
+      expect(countElectiveSlotsNeeded({ ...baseline, blockedUnitCodes: ['COS30015'] })).toBe(4);
+      expect(countElectiveSlotsNeeded(baseline)).toBe(4);
+    });
+
+    test('blocking one of each frees only the plain elective', () => {
+      expect(
+        countElectiveSlotsNeeded({
+          ...withPlainElective,
+          blockedUnitCodes: ['COS30045', 'COS30015'],
+        }),
+      ).toBe(4);
+    });
   });
 
   test('a pooled elective left out for any other reason still fills its slot', () => {
@@ -326,6 +355,10 @@ describe('countElectiveSlotsNeeded', () => {
     expect(countElectiveSlotsNeeded({ ...baseline, blockedUnitCodes: ['COS10009'] })).toBe(4);
   });
 
+  // BA-CS AI September 2023: COS10003 passed on the planner, COS30045 passed
+  // from the elective group, COS30015 pooled but blocked by a Conceded Pass.
+  // COS30015 is a prescribed elective, so it keeps its slot and the plan is
+  // genuinely one elective short until the student can take it.
   test('the test student: one named elective passed, one group elective passed, one pooled elective blocked', () => {
     expect(
       countElectiveSlotsNeeded({
@@ -334,7 +367,7 @@ describe('countElectiveSlotsNeeded', () => {
         pool: baseline.pool.filter((u) => u.code !== 'COS10003'),
         blockedUnitCodes: ['COS30015'],
       }),
-    ).toBe(4);
+    ).toBe(3);
   });
 
   test('falls back to the planner\'s own empty slots when no count was recorded', () => {
@@ -346,5 +379,54 @@ describe('countElectiveSlotsNeeded', () => {
         blockedUnitCodes: ['COS30015'],
       }),
     ).toBe(4);
+  });
+});
+// B2 changed only how a blocked unit is counted, never how it is reported. An
+// advisor still has to see why the unit cannot be placed.
+describe('a blocked prescribed elective is still reported', () => {
+  test('blockedByRequisites reports it exactly as before', () => {
+    const result: CustomPlanResult = {
+      semesters: [],
+      unschedulableUnits: [
+        { code: 'COS30015', name: 'IT Security', category: 'prescribed_elective' },
+      ],
+      warnings: [
+        {
+          kind: 'requisite_violation',
+          unitCode: 'COS30015',
+          missing: ['TNE10006'],
+          concededPass: ['TNE10006'],
+        },
+      ],
+    };
+
+    expect(blockedByRequisites(result)).toEqual(['COS30015']);
+    expect(result.warnings).toEqual([
+      {
+        kind: 'requisite_violation',
+        unitCode: 'COS30015',
+        missing: ['TNE10006'],
+        concededPass: ['TNE10006'],
+      },
+    ]);
+  });
+
+  test('it keeps its slot even though it is reported as blocked', () => {
+    const blocked = blockedByRequisites({
+      semesters: [],
+      unschedulableUnits: [{ code: 'COS30015', name: 'IT Security', category: 'prescribed_elective' }],
+      warnings: [{ kind: 'requisite_violation', unitCode: 'COS30015', missing: ['TNE10006'] }],
+    });
+
+    expect(
+      countElectiveSlotsNeeded({
+        electiveCount: 8,
+        plannerUnits: [{ category: 'prescribed_elective', unitCode: 'COS30015' }],
+        electiveGroupCodes: [],
+        completedUnitCodes: [],
+        pool: [{ code: 'COS30015', category: 'prescribed_elective' }],
+        blockedUnitCodes: blocked,
+      }),
+    ).toBe(7);
   });
 });

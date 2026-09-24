@@ -569,8 +569,19 @@ export default function PathwayPage() {
                 completedUnitCodes: dashboardData?.completedCodes ?? [],
                 concededPassUnitCodes: getConcededPassUnitCodes(allTranscriptUnits),
                 intakeSemester: planIntakeSemester,
+                // Every prescribed elective is treated as compulsory. A Swinburne
+                // planner stars the compulsory ones ("* Compulsory Pre-scribed
+                // Elective"), but the seed records no star, and a unit that is a
+                // prescribed elective on one planner is major core on another. So
+                // this errs towards warning: if one is really optional the advisor
+                // sees a false "required to graduate", which is visible and easy to
+                // dismiss, where the other way round a student silently skips a
+                // compulsory unit. Revisit if the client says only starred ones are.
                 requiredUnits: planUnits.filter(
-                  (u) => u.category === 'core' || u.category === 'major_core'
+                  (u) =>
+                    u.category === 'core' ||
+                    u.category === 'major_core' ||
+                    u.category === 'prescribed_elective'
                 ),
                 unitData,
                 requirements: planRequirements,
