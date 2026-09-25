@@ -46,6 +46,41 @@
   opacity: 0.85;
 }
 
+.btnPrimary:disabled,
+.btnDanger:disabled,
+.btnSecondary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btnDanger {
+  padding: 8px 12px;
+  background: var(--accent-red);
+  color: #fff;
+  border: 1px solid var(--accent-red);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.btnDanger:hover:not(:disabled) {
+  opacity: 0.85;
+}
+
+.btnSecondary {
+  padding: 8px 12px;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--panel-border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.btnSecondary:hover:not(:disabled) {
+  border-color: var(--accent-blue);
+  color: var(--text-primary);
+}
+
 .listItems {
   overflow-y: auto;
   flex: 1;
@@ -157,4 +192,67 @@
   font-size: 10px;
   color: var(--text-muted);
   font-family: var(--font-mono);
+}
+
+.editActions {
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  justify-content: flex-end;
+}
+
+.editActions span {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}
+
+.dialogOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(2px);
+}
+
+.savedDialog {
+  width: 360px;
+  max-width: calc(100vw - 32px);
+  padding: 20px;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  background: var(--surface-bg);
+  color: var(--text-primary);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+  text-align: center;
+}
+
+.savedDialog h2 {
+  margin: 0 0 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--panel-border);
+  color: var(--accent-blue);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.savedDialog p {
+  margin: 0 0 18px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.dialogActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }

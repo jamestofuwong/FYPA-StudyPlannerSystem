@@ -259,7 +259,7 @@ export default function CourseListTable({
 
                                                     {/* Unit Code */}
                                                     <td>
-                                                        {editable && onUnitEdit ? (
+                                                        {editable && onUnitEdit && (unit as any)._id ? (
                                                             <input 
                                                             key={(unit as any)._id}
                                                             type="text" 
@@ -278,7 +278,7 @@ export default function CourseListTable({
 
                                                     {/* Unit Name */}
                                                     <td>
-                                                        {editable && onUnitEdit ? (
+                                                        {editable && onUnitEdit && (unit as any)._id ? (
                                                         <div contentEditable suppressContentEditableWarning className={styles.editTextarea} 
                                                         onBlur={(e) => onUnitEdit((unit as any)._id, 'unit_name', e.currentTarget.textContent || '')}>
                                                             {unit.unit_name || ''}
@@ -290,7 +290,7 @@ export default function CourseListTable({
 
                                                     {/* Category */}
                                                     <td>
-                                                        {editable && onUnitEdit ? (
+                                                        {editable && onUnitEdit && (unit as any)._id ? (
                                                         <select value={unit.category || 'elective'} onChange={(e) => onUnitEdit((unit as any)._id, 'category', e.target.value)} className={`${styles.badge} ${styles[badgeClassForCategory(unit.category)]} ${styles.badgeSelect}`}>
                                                             <option value="core">Core</option>
                                                             <option value="major_core">Major Core</option>
@@ -306,7 +306,7 @@ export default function CourseListTable({
 
                                                     {/* Prerequisite */}
                                                     <td>
-                                                        {editable && onUnitEdit ? (
+                                                        {editable && onUnitEdit && (unit as any)._id ? (
                                                         <div contentEditable suppressContentEditableWarning className={styles.editTextarea} 
                                                         onBlur={(e) => onUnitEdit((unit as any)._id, 'prerequisite', e.currentTarget.textContent || '')}>
                                                             {unit.prerequisite || ''}
@@ -318,7 +318,7 @@ export default function CourseListTable({
 
                                                     {/* Offered In */}
                                                     <td>
-                                                        {editable && onUnitEdit ? (
+                                                        {editable && onUnitEdit && (unit as any)._id ? (
                                                             <select 
                                                                 value={
                                                                     Array.isArray(unit.offered_in) 
@@ -473,7 +473,7 @@ export default function CourseListTable({
 
                                         {/* Unit Code */}
                                         <td>
-                                            {editable && onUnitEdit ? (
+                                            {editable && onUnitEdit && (unit as any)._id ? (
                                                 <input 
                                                     key={(unit as any)._id}
                                                     type="text" 
@@ -488,7 +488,7 @@ export default function CourseListTable({
 
                                         {/* Unit Name */}
                                         <td>
-                                            {editable && onUnitEdit ? (
+                                            {editable && onUnitEdit && (unit as any)._id ? (
                                                 <div contentEditable suppressContentEditableWarning className={styles.editTextarea} 
                                                 onBlur={(e) => onUnitEdit((unit as any)._id, 'unit_name', e.currentTarget.textContent || '')}>
                                                     {unit.unit_name || ''}
@@ -503,7 +503,7 @@ export default function CourseListTable({
                                         
                                         {/* Prerequisite */}
                                         <td>
-                                            {editable && onUnitEdit ? (
+                                            {editable && onUnitEdit && (unit as any)._id ? (
                                                 <div contentEditable suppressContentEditableWarning className={styles.editTextarea} 
                                                     onBlur={(e) => onUnitEdit((unit as any)._id, 'prerequisite', e.currentTarget.textContent || '')}>
                                                     {unit.prerequisite || ''}
@@ -515,7 +515,7 @@ export default function CourseListTable({
 
                                         {/* Offered In */}
                                         <td>
-                                            {editable && onUnitEdit ? (
+                                            {editable && onUnitEdit && (unit as any)._id ? (
                                                 <select 
                                                     value={
                                                         Array.isArray(unit.offered_in) 
@@ -583,7 +583,7 @@ export default function CourseListTable({
 
                 {/* Minor Header (Editable) */}
                 <div className={styles.termHeading}>
-                    <div contentEditable={editable} suppressContentEditableWarning className={styles.minorLabel}
+                    <div contentEditable={editable && units.every((unit: any) => Boolean(unit._id))} suppressContentEditableWarning className={styles.minorLabel}
                         onBlur={(e) => {
                             const newName = e.currentTarget.textContent || '';
                             units.forEach((unit: any) => {
@@ -619,7 +619,7 @@ export default function CourseListTable({
 
                                     {/* Unit Code */}
                                     <td>
-                                        {editable && onUnitEdit ? (
+                                        {editable && onUnitEdit && (unit as any)._id ? (
                                             <input 
                                                 key={(unit as any)._id}
                                                 type="text" 
@@ -634,7 +634,7 @@ export default function CourseListTable({
 
                                     {/* Unit Name */}
                                     <td>
-                                        {editable && onUnitEdit ? (
+                                        {editable && onUnitEdit && (unit as any)._id ? (
                                             <div contentEditable suppressContentEditableWarning className={styles.editTextarea} 
                                             onBlur={(e) => onUnitEdit((unit as any)._id, 'unit_name', e.currentTarget.textContent || '')}>
                                                     {unit.unit_name || ''}
@@ -649,7 +649,7 @@ export default function CourseListTable({
                                         
                                     {/* Prerequisite */}
                                     <td>
-                                        {editable && onUnitEdit ? (
+                                        {editable && onUnitEdit && (unit as any)._id ? (
                                            <div contentEditable suppressContentEditableWarning className={styles.editTextarea} 
                                                 onBlur={(e) => onUnitEdit((unit as any)._id, 'prerequisite', e.currentTarget.textContent || '')}>
                                                 {unit.prerequisite || ''}
@@ -661,7 +661,7 @@ export default function CourseListTable({
 
                                     {/* Offered In */}
                                     <td>
-                                        {editable && onUnitEdit ? (
+                                        {editable && onUnitEdit && (unit as any)._id ? (
                                             <select 
                                                 value={
                                                     Array.isArray(unit.offered_in) 
