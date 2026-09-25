@@ -12,7 +12,8 @@ import type { EstimationRecord } from '@shared/types/classEstimation';
 function record(studentId: string): EstimationRecord {
   return {
     studentId, name: 'Test Student', dbId: 1, enrollId: 1,
-    scraped: {} as never, rawInput: {} as never, unitStates: new Map(),
+    source: 'import', transcript: [], rawInput: {} as never, unitStates: new Map(),
+    totalCreditsEarned: 0, scheduledUnits: [], appliedAliases: [],
     concededPassUnitCodes: [], mappingWarnings: [],
   };
 }

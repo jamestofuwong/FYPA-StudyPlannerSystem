@@ -17,8 +17,7 @@ import {
   fetchEnrollments,
   fetchDegreeAudit,
 } from '../portal/portalSessionService';
-import { resolveUnitStates, getConcededPassUnitCodes } from '../../shared/constants/grades';
-import { mapScrapedStudentToRawInput } from './scrapedStudentMapper';
+import { buildEstimationRecord } from './estimationRecordBuilder';
 import { resetEstimationRecords, pushEstimationRecord } from './estimationStore';
 
 export type ScrapePhase = 'enrollments' | 'audit';
@@ -89,21 +88,15 @@ export async function runScrapeForStudents(
     try {
       const scraped = await fetchDegreeAudit(student.db_id, primary.EnrollId, student.student_id);
 
-      const { rawInput, warnings } = mapScrapedStudentToRawInput(scraped, student.student_id);
-      const unitStates = resolveUnitStates(scraped.courseList);
-      const concededPassUnitCodes = getConcededPassUnitCodes(scraped.courseList);
-
-      pushEstimationRecord({
+      pushEstimationRecord(buildEstimationRecord({
+        source: 'portal',
         studentId: student.student_id,
         name: student.name,
         dbId: student.db_id,
         enrollId: primary.EnrollId,
         scraped,
-        rawInput,
-        unitStates,
-        concededPassUnitCodes,
-        mappingWarnings: warnings,
-      });
+        transcript: scraped.courseList,
+      }));
 
       completed++;
       callbacks.onStudentDone(student.student_id, student.name, scraped.course);

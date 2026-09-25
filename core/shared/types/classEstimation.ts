@@ -1,5 +1,5 @@
 import type { RawStudentInput, UnitCategory } from './matching';
-import type { ScrapedStudent } from './student';
+import type { ScrapedStudent, ScrapedCourseListItem } from './student';
 import type { UnitState } from '../constants/grades';
 
 // ============================================================
@@ -8,15 +8,46 @@ import type { UnitState } from '../constants/grades';
 // see core/services/classEstimation/estimationStore.ts).
 // ============================================================
 
+/**
+ * Where a transcript came from. Recorded so a run can report its mix and a problem can be traced, never
+ * branched on: everything downstream of the record builder treats all sources identically, which is what
+ * stops the portal and import paths drifting apart.
+ */
+export type EstimationSource = 'portal' | 'import' | 'mock';
+
+/** A unit the student has already enrolled in for a future term, from a "Scheduled" transcript row. */
+export interface ScheduledUnitRow {
+  code: string;
+  term: string;
+}
+
 export interface EstimationRecord {
   studentId: string;
+  source: EstimationSource;
   name: string;
-  dbId: number;
-  enrollId: number;
-  /** Raw scraped data, kept for traceability/debugging. */
-  scraped: ScrapedStudent;
+  /** Portal only. An imported transcript has no portal identifiers. */
+  dbId?: number;
+  enrollId?: number;
+  /** Full portal payload when there was one, kept for traceability. Absent for an imported transcript. */
+  scraped?: ScrapedStudent;
+  /** The transcript rows themselves, always present whatever the source. */
+  transcript: ScrapedCourseListItem[];
   /** Derived input ready for runMatchingPipeline. */
   rawInput: RawStudentInput;
+  /**
+   * Credit points earned, summed from the transcript's own Earned column rather than counting units at a
+   * flat rate. Real transcripts carry 0-credit modules and 25-credit placements, so a count is wrong in
+   * both directions, and credit-point requisites depend on this being right.
+   */
+  totalCreditsEarned: number;
+  /**
+   * Units already booked for a future term. Recorded for measurement only: by decision these are still
+   * predicted normally rather than counted as certain, so the estimator can be measured honestly
+   * end-to-end instead of scoring itself on enrolments it read off the transcript.
+   */
+  scheduledUnits: ScheduledUnitRow[];
+  /** Unit codes rewritten by the alias map, as [from, to], so a wrong alias is visible rather than silent. */
+  appliedAliases: Array<[string, string]>;
   /** Per-unit status (passed/in_progress/must_retake/not_taken), from resolveUnitStates(). */
   unitStates: Map<string, UnitState>;
   /**

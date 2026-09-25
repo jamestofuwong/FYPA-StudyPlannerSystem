@@ -12,8 +12,7 @@
 // ============================================================
 
 import { runEstimationPreview } from '@core/services/classEstimation/estimationPreview';
-import { mapScrapedStudentToRawInput } from '@core/services/classEstimation/scrapedStudentMapper';
-import { resolveUnitStates, getConcededPassUnitCodes } from '@shared/constants/grades';
+import { buildEstimationRecord } from '@core/services/classEstimation/estimationRecordBuilder';
 import * as plannerRepository from '@core/db/repositories/plannerRepository';
 import * as unitRepository from '@core/db/repositories/unitRepository';
 import type { EstimationRecord } from '@shared/types/classEstimation';
@@ -59,7 +58,9 @@ function plannerFixture() {
       { category: 'core', year_level: 2, semester: 1, unit: dbUnit('COS20007', [1], [prereq('COS10009')]) },
       { category: 'core', year_level: 2, semester: 2, unit: dbUnit('COS30008', [2], [prereq('COS20007')]) },
       { category: 'major_core', year_level: 2, semester: 1, unit: dbUnit('COS20015', [1, 2]) },
-      { category: 'major_core', year_level: 3, semester: 1, unit: dbUnit('COS30049', [], [creditPoints(100)]) },
+      // 25cp is what the fixture transcript actually earns two units' worth of, so this gate passes for the
+      // standard student and fails for the one below whose units earned nothing.
+      { category: 'major_core', year_level: 3, semester: 1, unit: dbUnit('COS30049', [], [creditPoints(25)]) },
       { category: 'elective', year_level: 3, semester: 2, unit: dbUnit('FREE1', [1, 2], [prereq('COS99999')]) },
     ],
     elective_groups: [{ id: 'g1', units: [{ unit: dbUnit('POOL1', [1]) }] }],
@@ -80,13 +81,16 @@ function scrapedStudent(overrides: Partial<ScrapedStudent> = {}): ScrapedStudent
 // hasWIL defaults to false here on purpose. The real default (defaultHasWIL: true) makes the matching pipeline waive 2
 // free elective slots, and this fixture only has one, so with it on there'd be no free elective candidate to look at.
 function record(id: string, scraped: ScrapedStudent, defaultHasWIL = false): EstimationRecord {
-  const { rawInput, warnings } = mapScrapedStudentToRawInput(scraped, id, { loadCap: 4, retentionRate: 0.85, defaultHasWIL });
-  return {
-    studentId: id, name: `Student ${id}`, dbId: 1, enrollId: 1, scraped, rawInput,
-    unitStates: resolveUnitStates(scraped.courseList),
-    concededPassUnitCodes: getConcededPassUnitCodes(scraped.courseList),
-    mappingWarnings: warnings,
-  };
+  return buildEstimationRecord({
+    source: 'portal',
+    studentId: id,
+    name: `Student ${id}`,
+    dbId: 1,
+    enrollId: 1,
+    scraped,
+    transcript: scraped.courseList,
+    config: { loadCap: 4, retentionRate: 0.85, defaultHasWIL },
+  });
 }
 
 describe('runEstimationPreview', () => {
@@ -113,7 +117,8 @@ describe('runEstimationPreview', () => {
     // Candidates: missing core (COS30008), missing major core (COS30049), the pool (POOL1) and the slotted elective (FREE1).
     expect(s.candidateCount).toBe(4);
 
-    // Eligible for semester 2: COS30008 (offered 2, prerequisite done), COS30049 (100 credits scraped, no offering rows).
+    // Eligible for semester 2: COS30008 (offered 2, prerequisite done), COS30049 (37.5 credits earned on
+    // the transcript clears its 25cp gate, and it has no offering rows).
     // Not eligible: POOL1 (sem 1 only), FREE1 (prerequisite COS99999 unmet).
     expect(s.eligibleCount).toBe(2);
     expect(s.ineligible).toEqual(expect.arrayContaining([
@@ -152,11 +157,24 @@ describe('runEstimationPreview', () => {
     expect(s.poolCandidates).toEqual({ prescribed: 1, freeElective: 0 });
   });
 
-  test('the portal credit total is what gates a credit_points requisite', async () => {
+  // Credit-point requisites are gated on what the transcript's Earned column adds up to, not on the
+  // portal's own creditsCompleted figure. The two disagree in real data: this fixture's portal figure
+  // claims 100 while its three units total 37.5. These units pass but earned nothing, so the same student
+  // clears the prerequisite chain yet fails the credit gate.
+  test('the credits earned on the transcript are what gate a credit_points requisite', async () => {
+    const noCredit = (courseId: string) => ({
+      courseId, courseTitle: courseId, level: '', credits: 12.5, creditsEarned: 0,
+      status: 'Complete', grade: '', term: '20241',
+    });
+
     const { students } = await runEstimationPreview(
-      [record('S1', scrapedStudent({ creditsCompleted: 50 }))],
+      [record('S1', scrapedStudent({
+        creditsCompleted: 100,
+        courseList: [noCredit('COS10009'), noCredit('COS20007'), noCredit('COS20015')],
+      }))],
       { targetTerm: 2, loadCap: 4 },
     );
+
     expect(students[0].ineligible.find((u) => u.code === 'COS30049')?.reason).toBe('requisites-unmet');
   });
 

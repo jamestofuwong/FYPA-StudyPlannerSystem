@@ -89,7 +89,6 @@ export interface PreviewOptions {
   loadCap: number;
 }
 
-const FLAT_CREDIT_HOURS = 12.5;
 
 function count<T>(items: T[], key: (item: T) => string): Record<string, number> {
   const out: Record<string, number> = {};
@@ -165,11 +164,13 @@ async function previewStudent(
   const base: StudentPreview = {
     studentId: record.studentId,
     name: record.name,
-    course: record.scraped.course,
+    course: record.scraped?.course ?? '',
     intake: { year: rawInput.intakeYear, semester: rawInput.intakeSemester },
     planner: null,
     completedCount: rawInput.completedUnitCodes.length,
-    creditsScraped: record.scraped.creditsCompleted,
+    // The portal's own figure, shown next to the transcript-derived total so the two can be compared.
+    // An imported transcript has no portal figure, so it reports 0.
+    creditsScraped: record.scraped?.creditsCompleted ?? 0,
     mappingWarnings: record.mappingWarnings,
     candidateCount: 0,
     eligibleCount: 0,
@@ -205,8 +206,11 @@ async function previewStudent(
     base.candidateCount = resolution.candidates.length;
 
     const completedOrInProgress = new Set(rawInput.completedUnitCodes.map((c) => c.trim().toUpperCase()));
-    // The scheduler's own convention (completed units * flat credit rate) is the fallback if the portal reports 0.
-    const totalCreditsEarned = record.scraped.creditsCompleted || completedOrInProgress.size * FLAT_CREDIT_HOURS;
+    // Summed from the transcript's Earned column by the record builder, which also handles the case of a
+    // transcript carrying no credit figures at all. No fallback here on purpose: a zero would otherwise be
+    // indistinguishable from missing data, and a student who genuinely holds no credit would be handed
+    // enough to clear a credit-point gate they have not met.
+    const totalCreditsEarned = record.totalCreditsEarned;
 
     const eligible = await filterEligibleUnits(resolution.candidates, resolution.plannerId, {
       targetTerm,
