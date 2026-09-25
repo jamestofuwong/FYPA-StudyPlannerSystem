@@ -2,6 +2,7 @@
 import { revalidatePath } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 import { FaqListSchema } from '@/lib/cms/schemas'
+import { getSession } from '@/lib/cms/session'
 
 export async function saveFaqItems(
   items: { id?: string; question: string; answer: string; position: number }[]
@@ -12,6 +13,7 @@ export async function saveFaqItems(
   }
   const data = parsed.data
 
+  const session = await getSession()
   await prisma.faqItem.deleteMany()
   await prisma.faqItem.createMany({
     data: data.map(item => ({
@@ -20,6 +22,7 @@ export async function saveFaqItems(
       position: item.position,
     })),
   })
+  console.info(`[CMS] faq:saved count=${data.length} by=${session?.email ?? 'unknown'}`)
   revalidatePath('/cms/help/faq')
   revalidatePath('/help')
 }

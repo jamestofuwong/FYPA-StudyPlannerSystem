@@ -3,6 +3,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { prisma } from '@/lib/prisma'
 import { PlannerSchema } from '@/lib/cms/schemas'
+import { getSession } from '@/lib/cms/session'
 
 interface SemesterUnitInput {
   unit_id: string | null
@@ -36,6 +37,7 @@ export async function savePlanner(data: PlannerFormData) {
     throw new Error(parsed.error.errors[0]?.message ?? 'Invalid planner data')
   }
   const d = parsed.data
+  const session = await getSession()
 
   // Resolve course — find existing by name, create if not found, then sync code
   let course = await prisma.course.findFirst({ where: { name: d.course_name } })
@@ -118,12 +120,17 @@ export async function savePlanner(data: PlannerFormData) {
     })
   }
 
+  const action = data.id ? 'updated' : 'created'
+  console.info(`[CMS] planner:${action} id=${plannerId} by=${session?.email ?? 'unknown'}`)
+
   revalidatePath('/cms/planners')
   redirect(`/cms/planners/${plannerId}`)
 }
 
 export async function deletePlanner(id: string) {
+  const session = await getSession()
   await prisma.plannerTemplate.delete({ where: { id } })
+  console.info(`[CMS] planner:deleted id=${id} by=${session?.email ?? 'unknown'}`)
   revalidatePath('/cms/planners')
   redirect('/cms/planners')
 }

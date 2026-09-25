@@ -3,6 +3,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { prisma } from '@/lib/prisma'
 import { UnitSchema } from '@/lib/cms/schemas'
+import { getSession } from '@/lib/cms/session'
 
 interface UnitFormData {
   id?: string
@@ -24,6 +25,7 @@ export async function saveUnit(data: UnitFormData) {
     throw new Error(parsed.error.errors[0]?.message ?? 'Invalid unit data')
   }
   const d = parsed.data
+  const session = await getSession()
 
   if (d.id) {
     await prisma.$transaction([
@@ -48,6 +50,7 @@ export async function saveUnit(data: UnitFormData) {
         requisites: { create: d.requisites.map(r => ({ requisite_type: r.requisite_type, requisite_unit_id: r.requisite_unit_id })) },
       },
     })
+    console.info(`[CMS] unit:updated code=${d.code} id=${d.id} by=${session?.email ?? 'unknown'}`)
     revalidatePath('/cms/units')
     redirect(`/cms/units/${d.id}`)
   } else {
@@ -65,6 +68,7 @@ export async function saveUnit(data: UnitFormData) {
         requisites: { create: d.requisites.map(r => ({ requisite_type: r.requisite_type, requisite_unit_id: r.requisite_unit_id })) },
       },
     })
+    console.info(`[CMS] unit:created code=${d.code} id=${unit.id} by=${session?.email ?? 'unknown'}`)
     revalidatePath('/cms/units')
     redirect(`/cms/units/${unit.id}`)
   }

@@ -2,6 +2,7 @@
 import { revalidatePath } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 import { HodListSchema } from '@/lib/cms/schemas'
+import { getSession } from '@/lib/cms/session'
 
 export async function saveHods(
   hods: { id?: string; faculty: string; department: string; name: string; email: string; position: number }[]
@@ -12,6 +13,7 @@ export async function saveHods(
   }
   const data = parsed.data
 
+  const session = await getSession()
   await prisma.headOfDepartment.deleteMany()
   await prisma.headOfDepartment.createMany({
     data: data.map(h => ({
@@ -22,6 +24,7 @@ export async function saveHods(
       position: h.position,
     })),
   })
+  console.info(`[CMS] hod:saved count=${data.length} by=${session?.email ?? 'unknown'}`)
   revalidatePath('/help/heads-of-department')
   revalidatePath('/cms/help/hod')
 }

@@ -38,6 +38,7 @@ export async function POST(req: NextRequest) {
     // Check IP limit first, then email limit
     const ipCheck = checkRateLimit(ipKey)
     if (ipCheck.limited) {
+      console.warn(`[CMS] login:rate_limited email=${email} ip=${ip}`)
       return NextResponse.json(
         { error: `Too many login attempts. Try again in ${ipCheck.retryAfterSeconds} seconds.` },
         { status: 429 }
@@ -46,6 +47,7 @@ export async function POST(req: NextRequest) {
 
     const emailCheck = checkRateLimit(emailKey)
     if (emailCheck.limited) {
+      console.warn(`[CMS] login:rate_limited email=${email} ip=${ip}`)
       return NextResponse.json(
         { error: `Too many login attempts. Try again in ${emailCheck.retryAfterSeconds} seconds.` },
         { status: 429 }
@@ -55,12 +57,14 @@ export async function POST(req: NextRequest) {
     const user = await prisma.cmsUser.findUnique({ where: { email } })
     const passwordValid = await safeVerifyPassword(password, user?.password_hash ?? null)
     if (!user || !passwordValid) {
+      console.warn(`[CMS] login:failed email=${email} ip=${ip}`)
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 })
     }
 
     // Successful login — clear rate limit counters for both keys
     resetRateLimit(ipKey)
     resetRateLimit(emailKey)
+    console.info(`[CMS] login:success email=${email} ip=${ip}`)
 
     const accessToken = await signAccessToken({
       sub: user.id,

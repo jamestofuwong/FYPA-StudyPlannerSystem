@@ -2,6 +2,7 @@
 import { revalidatePath } from 'next/cache'
 import { prisma } from '@/lib/prisma'
 import { GeneralEnquiriesSchema, ItHelpDeskSchema } from '@/lib/cms/schemas'
+import { getSession } from '@/lib/cms/session'
 
 export async function saveGeneralEnquiries(formData: FormData) {
   const raw = {
@@ -17,12 +18,14 @@ export async function saveGeneralEnquiries(formData: FormData) {
   }
   const data = parsed.data
 
+  const session = await getSession()
   const existing = await prisma.generalEnquiries.findFirst()
   if (existing) {
     await prisma.generalEnquiries.update({ where: { id: existing.id }, data })
   } else {
     await prisma.generalEnquiries.create({ data })
   }
+  console.info(`[CMS] contacts:general_enquiries saved by=${session?.email ?? 'unknown'}`)
   revalidatePath('/help')
   revalidatePath('/cms/help/contacts')
 }
@@ -43,12 +46,14 @@ export async function saveItHelpDesk(formData: FormData) {
   }
   const data = parsed.data
 
+  const session = await getSession()
   const existing = await prisma.itHelpDesk.findFirst()
   if (existing) {
     await prisma.itHelpDesk.update({ where: { id: existing.id }, data })
   } else {
     await prisma.itHelpDesk.create({ data })
   }
+  console.info(`[CMS] contacts:it_help_desk saved by=${session?.email ?? 'unknown'}`)
   revalidatePath('/help')
   revalidatePath('/cms/help/contacts')
 }
