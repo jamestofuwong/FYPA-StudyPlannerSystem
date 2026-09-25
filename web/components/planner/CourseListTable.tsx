@@ -67,7 +67,7 @@ function formatRequisites(requisites: any): string {
             // Format credit points
             if (c.type === 'credit_points') return `${c.credit_points}cp`;
 
-            // Format external qualification (e.g. "VCE Maths or equivalent") 👈 ADD THIS!
+            // Format external qualification (e.g. "VCE Maths or equivalent")
             if (c.type === 'external') return c.external_requisite || 'External Requirement';
 
             // Normal unit code
