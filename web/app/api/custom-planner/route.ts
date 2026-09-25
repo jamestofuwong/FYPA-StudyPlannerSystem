@@ -57,6 +57,9 @@ export async function POST(req: NextRequest) {
       where: { id: plannerId },
       include: {
         units: { include: { unit: { include: UNIT_INCLUDE } } },
+        minors: {
+          include: { units: { include: { unit: { include: UNIT_INCLUDE } } } },
+        },
         // Candidates for the planner's empty elective slots
         elective_groups: {
           orderBy: { created_at: 'asc' },
@@ -206,6 +209,32 @@ export async function POST(req: NextRequest) {
       })
       .filter((dm) => dm.canFitStrictly); // Only expose those that strictly fit into available slots!
 
+    // Detect Feasible Minors (Strict Fit Rule)
+    const availableMinors = (planner.minors ?? [])
+      .map((minor) => {
+        const missingUnits: SchedulableUnit[] = (minor.units ?? [])
+          .filter((mu) => mu.unit !== null)
+          .map((mu) => toSchedulable(mu.unit, 'minor'))
+          .filter(
+            (u) =>
+              !normalizedCompleted.has(u.code.toUpperCase()) &&
+              !primaryUnitCodes.has(u.code.toUpperCase())
+          );
+
+        const neededCount = missingUnits.length;
+        const canFitStrictly = neededCount > 0 && neededCount <= electiveSlotsNeeded;
+
+        return {
+          minorId: minor.id,
+          minorName: minor.name,
+          neededCount,
+          canFitStrictly,
+          units: missingUnits,
+        };
+      })
+      .filter((m) => m.canFitStrictly);
+
+      
     // If user selected a Double Major, SWAP the elective slots with those units!
     if (selectedDoubleMajorId) {
       const chosenMajor = availableDoubleMajors.find((dm) => dm.plannerId === selectedDoubleMajorId);
@@ -263,6 +292,7 @@ export async function POST(req: NextRequest) {
       intakeSemester,
       requirements,
       availableDoubleMajors,
+      availableMinors,
       // Categories for units already completed, which the pool leaves out but
       // the requirement totals must still count. A unit the planner only offers
       // as an elective candidate is an elective the student has taken, so it is

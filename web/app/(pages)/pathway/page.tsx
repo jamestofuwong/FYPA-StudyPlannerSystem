@@ -185,6 +185,7 @@ export default function PathwayPage() {
     availableDoubleMajors, setAvailableDoubleMajors,
     selectedDoubleMajorId, setSelectedDoubleMajorId,
   } = useStudentSession();
+  const [availableMinors, setAvailableMinors] = useState<any[]>([]);
   const [customPlanLoading, setCustomPlanLoading] = useState(false);
 
   // Catalogue state. The units are fetched the first time a picker is opened,
@@ -296,6 +297,7 @@ export default function PathwayPage() {
         setPlanRequirements(data.requirements ?? []);
         setGeneratedSemesters(data.data.semesters);
         setAvailableDoubleMajors(data.availableDoubleMajors ?? []);
+        setAvailableMinors(data.availableMinors ?? []);
         setIsPlanEdited(false);
       } else {
         showToast('Failed to generate custom pathway.', 'error');
@@ -413,85 +415,61 @@ export default function PathwayPage() {
       )}
 
       {/* Minors & Specializations */}
-      {(() => {
-        if (!customPlan) return null;
-        const activePlanner = selectedPlannerIdx === -1 ? manualPlanner : dashboardData?.planners?.[selectedPlannerIdx];
-        const minors: any[] = activePlanner?.minors ?? [];
-        if (minors.length === 0) return null;
+      {availableMinors.length > 0 && (
+        <div className={styles.pathwaySection}>
+          <div className={styles.sectionTitle}>Minors & Specializations</div>
+          <div className={styles.doubleMajorGrid}>
+            {availableMinors.map((minor) => {
+              const isInjected = injectedMinors.has(minor.minorId);
 
-        const doneCodes = new Set(
-          getCompletedUnitCodes(
-            [...(scrapedStudent?.student?.courseList ?? []), ...(dashboardData?.mpuCourseList ?? [])]
-          )
-        );
-
-        return (
-          <div className={styles.pathwaySection}>
-            <div className={styles.sectionTitle}>Minors & Specializations</div>
-            <div className={styles.doubleMajorGrid}>
-              {minors.map((minor: any) => {
-                const isInjected = injectedMinors.has(minor.id);
-                const missingUnits = (minor.units ?? []).filter(
-                  (mu: any) => mu.unit && !doneCodes.has(mu.unit.unit_code?.trim().toUpperCase())
-                );
-                const missingCount = missingUnits.length;
-
-                return (
-                  <div
-                    key={minor.id}
-                    className={`${styles.doubleMajorCard} ${isInjected ? styles.doubleMajorCardActive : ''}`}
-                  >
-                    <div className={styles.cardContent}>
-                      <div className={styles.cardHeader}>
-                        <span className={styles.cardTitle}>{minor.name}</span>
-                        <Badge label="Minor" cls="badgeYellow" />
-                        {missingCount === 0 && (
-                          <span className={styles.completedText}>✓ Completed</span>
-                        )}
-                      </div>
-
-                      <div className={styles.cardSubtitle}>
-                        {missingCount > 0 ? (
-                          <>
-                            Requires <span className={styles.highlightCount}>{missingCount}</span> unit{missingCount !== 1 ? 's' : ''} to complete this specialization:
-                          </>
-                        ) : (
-                          'All requirements for this minor have already been completed.'
-                        )}
-                      </div>
-
-                      {missingCount > 0 && (
-                        <div className={styles.chipList}>
-                          {missingUnits.map((mu: any) => (
-                            <span
-                              key={mu.unit.unit_code}
-                              className={`${styles.unitChip}`}
-                              title={mu.unit.unit_name}
-                            >
-                              {mu.unit.unit_code} · {mu.unit.unit_name}
-                            </span>
-                          ))}
-                        </div>
-                      )}
+              return (
+                <div
+                  key={minor.minorId}
+                  className={`${styles.doubleMajorCard} ${isInjected ? styles.doubleMajorCardActive : ''}`}
+                >
+                  <div className={styles.cardContent}>
+                    <div className={styles.cardHeader}>
+                      <span className={styles.cardTitle}>{minor.minorName}</span>
+                      <Badge label="Minor" cls="badgeYellow" />
                     </div>
 
-                    {missingCount > 0 && (
-                      <button
-                        type="button"
-                        className={`${isInjected ? styles.btnDanger : styles.btnSecondary} ${styles.cardActionBtn}`}
-                        onClick={() => toggleMinorInjection(minor.id)}
-                        disabled={customPlanLoading}
-                      >
-                        {isInjected ? '✕ Remove Minor' : '+ Include in Custom Plan'}
-                      </button>
+                    <div className={styles.cardSubtitle}>
+                      Requires <span className={styles.highlightCount}>{minor.neededCount}</span> unit{minor.neededCount !== 1 ? 's' : ''} to complete this specialization:
+                    </div>
+
+                    <div className={styles.chipList}>
+                      {minor.units.map((u: any) => (
+                        <span
+                          key={u.code}
+                          className={styles.unitChip}
+                          title={u.name}
+                        >
+                          {u.code} · {u.name}
+                        </span>
+                      ))}
+                    </div>
+
+                    {isInjected && (
+                      <div className={styles.injectedNotice}>
+                        ✓ {minor.neededCount} unit{minor.neededCount !== 1 ? 's' : ''} will be injected into the custom pathway.
+                      </div>
                     )}
                   </div>
-                );
-              })}
-            </div>
+
+                  <button
+                    type="button"
+                    className={`${isInjected ? styles.btnDanger : styles.btnSecondary} ${styles.cardActionBtn}`}
+                    onClick={() => toggleMinorInjection(minor.minorId)}
+                    disabled={customPlanLoading}
+                  >
+                    {isInjected ? '✕ Remove from Plan' : '+ Include in Custom Plan'}
+                  </button>
+                </div>
+              );
+            })}
           </div>
-        );
-      })()}
+        </div>
+      )}
 
       {/* Custom Study Pathway */}
       {(() => {
@@ -556,7 +534,14 @@ export default function PathwayPage() {
               <button
                 className={styles.btnPrimary}
                 style={{ fontSize: 12 }}
-                onClick={() => { if (confirmDiscardEdits()) generateCustomPlan(); }}
+                onClick={() => {
+                  if (confirmDiscardEdits()) {
+                    // Reset all active selections when regenerating the baseline pathway
+                    setSelectedDoubleMajorId(null);
+                    setInjectedMinors(new Set());
+                    generateCustomPlan(new Set(), null);
+                  }
+                }}
                 disabled={customPlanLoading}
               >
                 {customPlanLoading
