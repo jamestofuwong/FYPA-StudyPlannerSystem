@@ -169,22 +169,32 @@ export function recommendElectives(input: RecommendElectivesInput): SchedulableU
 
     const ranked = candidates
       .map((unit, index) => {
-        // Priority: runs in preferred term (0) > runs in any regular term (1) > summer/winter only (2)
+        // Check how versatile the elective is:
+        // Score 0: Runs in BOTH semesters (unrestricted / 1 and 2)
+        // Score 1: Runs in target term
+        // Score 2: Runs in single non-target regular term
+        // Score 3: Summer/Winter only
+        const isBothSemesters =
+          unit.offeringSemesters.length === 0 ||
+          (unit.offeringSemesters.includes(1) && unit.offeringSemesters.includes(2));
+
         const runsInTarget =
           targetTerm === undefined ||
-          unit.offeringSemesters.length === 0 || // unrestricted
+          unit.offeringSemesters.length === 0 ||
           unit.offeringSemesters.includes(targetTerm);
 
-        const offeringScore = runsInTarget
+        const versatilityScore = isBothSemesters
           ? 0
-          : offersRegularSemester(unit)
+          : runsInTarget
           ? 1
-          : 2;
+          : offersRegularSemester(unit)
+          ? 2
+          : 3;
 
         return {
           unit,
           index,
-          offering: offeringScore,
+          offering: versatilityScore,
           requisites: requisitesReachable(unit, available) ? 0 : 1,
         };
       })

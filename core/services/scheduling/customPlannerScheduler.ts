@@ -451,6 +451,54 @@ export function buildCustomPlan(
 
       previousSemesterPlacedPartA = toPlace.some((u) => isProjectPartA(u));
 
+      // Check: did this semester place Project B (the graduation capstone)
+      const placedProjectB = toPlace.some((u) => isProjectPartB(u));
+
+      if (placedProjectB) {
+        // Project B marks the final semester of the degree
+        // If this semester still has open slots, and the remaining pool has electives
+        // that couldn't run in this term, convert them into flexible placeholder slots
+        const standardPlaced = toPlace.filter((u) => u.category !== 'mpu').length;
+        const availableSlots = standardLimit - standardPlaced;
+
+        if (availableSlots > 0 && pool.length > 0) {
+          const electivesToConvert: SchedulableUnit[] = [];
+
+          // Find recommended electives in the pool that couldn't be scheduled
+          for (let pIdx = pool.length - 1; pIdx >= 0; pIdx--) {
+            const candidate = pool[pIdx];
+            if (candidate.category === 'elective' || candidate.category === 'prescribed_elective') {
+              electivesToConvert.push(candidate);
+              pool.splice(pIdx, 1);
+              if (electivesToConvert.length >= availableSlots) break;
+            }
+          }
+
+          // Backfill each into the Project B semester as an elective placeholder
+          const currentSemesterBucket = semesters[semesters.length - 1];
+          for (const _ of electivesToConvert) {
+            const placeholderUnit: ScheduledUnit = {
+              code: 'ELECTIVE',
+              name: 'Elective Slot (To be selected)',
+              category: 'elective',
+              recommended: false,
+            };
+            currentSemesterBucket.units.push(placeholderUnit);
+            completed.add('ELECTIVE');
+          }
+        }
+
+        // If only recommended electives remain in the pool, drop them so the plan ends at Project B
+        const remainingOnlyElectives = pool.every(
+          (u) => u.category === 'elective' || u.category === 'prescribed_elective'
+        );
+        if (remainingOnlyElectives) {
+          pool.length = 0;
+          break; // Conclude degree at Project B
+        }
+      }
+
+
       const standardPlaced = toPlace.filter((u) => u.category !== 'mpu').length;
       if (standardPlaced > normalLoad) {
         warnings.push({

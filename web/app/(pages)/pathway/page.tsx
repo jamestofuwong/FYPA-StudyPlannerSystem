@@ -917,7 +917,7 @@ export default function PathwayPage() {
                                       RETAKE
                                     </span>
                                   )}
-                                  {u.recommended && (
+                                  {u.recommended && u.code !== 'ELECTIVE' && (
                                     <span
                                       title="Not named by the planner — chosen from its elective groups to fill an empty elective slot."
                                       style={{
@@ -954,11 +954,14 @@ export default function PathwayPage() {
                                 <td>
                                   <Badge
                                     label={
+                                      u.code === 'ELECTIVE' ? 'Elective Slot' :
                                       u.category === 'double_major' ? 'Double Major' :
+                                      u.category === 'prescribed_elective' ? 'Prescribed Elec' :
                                       u.category === 'minor' ? 'minor elective' :
                                       u.category.replace(/_/g, ' ')
                                     }
                                     cls={
+                                      u.code === 'ELECTIVE' ? 'badgePurple' :
                                       u.category === 'core' ? 'badgeRed' :
                                       u.category === 'major_core' ? 'badgeOrange' :
                                       u.category === 'double_major' ? 'badgeYellow' :
@@ -976,6 +979,45 @@ export default function PathwayPage() {
                                       onChange={(e) => moveUnitToSlot(u.code, e.target.value)}
                                       title="Move to another semester"
                                     >
+                                    <td>
+                                      <div className={styles.rowActions}>
+                                        {u.code === 'ELECTIVE' ? (
+                                          <button
+                                            type="button"
+                                            className={styles.btnSecondary}
+                                            style={{ fontSize: 11, padding: '3px 8px', borderColor: 'var(--accent-purple)', color: 'var(--accent-purple)' }}
+                                            onClick={() => {
+                                              showToast('Unit selection modal will open here once connected!', 'info');
+                                            }}
+                                            title="Click to select an elective from the catalogue"
+                                          >
+                                            + Select Unit
+                                          </button>
+                                        ) : (
+                                          <select
+                                            className={styles.moveSelect}
+                                            value={`${sem.year}-${sem.semester}`}
+                                            onChange={(e) => moveUnitToSlot(u.code, e.target.value)}
+                                            title="Move to another semester"
+                                          >
+                                            {semesters.map((target) => (
+                                              <option key={`${target.year}-${target.semester}`} value={`${target.year}-${target.semester}`}>
+                                                Y{target.year} S{target.semester}
+                                              </option>
+                                            ))}
+                                          </select>
+                                        )}
+
+                                        <button
+                                          className={styles.removeBtn}
+                                          onClick={() => applyEdit(removeUnit(semesters, u.code))}
+                                          title={`Remove ${u.code} from this plan`}
+                                          aria-label={`Remove ${u.code}`}
+                                        >
+                                          ✕
+                                        </button>
+                                      </div>
+                                    </td>
                                       {semesters.map((target) => (
                                         <option key={`${target.year}-${target.semester}`} value={`${target.year}-${target.semester}`}>
                                           Y{target.year} S{target.semester}
