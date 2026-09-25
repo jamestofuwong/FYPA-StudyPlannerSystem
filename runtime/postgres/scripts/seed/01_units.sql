@@ -216,8 +216,3 @@ UPDATE units
 SET is_active = FALSE,
     replaced_by_unit_id = (SELECT id FROM units WHERE unit_code = 'MPU3272')
 WHERE unit_code = 'MPU3273';
-
-UPDATE units
-SET is_active = FALSE,
-    replaced_by_unit_id = (SELECT id FROM units WHERE unit_code = 'ICT20016')
-WHERE unit_code = 'ICT20016*Optional';
