@@ -817,7 +817,7 @@ export default function PathwayPage() {
                           <colgroup>
                             <col style={{ width: 110 }} />
                             <col style={{ width: 'auto' }} />
-                            <col style={{ width: 160 }} />
+                            <col style={{ width: 185 }} />
                             <col style={{ width: 150 }} />
                           </colgroup>
                           <thead>

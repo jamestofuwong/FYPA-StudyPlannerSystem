@@ -235,7 +235,7 @@ export async function POST(req: NextRequest) {
       .filter((m) => m.canFitStrictly);
 
       
-    // If user selected a Double Major, SWAP the elective slots with those units!
+    // If user selected a Double Major, SWAP the elective slots with those units
     if (selectedDoubleMajorId) {
       const chosenMajor = availableDoubleMajors.find((dm) => dm.plannerId === selectedDoubleMajorId);
       if (chosenMajor) {
@@ -250,6 +250,17 @@ export async function POST(req: NextRequest) {
         electiveSlotsNeeded = Math.max(0, electiveSlotsNeeded - chosenMajor.neededCount);
       }
     }
+
+    // If user selected a Minor, SWAP elective slots with those units
+    if (minorIds.length > 0) {
+      // Find the units belonging to the selected minors that were injected
+      const chosenMinors = availableMinors.filter((m) => minorIds.includes(m.minorId));
+      for (const m of chosenMinors) {
+        // Subtract the minor units from the free elective count so they replace electives!
+        electiveSlotsNeeded = Math.max(0, electiveSlotsNeeded - m.neededCount);
+      }
+    }
+
     // Calculate the calendar term of the starting semester
     const startCalendarTerm = calendarTermFor(startSemester, intakeSemester);
     // If any free elective slots STILL remain, fill with general recommendations
@@ -277,7 +288,7 @@ export async function POST(req: NextRequest) {
     const requirements = [
       { category: 'core', creditPoints: planner.core_cp, unitCount: planner.core_count, planCategories: ['core'] },
       { category: 'major', creditPoints: planner.major_cp, unitCount: planner.major_count, planCategories: ['major_core'] },
-      { category: 'elective', creditPoints: planner.elective_cp, unitCount: planner.elective_count, planCategories: ['elective', 'prescribed_elective', 'double_major'] },
+      { category: 'elective', creditPoints: planner.elective_cp, unitCount: planner.elective_count, planCategories: ['elective', 'prescribed_elective', 'double_major', 'minor'] },
       { category: 'wil', creditPoints: planner.wil_cp, unitCount: planner.wil_count, planCategories: ['wil'] },
     ].filter((r) => r.creditPoints != null);
 
@@ -299,13 +310,29 @@ export async function POST(req: NextRequest) {
       // listed too, or the elective total comes up short.
       completedUnits: [
         ...namedCompleted.map((tu) => toSchedulable(tu.unit!, String(tu.category))),
-        ...electiveGroupUnits
-          .filter(
-            (unit) =>
-              normalizedCompleted.has(unit.unit_code.toUpperCase()) &&
-              !namedCodes.has(unit.unit_code.toUpperCase()),
+        // Any completed unit not explicitly named as core or MPU is credited as an elective
+        ...[...normalizedCompleted]
+          .filter((code) =>
+              !namedCodes.has(code) &&
+              !code.startsWith('MPU') &&
+              code !== 'AIMFECS' &&
+              code !== 'AIM-FECS' &&
+              code !== 'AIMSFS' &&
+              code !== 'AIM-SFS'
           )
-          .map((unit) => toSchedulable(unit, 'elective')),
+          .map((code) => {
+            // Find if full unit metadata exists in elective groups or create a standard 12.5 CP unit
+            const found = electiveGroupUnits.find((u) => u.unit_code.toUpperCase() === code);
+            if (found) return toSchedulable(found, 'elective');
+            return {
+              code,
+              name: code,
+              category: 'elective',
+              offeringSemesters: [1, 2] as (1 | 2)[],
+              requisiteGroups: [],
+              creditPoints: 12.5,
+            };
+          }),
       ],
     });
   } catch (error) {
