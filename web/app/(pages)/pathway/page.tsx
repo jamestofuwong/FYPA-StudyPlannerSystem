@@ -313,18 +313,17 @@ export default function PathwayPage() {
     if (customPlan && !confirmDiscardEdits()) return;
     const next = selectedDoubleMajorId === plannerId ? null : plannerId;
     setSelectedDoubleMajorId(next);
-    generateCustomPlan(undefined, next);
+    generateCustomPlan(injectedMinors, next);
   };
 
 
   const toggleMinorInjection = (minorId: string) => {
-    // Toggling regenerates, so it discards edits just as the Generate button does
     if (customPlan && !confirmDiscardEdits()) return;
     const next = new Set(injectedMinors);
-    if (next.has(minorId)) next.delete(minorId); else next.add(minorId);
+    if (next.has(minorId)) next.delete(minorId);
+    else next.add(minorId);
     setInjectedMinors(next);
-    // If a plan is already showing, regenerate immediately with the new set
-    if (customPlan) generateCustomPlan(next);
+    generateCustomPlan(next, selectedDoubleMajorId);
   };
 
   const selectedPlanner = selectedPlannerIdx === -1 ? manualPlanner : dashboardData?.planners?.[selectedPlannerIdx];
@@ -358,7 +357,7 @@ export default function PathwayPage() {
       </div>
 
       {/* Double Major Opportunities */}
-      {availableDoubleMajors.length > 0 && (
+      {(availableDoubleMajors.length > 0 || selectedDoubleMajorId !== null) && (
         <div className={styles.pathwaySection}>
           <div className={styles.sectionTitle}>Double Major Opportunities</div>
           <div className={styles.doubleMajorGrid}>
@@ -415,7 +414,7 @@ export default function PathwayPage() {
       )}
 
       {/* Minors & Specializations */}
-      {availableMinors.length > 0 && (
+      {(availableMinors.length > 0 || injectedMinors.size > 0) && (
         <div className={styles.pathwaySection}>
           <div className={styles.sectionTitle}>Minors & Specializations</div>
           <div className={styles.doubleMajorGrid}>
