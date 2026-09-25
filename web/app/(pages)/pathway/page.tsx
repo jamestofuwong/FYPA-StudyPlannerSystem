@@ -260,17 +260,51 @@ export default function PathwayPage() {
     // Only exclude passed and in-progress units. Future pre-enrollments go back
     // into the pool so the scheduler can repack them as the single source of
     // truth, and so do failed units (N / SN) so they get rescheduled as retakes.
-    const completedForScheduler = getCompletedUnitCodes(allTranscriptRows);
-    // Completed, but a Conceded Pass cannot satisfy a prerequisite
+    const rawCompletedCodes = getCompletedUnitCodes(allTranscriptRows);
     const concededPassCodes = getConcededPassUnitCodes(allTranscriptRows);
+    const passedSet = new Set(rawCompletedCodes);
 
-    // Units the student attempted and failed, so the pathway can mark them as retakes.
-    const transcriptStates = resolveUnitStates(allTranscriptRows);
-    const retakeCodes = new Set(
-      [...transcriptStates].filter(([, state]) => state === 'must_retake').map(([code]) => code)
+    // Identify all remaining units the student has NOT passed yet
+    const unpassedPlannerUnits = (activePlanner?.units ?? []).filter(
+      (tu: any) => tu.unit && !passedSet.has(tu.unit.unit_code?.trim().toUpperCase())
     );
 
-        setCustomPlanLoading(true);
+    // Collect all unit codes that act as prerequisites for those remaining units
+    const activePrereqCodes = new Set<string>();
+    for (const tu of unpassedPlannerUnits) {
+      for (const group of tu.unit.requisite_groups ?? []) {
+        for (const cond of group.conditions ?? []) {
+          if (cond.type === 'unit' && cond.unit?.unit_code) {
+            const reqType = cond.requisite_type ?? 'prerequisite';
+            if (reqType === 'prerequisite' || reqType === 'corequisite') {
+              activePrereqCodes.add(cond.unit.unit_code.trim().toUpperCase());
+            }
+          }
+        }
+      }
+    }
+
+    // A Conceded Pass only needs to be retaken if it is an active prerequisite
+    const blockingConcededPasses = new Set(
+      concededPassCodes.filter((cpCode) => activePrereqCodes.has(normaliseCode(cpCode)))
+    );
+
+    // Completed for scheduler: Keep non-blocking CP as completed; only retake blocking CP
+    const completedForScheduler = rawCompletedCodes.filter(
+      (code) => !blockingConcededPasses.has(normaliseCode(code))
+    );
+
+    const transcriptStates = resolveUnitStates(allTranscriptRows);
+    const retakeCodes = new Set([
+      ...[...transcriptStates].filter(([, state]) => state === 'must_retake').map(([code]) => code),
+      ...blockingConcededPasses,
+    ]);
+
+    const effectiveConcededPasses = concededPassCodes.filter(
+      (code) => !blockingConcededPasses.has(normaliseCode(code))
+    );
+
+    setCustomPlanLoading(true);
     try {
       const res = await fetch('/api/custom-planner', {
         method: 'POST',
@@ -278,7 +312,7 @@ export default function PathwayPage() {
         body: JSON.stringify({
           plannerId: activePlanner.id,
           completedUnitCodes: completedForScheduler,
-          concededPassUnitCodes: concededPassCodes,
+          concededPassUnitCodes: effectiveConcededPasses,
           courseList: scrapedStudent?.student?.courseList ?? [],
           injectedMinorIds: [...effectiveInjections],
           selectedDoubleMajorId: effectiveDoubleMajorId,
@@ -567,11 +601,21 @@ export default function PathwayPage() {
                 (u) => u.category !== 'mpu' && !placedCodes.has(normaliseCode(u.code))
               );
 
+              // Exclude units placed in the custom plan from completed history to avoid double-counting retakes
+              const validatedCompletedCodes = (dashboardData?.completedCodes ?? []).filter(
+                (code: string) => !placedCodes.has(normaliseCode(code))
+              );
+
+              const validatedConcededPassCodes = getConcededPassUnitCodes(allTranscriptUnits).filter(
+                (code: string) => !placedCodes.has(normaliseCode(code))
+              );
+
               const validation = validatePlan({
                 semesters,
-                completedUnitCodes: dashboardData?.completedCodes ?? [],
-                concededPassUnitCodes: getConcededPassUnitCodes(allTranscriptUnits),
+                completedUnitCodes: validatedCompletedCodes,
+                concededPassUnitCodes: validatedConcededPassCodes,
                 intakeSemester: planIntakeSemester,
+
                 // Every prescribed elective is treated as compulsory. A Swinburne
                 // planner stars the compulsory ones ("* Compulsory Pre-scribed
                 // Elective"), but the seed records no star, and a unit that is a
@@ -627,6 +671,10 @@ export default function PathwayPage() {
                   ('unitCodes' in w && (w as any).unitCodes?.every((c: string) => c.startsWith('MPU')))
                 ) {
                   continue; // Skip this warning completely
+                }
+
+                if (w.kind === 'short_term_only') {
+                  continue;
                 }
 
                 // Normal warning handling continues below...
@@ -975,9 +1023,19 @@ export default function PathwayPage() {
                 )}
 
                 {(() => {
-                  // Filter out any MPU units from unschedulable units list
+                  // Collect codes for optional break units (summer/winter only)
+                  const breakTermCodes = new Set(
+                    (customPlan.warnings ?? [])
+                      .filter((w: any) => w.kind === 'short_term_only')
+                      .map((w: any) => normaliseCode(w.unitCode))
+                  );
+
+                  // Filter out MPU units and optional break units (which are displayed in their own table below)
                   const nonMpuUnschedulable = (customPlan.unschedulableUnits ?? []).filter(
-                    (u: any) => u.category !== 'mpu' && !u.code?.toUpperCase().startsWith('MPU')
+                    (u: any) =>
+                      u.category !== 'mpu' &&
+                      !u.code?.toUpperCase().startsWith('MPU') &&
+                      !breakTermCodes.has(normaliseCode(u.code))
                   );
 
                   if (!isPlanEdited && messages.length === 0 && nonMpuUnschedulable.length > 0) {
@@ -992,6 +1050,86 @@ export default function PathwayPage() {
                     );
                   }
                   return null;
+                })()}
+
+                {/* Summer / Winter Term Units (Optional Break Periods) */}
+                {(() => {
+                  const shortTermWarnings = (customPlan.warnings ?? []).filter(
+                    (w: any) => w.kind === 'short_term_only'
+                  );
+                  const shortTermCodes = new Set(shortTermWarnings.map((w: any) => normaliseCode(w.unitCode)));
+                  const shortTermUnits = (customPlan.unschedulableUnits ?? []).filter((u: any) =>
+                    shortTermCodes.has(normaliseCode(u.code))
+                  );
+
+                  if (shortTermUnits.length === 0) return null;
+
+                  return (
+                    <div className={styles.mpuSection} style={{ marginBottom: 16 }}>
+                      <div className={styles.mpuHeader}>
+                        <div className={styles.sectionTitle} style={{ margin: 0, fontSize: 13 }}>
+                          Summer / Winter Term Units ({shortTermUnits.length})
+                        </div>
+                        <span className={styles.mpuSubtitle}>
+                          Offered during semester breaks · Optional acceleration
+                        </span>
+                      </div>
+
+                      <div className={styles.mpuTableWrap}>
+                        <table className={styles.table} style={{ tableLayout: 'fixed', width: '100%' }}>
+                          <colgroup>
+                            <col style={{ width: 140 }} />
+                            <col style={{ width: 'auto' }} />
+                            <col style={{ width: 160 }} />
+                            <col style={{ width: 140 }} />
+                          </colgroup>
+                          <thead>
+                            <tr>
+                              <th>Unit Code</th>
+                              <th>Unit Title</th>
+                              <th>Offering Term</th>
+                              <th>Status</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {shortTermUnits.map((u: any) => {
+                              const isOptionalProject = u.code.includes('ICT20016');
+                              return (
+                                <tr key={u.code}>
+                                  <td>
+                                    <InlineCode>{u.code}</InlineCode>
+                                  </td>
+                                  <td style={{ whiteSpace: 'normal' }}>
+                                    {u.name}
+                                    {isOptionalProject && (
+                                      <span
+                                        style={{
+                                          marginLeft: 6,
+                                          fontSize: 9,
+                                          fontFamily: 'var(--font-mono)',
+                                          color: 'var(--accent-purple)',
+                                          letterSpacing: '0.05em',
+                                        }}
+                                        title="25 Credit Points · Equivalent to 2 elective units"
+                                      >
+                                        25 CP · REPLACES 2 ELECTIVES
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td>
+                                    <Badge label="Winter Term" cls="badgePurple" />
+                                  </td>
+                                  <td>
+                                    <span className={styles.statusPending}>Optional Break Term</span>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  );
                 })()}
 
                 {/* Remaining MPU units */}

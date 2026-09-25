@@ -327,6 +327,9 @@ export async function POST(req: NextRequest) {
               code !== 'AIM-SFS'
           )
           .map((code) => {
+            // Check if this completed unit is the 25 CP optional industry project
+            const isOptional25Cp = code.includes('ICT20016') && code.includes('OPTIONAL');
+
             // Find if full unit metadata exists in elective groups or create a standard 12.5 CP unit
             const found = electiveGroupUnits.find((u) => u.unit_code.toUpperCase() === code);
             if (found) return toSchedulable(found, 'elective');
@@ -336,7 +339,7 @@ export async function POST(req: NextRequest) {
               category: 'elective',
               offeringSemesters: [1, 2] as (1 | 2)[],
               requisiteGroups: [],
-              creditPoints: 12.5,
+              creditPoints: isOptional25Cp ? 25 : 12.5, 
             };
           }),
       ],

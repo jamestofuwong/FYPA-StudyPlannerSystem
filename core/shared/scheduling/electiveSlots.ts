@@ -42,6 +42,16 @@ const NON_ACADEMIC_MODULES = new Set(['AIMFECS', 'AIM-FECS', 'AIMSFS', 'AIM-SFS'
 export function countElectiveSlotsNeeded(input: ElectiveSlotsNeededInput): number {
   const isElective = (category: string) => ELECTIVE_CATEGORIES.includes(category);
 
+  // Helper to determine slot weight: 25 CP = 2 slots, standard 12.5 CP = 1 slot
+  function getSlotWeight(unitCode: string, unitDataMap?: Map<string, { creditPoints?: number }>): number {
+    const code = normaliseCode(unitCode);
+    if (code.includes('ICT20016') && code.includes('OPTIONAL')) return 2;
+    const cp = unitDataMap?.get(code)?.creditPoints;
+    if (cp && cp >= 25) return Math.round(cp / 12.5);
+    return 1;
+  }
+
+
   if (input.electiveCount == null) {
     return input.plannerUnits.filter((row) => row.unitCode === null && isElective(row.category))
       .length;
@@ -70,18 +80,23 @@ export function countElectiveSlotsNeeded(input: ElectiveSlotsNeededInput): numbe
     completedElectives.add(code);
   }
 
-  // A plain elective the scheduler can never place fills no slot, so it leaves
-  // one for a recommendation that can be placed. A prescribed elective is
-  // compulsory and cannot be substituted, so a blocked one still occupies its
-  // slot: the student has to take that unit itself, and replacing it would hide
-  // the fact that the plan does not graduate them.
-  const pooledElectives = input.pool.filter(
-    (unit) =>
-      isElective(unit.category) &&
-      !(unit.category === 'elective' && blocked.has(normaliseCode(unit.code))),
-  ).length;
+  // Calculate how many elective SLOTS were fulfilled by completed units (25 CP = 2 slots)
+  let completedElectiveSlots = 0;
+  for (const code of completedElectives) {
+    completedElectiveSlots += getSlotWeight(code);
+  }
 
-  return input.electiveCount - completedElectives.size - pooledElectives;
+  // Calculate how many elective SLOTS are already occupied in the pool
+  const pooledElectives = input.pool
+    .filter(
+      (unit) =>
+        isElective(unit.category) &&
+        !(unit.category === 'elective' && blocked.has(normaliseCode(unit.code))),
+    )
+    .reduce((sum, unit) => sum + getSlotWeight(unit.code), 0);
+
+  // Return remaining slots needed (bounded at 0)
+  return Math.max(0, input.electiveCount - completedElectiveSlots - pooledElectives);
 }
 
 /**
