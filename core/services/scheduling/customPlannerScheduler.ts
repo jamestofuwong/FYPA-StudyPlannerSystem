@@ -338,7 +338,33 @@ export function buildCustomPlan(
     let changed = true;
     while (changed) {
       changed = false;
-      for (const unit of pool) {
+
+      // Sort candidate units by academic priority:
+      // #1 Bottleneck Depth: Units that unlock other units in the remaining pool
+      // #2 Offering Scarcity: Units offered in only 1 semester over both sem units
+      // #3 Category Urgency: Core / Major Core over electives
+      const prioritizedPool = [...pool].sort((a, b) => {
+        // Priority 1: Does unit A unlock other units in the pool
+        const aIsPrereqFor = pool.filter((other) =>
+          other.requisiteGroups.some((g) => g.some((c) => c.unitCode === a.code))
+        ).length;
+        const bIsPrereqFor = pool.filter((other) =>
+          other.requisiteGroups.some((g) => g.some((c) => c.unitCode === b.code))
+        ).length;
+        if (bIsPrereqFor !== aIsPrereqFor) return bIsPrereqFor - aIsPrereqFor;
+
+        // Priority 2: Offering Scarcity (Offered in 1 semester > Offered in both)
+        const aScarcity = a.offeringSemesters.length === 1 ? 1 : 0;
+        const bScarcity = b.offeringSemesters.length === 1 ? 1 : 0;
+        if (bScarcity !== aScarcity) return bScarcity - aScarcity;
+
+        // Priority 3: Compulsory degree units over electives
+        const categoryWeight = (cat: string) =>
+          cat === 'core' || cat === 'major_core' ? 2 : cat === 'double_major' ? 1 : 0;
+        return categoryWeight(b.category) - categoryWeight(a.category);
+      });
+
+      for (const unit of prioritizedPool) {
         if (bucketCodes.has(normaliseCode(unit.code))) continue;
 
         const isMpu = unit.category === 'mpu';
@@ -455,6 +481,11 @@ export function isConditionSatisfied(
   bucketCodes: Set<string>,
   totalCredits: number
 ): boolean {
+  // External qualification text does not block scheduling
+  if ((condition as any).type === 'external') {
+    return true;
+  }
+
   if (condition.type === 'credit_points') {
     return totalCredits >= (condition.creditPoints ?? 0);
   }
@@ -516,6 +547,11 @@ function explainUnplaced(
         }
         continue;
       }
+        // Skip external string conditions
+      if ((condition as any).type === 'external') {
+        continue;
+      }
+
       if (condition.type !== 'unit' || !condition.unitCode) {
         a.impossible = true;
         continue;
@@ -571,4 +607,35 @@ function explainUnplaced(
   if (waiting) return toWarning(waiting, waiting.waitingOn);
 
   return { kind: 'not_offered', unitCode: unit.code, offeringTerms: offeringTermsOf(unit) };
+}
+
+export interface NextStudyTerm {
+  startYear: number;
+  startSemester: 1 | 2;
+  enrolledTermsCount: number;
+}
+
+export function resolveNextStudyTerm(courseList: Array<{ term?: string; studyPeriod?: string }>): NextStudyTerm {
+  // Collect all distinct regular study terms
+  const terms = new Set<string>();
+
+  for (const item of courseList ?? []) {
+    const rawTerm = (item.term || item.studyPeriod || '').trim().toUpperCase();
+    // Only count regular semesters (_S1 or _S2)
+    if (rawTerm.includes('_S1') || rawTerm.includes('_S2')) {
+      terms.add(rawTerm);
+    }
+  }
+
+  const termsCount = terms.size;
+
+  if (termsCount === 0) {
+    return { startYear: 1, startSemester: 1, enrolledTermsCount: 0 };
+  }
+
+  // Each academic year has 2 standard semesters
+  const startYear = Math.floor(termsCount / 2) + 1;
+  const startSemester: 1 | 2 = termsCount % 2 === 0 ? 1 : 2;
+
+  return { startYear, startSemester, enrolledTermsCount: termsCount };
 }

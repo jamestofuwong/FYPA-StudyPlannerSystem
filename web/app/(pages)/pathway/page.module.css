@@ -118,3 +118,103 @@
   font-size: 11px;
   color: var(--accent-orange);
 }
+
+/* Double Major Styles */
+.doubleMajorGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.doubleMajorCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--card-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 4px;
+  padding: 10px 14px;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.doubleMajorCard:hover {
+  border-color: var(--accent-blue);
+}
+
+.doubleMajorCardActive {
+  border-color: var(--accent-green) !important;
+  background: rgba(78, 201, 176, 0.06);
+}
+
+/* Card Container and Content */
+.pathwaySection {
+  margin-top: 20px;
+}
+
+.cardContent {
+  flex: 1;
+  min-width: 0;
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cardTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.cardSubtitle {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.highlightCount {
+  color: var(--accent-orange);
+  font-weight: 600;
+}
+
+.completedText {
+  font-size: 11px;
+  color: var(--accent-green);
+  font-weight: 500;
+}
+
+.injectedNotice {
+  font-size: 10px;
+  color: var(--accent-green);
+  margin-top: 6px;
+}
+
+.cardActionBtn {
+  font-size: 11px;
+  white-space: nowrap;
+  align-self: flex-start;
+  margin-top: 4px;
+  flex-shrink: 0;
+}
+
+/* Unit Chip Lists */
+.chipList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.unitChip {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  background: var(--surface-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 3px;
+  padding: 2px 6px;
+  color: var(--accent-yellow);
+}

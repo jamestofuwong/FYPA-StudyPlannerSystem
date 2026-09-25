@@ -30,6 +30,9 @@ export interface ElectiveSlotsNeededInput {
   blockedUnitCodes?: string[];
 }
 
+// To ignore non-academic training modules
+const NON_ACADEMIC_MODULES = new Set(['AIMFECS', 'AIM-FECS', 'AIMSFS', 'AIM-SFS']);
+
 /**
  * How many elective slots still have to be filled.
  *
@@ -50,15 +53,21 @@ export function countElectiveSlotsNeeded(input: ElectiveSlotsNeededInput): numbe
   // Taking an elective from one of the planner's groups is the normal way to do
   // it, so a passed unit counts whether the planner named it or only offered it
   // as a candidate. A set, because a unit can be both.
+  // Identify all core / major core codes defined on this planner
+  const compulsoryCodes = new Set(
+    input.plannerUnits
+      .filter((row) => row.unitCode !== null && (row.category === 'core' || row.category === 'major_core'))
+      .map((row) => normaliseCode(row.unitCode!))
+  );
+
+  // Any completed unit that is NOT core/major_core and NOT mpu counts as an elective
   const completedElectives = new Set<string>();
-  for (const row of input.plannerUnits) {
-    if (row.unitCode === null || !isElective(row.category)) continue;
-    const code = normaliseCode(row.unitCode);
-    if (completed.has(code)) completedElectives.add(code);
-  }
-  for (const candidate of input.electiveGroupCodes ?? []) {
-    const code = normaliseCode(candidate);
-    if (completed.has(code)) completedElectives.add(code);
+  for (const code of completed) {
+    // Ignore MPU, compulsory units and non-academic training modules
+    if (code.startsWith('MPU') || compulsoryCodes.has(code) || NON_ACADEMIC_MODULES.has(code)) {
+      continue;
+    }
+    completedElectives.add(code);
   }
 
   // A plain elective the scheduler can never place fills no slot, so it leaves
@@ -100,6 +109,7 @@ export interface RecommendElectivesInput {
   candidateSources: SchedulableUnit[][];
   completedUnitCodes: string[];
   alreadyPlannedCodes: string[];
+  preferredTerm?: 1 | 2;
 }
 
 /**
@@ -140,13 +150,29 @@ export function recommendElectives(input: RecommendElectivesInput): SchedulableU
       candidates.push(unit);
     }
 
+    const targetTerm = input.preferredTerm;
+
     const ranked = candidates
-      .map((unit, index) => ({
-        unit,
-        index,
-        offering: offersRegularSemester(unit) ? 0 : 1,
-        requisites: requisitesReachable(unit, available) ? 0 : 1,
-      }))
+      .map((unit, index) => {
+        // Priority: runs in preferred term (0) > runs in any regular term (1) > summer/winter only (2)
+        const runsInTarget =
+          targetTerm === undefined ||
+          unit.offeringSemesters.length === 0 || // unrestricted
+          unit.offeringSemesters.includes(targetTerm);
+
+        const offeringScore = runsInTarget
+          ? 0
+          : offersRegularSemester(unit)
+          ? 1
+          : 2;
+
+        return {
+          unit,
+          index,
+          offering: offeringScore,
+          requisites: requisitesReachable(unit, available) ? 0 : 1,
+        };
+      })
       .sort(
         (a, b) =>
           a.offering - b.offering || a.requisites - b.requisites || a.index - b.index,
@@ -189,4 +215,56 @@ function requisitesReachable(unit: SchedulableUnit, available: Set<string>): boo
         : available.has(code);
     }),
   );
+}
+
+// =============================================================
+// Double Major & Sibling Exploration
+// =============================================================
+export interface SiblingMajorCandidate {
+  plannerId: string;
+  majorId: string | null;
+  majorName: string;
+  missingUnits: SchedulableUnit[];
+  canFitStrictly: boolean;
+}
+
+export function detectSiblingMajorFit(input: {
+  freeElectiveSlots: number;
+  primaryMajorCodeSet: Set<string>;
+  completedUnitCodeSet: Set<string>;
+  siblingPlanners: Array<{
+    id: string;
+    major_id: string | null;
+    major_name: string;
+    majorCoreUnits: SchedulableUnit[];
+  }>;
+}): SiblingMajorCandidate[] {
+  const { freeElectiveSlots, primaryMajorCodeSet, completedUnitCodeSet, siblingPlanners } = input;
+
+  if (freeElectiveSlots <= 0) return [];
+
+  const results: SiblingMajorCandidate[] = [];
+
+  for (const sibling of siblingPlanners) {
+    // Collect major core units from this sibling major that the student has NOT completed and that are NOT already in the primary degree
+    const missingUnits = sibling.majorCoreUnits.filter((u) => {
+      const code = normaliseCode(u.code);
+      return !completedUnitCodeSet.has(code) && !primaryMajorCodeSet.has(code);
+    });
+
+    const neededCount = missingUnits.length;
+    // Strict Fit Rule: must need at least 1 unit, and all missing units must fit inside free elective slots
+    const canFitStrictly = neededCount > 0 && neededCount <= freeElectiveSlots;
+
+    results.push({
+      plannerId: sibling.id,
+      majorId: sibling.major_id,
+      majorName: sibling.major_name,
+      missingUnits,
+      canFitStrictly,
+    });
+  }
+
+  // Return feasible double majors sorted by closest fit
+  return results.filter((r) => r.canFitStrictly);
 }

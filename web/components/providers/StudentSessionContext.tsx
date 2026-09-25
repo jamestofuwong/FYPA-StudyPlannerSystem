@@ -61,6 +61,12 @@ export type StudentSessionState = {
   setGeneratedSemesters: Dispatch<SetStateAction<CustomSemesterBucket[]>>;
   isPlanEdited: boolean;
   setIsPlanEdited: Dispatch<SetStateAction<boolean>>;
+
+  availableDoubleMajors: any[];
+  setAvailableDoubleMajors: React.Dispatch<React.SetStateAction<any[]>>;
+  selectedDoubleMajorId: string | null;
+  setSelectedDoubleMajorId: React.Dispatch<React.SetStateAction<string | null>>;
+
 };
 
 const StudentSessionContext = createContext<StudentSessionState | null>(null);
@@ -88,6 +94,10 @@ export function StudentSessionProvider({ children }: { children: ReactNode }) {
   const [generatedSemesters, setGeneratedSemesters] = useState<CustomSemesterBucket[]>([]);
   const [isPlanEdited, setIsPlanEdited] = useState(false);
 
+  const [availableDoubleMajors, setAvailableDoubleMajors] = useState<any[]>([]);
+  const [selectedDoubleMajorId, setSelectedDoubleMajorId] = useState<string | null>(null);
+
+
   // Switching planner discards the custom plan built for the previous one. This runs
   // here rather than in a page so that revisiting a page does not clear the plan.
   useEffect(() => {
@@ -104,6 +114,8 @@ export function StudentSessionProvider({ children }: { children: ReactNode }) {
     setPlanRequirements([]);
     setGeneratedSemesters([]);
     setIsPlanEdited(false);
+    setAvailableDoubleMajors([]);
+    setSelectedDoubleMajorId(null);
   }, [selectedPlannerIdx, dashboardData, manualPlanner]);
 
   return (
@@ -127,6 +139,8 @@ export function StudentSessionProvider({ children }: { children: ReactNode }) {
         planRequirements, setPlanRequirements,
         generatedSemesters, setGeneratedSemesters,
         isPlanEdited, setIsPlanEdited,
+        availableDoubleMajors, setAvailableDoubleMajors,
+        selectedDoubleMajorId, setSelectedDoubleMajorId,
       }}
     >
       {children}

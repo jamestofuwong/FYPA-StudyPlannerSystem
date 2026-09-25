@@ -182,6 +182,8 @@ export default function PathwayPage() {
     planRequirements, setPlanRequirements,
     generatedSemesters, setGeneratedSemesters,
     isPlanEdited, setIsPlanEdited,
+    availableDoubleMajors, setAvailableDoubleMajors,
+    selectedDoubleMajorId, setSelectedDoubleMajorId,
   } = useStudentSession();
   const [customPlanLoading, setCustomPlanLoading] = useState(false);
 
@@ -239,8 +241,13 @@ export default function PathwayPage() {
     setIsPlanEdited(false);
   };
 
-  const generateCustomPlan = async (overrideInjections?: Set<string>) => {
+  const generateCustomPlan = async (
+    overrideInjections?: Set<string>,
+    overrideDoubleMajorId?: string | null
+  ) => {
     const effectiveInjections = overrideInjections ?? injectedMinors;
+    const effectiveDoubleMajorId =
+      overrideDoubleMajorId !== undefined ? overrideDoubleMajorId : selectedDoubleMajorId;
     const activePlanner = selectedPlannerIdx === -1 ? manualPlanner : dashboardData?.planners?.[selectedPlannerIdx];
     if (!activePlanner || !dashboardData) return;
 
@@ -262,67 +269,7 @@ export default function PathwayPage() {
       [...transcriptStates].filter(([, state]) => state === 'must_retake').map(([code]) => code)
     );
 
-    const plannerUnits: any[] = activePlanner.units ?? [];
-
-    // Anchor start semester on Current units only.
-    // Using max(Complete ∪ Current) would jump past Year 3 Sem 2 if the
-    // student completed any out-of-sequence unit that the planner places there.
-    const currentOnlyCodes = new Set(
-      courseList
-        .filter((u: any) => u.status === 'Current')
-        .map((u: any) => u.courseId?.trim().toUpperCase())
-        .filter(Boolean)
-    );
-
-    const activeTermUnits = plannerUnits.filter(
-      (u: any) => u.unit && currentOnlyCodes.has(u.unit.unit_code?.trim().toUpperCase())
-    );
-
-    let startYear = 1;
-    let startSemester: 1 | 2 = 1;
-
-    if (activeTermUnits.length > 0) {
-      // Start immediately after the semester the student is currently enrolled in
-      const maxYear = Math.max(...activeTermUnits.map((u: any) => u.year_level));
-      const maxSemInYear = Math.max(
-        ...activeTermUnits.filter((u: any) => u.year_level === maxYear).map((u: any) => u.semester)
-      );
-      if (maxSemInYear === 1) {
-        startYear = maxYear;
-        startSemester = 2;
-      } else {
-        startYear = maxYear + 1;
-        startSemester = 1;
-      }
-    } else {
-      // No Current units, so fall back to the semester after the last passed unit.
-      // Passed only: a failed unit must not push the start semester forward.
-      const courseListStates = resolveUnitStates(courseList);
-      const completeCodes = new Set(
-        [...courseListStates].filter(([, state]) => state === 'passed').map(([code]) => code)
-      );
-      const completedPlannerUnits = plannerUnits.filter(
-        (u: any) => u.unit && completeCodes.has(u.unit.unit_code?.trim().toUpperCase())
-      );
-      if (completedPlannerUnits.length > 0) {
-        const maxYear = Math.max(...completedPlannerUnits.map((u: any) => u.year_level));
-        const maxSemInYear = Math.max(
-          ...completedPlannerUnits.filter((u: any) => u.year_level === maxYear).map((u: any) => u.semester)
-        );
-        startYear = maxSemInYear === 1 ? maxYear : maxYear + 1;
-        startSemester = maxSemInYear === 1 ? 2 : 1;
-      } else {
-        // Student has no history at all, so start from the planner's first slot
-        const allYearSems = [...new Set(plannerUnits.map((u: any) => `${u.year_level}-${u.semester}`))].sort();
-        if (allYearSems.length > 0) {
-          const [y, s] = (allYearSems[0] as string).split('-');
-          startYear = parseInt(y);
-          startSemester = parseInt(s) as 1 | 2;
-        }
-      }
-    }
-
-    setCustomPlanLoading(true);
+        setCustomPlanLoading(true);
     try {
       const res = await fetch('/api/custom-planner', {
         method: 'POST',
@@ -331,22 +278,24 @@ export default function PathwayPage() {
           plannerId: activePlanner.id,
           completedUnitCodes: completedForScheduler,
           concededPassUnitCodes: concededPassCodes,
-          startYear,
-          startSemester,
+          courseList: scrapedStudent?.student?.courseList ?? [],
           injectedMinorIds: [...effectiveInjections],
+          selectedDoubleMajorId: effectiveDoubleMajorId,
         }),
       });
+
       if (!res.ok) { showToast('Failed to generate custom pathway.', 'error'); return; }
       const data = await res.json();
       if (data.success) {
         setCustomPlan(data.data);
-        setCustomPlanStart({ year: startYear, semester: startSemester });
+        setCustomPlanStart({ year: data.startYear, semester: data.startSemester });
         setRetakeUnitCodes(retakeCodes);
         setPlanUnits(data.units ?? []);
         setPlanIntakeSemester(data.intakeSemester === 2 ? 2 : 1);
         setPlanCompletedUnits(data.completedUnits ?? []);
         setPlanRequirements(data.requirements ?? []);
         setGeneratedSemesters(data.data.semesters);
+        setAvailableDoubleMajors(data.availableDoubleMajors ?? []);
         setIsPlanEdited(false);
       } else {
         showToast('Failed to generate custom pathway.', 'error');
@@ -357,6 +306,14 @@ export default function PathwayPage() {
       setCustomPlanLoading(false);
     }
   };
+
+  const toggleDoubleMajor = (plannerId: string) => {
+    if (customPlan && !confirmDiscardEdits()) return;
+    const next = selectedDoubleMajorId === plannerId ? null : plannerId;
+    setSelectedDoubleMajorId(next);
+    generateCustomPlan(undefined, next);
+  };
+
 
   const toggleMinorInjection = (minorId: string) => {
     // Toggling regenerates, so it discards edits just as the Generate button does
@@ -398,8 +355,66 @@ export default function PathwayPage() {
         . Change the student or planner on the Major Detection page.
       </div>
 
+      {/* Double Major Opportunities */}
+      {availableDoubleMajors.length > 0 && (
+        <div className={styles.pathwaySection}>
+          <div className={styles.sectionTitle}>Double Major Opportunities</div>
+          <div className={styles.doubleMajorGrid}>
+            {availableDoubleMajors.map((dm) => {
+              const isSelected = selectedDoubleMajorId === dm.plannerId;
+
+              return (
+                <div
+                  key={dm.plannerId}
+                  className={`${styles.doubleMajorCard} ${isSelected ? styles.doubleMajorCardActive : ''}`}
+                >
+                  <div className={styles.cardContent}>
+                    <div className={styles.cardHeader}>
+                      <span className={styles.cardTitle}>{dm.majorName}</span>
+                      <Badge label="Double Major" cls="badgeYellow" />
+                    </div>
+
+                    <div className={styles.cardSubtitle}>
+                      Requires <span className={styles.highlightCount}>{dm.neededCount}</span> unit{dm.neededCount !== 1 ? 's' : ''} to complete this major:
+                    </div>
+
+                    <div className={styles.chipList}>
+                      {dm.units.map((u: any) => (
+                        <span
+                          key={u.code}
+                          className={`${styles.unitChip}`}
+                          title={u.name}
+                        >
+                          {u.code} · {u.name}
+                        </span>
+                      ))}
+                    </div>
+
+                    {isSelected && (
+                      <div className={styles.injectedNotice}>
+                        ✓ {dm.neededCount} core unit{dm.neededCount !== 1 ? 's' : ''} swapped into custom pathway elective slots.
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    className={`${isSelected ? styles.btnDanger : styles.btnSecondary} ${styles.cardActionBtn}`}
+                    onClick={() => toggleDoubleMajor(dm.plannerId)}
+                    disabled={customPlanLoading}
+                  >
+                    {isSelected ? '✕ Remove from Plan' : '+ Include in Custom Plan'}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Minors & Specializations */}
       {(() => {
+        if (!customPlan) return null;
         const activePlanner = selectedPlannerIdx === -1 ? manualPlanner : dashboardData?.planners?.[selectedPlannerIdx];
         const minors: any[] = activePlanner?.minors ?? [];
         if (minors.length === 0) return null;
@@ -410,66 +425,70 @@ export default function PathwayPage() {
           )
         );
 
-        // How many free elective slots the student still needs to fill
-        const remainingElectiveSlots = (activePlanner?.units ?? []).filter(
-          (u: any) => u.category === 'elective' &&
-            (u.unit === null || !doneCodes.has(u.unit?.unit_code?.toUpperCase()))
-        ).length;
-
         return (
-          <div>
-            <div className={styles.sectionTitle} style={{ marginTop: 20 }}>Minors & Specializations</div>
-            {minors.map((minor: any) => {
-              const { missing } = getMinorProgress(minor, doneCodes);
-              const isInjected = injectedMinors.has(minor.id);
-              const wouldExceedCredits = missing > 0 && remainingElectiveSlots === 0;
+          <div className={styles.pathwaySection}>
+            <div className={styles.sectionTitle}>Minors & Specializations</div>
+            <div className={styles.doubleMajorGrid}>
+              {minors.map((minor: any) => {
+                const isInjected = injectedMinors.has(minor.id);
+                const missingUnits = (minor.units ?? []).filter(
+                  (mu: any) => mu.unit && !doneCodes.has(mu.unit.unit_code?.trim().toUpperCase())
+                );
+                const missingCount = missingUnits.length;
 
-              return (
-                <div
-                  key={minor.id}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'flex-start',
-                    gap: 10,
-                    paddingLeft: 8,
-                    borderLeft: `2px solid ${isInjected ? 'rgba(197,134,192,0.6)' : 'transparent'}`,
-                  }}
-                >
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <MinorProgressCard minor={minor} doneCodes={doneCodes} />
-                    {(isInjected || wouldExceedCredits) && (
-                      <div style={{ marginTop: -4, marginBottom: 10 }}>
-                        {isInjected && (
-                          <div style={{ fontSize: 10, color: 'var(--accent-purple)', marginTop: 6 }}>
-                            {missing} missing unit{missing !== 1 ? 's' : ''} will be injected into the custom pathway.
-                          </div>
-                        )}
-                        {wouldExceedCredits && (
-                          <div style={{ fontSize: 10, color: 'var(--accent-orange)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <span>⚠</span>
-                            <span>
-                              {isInjected
-                                ? 'No free elective slots remain — these units will exceed standard degree credits (extra units added to pathway).'
-                                : 'Note: No free elective slots remain. Including this minor will exceed standard degree credits.'}
-                            </span>
-                          </div>
+                return (
+                  <div
+                    key={minor.id}
+                    className={`${styles.doubleMajorCard} ${isInjected ? styles.doubleMajorCardActive : ''}`}
+                  >
+                    <div className={styles.cardContent}>
+                      <div className={styles.cardHeader}>
+                        <span className={styles.cardTitle}>{minor.name}</span>
+                        <Badge label="Minor" cls="badgeYellow" />
+                        {missingCount === 0 && (
+                          <span className={styles.completedText}>✓ Completed</span>
                         )}
                       </div>
+
+                      <div className={styles.cardSubtitle}>
+                        {missingCount > 0 ? (
+                          <>
+                            Requires <span className={styles.highlightCount}>{missingCount}</span> unit{missingCount !== 1 ? 's' : ''} to complete this specialization:
+                          </>
+                        ) : (
+                          'All requirements for this minor have already been completed.'
+                        )}
+                      </div>
+
+                      {missingCount > 0 && (
+                        <div className={styles.chipList}>
+                          {missingUnits.map((mu: any) => (
+                            <span
+                              key={mu.unit.unit_code}
+                              className={`${styles.unitChip}`}
+                              title={mu.unit.unit_name}
+                            >
+                              {mu.unit.unit_code} · {mu.unit.unit_name}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {missingCount > 0 && (
+                      <button
+                        type="button"
+                        className={`${isInjected ? styles.btnDanger : styles.btnSecondary} ${styles.cardActionBtn}`}
+                        onClick={() => toggleMinorInjection(minor.id)}
+                        disabled={customPlanLoading}
+                      >
+                        {isInjected ? '✕ Remove Minor' : '+ Include in Custom Plan'}
+                      </button>
                     )}
                   </div>
-                  {missing > 0 && (
-                    <button
-                      className={isInjected ? styles.btnDanger : styles.btnSecondary}
-                      style={{ fontSize: 11, whiteSpace: 'nowrap', flexShrink: 0, marginTop: 12 }}
-                      onClick={() => toggleMinorInjection(minor.id)}
-                      disabled={customPlanLoading}
-                    >
-                      {isInjected ? '✕ Remove from Plan' : '+ Include in Custom Plan'}
-                    </button>
-                  )}
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         );
       })()}
@@ -883,10 +902,15 @@ export default function PathwayPage() {
                                 </td>
                                 <td>
                                   <Badge
-                                    label={u.category === 'minor' ? 'minor elective' : u.category.replace(/_/g, ' ')}
+                                    label={
+                                      u.category === 'double_major' ? 'Double Major' :
+                                      u.category === 'minor' ? 'minor elective' :
+                                      u.category.replace(/_/g, ' ')
+                                    }
                                     cls={
                                       u.category === 'core' ? 'badgeRed' :
                                       u.category === 'major_core' ? 'badgeOrange' :
+                                      u.category === 'double_major' ? 'badgeYellow' :
                                       u.category === 'mpu' ? 'badgeBlue' :
                                       u.category === 'minor' ? 'badgeYellow' :
                                       'badgePurple'
@@ -997,7 +1021,7 @@ export default function PathwayPage() {
                           Remaining MPU Units ({remainingMpus.length})
                         </div>
                         <span className={styles.mpuSubtitle}>
-                          Available in all semesters · Can be taken alongside degree units
+                          -
                         </span>
                       </div>
 

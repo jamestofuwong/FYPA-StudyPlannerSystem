@@ -4,6 +4,8 @@ import { prisma } from '../../../../core/db/client';
 import {
   buildCustomPlan,
   validateSchedulerConfig,
+  resolveNextStudyTerm,
+  calendarTermFor,
   type SchedulableUnit,
 } from '../../../../core/services/scheduling/customPlannerScheduler';
 import {
@@ -17,16 +19,26 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const {
-      plannerId, completedUnitCodes, startYear, startSemester, injectedMinorIds,
-      concededPassUnitCodes, config,
+      plannerId, 
+      completedUnitCodes, 
+      courseList, 
+      injectedMinorIds,
+      concededPassUnitCodes, 
+      config, 
+      selectedDoubleMajorId,
     } = body;
 
-    if (
-      !plannerId ||
-      typeof startYear !== 'number' ||
-      (startSemester !== 1 && startSemester !== 2)
-    ) {
-      return NextResponse.json({ error: 'Invalid request parameters' }, { status: 400 });
+    if (!plannerId) {
+      return NextResponse.json({ error: 'Invalid request: plannerId is required' }, { status: 400 });
+    }
+
+    let startYear: number = body.startYear;
+    let startSemester: 1 | 2 = body.startSemester;
+
+    if (typeof startYear !== 'number' || (startSemester !== 1 && startSemester !== 2)) {
+      const resolved = resolveNextStudyTerm(courseList ?? []);
+      startYear = resolved.startYear;
+      startSemester = resolved.startSemester;
     }
 
     const configCheck = validateSchedulerConfig(config);
@@ -87,7 +99,7 @@ export async function POST(req: NextRequest) {
 
     // The core pool is all planner units the student has not yet completed/enrolled in
     const remainingUnits: SchedulableUnit[] = planner.units
-      .filter((tu) => tu.unit !== null && !normalizedCompleted.has(tu.unit.unit_code.toUpperCase()))
+      .filter((tu) => tu.unit !== null && tu.category !== 'mpu' && !normalizedCompleted.has(tu.unit.unit_code.toUpperCase()))
       .map((tu) => toSchedulable(tu.unit!, String(tu.category)));
 
     // Minor injection
@@ -133,7 +145,7 @@ export async function POST(req: NextRequest) {
     // requisite is never placed and leaves its slot to a recommendation. The
     // first run answers that and is discarded; the second is the plan returned.
     const probe = schedule(remainingUnits);
-    const electiveSlotsNeeded = countElectiveSlotsNeeded({
+    let electiveSlotsNeeded = countElectiveSlotsNeeded({
       electiveCount: planner.elective_count,
       plannerUnits: planner.units.map((tu) => ({
         category: String(tu.category),
@@ -145,27 +157,98 @@ export async function POST(req: NextRequest) {
       blockedUnitCodes: blockedByRequisites(probe),
     });
 
-    const recommended = recommendElectives({
-      needed: electiveSlotsNeeded,
-      // One source per elective group, in the order the planner lists them.
-      candidateSources: planner.elective_groups.map((group) =>
-        group.units.map((gu) => toSchedulable(gu.unit, 'elective')),
-      ),
-      completedUnitCodes: [...normalizedCompleted],
-      alreadyPlannedCodes: remainingUnits.map((u) => u.code),
+    // Query Sibling Majors (Same course, year, intake)
+    const siblingPlanners = await prisma.plannerTemplate.findMany({
+      where: {
+        course_id: planner.course_id,
+        intake_year: planner.intake_year,
+        intake_month: planner.intake_month,
+        id: { not: planner.id }, // Sibling majors only
+      },
+      include: {
+        major: true,
+        units: {
+          where: { category: 'major_core' },
+          include: { unit: { include: UNIT_INCLUDE } },
+        },
+      },
     });
-    for (const unit of recommended) {
-      remainingUnits.push({ ...unit, category: 'elective', recommended: true });
+
+    // Detect Feasible Double Majors (Strict Fit Rule)
+    const primaryUnitCodes = new Set([
+      ...namedCodes,
+      ...remainingUnits.map((u) => u.code.toUpperCase()),
+    ]);
+
+    const availableDoubleMajors = siblingPlanners
+      .map((sibling) => {
+        // Collect major core units from sibling that student hasn't taken and aren't in primary major
+        const missingUnits: SchedulableUnit[] = sibling.units
+          .filter((tu) => tu.unit !== null)
+          .map((tu) => toSchedulable(tu.unit!, 'double_major'))
+          .filter(
+            (u) =>
+              !normalizedCompleted.has(u.code.toUpperCase()) &&
+              !primaryUnitCodes.has(u.code.toUpperCase())
+          );
+
+        const neededCount = missingUnits.length;
+        const canFitStrictly = neededCount > 0 && neededCount <= electiveSlotsNeeded;
+
+        return {
+          plannerId: sibling.id,
+          majorId: sibling.major?.id ?? null,
+          majorName: sibling.major?.name ?? 'Secondary Major',
+          neededCount,
+          canFitStrictly,
+          units: missingUnits,
+        };
+      })
+      .filter((dm) => dm.canFitStrictly); // Only expose those that strictly fit into available slots!
+
+    // If user selected a Double Major, SWAP the elective slots with those units!
+    if (selectedDoubleMajorId) {
+      const chosenMajor = availableDoubleMajors.find((dm) => dm.plannerId === selectedDoubleMajorId);
+      if (chosenMajor) {
+        for (const dmUnit of chosenMajor.units) {
+          remainingUnits.push({
+            ...dmUnit,
+            category: 'double_major',
+            recommended: true,
+          });
+        }
+        // Deduct the swapped units from the elective slots count
+        electiveSlotsNeeded = Math.max(0, electiveSlotsNeeded - chosenMajor.neededCount);
+      }
+    }
+    // Calculate the calendar term of the starting semester
+    const startCalendarTerm = calendarTermFor(startSemester, intakeSemester);
+    // If any free elective slots STILL remain, fill with general recommendations
+    if (electiveSlotsNeeded > 0) {
+      const recommended = recommendElectives({
+        needed: electiveSlotsNeeded,
+        preferredTerm: startCalendarTerm,
+        candidateSources: planner.elective_groups.map((group) =>
+          group.units.map((gu) => toSchedulable(gu.unit, 'elective')),
+        ),
+        completedUnitCodes: [...normalizedCompleted],
+        alreadyPlannedCodes: remainingUnits.map((u) => u.code),
+      });
+
+      for (const unit of recommended) {
+        remainingUnits.push({ ...unit, category: 'elective', recommended: true });
+      }
     }
 
-    const result = recommended.length > 0 ? schedule(remainingUnits) : probe;
+    // Final Plan Scheduling
+    const result = schedule(remainingUnits);
 
     // A null requirement means the planner never recorded one, so it is left
     // out rather than sent as zero, which would read as "nothing required".
     const requirements = [
       { category: 'core', creditPoints: planner.core_cp, unitCount: planner.core_count, planCategories: ['core'] },
       { category: 'major', creditPoints: planner.major_cp, unitCount: planner.major_count, planCategories: ['major_core'] },
-      { category: 'elective', creditPoints: planner.elective_cp, unitCount: planner.elective_count, planCategories: ['elective', 'prescribed_elective'] },
+      { category: 'elective', creditPoints: planner.elective_cp, unitCount: planner.elective_count, planCategories: ['elective', 'prescribed_elective', 'double_major'] },
       { category: 'wil', creditPoints: planner.wil_cp, unitCount: planner.wil_count, planCategories: ['wil'] },
     ].filter((r) => r.creditPoints != null);
 
@@ -175,8 +258,11 @@ export async function POST(req: NextRequest) {
       success: true,
       data: result,
       units: remainingUnits,
+      startYear,
+      startSemester,
       intakeSemester,
       requirements,
+      availableDoubleMajors,
       // Categories for units already completed, which the pool leaves out but
       // the requirement totals must still count. A unit the planner only offers
       // as an elective candidate is an elective the student has taken, so it is
