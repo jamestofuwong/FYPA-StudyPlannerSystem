@@ -199,6 +199,7 @@
   align-self: flex-start;
   margin-top: 4px;
   flex-shrink: 0;
+  width: 150px;
 }
 
 /* Unit Chip Lists */

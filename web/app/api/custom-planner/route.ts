@@ -126,8 +126,10 @@ export async function POST(req: NextRequest) {
     // pool fills its slot is only knowable after a run, since one blocked by a
     // requisite is never placed and leaves its slot to a recommendation. The
     // first run answers that and is discarded; the second is the plan returned.
+
+    // Baseline simulation probe to find exact free elective slots needed
     const probe = schedule(remainingUnits);
-    let electiveSlotsNeeded = countElectiveSlotsNeeded({
+    const baseElectiveSlotsNeeded = countElectiveSlotsNeeded({
       electiveCount: planner.elective_count,
       plannerUnits: planner.units.map((tu) => ({
         category: String(tu.category),
@@ -145,7 +147,7 @@ export async function POST(req: NextRequest) {
         course_id: planner.course_id,
         intake_year: planner.intake_year,
         intake_month: planner.intake_month,
-        id: { not: planner.id }, // Sibling majors only
+        id: { not: planner.id },
       },
       include: {
         major: true,
@@ -163,9 +165,51 @@ export async function POST(req: NextRequest) {
         .map((tu) => tu.unit!.unit_code.toUpperCase())
     );
 
+    // Units the currently active double major consumes
+    const activeMajorUnits: SchedulableUnit[] = [];
+    if (selectedDoubleMajorId) {
+      const selectedSibling = siblingPlanners.find((s) => s.id === selectedDoubleMajorId);
+      if (selectedSibling) {
+        const missing = selectedSibling.units
+          .filter((tu) => tu.unit !== null)
+          .map((tu) => toSchedulable(tu.unit!, 'double_major'))
+          .filter(
+            (u) =>
+              !normalizedCompleted.has(u.code.toUpperCase()) &&
+              !primaryUnitCodes.has(u.code.toUpperCase())
+          );
+        activeMajorUnits.push(...missing);
+      }
+    }
+
+    // Units the currently active minors consume
+    const activeMinorUnits: SchedulableUnit[] = [];
+    if (minorIds.length > 0) {
+      const selectedMinorsData = (planner.minors ?? []).filter((m) => minorIds.includes(m.id));
+      for (const sm of selectedMinorsData) {
+        const missing = (sm.units ?? [])
+          .filter((mu) => mu.unit !== null)
+          .map((mu) => toSchedulable(mu.unit, 'minor'))
+          .filter(
+            (u) =>
+              !normalizedCompleted.has(u.code.toUpperCase()) &&
+              !primaryUnitCodes.has(u.code.toUpperCase())
+          );
+        activeMinorUnits.push(...missing);
+      }
+    }
+
+    // Combine active swapped units to know current remaining free budget
+    const currentlySwappedCodes = new Set([
+      ...activeMajorUnits.map((u) => u.code.toUpperCase()),
+      ...activeMinorUnits.map((u) => u.code.toUpperCase()),
+    ]);
+    const remainingElectiveBudget = Math.max(0, baseElectiveSlotsNeeded - currentlySwappedCodes.size);
+
+    // Dynamic capacity for Double Majors
+    // Cards remain visible if they could fit in base budget, but canFitInRemainingBudget disables them if no room
     const availableDoubleMajors = siblingPlanners
       .map((sibling) => {
-        // Collect major core units from sibling that student hasn't taken and aren't in primary major
         const missingUnits: SchedulableUnit[] = sibling.units
           .filter((tu) => tu.unit !== null)
           .map((tu) => toSchedulable(tu.unit!, 'double_major'))
@@ -176,22 +220,31 @@ export async function POST(req: NextRequest) {
           );
 
         const neededCount = missingUnits.length;
-        // Keep eligible if it fits into empty slots
+        // Units this major needs that aren't already supplied by active selections
+        const netNewUnitsNeeded = missingUnits.filter(
+          (u) => !currentlySwappedCodes.has(u.code.toUpperCase())
+        ).length;
+
         const isCurrentSelection = sibling.id === selectedDoubleMajorId;
-        const canFitStrictly = (neededCount > 0 && neededCount <= electiveSlotsNeeded) || isCurrentSelection;
+        const fitsInBase = neededCount > 0 && neededCount <= baseElectiveSlotsNeeded;
+        // Can be clicked if it's already active, or if its net new units fit into remaining budget
+        const canFitInRemainingBudget = isCurrentSelection || (netNewUnitsNeeded > 0 && netNewUnitsNeeded <= remainingElectiveBudget);
 
         return {
           plannerId: sibling.id,
           majorId: sibling.major?.id ?? null,
           majorName: sibling.major?.name ?? 'Secondary Major',
           neededCount,
-          canFitStrictly,
+          netNewUnitsNeeded,
+          canFitStrictly: fitsInBase || isCurrentSelection,
+          canFitInRemainingBudget,
+          remainingElectiveBudget,
           units: missingUnits,
         };
       })
-      .filter((dm) => dm.canFitStrictly); // Only expose those that strictly fit into available slots!
+      .filter((dm) => dm.canFitStrictly);
 
-    // Detect Feasible Minors (Strict Fit Rule)
+    // Dynamic capacity for Minors
     const availableMinors = (planner.minors ?? [])
       .map((minor) => {
         const missingUnits: SchedulableUnit[] = (minor.units ?? [])
@@ -204,72 +257,64 @@ export async function POST(req: NextRequest) {
           );
 
         const neededCount = missingUnits.length;
-        // Keep eligible if it fits into empty slots
+        const netNewUnitsNeeded = missingUnits.filter(
+          (u) => !currentlySwappedCodes.has(u.code.toUpperCase())
+        ).length;
+
         const isCurrentlyInjected = minorIds.includes(minor.id);
-        const canFitStrictly = (neededCount > 0 && neededCount <= electiveSlotsNeeded) || isCurrentlyInjected;
+        const fitsInBase = neededCount > 0 && neededCount <= baseElectiveSlotsNeeded;
+        const canFitInRemainingBudget = isCurrentlyInjected || (netNewUnitsNeeded > 0 && netNewUnitsNeeded <= remainingElectiveBudget);
 
         return {
           minorId: minor.id,
           minorName: minor.name,
           neededCount,
-          canFitStrictly,
+          netNewUnitsNeeded,
+          canFitStrictly: fitsInBase || isCurrentlyInjected,
+          canFitInRemainingBudget,
+          remainingElectiveBudget,
           units: missingUnits,
         };
       })
       .filter((m) => m.canFitStrictly);
 
-      
-
-    // Unified Double Major & Minor Elective Swapping (with Cross-Credit Deduplication)
-    const chosenMajor = selectedDoubleMajorId
-      ? availableDoubleMajors.find((dm) => dm.plannerId === selectedDoubleMajorId)
-      : null;
-
-    const chosenMinors = minorIds.length > 0
-      ? availableMinors.filter((m) => minorIds.includes(m.minorId))
-      : [];
-
-    // Combine all units from chosen major & chosen minors
+    // Combine and deduplicate swapped units up to baseElectiveSlotsNeeded
     const extraUnitsToSwap = new Map<string, SchedulableUnit>();
 
-    // Add Double Major units (Priority category: 'double_major')
-    if (chosenMajor) {
-      for (const dmUnit of chosenMajor.units) {
-        extraUnitsToSwap.set(dmUnit.code.toUpperCase(), {
-          ...dmUnit,
-          category: 'double_major',
+    for (const dmUnit of activeMajorUnits) {
+      extraUnitsToSwap.set(dmUnit.code.toUpperCase(), {
+        ...dmUnit,
+        category: 'double_major',
+        recommended: true,
+      });
+    }
+
+    for (const mUnit of activeMinorUnits) {
+      const code = mUnit.code.toUpperCase();
+      if (!extraUnitsToSwap.has(code)) {
+        extraUnitsToSwap.set(code, {
+          ...mUnit,
+          category: 'minor',
           recommended: true,
         });
       }
     }
 
-    // Add Minor units (If already added by major, keep it; otherwise add as 'minor')
-    for (const m of chosenMinors) {
-      for (const mUnit of m.units) {
-        const code = mUnit.code.toUpperCase();
-        if (!extraUnitsToSwap.has(code)) {
-          extraUnitsToSwap.set(code, {
-            ...mUnit,
-            category: 'minor',
-            recommended: true,
-          });
+    // Safety Cap: never allow swapped units to exceed the total base free elective slots
+    let slotsToDeduct = 0;
+    for (const [code, unit] of extraUnitsToSwap.entries()) {
+      if (slotsToDeduct < baseElectiveSlotsNeeded) {
+        if (!remainingUnits.some((u) => u.code.toUpperCase() === code)) {
+          remainingUnits.push(unit);
         }
+        slotsToDeduct++;
       }
     }
 
-    // Push unique units into remainingUnits pool
-    for (const unit of extraUnitsToSwap.values()) {
-      if (!remainingUnits.some((u) => u.code.toUpperCase() === unit.code.toUpperCase())) {
-        remainingUnits.push(unit);
-      }
-    }
-
-    // Deduct the exact number of unique units from free elective slots
-    electiveSlotsNeeded = Math.max(0, electiveSlotsNeeded - extraUnitsToSwap.size);
-
-    // Calculate the calendar term of the starting semester
+    // Deduct swapped units from remaining slots
+    let electiveSlotsNeeded = Math.max(0, baseElectiveSlotsNeeded - slotsToDeduct);
     const startCalendarTerm = calendarTermFor(startSemester, intakeSemester);
-    // If any free elective slots STILL remain, fill with general recommendations
+    // If any free elective slots still remain, fill with general recommendations
     if (electiveSlotsNeeded > 0) {
       const recommended = recommendElectives({
         needed: electiveSlotsNeeded,

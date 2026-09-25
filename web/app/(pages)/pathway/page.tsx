@@ -350,7 +350,6 @@ export default function PathwayPage() {
     generateCustomPlan(injectedMinors, next);
   };
 
-
   const toggleMinorInjection = (minorId: string) => {
     if (customPlan && !confirmDiscardEdits()) return;
     const next = new Set(injectedMinors);
@@ -436,10 +435,20 @@ export default function PathwayPage() {
                     type="button"
                     className={`${isSelected ? styles.btnDanger : styles.btnSecondary} ${styles.cardActionBtn}`}
                     onClick={() => toggleDoubleMajor(dm.plannerId)}
-                    disabled={customPlanLoading}
+                    disabled={customPlanLoading || (!isSelected && !dm.canFitInRemainingBudget)}
+                    title={
+                      !isSelected && !dm.canFitInRemainingBudget
+                        ? `Not enough elective slots (needs ${dm.netNewUnitsNeeded ?? dm.neededCount}, only ${dm.remainingElectiveBudget ?? 0} available)`
+                        : undefined
+                    }
                   >
-                    {isSelected ? '✕ Remove from Plan' : '+ Include in Custom Plan'}
+                    {isSelected
+                      ? '✕ Remove from Plan'
+                      : !dm.canFitInRemainingBudget
+                      ? `Not enough slots (${dm.remainingElectiveBudget ?? 0} left)`
+                      : '+ Include in Custom Plan'}
                   </button>
+
                 </div>
               );
             })}
@@ -493,10 +502,20 @@ export default function PathwayPage() {
                     type="button"
                     className={`${isInjected ? styles.btnDanger : styles.btnSecondary} ${styles.cardActionBtn}`}
                     onClick={() => toggleMinorInjection(minor.minorId)}
-                    disabled={customPlanLoading}
+                    disabled={customPlanLoading || (!isInjected && !minor.canFitInRemainingBudget)}
+                    title={
+                      !isInjected && !minor.canFitInRemainingBudget
+                        ? `Not enough elective slots (needs ${minor.netNewUnitsNeeded ?? minor.neededCount}, only ${minor.remainingElectiveBudget ?? 0} available)`
+                        : undefined
+                    }
                   >
-                    {isInjected ? '✕ Remove from Plan' : '+ Include in Custom Plan'}
+                    {isInjected
+                      ? '✕ Remove from Plan'
+                      : !minor.canFitInRemainingBudget
+                      ? `Not enough slots (${minor.remainingElectiveBudget ?? 0} left)`
+                      : '+ Include in Custom Plan'}
                   </button>
+
                 </div>
               );
             })}
