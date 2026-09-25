@@ -5,6 +5,7 @@ import {
   buildCustomPlan,
   mapUnitToSchedulable,
   validateSchedulerConfig,
+  type RequisiteCondition,
   type SchedulableUnit,
 } from '../../../../core/services/scheduling/customPlannerScheduler';
 import { toSchedulableUnit } from '../../../../core/shared/scheduling/schedulableUnit';
