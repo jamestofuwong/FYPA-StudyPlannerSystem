@@ -17,7 +17,8 @@ export async function GET() {
       const modelReady = data.models.some((m) => m.name.startsWith(OLLAMA_MODEL));
       ollamaStore.model = modelReady ? 'ready' : 'unavailable';
     }
-  } catch {
+  } catch (err) {
+    console.warn('[Ollama] Status check failed:', err);
     ollamaStore.ollama = 'unavailable';
     if (ollamaStore.model !== 'pulling') {
       ollamaStore.model = 'unavailable';
