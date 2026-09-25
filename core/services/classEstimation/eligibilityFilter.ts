@@ -5,21 +5,19 @@
 // planner per run regardless of how many times this function is called for that same planner.
 // ============================================================
 
-import { buildEligibilityUnitsFromPlanner, isUnitEligible } from './eligibilityEngine';
+import { buildEligibilityUnitsFromPlanner, isUnitEligible, type EligibilityInput } from './eligibilityEngine';
 import type { CandidateUnit } from '../../shared/types/classEstimation';
 
 export async function filterEligibleUnits(
   candidates: CandidateUnit[],
   plannerId: string,
-  targetOfferedIn: 1 | 2,
-  completedOrInProgress: Set<string>,
-  totalCreditsEarned: number,
+  input: EligibilityInput,
 ): Promise<CandidateUnit[]> {
   const eligibilityUnits = await buildEligibilityUnitsFromPlanner(plannerId);
 
   return candidates.filter((candidate) => {
     const unit = eligibilityUnits.get(candidate.code);
     if (!unit) return false; // not part of this planner's known unit set, can't verify offering/requisites
-    return isUnitEligible(unit, targetOfferedIn, completedOrInProgress, totalCreditsEarned);
+    return isUnitEligible(unit, input);
   });
 }

@@ -8,6 +8,10 @@
 // prerequisite/corequisite distinction wrong in the process (a prerequisite must come from prior
 // completion only, a corequisite can also be satisfied by another unit picked in the same round). Reusing
 // the already-correct, already-used-elsewhere logic avoids repeating that mistake.
+//
+// Inputs are passed as a named object rather than positionally. canTake() gained a parameter in the middle
+// of its signature once already, which silently shifted every argument after it here and survived a merge.
+// With named fields that same change is a compile error instead of a wrong answer.
 // ============================================================
 
 import {
@@ -24,20 +28,41 @@ export type { SchedulableUnit };
 // would need the same iterative fixed-point loop buildCustomPlan() uses across multiple semesters, which
 // is out of scope for a single-semester eligibility check. A corequisite is therefore only satisfiable if
 // it's already completed or in progress, same as a prerequisite, until that's built.
-export function isUnitEligible(
-  unit: SchedulableUnit,
-  targetOfferedIn: 1 | 2,
-  completedOrInProgress: Set<string>,
-  totalCreditsEarned: number,
-): boolean {
-  return canTake(unit, targetOfferedIn, completedOrInProgress, new Set(), totalCreditsEarned);
+const NO_SAME_ROUND_PICKS = new Set<string>();
+
+export interface EligibilityInput {
+  /** The semester being estimated. */
+  targetTerm: 1 | 2;
+  /** Units the student has passed or is currently taking, uppercased. */
+  completedOrInProgress: Set<string>;
+  // The subset of completedOrInProgress held only as a Conceded Pass. Those units are not owed again, but
+  // they cannot satisfy a prerequisite or corequisite, so they have to be named rather than inferred.
+  concededPass: Set<string>;
+  /** Credit points earned, for credit-point requisites such as "150cp before the capstone". */
+  totalCreditsEarned: number;
 }
 
-/**
- * Builds a unitCode -> SchedulableUnit lookup for every unit reachable from a specific planner: its
- * slotted TemplateUnit rows and its elective-group pool units, since both are candidate categories for
- * class estimation.
- */
+export function isUnitEligible(unit: SchedulableUnit, input: EligibilityInput): boolean {
+  // A unit whose offering data lists only summer or winter terms cannot be taken in the semester being
+  // estimated. canTake() can't see this on its own: it only reads offeringSemesters, which comes back empty
+  // both for a short-term-only unit and for one with no offering data at all. Those two are not the same.
+  // No data stays permissive, since most units in the catalogue currently have none. Data that positively
+  // says "never in a semester" is respected.
+  const hasOfferingData = (unit.allOfferingTerms ?? []).length > 0;
+  if (hasOfferingData && unit.offeringSemesters.length === 0) return false;
+
+  return canTake(
+    unit,
+    input.targetTerm,
+    input.completedOrInProgress,
+    input.concededPass,
+    NO_SAME_ROUND_PICKS,
+    input.totalCreditsEarned,
+  );
+}
+
+ // Builds a unitCode -> SchedulableUnit lookup for every unit reachable from a specific planner: its
+ // slotted TemplateUnit rows and its elective-group pool units, since both are candidate categories for class estimation.
 export async function buildEligibilityUnitsFromPlanner(plannerId: string): Promise<Map<string, SchedulableUnit>> {
   const planner = await getCachedPlannerById(plannerId);
   const eligibilityUnits = new Map<string, SchedulableUnit>();

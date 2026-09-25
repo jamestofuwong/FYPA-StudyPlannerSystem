@@ -205,6 +205,8 @@ export function standardLimitFor(cfg: SchedulerConfig, year: number, slotSemeste
 /** Empty offeringSemesters means unrestricted, so an unknown offering never blocks placement. */
 export function isOfferedIn(unit: SchedulableUnit, calendarTerm: 1 | 2): boolean {
   return unit.offeringSemesters.length === 0 || unit.offeringSemesters.includes(calendarTerm);
+}
+
 // Raw shape of a unit as returned by Prisma's nested planner/minor includes
 // (see web/app/api/custom-planner/route.ts and plannerRepository.getPlannerById()),
 // covering only the fields mapUnitToSchedulable reads.
@@ -246,12 +248,13 @@ export function mapUnitToSchedulable(unit: RawSchedulableUnitRow, category: stri
     )
     .filter((g) => g.length > 0);
 
-  // Terms 3 (summer) and 4 (winter) are dropped, since canTake only cycles semesters 1 and 2.
-  const offeringSemesters = (unit.offerings ?? [])
-    .map((o) => o.offered_in as 1 | 2)
-    .filter((sem) => sem === 1 || sem === 2);
+  const allOfferingTerms = [...new Set((unit.offerings ?? []).map((o) => o.offered_in))].sort((a, b) => a - b);
+  // Only semesters 1 and 2 are placeable. A unit offered solely in summer (3) or winter (4) keeps its raw
+  // terms here so callers can tell "offered, but not in a term we schedule" from "no offering data at all",
+  // which otherwise both arrive as an empty offeringSemesters and read as unrestricted.
+  const offeringSemesters = allOfferingTerms.filter((term): term is 1 | 2 => term === 1 || term === 2);
 
-  return { code: unit.unit_code, name: unit.unit_name, category, offeringSemesters, requisiteGroups };
+  return { code: unit.unit_code, name: unit.unit_name, category, offeringSemesters, allOfferingTerms, requisiteGroups };
 }
 
 export function buildCustomPlan(

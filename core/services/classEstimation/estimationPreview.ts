@@ -208,13 +208,12 @@ async function previewStudent(
     // The scheduler's own convention (completed units * flat credit rate) is the fallback if the portal reports 0.
     const totalCreditsEarned = record.scraped.creditsCompleted || completedOrInProgress.size * FLAT_CREDIT_HOURS;
 
-    const eligible = await filterEligibleUnits(
-      resolution.candidates,
-      resolution.plannerId,
+    const eligible = await filterEligibleUnits(resolution.candidates, resolution.plannerId, {
       targetTerm,
       completedOrInProgress,
+      concededPass: new Set(record.concededPassUnitCodes),
       totalCreditsEarned,
-    );
+    });
     base.eligibleCount = eligible.length;
 
     const eligibilityUnits = await buildEligibilityUnitsFromPlanner(resolution.plannerId);

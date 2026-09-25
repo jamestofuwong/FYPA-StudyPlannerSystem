@@ -17,7 +17,7 @@ import {
   fetchEnrollments,
   fetchDegreeAudit,
 } from '../portal/portalSessionService';
-import { resolveUnitStates } from '../../shared/constants/grades';
+import { resolveUnitStates, getConcededPassUnitCodes } from '../../shared/constants/grades';
 import { mapScrapedStudentToRawInput } from './scrapedStudentMapper';
 import { resetEstimationRecords, pushEstimationRecord } from './estimationStore';
 
@@ -91,6 +91,7 @@ export async function runScrapeForStudents(
 
       const { rawInput, warnings } = mapScrapedStudentToRawInput(scraped, student.student_id);
       const unitStates = resolveUnitStates(scraped.courseList);
+      const concededPassUnitCodes = getConcededPassUnitCodes(scraped.courseList);
 
       pushEstimationRecord({
         studentId: student.student_id,
@@ -100,6 +101,7 @@ export async function runScrapeForStudents(
         scraped,
         rawInput,
         unitStates,
+        concededPassUnitCodes,
         mappingWarnings: warnings,
       });
 

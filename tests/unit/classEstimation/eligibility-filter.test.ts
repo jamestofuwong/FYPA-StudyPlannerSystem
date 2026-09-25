@@ -9,7 +9,19 @@
 import { filterEligibleUnits } from '@core/services/classEstimation/eligibilityFilter';
 import { resetPlannerCache } from '@core/services/classEstimation/plannerCache';
 import * as plannerRepository from '@core/db/repositories/plannerRepository';
+import type { EligibilityInput } from '@core/services/classEstimation/eligibilityEngine';
 import type { CandidateUnit } from '@shared/types/classEstimation';
+
+// Named inputs with blank defaults, so each test states only the part it cares about.
+function input(overrides: Partial<EligibilityInput> = {}): EligibilityInput {
+  return {
+    targetTerm: 1,
+    completedOrInProgress: new Set(),
+    concededPass: new Set(),
+    totalCreditsEarned: 0,
+    ...overrides,
+  };
+}
 
 jest.mock('@core/db/repositories/plannerRepository');
 
@@ -37,7 +49,10 @@ describe('filterEligibleUnits', () => {
     } as never);
 
     const candidates: CandidateUnit[] = [{ code: 'COS20015', category: 'core' }];
-    const result = await filterEligibleUnits(candidates, 'p1', 1, new Set(['COS10009']), 12.5);
+    const result = await filterEligibleUnits(candidates, 'p1', input({
+      completedOrInProgress: new Set(['COS10009']),
+      totalCreditsEarned: 12.5,
+    }));
 
     expect(result).toEqual(candidates);
   });
@@ -56,7 +71,7 @@ describe('filterEligibleUnits', () => {
       elective_groups: [],
     } as never);
 
-    const result = await filterEligibleUnits([{ code: 'COS20015', category: 'core' }], 'p1', 1, new Set(), 0);
+    const result = await filterEligibleUnits([{ code: 'COS20015', category: 'core' }], 'p1', input());
     expect(result).toEqual([]);
   });
 
@@ -66,7 +81,7 @@ describe('filterEligibleUnits', () => {
       elective_groups: [],
     } as never);
 
-    const result = await filterEligibleUnits([{ code: 'U1', category: 'core' }], 'p1', 1, new Set(), 0);
+    const result = await filterEligibleUnits([{ code: 'U1', category: 'core' }], 'p1', input());
     expect(result).toEqual([]);
   });
 
@@ -75,7 +90,7 @@ describe('filterEligibleUnits', () => {
   // than assumed eligible.
   test('drops a candidate the planner has no record of at all', async () => {
     getPlannerById.mockResolvedValue({ units: [], elective_groups: [] } as never);
-    const result = await filterEligibleUnits([{ code: 'UNKNOWN', category: 'core' }], 'p1', 1, new Set(), 0);
+    const result = await filterEligibleUnits([{ code: 'UNKNOWN', category: 'core' }], 'p1', input());
     expect(result).toEqual([]);
   });
 
@@ -90,7 +105,7 @@ describe('filterEligibleUnits', () => {
 
     const result = await filterEligibleUnits(
       [{ code: 'OK', category: 'core' }, { code: 'BLOCKED', category: 'core' }],
-      'p1', 1, new Set(), 0,
+      'p1', input(),
     );
 
     expect(result).toEqual([{ code: 'OK', category: 'core' }]);

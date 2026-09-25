@@ -364,8 +364,40 @@ describe('Custom Planner Scheduler', () => {
         'core',
       );
       expect(result).toEqual({
-        code: 'COS10009', name: 'Intro', category: 'core', offeringSemesters: [1], requisiteGroups: [],
+        code: 'COS10009', name: 'Intro', category: 'core',
+        offeringSemesters: [1], allOfferingTerms: [1], requisiteGroups: [],
       });
+    });
+
+    // The two empty cases are not the same, and callers need to tell them apart: a unit with no offering
+    // rows has no data, while a summer/winter-only unit has data saying it never runs in a semester.
+    test('a short-term-only unit keeps its terms while offeringSemesters comes back empty', () => {
+      const winterOnly = mapUnitToSchedulable(
+        { unit_code: 'WIL', unit_name: 'Placement', offerings: [{ offered_in: 4 }], requisite_groups: [] },
+        'wil',
+      );
+      expect(winterOnly.offeringSemesters).toEqual([]);
+      expect(winterOnly.allOfferingTerms).toEqual([4]);
+
+      const noData = mapUnitToSchedulable(
+        { unit_code: 'U1', unit_name: 'X', offerings: [], requisite_groups: [] },
+        'core',
+      );
+      expect(noData.offeringSemesters).toEqual([]);
+      expect(noData.allOfferingTerms).toEqual([]);
+    });
+
+    test('deduplicates and sorts offering terms', () => {
+      const result = mapUnitToSchedulable(
+        {
+          unit_code: 'U1', unit_name: 'X',
+          offerings: [{ offered_in: 2 }, { offered_in: 1 }, { offered_in: 2 }],
+          requisite_groups: [],
+        },
+        'core',
+      );
+      expect(result.allOfferingTerms).toEqual([1, 2]);
+      expect(result.offeringSemesters).toEqual([1, 2]);
     });
 
     test('drops summer/winter offering terms (3, 4), canTake only cycles semesters 1 and 2', () => {
@@ -424,6 +456,9 @@ describe('Custom Planner Scheduler', () => {
         'core',
       );
       expect(result.requisiteGroups).toEqual([[{ type: 'unit', requisiteType: 'prerequisite', unitCode: 'BASE' }]]);
+    });
+  });
+
   const warningsOf = <K extends PlanWarning['kind']>(
     result: ReturnType<typeof buildCustomPlan>,
     kind: K,

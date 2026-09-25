@@ -19,6 +19,12 @@ export interface EstimationRecord {
   rawInput: RawStudentInput;
   /** Per-unit status (passed/in_progress/must_retake/not_taken), from resolveUnitStates(). */
   unitStates: Map<string, UnitState>;
+  /**
+   * Units held only as a Conceded Pass, from getConcededPassUnitCodes(). A CP earns credit, so the unit is
+   * not owed again, but it cannot satisfy a prerequisite or corequisite, so eligibility needs it separately
+   * from completedUnitCodes rather than inferring it.
+   */
+  concededPassUnitCodes: string[];
   /** Every field on rawInput that was defaulted/guessed rather than read directly from scraped data. */
   mappingWarnings: string[];
 }

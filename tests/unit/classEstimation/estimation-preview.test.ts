@@ -13,7 +13,7 @@
 
 import { runEstimationPreview } from '@core/services/classEstimation/estimationPreview';
 import { mapScrapedStudentToRawInput } from '@core/services/classEstimation/scrapedStudentMapper';
-import { resolveUnitStates } from '@shared/constants/grades';
+import { resolveUnitStates, getConcededPassUnitCodes } from '@shared/constants/grades';
 import * as plannerRepository from '@core/db/repositories/plannerRepository';
 import * as unitRepository from '@core/db/repositories/unitRepository';
 import type { EstimationRecord } from '@shared/types/classEstimation';
@@ -83,7 +83,9 @@ function record(id: string, scraped: ScrapedStudent, defaultHasWIL = false): Est
   const { rawInput, warnings } = mapScrapedStudentToRawInput(scraped, id, { loadCap: 4, retentionRate: 0.85, defaultHasWIL });
   return {
     studentId: id, name: `Student ${id}`, dbId: 1, enrollId: 1, scraped, rawInput,
-    unitStates: resolveUnitStates(scraped.courseList), mappingWarnings: warnings,
+    unitStates: resolveUnitStates(scraped.courseList),
+    concededPassUnitCodes: getConcededPassUnitCodes(scraped.courseList),
+    mappingWarnings: warnings,
   };
 }
 
