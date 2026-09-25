@@ -325,6 +325,7 @@ export function buildCustomPlan(
   let currentSem: 1 | 2 = startSemester;
   let consecutiveIdle = 0;
   let blocked = false;
+  let previousSemesterPlacedPartA = false;
 
   for (let i = 0; i < cfg.maxSemesters && pool.length > 0; i++) {
     const totalCredits = completed.size * cfg.creditPointsPerUnit;
@@ -339,11 +340,30 @@ export function buildCustomPlan(
     while (changed) {
       changed = false;
 
+      // Calculate how many semesters of study remain based on remaining units
+      const remainingSemestersEstimate = Math.ceil(pool.length / normalLoad);
+      const isFinalYearStretch = remainingSemestersEstimate <= 2;
+
       // Sort candidate units by academic priority:
+      // #0 FYP Consecutive Chain: Project B immediately after Project A
       // #1 Bottleneck Depth: Units that unlock other units in the remaining pool
       // #2 Offering Scarcity: Units offered in only 1 semester over both sem units
       // #3 Category Urgency: Core / Major Core over electives
       const prioritizedPool = [...pool].sort((a, b) => {
+        // Priority 0: If Project A was placed in the last semester, Project B gets Top priority
+        if (previousSemesterPlacedPartA) {
+          const aIsB = isProjectPartB(a) ? 1 : 0;
+          const bIsB = isProjectPartB(b) ? 1 : 0;
+          if (aIsB !== bIsB) return bIsB - aIsB;
+        }
+
+        // Priority 0.5: FYP Final Year Anchor
+        if (isFinalYearStretch) {
+          const aIsA = isProjectPartA(a) ? 1 : 0;
+          const bIsA = isProjectPartA(b) ? 1 : 0;
+          if (aIsA !== bIsA) return bIsA - aIsA;
+        }
+
         // Priority 1: Does unit A unlock other units in the pool
         const aIsPrereqFor = pool.filter((other) =>
           other.requisiteGroups.some((g) => g.some((c) => c.unitCode === a.code))
@@ -367,6 +387,31 @@ export function buildCustomPlan(
       for (const unit of prioritizedPool) {
         if (bucketCodes.has(normaliseCode(unit.code))) continue;
 
+        // do not place Project A early unless there are literally no other placeable units
+        if (isProjectPartA(unit) && !isFinalYearStretch) {
+          const otherPlaceableExists = prioritizedPool.some(
+            (other) =>
+              other.code !== unit.code &&
+              !bucketCodes.has(normaliseCode(other.code)) &&
+              canTake(other, calendarTerm, completed, concededPass, bucketCodes, totalCredits)
+          );
+          if (otherPlaceableExists) {
+            continue;
+          }
+        }
+
+        if (isProjectPartA(unit)) {
+          const matchingB = findMatchingProjectB(unit, pool);
+          if (matchingB) {
+            const nextSem: 1 | 2 = currentSem === 1 ? 2 : 1;
+            const nextCalendarTerm = calendarTermFor(nextSem, intakeSemester);
+            // If Project B is not offered in next term, postpone Project A to prevent a broken sequence
+            if (!isOfferedIn(matchingB, nextCalendarTerm)) {
+              continue;
+            }
+          }
+        }
+
         const isMpu = unit.category === 'mpu';
         const standardCount = toPlace.filter((u) => u.category !== 'mpu').length;
         const mpuCount = toPlace.filter((u) => u.category === 'mpu').length;
@@ -384,6 +429,7 @@ export function buildCustomPlan(
 
     if (toPlace.length === 0) {
       consecutiveIdle++;
+      previousSemesterPlacedPartA = false;
       if (consecutiveIdle >= 2) {
         blocked = true;
         break;
@@ -402,6 +448,8 @@ export function buildCustomPlan(
         semester: currentSem,
         units: toPlace.map((u) => toScheduled(u)),
       });
+
+      previousSemesterPlacedPartA = toPlace.some((u) => isProjectPartA(u));
 
       const standardPlaced = toPlace.filter((u) => u.category !== 'mpu').length;
       if (standardPlaced > normalLoad) {
@@ -638,4 +686,48 @@ export function resolveNextStudyTerm(courseList: Array<{ term?: string; studyPer
   const startSemester: 1 | 2 = termsCount % 2 === 0 ? 1 : 2;
 
   return { startYear, startSemester, enrolledTermsCount: termsCount };
+}
+
+// Detects if a unit is Part A of a two-part capstone/FYP sequence (e.g., Project A)
+export function isProjectPartA(unit: SchedulableUnit): boolean {
+  const name = unit.name.trim().toLowerCase();
+  const code = unit.code.trim().toUpperCase();
+  return (
+    name.endsWith(' project a') ||
+    name.endsWith(' capstone a') ||
+    code.endsWith('A') && name.includes('project')
+  );
+}
+
+
+// Detects if a unit is Part B of a two-part capstone/FYP sequence (e.g., Project B)
+export function isProjectPartB(unit: SchedulableUnit): boolean {
+  const name = unit.name.trim().toLowerCase();
+  const code = unit.code.trim().toUpperCase();
+  return (
+    name.endsWith(' project b') ||
+    name.endsWith(' capstone b') ||
+    code.endsWith('B') && name.includes('project')
+  );
+}
+
+
+// Finds the corresponding Project B unit for a given Project A unit in the pool
+export function findMatchingProjectB(
+  unitA: SchedulableUnit,
+  pool: SchedulableUnit[]
+): SchedulableUnit | undefined {
+  if (!isProjectPartA(unitA)) return undefined;
+
+  // Look for Project B whose prerequisites link back to unitA or share the same base title
+  const baseTitle = unitA.name.replace(/ project a$/i, '').trim().toLowerCase();
+
+  return pool.find((u) => {
+    if (!isProjectPartB(u)) return false;
+    const uBaseTitle = u.name.replace(/ project b$/i, '').trim().toLowerCase();
+    const hasRequisiteLink = u.requisiteGroups.some((g) =>
+      g.some((c) => c.unitCode && normaliseCode(c.unitCode) === normaliseCode(unitA.code))
+    );
+    return hasRequisiteLink || baseTitle === uBaseTitle;
+  });
 }
