@@ -98,7 +98,11 @@ export async function extractPlannerFromPdf(
     const result = await new Promise<PlannerImportResult>((resolve, reject) => {
       const child = spawn(executable, args, {
         cwd: process.cwd(),
-        env: process.env,
+        env: {
+          ...process.env,
+          PYTHONIOENCODING: "utf-8",
+          PYTHONUTF8: "1",
+        },
         stdio: ["ignore", "pipe", "pipe"],
       });
 
@@ -106,11 +110,11 @@ export async function extractPlannerFromPdf(
       let stderr = "";
 
       child.stdout.on("data", (chunk: Buffer | string) => {
-        stdout += chunk.toString();
+        stdout += chunk.toString("utf8");
       });
 
       child.stderr.on("data", (chunk: Buffer | string) => {
-        stderr += chunk.toString();
+        stderr += chunk.toString("utf8");
       });
 
       child.on("error", (error) => {

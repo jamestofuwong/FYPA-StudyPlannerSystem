@@ -4,18 +4,13 @@ import os
 import re
 import sys
 from contextlib import redirect_stdout
-
 from plannerPdfExtractor import (
     extract_text_from_pdf,
     clean_text,
-    extract_metadata,
-    extract_requirements,
     extract_units,
     extract_elective_sections,
-    detect_colour_legend,
-    match_category,
-    _get_row_colour,
 )
+from plannerPdfRequirements import extract_metadata, extract_requirements
 from plannerStructureAssembler import (
     assemble_json,
     clean_unit_name,
@@ -23,19 +18,12 @@ from plannerStructureAssembler import (
     coerce_requirement_cp,
     normalise_offered_in,
     normalise_prereq_text,
-    output_category,
 )
 from plannerExtractionPipeline import apply_extraction_pipeline
 
-UNIT_CODE_RE = re.compile(r"\b[A-Z]{3}\d{3,5}(?:[@#â€ *]+)?\b")
-YEAR_RE = re.compile(r"^\s*Year\s+(One|Two|Three|Four|Five|\d+)\s*$", re.IGNORECASE)
-SEM_RE = re.compile(r"^\s*Semester\s+(\d+)(?:\s*\|\s*([A-Za-z/]+)\s+(\d{4}))?.*$", re.IGNORECASE)
-TERM_RE = re.compile(r"^\s*(Summer(?:\s+Term)?|Winter(?:\s+Term)?)(?:\s*\|\s*([A-Za-z/]+)\s+(\d{4}))?.*$", re.IGNORECASE)
-YEAR_MAP = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5}
-# ---------------------------
-# Parse WIL unit name/prereq
-# ---------------------------
-# This takes a raw WIL unit dict and returns a cleaned name and prerequisite because WIL rows often combine the title and conditions in one field.
+# ============================================================
+# STEP 1: Prepare application helpers
+# ============================================================
 def infer_template_course_type(course_name):
     text = re.sub(r"\s+", " ", str(course_name or "")).strip()
     if re.search(r"^Bachelor\b", text, re.IGNORECASE):
@@ -45,7 +33,6 @@ def infer_template_course_type(course_name):
     if re.search(r"Foundation\b", text, re.IGNORECASE):
         return "foundation"
     return "bachelor"
-
 
 # This takes structured planner JSON and returns duration_semesters because planner template persistence needs schema-aligned duration metadata.
 def infer_template_duration_semesters(data):
@@ -85,11 +72,9 @@ def infer_template_duration_semesters(data):
         return max(2, max_semester if max_semester > 4 else 6)
     return 6
 
-
-
-
-
-
+# ============================================================
+# STEP 2: Prepare normalization and report helpers
+# ============================================================
 # This takes structured planner JSON and returns planner-template persistence metadata because requisite groups are intentionally deferred until the database save layer runs after user review.
 def build_planner_template_db_payload(data):
     ci = data.get("course_information", {}) if isinstance(data, dict) else {}
@@ -115,7 +100,7 @@ def build_planner_template_db_payload(data):
     }
     return payload
 
-
+# Normalize extracted planner data to the application schema.
 def normalise_planner_output(data, file_name):
     data = data if isinstance(data, dict) else {}
     data["file_name"] = file_name
@@ -131,6 +116,7 @@ def normalise_planner_output(data, file_name):
 
     categories = data.get("categories") if isinstance(data.get("categories"), dict) else {}
     electives = categories.get("elective_groups") if isinstance(categories.get("elective_groups"), dict) else {}
+    # Normalize all units in one category while preserving their fields.
     def normalise_units(units, category):
         output = []
         for raw in units if isinstance(units, list) else []:
@@ -160,17 +146,17 @@ def normalise_planner_output(data, file_name):
     }
     return data
 
-
+# Count units in each output group for the import report.
 def unit_count_snapshot(data):
     categories = data.get("categories", {})
     electives = categories.get("elective_groups", {})
     return {"core_units": len(categories.get("core_units", [])), "major_units": len(categories.get("major_units", [])), "mpu_group": len(categories.get("mpu_group", [])), "prescribed_elective": len(electives.get("prescribed_elective", [])), "elective": len(electives.get("elective", [])), "minor_groups": len(categories.get("minor_groups", [])), "wil_group": len(categories.get("wil_group", []))}
 
-
+# Preserve the application validation hook for compatibility.
 def validate_and_normalise(data, silent=False):
     return data
 
-
+# Report missing runtime fields without using gold data.
 def collect_validation_issues(data):
     issues = []
     ci = data.get("course_information", {})
@@ -182,10 +168,9 @@ def collect_validation_issues(data):
     if not isinstance(categories.get("elective_groups"), dict): issues.append("elective_groups is missing or invalid")
     return issues
 
-
+# Normalize a user-facing issue string.
 def _normalise_text(value):
     return re.sub(r"\s+", " ", str(value or "")).strip()
-
 
 # Formats validation issue for user for app-facing output.
 # This takes an internal validation issue and returns a readable user message because the UI should not expose raw field paths like major_units.
@@ -226,9 +211,7 @@ def format_validation_issue_for_user(issue):
         .replace("_", " ")
     )
 
-
-# Formats validation issues for user for app-facing output.
-# This takes raw issue list and returns deduped readable issues because the report should be concise and user-facing.
+# Format validation issues for app-facing output.
 def format_validation_issues_for_user(issues):
     formatted = []
     for issue in issues or []:
@@ -249,100 +232,10 @@ def determine_processing_outcome(categories, validation_issues):
         "status": "deterministic_ok",
     }
 
-# Applies wil text override to the structured planner data.
-# This takes structured planner JSON and returns planner JSON with WIL-like units moved into wil_group because WIL rows are often misclassified by colour or table layout.
-def apply_wil_text_override(data):
-    categories = data.setdefault("categories", {})
-    elective_groups = categories.setdefault("elective_groups", {})
-
-    containers = {
-        "core": categories.setdefault("core_units", []),
-        "major_core": categories.setdefault("major_units", []),
-        "mpu": categories.setdefault("mpu_group", []),
-        "prescribed_elective": elective_groups.setdefault("prescribed_elective", []),
-        "elective": elective_groups.setdefault("elective", []),
-        "wil": categories.setdefault("wil_group", []),
-    }
-
-    wil_patterns = [
-        r"professional experience in engineering",
-        r"professional experience",
-        r"industry placement unit",
-        r"industry placement",
-        r"industry training",
-        r"work-integrated learning",
-        r"work integrated learning",
-        r"\bwil placement\b",
-        r"\bwil\b",
-        r"\binternship\b",
-    ]
-
-    # This takes unit dict and returns boolean because wIL detection combines code, name, and prerequisite evidence.
-    def is_wil_unit(unit):
-        text = " ".join([
-            str(unit.get("unit_code", "")),
-            str(unit.get("unit_name", "")),
-            str(unit.get("prerequisite", "")),
-        ]).lower()
-
-        if any(re.search(pattern, text, re.IGNORECASE) for pattern in wil_patterns):
-            return True
-
-        # Introductory Seminar only counts when attached to Professional Experience.
-        has_intro = re.search(r"introductory seminar", text, re.IGNORECASE)
-        return bool(has_intro and re.search(r"professional experience", text, re.IGNORECASE))
-
-    moved = []
-    seen_wil_codes = {
-        str(u.get("unit_code", "")).strip().upper()
-        for u in containers["wil"]
-    }
-
-    for category_name, unit_list in list(containers.items()):
-        if category_name == "wil":
-            continue
-
-        kept = []
-
-        for unit in unit_list:
-            code = str(unit.get("unit_code", "")).strip().upper()
-
-            if is_wil_unit(unit):
-                unit["category"] = "wil"
-
-                # Fix common mixed name/prerequisite case
-                name = str(unit.get("unit_name", "") or "")
-                prereq = unit.get("prerequisite")
-
-                if "introductory seminar" in name.lower():
-                    unit["unit_name"] = re.sub(
-                        r"\s*#?\s*Introductory Seminar\s*$",
-                        "",
-                        name,
-                        flags=re.IGNORECASE
-                    ).strip()
-                    unit["prerequisite"] = "Introductory Seminar"
-
-                if code not in seen_wil_codes:
-                    containers["wil"].append(unit)
-                    seen_wil_codes.add(code)
-
-                moved.append(code)
-            else:
-                kept.append(unit)
-
-        containers[category_name][:] = kept
-
-    if moved:
-        data.setdefault("_deterministic_fixes", []).append({
-            "reason": "wil_text_override",
-            "moved_units": moved,
-        })
-
-    return data
-
-# Helper for process planner pdf in the planner import pipeline.
-# This returns the deterministic planner and report for one PDF input.
+# ============================================================
+# STEP 3: Run extraction, refinement, and report creation
+# ============================================================
+# Extract one planner and build its application report.
 def process_planner_pdf(pdf_path):
     if not os.path.exists(pdf_path):
         raise FileNotFoundError("file not found: " + pdf_path)
@@ -384,10 +277,18 @@ def process_planner_pdf(pdf_path):
     return structured, report
 
 
-# ---------------------------
-# App subprocess entrypoint
-# ---------------------------
+# ============================================================
+# STEP 4: Write the subprocess result
+# ============================================================
+# Ensure subprocess JSON and diagnostics use the same encoding as Node's pipe decoder.
+def _configure_utf8_stdio():
+    for stream in (sys.stdout, sys.stderr):
+        if stream is not None and hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
+
+
 if __name__ == "__main__":
+    _configure_utf8_stdio()
     parser = argparse.ArgumentParser(description="Extract a planner PDF into structured JSON.")
     parser.add_argument("pdf", help="Path to planner PDF")
     parser.add_argument("--planner-only", action="store_true", help="Print only the structured planner JSON")

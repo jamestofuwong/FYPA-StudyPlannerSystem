@@ -1,16 +1,16 @@
 from __future__ import annotations
 import re
-from plannerPdfExtractor import UNIT_MARKER_RE
-
-# Canonical planner-structure helpers shared by extraction fallbacks and normalization.
-# This module assembles groups and unit objects; PDF parsing remains in extractor modules.
+from plannerPdfEvidence import UNIT_MARKER_RE
 
 CODE_TOKEN_RE = re.compile(
     rf"^[A-Z]{{3}}\d{{3,5}}(?:{UNIT_MARKER_RE})?$", re.IGNORECASE
 )
 
+# ============================================================
+# STEP 1: Prepare extracted unit values
+# ============================================================
+# Remove PDF markers and repeated noise while preserving the unit title.
 def clean_unit_name(name):
-    """Remove PDF markers and repeated noise while preserving the unit title."""
     if not name:
         return name
     name = re.sub(r'\s+[A-Z]{3}\d{3,5}[@#]?\s*', ' ', str(name))
@@ -27,7 +27,9 @@ def clean_unit_name(name):
     )
     return re.sub(r'\s+', ' ', name).strip()
 
-
+# ============================================================
+# STEP 2: Traverse and index units
+# ============================================================
 CATEGORY_GROUPS = {
     "core": ("core_units",),
     "major_core": ("major_units",),
@@ -38,8 +40,8 @@ CATEGORY_GROUPS = {
 }
 
 
+# Yield (group name, unit) pairs from every main planner category.
 def iter_units(data):
-    """Yield (group name, unit) pairs from every main planner category."""
     categories = data.get("categories", {}) if isinstance(data, dict) else {}
     groups = [
         ("core", categories.get("core_units", [])),
@@ -55,6 +57,7 @@ def iter_units(data):
                 yield category, unit
 
 
+# Yield units with their canonical category and storage path.
 def _iter_unit_refs(data):
     categories = data.get("categories", {}) if isinstance(data, dict) else {}
     for category, path in CATEGORY_GROUPS.items():
@@ -66,6 +69,7 @@ def _iter_unit_refs(data):
                 yield category, unit
 
 
+# Index main planner units by normalized code.
 def _unit_index(data):
     return {
         str(unit.get("unit_code") or "").strip().upper(): (category, unit)
@@ -74,6 +78,7 @@ def _unit_index(data):
     }
 
 
+# Collect codes listed in minor groups.
 def _minor_codes(data):
     groups = data.get("categories", {}).get("minor_groups", []) if isinstance(data, dict) else []
     return {
@@ -83,8 +88,11 @@ def _minor_codes(data):
         if isinstance(unit, dict) and unit.get("unit_code")
     }
 
+# ============================================================
+# STEP 3: Normalize requirements and placements
+# ============================================================
+# Separate WIL title text from attached explanatory or prerequisite text.
 def parse_wil_unit(u):
-    """Separate WIL title text from attached explanatory or prerequisite text."""
     raw = u.get('unit_name', u.get('name')) or ''
     if re.search(r'exemption to \d+ electives', raw, re.IGNORECASE):
         return raw, None
@@ -111,10 +119,8 @@ def parse_wil_unit(u):
     return clean_unit_name(name), prereq_str
 
 
-# This takes raw prerequisite and returns nullable cleaned text because app JSON should represent Nil/blank prerequisites as None.
-
+# Return normalized prerequisite text, representing blank or Nil values as None.
 def normalise_prereq_text(text):
-    """Return normalized prerequisite text, representing blank or Nil values as None."""
     if text is None:
         return None
     text = re.sub(r"\s+", " ", str(text)).strip()
@@ -123,8 +129,7 @@ def normalise_prereq_text(text):
     return text
 
 
-# This takes course title and returns template course_type because planner templates now store canonical course type values for persistence.
-
+# Convert an integer-like value without guessing from free text.
 def coerce_int(value):
     if isinstance(value, int):
         return value
@@ -146,8 +151,8 @@ def has_scheduled_placement(unit):
 
 
 
+# Preserve integer and decimal credit-point values during final normalisation.
 def coerce_requirement_cp(value):
-    """Preserve integer and decimal credit-point values during final normalisation."""
     if isinstance(value, bool) or value is None:
         return None
     if isinstance(value, (int, float)):
@@ -161,10 +166,8 @@ def coerce_requirement_cp(value):
     return None
 
 
-# This takes offered-in label and returns app semester code because labels like Feb/Mar need database-compatible numeric values.
-
+# Normalize offered-in values into the planner contract's nullable representation.
 def normalise_offered_in(value):
-    """Normalize offered-in values into the planner contract's nullable representation."""
     if value is None:
         return None
     if isinstance(value, int):
@@ -196,19 +199,16 @@ def normalise_offered_in(value):
     return None
 
 
-# This takes internal category and returns app category because major units are stored as major_core in the app contract.
-
+# Convert internal category names to the app schema.
 def output_category(category):
     if category == "major":
         return "major_core"
     return category
 
-
-# ---------------------------
-# Deterministic assembly into target JSON schema
-# ---------------------------
-# This takes deterministic unit and returns app-schema unit dict because all groups need consistent field names and normalised values.
-
+# ============================================================
+# STEP 4: Build main unit objects
+# ============================================================
+# Build a normalized unit object for the main planner groups.
 def unit_obj(u):
     obj = {
         "year_level":   coerce_int(u.get("year_level")),
@@ -221,9 +221,10 @@ def unit_obj(u):
     }
     return obj
 
-
-# This takes minor/elective unit-like dict and returns compact minor unit dict because minor groups are stored separately from the main planner timeline.
-
+# ============================================================
+# STEP 5: Build minor and elective relationships
+# ============================================================
+# Build the compact object used inside a minor group.
 def minor_unit_obj(unit_like):
     unit = {
         "unit_code": str(unit_like.get("unit_code") or unit_like.get("code") or "").strip().upper(),
@@ -241,9 +242,7 @@ def minor_unit_obj(unit_like):
     unit["prerequisite"] = prereq
     return unit
 
-
-# This takes section name and returns display minor name because minor headings vary but UI labels should be stable.
-
+# Normalize a minor section heading for output.
 def format_minor_name(section_name):
     name = re.sub(r"\s+", " ", str(section_name or "")).strip()
     if not name:
@@ -260,11 +259,8 @@ def format_minor_name(section_name):
         return name
     return (name + " Minor").strip()
 
-
-# This takes extracted units and section groups and returns app minor_groups list because minor sections must preserve unit names/prereqs from best available evidence.
-
+# Build minor-group structures while retaining unit ownership and section names.
 def build_minor_groups(units, section_groups):
-    """Build minor-group structures while retaining unit ownership and section names."""
     if not isinstance(section_groups, dict):
         return []
 
@@ -340,13 +336,12 @@ def build_minor_groups(units, section_groups):
 
     return minor_groups
 
-
-# This assembles extracted metadata, requirements, units, and elective sections into the app planner schema.
-
+# ============================================================
+# STEP 6: Assemble the final planner structure
+# ============================================================
+# Assemble extracted metadata and units into the canonical planner JSON structure.
 def assemble_json(file_name, metadata, requirements, units, elective_sections):
-    """Assemble extracted metadata and units into the canonical planner JSON structure."""
-    # Build requirements entry with count + cp
-    # This takes internal planner import values and returns helper result because this keeps extraction, normalisation, or validation logic readable in one place.
+    # Build one requirement entry with count and credit points.
     def req_entry(key):
         val = requirements.get(key, {})
         if isinstance(val, dict):
@@ -382,6 +377,7 @@ def assemble_json(file_name, metadata, requirements, units, elective_sections):
         for minor_unit in group.get("units", []):
             if isinstance(minor_unit, dict) and minor_unit.get("unit_code"):
                 minor_codes.add(str(minor_unit.get("unit_code", "")).strip().upper())
+    # Keep a unit in its semester even when it also belongs to a minor.
     regular_electives = [
         u for u in regular_electives
         if str(u.get("code", "")).strip().upper() not in minor_codes
@@ -422,6 +418,3 @@ def assemble_json(file_name, metadata, requirements, units, elective_sections):
             "wil_group":       wil_list,
         },
     }
-
-
-# This takes planner semester and optional season and returns app semester code because planner numbering and database terms differ.

@@ -1,23 +1,25 @@
 ﻿import copy
 import re
 import statistics
-from collections import Counter, defaultdict
-
 import pdfplumber
-
+from collections import Counter, defaultdict
 from plannerStructureAssembler import iter_units
-
-from plannerPdfExtractor import (
-    _clean_candidate_name,
-    _clean_candidate_prereq,
+from plannerPdfEvidence import (
     _colour_dist,
     _extract_line_headers,
-    _looks_like_sidebar_footer_noise,
     _normalise_rgb,
     _normalise_semester_number,
 )
+from plannerPdfTextRules import (
+    _clean_candidate_name,
+    _clean_candidate_prereq,
+    _looks_like_sidebar_footer_noise,
+)
 from plannerExtractionQuality import validate_planner
 
+# ============================================================
+# STEP 1: Prepare shared layout evidence
+# ============================================================
 # Geometry-based refinements reconnect extracted text with planner rows, headers, and columns.
 # Candidates are accepted only when their structural quality is no worse than current data.
 
@@ -29,11 +31,12 @@ PREREQ_BOUNDARY_NOISE_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Normalize a unit-code anchor for layout matching.
 def _normalise_code(text):
     return re.sub(r"[*#\u2020]+$", "", str(text or "").strip().upper())
 
+# Group words using a tolerance derived from the page's median glyph height.
 def _lines(words):
-    """Group words using a tolerance derived from the page's median glyph height."""
     if not words:
         return []
     tolerance = max(1.5, statistics.median(w["bottom"] - w["top"] for w in words) * 0.35)
@@ -49,6 +52,7 @@ def _lines(words):
             ) / len(grouped[-1][1])
     return grouped
 
+# Find the visible header column boundaries.
 def _header_columns(line_words):
     ordered = sorted(line_words, key=lambda item: item["x0"])
     texts = [word["text"].lower().strip(" :") for word in ordered]
@@ -59,13 +63,14 @@ def _header_columns(line_words):
         return None
     return ordered[code_at]["x0"], ordered[name_at]["x0"], ordered[prereq_at]["x0"]
 
+# Check whether a word lies inside a bounding box.
 def _inside(word, bbox):
     middle_x = (word["x0"] + word["x1"]) / 2
     middle_y = (word["top"] + word["bottom"]) / 2
     return bbox[0] <= middle_x <= bbox[2] and bbox[1] <= middle_y <= bbox[3]
 
+# Collect separator evidence from cells, vector edges, lines, and rect edges.
 def _separator_positions(page, table):
-    """Collect separator evidence from cells, vector edges, lines, and rect edges."""
     left, top, right, bottom = table.bbox
     support = Counter()
     for row in table.rows:
@@ -89,11 +94,13 @@ def _separator_positions(page, table):
         support[round(float(rect["x1"]), 2)] += 1
     return support
 
+# Choose the separator best supported by the table geometry.
 def _choose_separator(support, lower, upper):
     choices = [(count, -abs(x - (lower + upper) / 2), x)
                for x, count in support.items() if lower < x < upper]
     return max(choices)[2] if choices else None
 
+# Build row, column, fill, and separator context for a table.
 def _table_context(page, table, words):
     table_words = [word for word in words if _inside(word, table.bbox)]
     header = next(
@@ -111,6 +118,7 @@ def _table_context(page, table, words):
         return None
     return header_y, code_name, name_prereq
 
+# Find the table row containing a unit-code anchor.
 def _row_for_anchor(table, anchor):
     middle_y = (anchor["top"] + anchor["bottom"]) / 2
     for row in table.rows:
@@ -118,6 +126,7 @@ def _row_for_anchor(table, anchor):
             return row
     return None
 
+# Read the background fill covering a bounding box.
 def _background_fill(page, bbox):
     middle_x = (bbox[0] + bbox[2]) / 2
     middle_y = (bbox[1] + bbox[3]) / 2
@@ -133,14 +142,17 @@ def _background_fill(page, bbox):
     rect = min(matches, key=lambda item: item["width"] * item["height"])
     return _normalise_rgb(rect.get("non_stroking_color"))
 
+# Check whether two words share compatible row fill evidence.
 def _compatible_fill(page, anchor, word):
     anchor_fill = _background_fill(page, (anchor["x0"], anchor["top"], anchor["x1"], anchor["bottom"]))
     word_fill = _background_fill(page, (word["x0"], word["top"], word["x1"], word["bottom"]))
     return anchor_fill is None or word_fill is None or _colour_dist(anchor_fill, word_fill) <= 0.08
 
+# Convert fill evidence into a stable comparison key.
 def _fill_key(fill):
     return tuple(round(value, 3) for value in fill) if fill else None
 
+# Find a matching structural header above a row.
 def _header_above(headers, header_type, row_bbox, max_gap=180):
     values = [
         header for header in headers
@@ -150,6 +162,7 @@ def _header_above(headers, header_type, row_bbox, max_gap=180):
     ]
     return max(values, key=lambda header: header["top"])["value"] if values else None
 
+# Map a legend label to the canonical category name.
 def _category_from_label(text):
     text = str(text or "")
     if re.search(r"General Studies|Mata Pelajaran|\bMPU\b", text, re.IGNORECASE):
@@ -164,6 +177,7 @@ def _category_from_label(text):
         return "core"
     return None
 
+# Learn category fills from the planner legend.
 def _legend_fill_categories(page, words, tables):
     votes = defaultdict(Counter)
     for rect in page.rects:
@@ -189,10 +203,12 @@ def _legend_fill_categories(page, words, tables):
         if len(counts) == 1
     }
 
+# Apply the layout refiner's name cleanup to a candidate.
 def _clean_name(text):
     text = re.sub(r"\s*[\[(][^\])]*[\])]", "", str(text or ""))
     return _clean_candidate_name(text)
 
+# Collect unit-row candidates with geometric evidence.
 def _row_candidates(pdf_path):
     candidates = defaultdict(list)
     with pdfplumber.open(pdf_path) as pdf:
@@ -262,9 +278,11 @@ def _row_candidates(pdf_path):
                         })
     return candidates
 
+# Index validation issues by unit and field.
 def _issue_keys(validation):
     return {(item["code"], item.get("unit_code"), item.get("section")) for item in validation["issues"]}
 
+# Check whether a proposed name is supported by the old value.
 def _name_supported(old, new):
     old_words = re.findall(r"[a-z0-9]+", str(old or "").lower())
     new_words = re.findall(r"[a-z0-9]+", str(new or "").lower())
@@ -273,6 +291,7 @@ def _name_supported(old, new):
     overlap = len(set(old_words) & set(new_words)) / len(set(new_words))
     return overlap >= 0.8 and (str(old).lower().startswith(str(new).lower()) or len(new) >= len(old) * 0.45)
 
+# Check whether a proposed prerequisite preserves useful content.
 def _prerequisite_supported(old, new):
     if not new or re.fullmatch(r"nil", new, re.IGNORECASE):
         return False
@@ -307,10 +326,12 @@ def _prerequisite_supported(old, new):
         and new.upper().startswith(first_old_code.group(0))
     )
 
+# Rank validation results for conservative proposal acceptance.
 def _validation_rank(validation):
     severity = {"high": 4, "medium": 1, "low": 0}
     return sum(severity.get(issue.get("severity"), 0) for issue in validation["issues"])
 
+# Append a missing unit without changing existing units.
 def _append_missing_unit(data, category, candidate):
     categories = data["categories"]
     target = {
@@ -331,9 +352,11 @@ def _append_missing_unit(data, category, candidate):
         "offered_in": None,
     })
 
-# Row / table refinement
+# ============================================================
+# STEP 2: Refine row boundaries
+# ============================================================
+# Apply conservative name/requisite proposals without mutating the baseline.
 def apply_row_boundary_refinement(base_data, pdf_path):
-    """Apply conservative name/requisite proposals without mutating the baseline."""
     result = copy.deepcopy(base_data)
     candidates = _row_candidates(pdf_path)
     diagnostics = []
@@ -439,10 +462,13 @@ def apply_row_boundary_refinement(base_data, pdf_path):
             })
     return result, diagnostics
 
-# Requirement association
+# ============================================================
+# STEP 3: Match requirement blocks
+# ============================================================
 COUNT_RE = re.compile(r"^\d+$")
 REQUIREMENT_CP_RE = re.compile(r"^(\d+(?:\.\d+)?)\s+(?:credit\s+points?|cps?)\b", re.IGNORECASE)
 
+# Map a requirement label to its canonical category key.
 def _requirement_category(label):
     text = re.sub(r"\s+", " ", str(label or "")).strip()
     compact = re.sub(r"[\s-]+", "", text).lower()
@@ -456,6 +482,7 @@ def _requirement_category(label):
         return "wil"
     return None
 
+# Find the local geometry containing requirement text.
 def _requirement_bbox(words):
     return [
         min(word["x0"] for word in words),
@@ -464,6 +491,7 @@ def _requirement_bbox(words):
         max(word["bottom"] for word in words),
     ]
 
+# Reconstruct a requirement label from one visual line.
 def _label_in_line(line_words):
     words = sorted(line_words, key=lambda word: word["x0"])
     for start, word in enumerate(words):
@@ -493,6 +521,7 @@ def _label_in_line(line_words):
                 }
     return None
 
+# Find a credit-point value in the local requirement line.
 def _cp_in_line(line_words, label_x, page_width):
     words = sorted(line_words, key=lambda word: word["x0"])
     x_tolerance = page_width * 0.05
@@ -512,9 +541,8 @@ def _cp_in_line(line_words, label_x, page_width):
         return (int(value) if value.is_integer() else value), _requirement_bbox(phrase_words), match.group(0)
     return None
 
+# Extract requirement labels and credit-point regions from page geometry.
 def extract_geometric_requirements(pdf_path):
-    """Extract requirement labels and credit-point regions from page geometry."""
-    """Return unambiguous count/CP pairs from local visual requirement blocks."""
     found = {}
     with pdfplumber.open(pdf_path) as pdf:
         for page_number, page in enumerate(pdf.pages, 1):
@@ -566,8 +594,8 @@ def extract_geometric_requirements(pdf_path):
             result[category] = evidence[0]
     return result
 
+# Associate requirement counts and credit points with planner sections.
 def apply_requirement_association(base_data, pdf_path):
-    """Associate requirement counts and credit points with planner sections."""
     result = copy.deepcopy(base_data)
     requirements = result.setdefault("course_information", {}).setdefault("requirements", {})
     diagnostics = []
@@ -585,29 +613,28 @@ def apply_requirement_association(base_data, pdf_path):
         })
     return result, diagnostics
 
-def _requirement_metrics(metrics):
-    scores = [score for field, score in metrics["scores"].items() if field.startswith("req.")]
-    correct = sum(score["correct"] for score in scores)
-    return correct, len(scores), round(correct / len(scores) * 100, 1) if scores else 100.0
-
-# Year / semester association
+# ============================================================
+# STEP 4: Recover year and semester context
+# ============================================================
 CODE_RE = re.compile(r"^[A-Z]{3}\d{3,5}[*#\u2020]*$", re.IGNORECASE)
 YEAR_RE = re.compile(r"^Year\s+(One|Two|Three|Four|Five|\d+)\b", re.IGNORECASE)
 SEMESTER_RE = re.compile(r"^Semester\s+(\d+)\b", re.IGNORECASE)
 TERM_RE = re.compile(r"^(Summer|Winter)\s+Term\b", re.IGNORECASE)
 YEAR_VALUES = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5}
 
+# Find the bounding box of a year header.
 def _year_bbox(words):
     return (
         min(word["x0"] for word in words), min(word["top"] for word in words),
         max(word["x1"] for word in words), max(word["bottom"] for word in words),
     )
 
+# Normalize a year-header fill for structural matching.
 def _year_fill_key(fill):
     return tuple(round(value, 3) for value in fill) if fill else None
 
+# Keep only the widest, aligned timetable tables; sidebars are narrower.
 def _main_tables(page):
-    """Keep only the widest, aligned timetable tables; sidebars are narrower."""
     tables = page.find_tables()
     if not tables:
         return []
@@ -618,6 +645,7 @@ def _main_tables(page):
         and (table.bbox[0] + table.bbox[2]) / 2 < page.width * 0.6
     ]
 
+# Convert a visual line into a structural header record.
 def _header_line(line_words):
     ordered = sorted(line_words, key=lambda word: word["x0"])
     text = " ".join(word["text"] for word in ordered).strip()
@@ -644,16 +672,18 @@ def _header_line(line_words):
         }
     return None
 
+# Check whether a header belongs to the same table region.
 def _aligned_to_table(header, table):
     left, _, right, _ = table.bbox
     header_left = header["bbox"][0]
     return left - 4 <= header_left <= left + (right - left) * 0.25
 
+# Find the table containing a unit-code anchor.
 def _table_for_anchor(tables, anchor):
     return next((table for table in tables if _inside(anchor, table.bbox)), None)
 
+# Return table-contained code anchors with preceding structural headers.
 def _header_candidates(pdf_path):
-    """Return table-contained code anchors with preceding structural headers."""
     candidates = {}
     with pdfplumber.open(pdf_path) as pdf:
         for page_number, page in enumerate(pdf.pages, 1):
@@ -737,9 +767,8 @@ def _header_candidates(pdf_path):
     return candidates
 
 
+# Attach year and semester headers to units using table alignment evidence.
 def apply_year_semester_association(base_data, pdf_path):
-    """Attach year and semester headers to units using table alignment evidence."""
-    """Apply only reliable upward header proposals; preserve missing contexts."""
     result = copy.deepcopy(base_data)
     candidates = _header_candidates(pdf_path)
     diagnostics = []
@@ -777,9 +806,9 @@ def apply_year_semester_association(base_data, pdf_path):
             unit.update(proposed)
     return result, diagnostics
 
-
-
-# Prerequisite association
+# ============================================================
+# STEP 5: Recover prerequisite cells
+# ============================================================
 UNIT_CODE_RE = re.compile(r"\b[A-Z]{3}\d{3,5}\b", re.IGNORECASE)
 CP_RE = re.compile(r"\b\d+(?:\.\d+)?\s*(?:cp|cps|credits?|credit\s+points?)\b", re.IGNORECASE)
 CONNECTOR_NAME_RE = re.compile(r"^(?:or|and|[&/,])$", re.IGNORECASE)
@@ -791,17 +820,16 @@ NOISE_RE = re.compile(
     re.IGNORECASE,
 )
 
-
+# Return the horizontal midpoint of a word.
 def _middle_x(word):
     return (word["x0"] + word["x1"]) / 2
 
-
+# Check whether a word lies inside a cell or row box.
 def _contains(box, word):
     return box[0] <= _middle_x(word) <= box[2] and box[1] <= (word["top"] + word["bottom"]) / 2 <= box[3]
 
-
+# Return the substantive rightmost cell instead of a thin grid gutter.
 def _prerequisite_cell(row, separator, table_width):
-    """Return the substantive rightmost cell instead of a thin grid gutter."""
     cells = [
         cell for cell in row.cells if cell
         and cell[0] >= separator - 2
@@ -809,7 +837,7 @@ def _prerequisite_cell(row, separator, table_width):
     ]
     return max(cells, key=lambda cell: cell[2] - cell[0]) if cells else None
 
-
+# Check whether a row has an independent unit-code anchor.
 def _row_has_code_anchor(words, row, code_separator):
     return any(
         _contains(row.bbox, word)
@@ -818,26 +846,24 @@ def _row_has_code_anchor(words, row, code_separator):
         for word in words
     )
 
-
+# Check whether two cells share the prerequisite column.
 def _same_prerequisite_column(cell, base_cell):
     if not cell:
         return False
     overlap = max(0, min(cell[2], base_cell[2]) - max(cell[0], base_cell[0]))
     return overlap >= min(cell[2] - cell[0], base_cell[2] - base_cell[0]) * 0.8
 
-
+# Join words belonging to a cell in reading order.
 def _cell_text(words, cells):
     selected = [word for cell in cells for word in words if _contains(cell, word)]
     return " ".join(word["text"] for word in sorted(selected, key=lambda item: (item["top"], item["x0"])))
 
-
+# pdfplumber recreates Row objects, so use their stable geometry.
 def _row_index(rows, row):
-    """pdfplumber recreates Row objects, so use their stable geometry."""
     return next((index for index, item in enumerate(rows) if item.bbox == row.bbox), None)
 
-
+# Return prerequisite text constrained to a real table cell and its continuations.
 def _cell_candidates(pdf_path):
-    """Return prerequisite text constrained to a real table cell and its continuations."""
     candidates = defaultdict(list)
     code_column, prerequisite_column = set(), set()
     with pdfplumber.open(pdf_path) as pdf:
@@ -897,7 +923,7 @@ def _cell_candidates(pdf_path):
                         })
     return candidates, code_column, prerequisite_column
 
-
+# Check whether prerequisite evidence supports a replacement.
 def _is_supported_prerequisite(old, candidate):
     if not candidate or NOISE_RE.search(candidate):
         return False
@@ -919,9 +945,8 @@ def _is_supported_prerequisite(old, candidate):
     # cell-contained candidate with fewer duplicate codes.
     return len(old_codes) != len(set(old_codes)) and len(new_codes) == len(set(new_codes))
 
-
+# Remove connector-only rows whose code has evidence solely in prerequisite cells.
 def _remove_prerequisite_only_ghosts(result, code_column, prerequisite_column, diagnostics):
-    """Remove connector-only rows whose code has evidence solely in prerequisite cells."""
     categories = result.get("categories", {})
     groups = [
         categories.get("core_units", []), categories.get("major_units", []), categories.get("mpu_group", []),
@@ -945,10 +970,8 @@ def _remove_prerequisite_only_ghosts(result, code_column, prerequisite_column, d
                     "reason": "code_evidence_only_in_prerequisite_column_connector_row",
                 })
 
-
+# Recover prerequisite text from the prerequisite column without changing its meaning.
 def apply_prerequisite_association(base_data, pdf_path):
-    """Recover prerequisite text from the prerequisite column without changing its meaning."""
-    """Apply only stronger prerequisite-cell evidence; preserve all other fields."""
     result = copy.deepcopy(base_data)
     candidates, code_column, prerequisite_column = _cell_candidates(pdf_path)
     diagnostics = []
@@ -975,10 +998,3 @@ def apply_prerequisite_association(base_data, pdf_path):
 
     _remove_prerequisite_only_ghosts(result, code_column, prerequisite_column, diagnostics)
     return result, diagnostics
-
-
-def _prerequisite_errors(metrics):
-    return sum(
-        not score["correct"] for field, score in metrics["scores"].items()
-        if field.startswith("prereq.")
-    )

@@ -1,7 +1,4 @@
 from __future__ import annotations
-
-# Coordinates deterministic extraction, quality-gated fallbacks, and structural refinements.
-# The individual modules own PDF parsing and candidate recovery; this file owns the stage order.
 import copy
 import time
 
@@ -15,12 +12,18 @@ from plannerLayoutRefiner import (
 )
 from plannerPdfTextFallback import apply_pdftext_fallback
 
+# Run quality-gated fallbacks and refinements for one planner PDF.
 def apply_extraction_pipeline(p0_data, pdf_path, baseline=None):
-    """Run quality-gated fallbacks and refinements for one planner PDF."""
+    # ============================================================
+    # STEP 1: Check deterministic extraction quality
+    # ============================================================
     started = time.perf_counter()
     p0_validation = validate_planner(p0_data)
     p0_plan = select_fallbacks(p0_validation)
 
+    # ============================================================
+    # STEP 2: Apply PDFText fallback when needed
+    # ============================================================
     # Use PDFText only when the initial quality plan identifies recoverable gaps.
     if plan_uses(p0_plan, "pdftext"):
         if baseline:
@@ -36,8 +39,15 @@ def apply_extraction_pipeline(p0_data, pdf_path, baseline=None):
         pdftext_diagnostics = []
         pdftext_seconds = 0.0
 
+    # ============================================================
+    # STEP 3: Check the updated result
+    # ============================================================
     p2_validation = validate_planner(p2_data)
     p2_plan = select_fallbacks(p2_validation)
+
+    # ============================================================
+    # STEP 4: Apply Docling fallback when needed
+    # ============================================================
     # Use Docling only for structural problems that remain after text recovery.
     if plan_uses(p2_plan, "docling"):
         if baseline:
@@ -60,6 +70,9 @@ def apply_extraction_pipeline(p0_data, pdf_path, baseline=None):
         }
         docling_seconds = 0.0
 
+    # ============================================================
+    # STEP 5: Run refinement stages
+    # ============================================================
     # The remaining passes associate extracted values with rows, requirements, and headers.
     boundary_started = time.perf_counter()
     final_data, row_boundary_diagnostics = apply_row_boundary_refinement(final_data, pdf_path)
@@ -81,7 +94,14 @@ def apply_extraction_pipeline(p0_data, pdf_path, baseline=None):
     )
     prerequisite_association_seconds = time.perf_counter() - prerequisite_started
 
+    # ============================================================
+    # STEP 6: Perform final quality validation
+    # ============================================================
     final_validation = validate_planner(final_data)
+
+    # ============================================================
+    # STEP 7: Return the planner and diagnostics
+    # ============================================================
     return final_data, {
         "p0_validation": p0_validation,
         "p0_fallback_plan": p0_plan,
@@ -110,22 +130,3 @@ def apply_extraction_pipeline(p0_data, pdf_path, baseline=None):
         "orchestration_seconds": time.perf_counter() - started,
     }
 
-def build_extraction_baseline(p0_data, pdf_path):
-    """Precompute fallback results so repeated pipeline runs can reuse diagnostics."""
-    started = time.perf_counter()
-    p2_data, pdftext_diagnostics = apply_pdftext_fallback(p0_data, pdf_path)
-    pdftext_seconds = time.perf_counter() - started
-    started = time.perf_counter()
-    p4_data, docling_proposals, docling_diagnostics = apply_docling_structural_fallback(
-        p2_data, pdf_path, pdftext_diagnostics
-    )
-    docling_seconds = time.perf_counter() - started
-    return {
-        "p2_data": p2_data,
-        "pdftext_diagnostics": pdftext_diagnostics,
-        "pdftext_seconds": pdftext_seconds,
-        "p4_data": p4_data,
-        "docling_proposals": docling_proposals,
-        "docling_diagnostics": docling_diagnostics,
-        "docling_seconds": docling_seconds,
-    }
