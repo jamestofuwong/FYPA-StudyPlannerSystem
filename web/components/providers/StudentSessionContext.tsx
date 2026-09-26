@@ -79,6 +79,9 @@ export type StudentSessionState = {
   customWilSlot: string | null;
   setCustomWilSlot: (slot: string | null) => void;
 
+  removedUnitSlots: Record<string, { year: number; semester: 1 | 2 }>;
+  setRemovedUnitSlots: React.Dispatch<React.SetStateAction<Record<string, { year: number; semester: 1 | 2 }>>>;
+
 };
 
 const StudentSessionContext = createContext<StudentSessionState | null>(null);
@@ -112,6 +115,7 @@ export function StudentSessionProvider({ children }: { children: ReactNode }) {
   const [availableMinors, setAvailableMinors] = useState<any[]>([]);
   const [breakMilestones, setBreakMilestones] = useState<any[]>([]);
   const [customWilSlot, setCustomWilSlot] = useState<string | null>(null);
+  const [removedUnitSlots, setRemovedUnitSlots] = useState<Record<string, { year: number; semester: 1 | 2 }>>({});
 
 
   // Switching planner discards the custom plan built for the previous one. This runs
@@ -162,6 +166,8 @@ export function StudentSessionProvider({ children }: { children: ReactNode }) {
         availableMinors, setAvailableMinors,
         breakMilestones, setBreakMilestones,
         customWilSlot, setCustomWilSlot,
+        removedUnitSlots, setRemovedUnitSlots,
+
       }}
     >
       {children}

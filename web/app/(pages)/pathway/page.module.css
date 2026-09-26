@@ -41,7 +41,7 @@
 .table tbody td { padding: 7px 12px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .warningList { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
-.warningItem { font-size: 11px; color: var(--accent-orange); padding: 4px 2px; display: flex; align-items: flex-start; gap: 6px; }
+.warningItem { font-size: 13px; color: var(--accent-orange); padding: 4px 2px; display: flex; align-items: flex-start; gap: 6px; }
 .warningInfo { color: var(--text-muted); }
 .capacityTag { margin-left: auto; font-size: 10px; font-family: var(--font-mono); color: var(--accent-orange); }
 
@@ -90,7 +90,7 @@
 .swapBtn:hover { border-color: var(--accent-blue); color: var(--accent-blue); }
 
 .rowFlagged { background: rgba(244,135,113,0.1) !important; }
-.rowWarning { font-size: 10px; color: var(--accent-orange); margin-top: 3px; white-space: normal; }
+.rowWarning { font-size: 11.5px; color: var(--accent-orange); margin-top: 3px; white-space: normal; }
 
 /* MPU Section Styling */
 .mpuSection {

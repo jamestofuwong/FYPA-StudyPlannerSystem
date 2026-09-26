@@ -203,6 +203,7 @@ export default function PathwayPage() {
     availableMinors, setAvailableMinors,
     breakMilestones, setBreakMilestones,
     customWilSlot, setCustomWilSlot,
+    removedUnitSlots, setRemovedUnitSlots,
   } = useStudentSession();
   const [customPlanLoading, setCustomPlanLoading] = useState(false);
   const [unitToRemove, setUnitToRemove] = useState<{ code: string; name: string; category: string } | null>(null);
@@ -865,6 +866,27 @@ export default function PathwayPage() {
                 applyEdit(moveUnit(semesters, code, year, semester as 1 | 2));
               };
 
+              const restoreUnitToOriginalSlot = (code: string) => {
+                const unit = planUnits.find((u) => normaliseCode(u.code) === normaliseCode(code));
+                if (!unit) return;
+
+                const savedSlot = removedUnitSlots?.[normaliseCode(code)];
+                // Check if the original semester bucket still exists
+                let targetBucket = savedSlot
+                  ? semesters.find((s) => s.year === savedSlot.year && s.semester === savedSlot.semester)
+                  : null;
+
+                // Fallback if the original semester was deleted
+                if (!targetBucket && semesters.length > 0) {
+                  targetBucket = semesters[semesters.length - 1];
+                }
+
+                if (targetBucket) {
+                  applyEdit(addUnit(semesters, unit, targetBucket.year, targetBucket.semester));
+                  showToast(`Restored ${unit.code} back to Year ${targetBucket.year} Semester ${targetBucket.semester}.`, 'info');
+                }
+              };
+
               return (
               <div>
                 {semesters.length === 0 ? (
@@ -1185,27 +1207,69 @@ export default function PathwayPage() {
                   )}
                 </div>
 
-                {messages.length > 0 && (
+                {warnings.length > 0 && (
                   <ul className={styles.warningList}>
-                    {messages.map((message) => (
-                      <li key={message} className={styles.warningItem}>
-                        <span aria-hidden="true">⚠</span>
-                        <span>{message}.</span>
-                        {chooseElectiveMessages.has(message) && (
-                          <button
-                            type="button"
-                            className={styles.swapBtn}
-                            onClick={() => {
-                              setPickerSlotKey('');
-                              if (picker?.mode === 'add') setPicker(null);
-                              else openPicker({ mode: 'add' });
-                            }}
-                          >
-                            Choose elective
-                          </button>
-                        )}
-                      </li>
-                    ))}
+                    {warnings.map((w, wIdx) => {
+                      const message = describeWarning(w, DEFAULT_SCHEDULER_CONFIG.maxSemesters, planIntakeSemester);
+                      if (!message || w.kind === 'over_capacity') return null;
+
+                      const isCompulsoryMissing = w.kind === 'compulsory_missing';
+                      const missingCodes = isCompulsoryMissing ? w.unitCodes : [];
+
+                      return (
+                        <li
+                          key={`warn-${wIdx}`}
+                          className={styles.warningItem}
+                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                            <span aria-hidden="true">⚠</span>
+                            <span>{message}.</span>
+                            {chooseElectiveMessages.has(message) && (
+                              <button
+                                type="button"
+                                className={styles.swapBtn}
+                                onClick={() => {
+                                  setPickerSlotKey('');
+                                  if (picker?.mode === 'add') setPicker(null);
+                                  else openPicker({ mode: 'add' });
+                                }}
+                              >
+                                Choose elective
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Restore Button(s) on the right */}
+                          {isCompulsoryMissing && (
+                            <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                              {missingCodes.map((code) => {
+                                const savedSlot = removedUnitSlots?.[normaliseCode(code)];
+                                const slotLabel = savedSlot ? `Y${savedSlot.year} S${savedSlot.semester}` : 'Plan';
+
+                                return (
+                                  <button
+                                    key={code}
+                                    type="button"
+                                    className={styles.btnSecondary}
+                                    style={{
+                                      fontSize: 10,
+                                      padding: '3px 8px',
+                                      borderColor: 'var(--accent-orange)',
+                                      color: 'var(--accent-orange)',
+                                    }}
+                                    onClick={() => restoreUnitToOriginalSlot(code)}
+                                    title={`Restore ${code} directly back into ${slotLabel}`}
+                                  >
+                                    + Restore to {slotLabel}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </li>
+                      );
+                    })}
                   </ul>
                 )}
 
@@ -1404,6 +1468,17 @@ export default function PathwayPage() {
                   className={styles.btnDanger}
                   onClick={() => {
                     const code = unitToRemove.code;
+                    // Find which semester this unit is currently sitting in before removing
+                    const currentBucket = customPlan.semesters.find((s: any) =>
+                      s.units.some((u: any) => normaliseCode(u.code) === normaliseCode(code))
+                    );
+                    if (currentBucket) {
+                      setRemovedUnitSlots((prev) => ({
+                        ...prev,
+                        [normaliseCode(code)]: { year: currentBucket.year, semester: currentBucket.semester },
+                      }));
+                    }
+
                     applyEdit(removeUnit(customPlan.semesters, code));
                     setUnitToRemove(null);
                     showToast(`Removed ${code} from study pathway.`, 'info');
