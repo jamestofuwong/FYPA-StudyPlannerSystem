@@ -16,13 +16,36 @@
 
 import {
   canTake,
+  calendarTermFor,
   mapUnitToSchedulable,
   type SchedulableUnit,
   type RawSchedulableUnitRow,
 } from '../scheduling/customPlannerScheduler';
+import { intakeSemesterFromMonth } from '../matching/plannerTemplateBuilder';
 import { getCachedPlannerById } from './plannerCache';
 
 export type { SchedulableUnit };
+
+/**
+ * A unit, plus the semester its planner recommends taking it in.
+ *
+ * The recommended semester does NOT decide availability. A unit's offerings come from an explicit statement
+ * in the planner PDF ("Feb/Mar", "Aug/Sept", "Semester 1"), parsed by normalise_offered_in() in
+ * plannerStructureAssembler.py, so they are a claim about when the unit actually runs. A planner slot is
+ * only where one major recommends fitting it in, and a unit offered in both semesters is routinely slotted
+ * in different semesters by different majors. A student who failed a unit legitimately retakes it in
+ * whichever semester comes next, so availability stays with the offerings.
+ *
+ * The recommended semester is carried here so the preview can point out predictions that fall outside it,
+ * which is a useful thing for the HoD to sanity check, not a filter.
+ */
+export interface EligibilityUnit extends SchedulableUnit {
+  /**
+   * The calendar term this planner recommends, or null when it has no semester 1 or 2 slot, which covers
+   * elective-pool units with no slot at all and the rare unit slotted only in summer or winter.
+   */
+  recommendedCalendarTerm: 1 | 2 | null;
+}
 
 // v1 does not resolve corequisites among candidates picked earlier in the same estimation round, that
 // would need the same iterative fixed-point loop buildCustomPlan() uses across multiple semesters, which
@@ -42,14 +65,36 @@ export interface EligibilityInput {
   totalCreditsEarned: number;
 }
 
-export function isUnitEligible(unit: SchedulableUnit, input: EligibilityInput): boolean {
+/**
+ * Whether the unit runs at all in the semester being estimated, before any requisite is considered. Decided
+ * by the offerings, which are the only statement available about when a unit is actually taught.
+ */
+export function isAvailableInTargetTerm(unit: EligibilityUnit, targetTerm: 1 | 2): boolean {
   // A unit whose offering data lists only summer or winter terms cannot be taken in the semester being
   // estimated. canTake() can't see this on its own: it only reads offeringSemesters, which comes back empty
   // both for a short-term-only unit and for one with no offering data at all. Those two are not the same.
-  // No data stays permissive, since most units in the catalogue currently have none. Data that positively
-  // says "never in a semester" is respected.
+  // No data stays permissive, since 37 of the 67 units currently have none, including every unit whose PDF
+  // stated both semesters at once, a phrasing normalise_offered_in() drops. Data that positively says
+  // "never in a semester" is respected.
   const hasOfferingData = (unit.allOfferingTerms ?? []).length > 0;
-  if (hasOfferingData && unit.offeringSemesters.length === 0) return false;
+  if (!hasOfferingData) return true;
+  if (unit.offeringSemesters.length === 0) return false;
+  return unit.offeringSemesters.includes(targetTerm);
+}
+
+/**
+ * True when the unit is being predicted in a semester its planner does not recommend. Usually a retake or a
+ * catch-up, which is legitimate, so this is reported and not filtered. It is worth surfacing because a unit
+ * whose offerings are wrong shows up here first: if the HoD sees a whole cohort predicted into a semester
+ * the planner never puts them in, the offerings row is the thing to check.
+ */
+export function isOutsideRecommendedTerm(unit: EligibilityUnit, targetTerm: 1 | 2): boolean {
+  if (unit.recommendedCalendarTerm === null) return false;
+  return unit.recommendedCalendarTerm !== targetTerm;
+}
+
+export function isUnitEligible(unit: EligibilityUnit, input: EligibilityInput): boolean {
+  if (!isAvailableInTargetTerm(unit, input.targetTerm)) return false;
 
   return canTake(
     unit,
@@ -63,24 +108,39 @@ export function isUnitEligible(unit: SchedulableUnit, input: EligibilityInput): 
 
  // Builds a unitCode -> SchedulableUnit lookup for every unit reachable from a specific planner: its
  // slotted TemplateUnit rows and its elective-group pool units, since both are candidate categories for class estimation.
-export async function buildEligibilityUnitsFromPlanner(plannerId: string): Promise<Map<string, SchedulableUnit>> {
+export async function buildEligibilityUnitsFromPlanner(plannerId: string): Promise<Map<string, EligibilityUnit>> {
   const planner = await getCachedPlannerById(plannerId);
-  const eligibilityUnits = new Map<string, SchedulableUnit>();
+  const eligibilityUnits = new Map<string, EligibilityUnit>();
   if (!planner) return eligibilityUnits;
+
+  // A planner's slot semesters are counted from its own intake, not from the calendar. 20 of the 45 loaded
+  // planners are September intakes, and for those the two are swapped: their semester 1 is calendar
+  // semester 2. Comparing a raw slot number against the target term would report every September cohort as
+  // being predicted outside its recommended semester when it is not.
+  const intakeSemester = intakeSemesterFromMonth(planner.intake_month);
 
   for (const tu of planner.units) {
     if (!tu.unit) continue;
     if (eligibilityUnits.has(tu.unit.unit_code)) continue;
-    eligibilityUnits.set(tu.unit.unit_code, mapUnitToSchedulable(tu.unit as RawSchedulableUnitRow, tu.category));
+
+    // Only semesters 1 and 2 convert to a calendar term. A summer or winter slot leaves this null, since
+    // there is no semester to compare a prediction against.
+    const slot = tu.semester === 1 || tu.semester === 2 ? tu.semester : null;
+
+    eligibilityUnits.set(tu.unit.unit_code, {
+      ...mapUnitToSchedulable(tu.unit as RawSchedulableUnitRow, tu.category),
+      recommendedCalendarTerm: slot === null ? null : calendarTermFor(slot, intakeSemester),
+    });
   }
 
   for (const eg of planner.elective_groups) {
     for (const egu of eg.units) {
       if (eligibilityUnits.has(egu.unit.unit_code)) continue;
-      eligibilityUnits.set(
-        egu.unit.unit_code,
-        mapUnitToSchedulable(egu.unit as RawSchedulableUnitRow, 'prescribed_elective'),
-      );
+      eligibilityUnits.set(egu.unit.unit_code, {
+        ...mapUnitToSchedulable(egu.unit as RawSchedulableUnitRow, 'prescribed_elective'),
+        // Pool units carry no slot, so there is no recommended semester to compare against.
+        recommendedCalendarTerm: null,
+      });
     }
   }
 

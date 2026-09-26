@@ -13,7 +13,11 @@ import { buildPlannerTemplatesForMatching } from '../matching/plannerTemplateBui
 import { buildUnitMasterTable } from '../matching/unitMasterTableBuilder';
 import { resetPlannerCache } from './plannerCache';
 import { resolveCandidateUnits } from './plannerCandidateResolver';
-import { buildEligibilityUnitsFromPlanner } from './eligibilityEngine';
+import {
+  buildEligibilityUnitsFromPlanner,
+  isAvailableInTargetTerm,
+  isOutsideRecommendedTerm,
+} from './eligibilityEngine';
 import { filterEligibleUnits } from './eligibilityFilter';
 import { rankAndCapUnits } from './unitRanker';
 import type {
@@ -58,6 +62,12 @@ export interface StudentPreview {
   ineligible: PreviewIneligibleUnit[];
   /** Eligible units with no offering rows in the DB. canTake() treats those as offered every semester. */
   eligibleWithoutOfferingData: string[];
+  /**
+   * Picked units the planner does not recommend for this semester. Normal for a retake or a catch-up, so
+   * they are still counted. Listed because a wrong offerings row shows up here first: a whole cohort
+   * predicted into a semester their planner never uses is a reason to check that row.
+   */
+  outsideRecommendedTerm: string[];
   error?: string;
 }
 
@@ -73,6 +83,8 @@ export interface PreviewSummary {
   totalPicked: number;
   ineligibleByReason: Record<IneligibleReason, number>;
   eligibleWithoutOfferingData: number;
+  /** How many picks fell outside the semester their planner recommends, across all students. */
+  outsideRecommendedTerm: number;
   mappingWarningCounts: Record<string, number>;
   plannerCounts: Array<{ plannerId: string; majorName: string; intakeYear: number; intakeSemester: 1 | 2; students: number }>;
   /** How many students had each picked unit, most common first. Not a headcount estimate, Phase 5 does that. */
@@ -144,6 +156,7 @@ export async function runEstimationPreview(
       'requisites-unmet': ineligible.filter((u) => u.reason === 'requisites-unmet').length,
     },
     eligibleWithoutOfferingData: students.reduce((sum, s) => sum + s.eligibleWithoutOfferingData.length, 0),
+    outsideRecommendedTerm: students.reduce((sum, s) => sum + s.outsideRecommendedTerm.length, 0),
     mappingWarningCounts: count(students.flatMap((s) => s.mappingWarnings), (w) => w),
     plannerCounts,
     pickedByUnit: Object.entries(pickedCounts)
@@ -179,6 +192,7 @@ async function previewStudent(
     poolCandidates: { prescribed: 0, freeElective: 0 },
     ineligible: [],
     eligibleWithoutOfferingData: [],
+    outsideRecommendedTerm: [],
   };
 
   try {
@@ -228,6 +242,12 @@ async function previewStudent(
     base.eligibleWithoutOfferingData = eligible
       .filter((c) => eligibilityUnits.get(c.code)?.offeringSemesters.length === 0)
       .map((c) => c.code);
+    base.outsideRecommendedTerm = eligible
+      .filter((c) => {
+        const unit = eligibilityUnits.get(c.code);
+        return unit ? isOutsideRecommendedTerm(unit, targetTerm) : false;
+      })
+      .map((c) => c.code);
 
     const ranked = await rankAndCapUnits(eligible, resolution.plannerId, loadCap);
     base.picked = ranked.picked.map((u) => ({
@@ -245,8 +265,9 @@ async function previewStudent(
   return base;
 }
 
-// Labels why a candidate failed eligibility. This mirrors the order canTake() checks things in (offering
-// first, then requisites) for reporting only, the actual eligibility decision is still made by canTake().
+// Labels why a candidate failed eligibility. Reporting only, the decision itself is still made by
+// isUnitEligible(). It asks the same question in the same order, so the label cannot claim a unit failed on
+// requisites when it actually failed on the semester it runs in.
 function ineligibleReason(
   candidate: CandidateUnit,
   eligibilityUnits: Awaited<ReturnType<typeof buildEligibilityUnitsFromPlanner>>,
@@ -254,6 +275,6 @@ function ineligibleReason(
 ): IneligibleReason {
   const unit = eligibilityUnits.get(candidate.code);
   if (!unit) return 'not-in-planner';
-  if (unit.offeringSemesters.length > 0 && !unit.offeringSemesters.includes(targetTerm)) return 'not-offered-in-term';
+  if (!isAvailableInTargetTerm(unit, targetTerm)) return 'not-offered-in-term';
   return 'requisites-unmet';
 }

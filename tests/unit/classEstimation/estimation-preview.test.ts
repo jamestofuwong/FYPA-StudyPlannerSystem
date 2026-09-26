@@ -7,7 +7,7 @@
 //
 // Fixture planner (intake Feb 2024, so semester 1):
 //   core        COS10009 (y1s1), COS20007 (y2s1), COS30008 (y2s2, needs COS20007, offered sem 2)
-//   major_core  COS20015 (y2s1), COS30049 (y3s1, needs 100 credit points, no offering rows)
+//   major_core  COS20015 (y2s1), COS30049 (y3s1, needs 25 credit points, no offering rows)
 //   elective    FREE1 (y3s2, needs COS99999, which nobody has), plus one unslotted pool group holding POOL1 (offered sem 1 only)
 // ============================================================
 
@@ -118,7 +118,7 @@ describe('runEstimationPreview', () => {
     expect(s.candidateCount).toBe(4);
 
     // Eligible for semester 2: COS30008 (offered 2, prerequisite done), COS30049 (37.5 credits earned on
-    // the transcript clears its 25cp gate, and it has no offering rows).
+    // the transcript clears its 25cp gate, and it has no offering rows so it is available in either).
     // Not eligible: POOL1 (sem 1 only), FREE1 (prerequisite COS99999 unmet).
     expect(s.eligibleCount).toBe(2);
     expect(s.ineligible).toEqual(expect.arrayContaining([
@@ -176,6 +176,26 @@ describe('runEstimationPreview', () => {
     );
 
     expect(students[0].ineligible.find((u) => u.code === 'COS30049')?.reason).toBe('requisites-unmet');
+  });
+
+  // A unit offered in both semesters is available in both, even in the semester its planner does not
+  // recommend, which is how a retake gets counted. 13 of the 67 loaded units are offered in both. The
+  // prediction is still flagged, since it is the first place a wrong offerings row would show up.
+  test('a unit offered in both semesters is counted outside its recommended semester, and flagged', async () => {
+    const planner = plannerFixture();
+    // COS30008 keeps its y2s2 slot but is offered in both semesters.
+    planner.units[2].unit = dbUnit('COS30008', [1, 2], [prereq('COS20007')]);
+    getPlannerById.mockResolvedValue(planner as never);
+    getAllPlannersWithUnits.mockResolvedValue([planner] as never);
+
+    const { students, summary } = await runEstimationPreview(
+      [record('S1', scrapedStudent())],
+      { targetTerm: 1, loadCap: 4 },
+    );
+
+    expect(students[0].picked.map((u) => u.code)).toContain('COS30008');
+    expect(students[0].outsideRecommendedTerm).toContain('COS30008');
+    expect(summary.outsideRecommendedTerm).toBeGreaterThan(0);
   });
 
   test('loadCap drops the later-slotted core units and says how many', async () => {

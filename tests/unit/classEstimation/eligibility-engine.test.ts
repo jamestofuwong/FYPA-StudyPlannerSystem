@@ -10,9 +10,11 @@
 
 import {
   isUnitEligible,
+  isAvailableInTargetTerm,
+  isOutsideRecommendedTerm,
   buildEligibilityUnitsFromPlanner,
   type EligibilityInput,
-  type SchedulableUnit,
+  type EligibilityUnit,
 } from '@core/services/classEstimation/eligibilityEngine';
 import { resetPlannerCache } from '@core/services/classEstimation/plannerCache';
 import * as plannerRepository from '@core/db/repositories/plannerRepository';
@@ -21,8 +23,12 @@ jest.mock('@core/db/repositories/plannerRepository');
 
 const getPlannerById = jest.mocked(plannerRepository.getPlannerById);
 
-function unit(overrides: Partial<SchedulableUnit> = {}): SchedulableUnit {
-  return { code: 'U1', name: 'Unit U1', category: 'core', offeringSemesters: [], requisiteGroups: [], ...overrides };
+function unit(overrides: Partial<EligibilityUnit> = {}): EligibilityUnit {
+  return {
+    code: 'U1', name: 'Unit U1', category: 'core',
+    offeringSemesters: [], requisiteGroups: [], recommendedCalendarTerm: null,
+    ...overrides,
+  };
 }
 
 // Named inputs with sensible blanks, so each test only states the part it cares about. canTake() shifted its
@@ -158,8 +164,10 @@ describe('buildEligibilityUnitsFromPlanner', () => {
   // estimation, so both need to end up in the lookup, not just the slotted ones.
   test('maps slotted units and elective-pool units into the lookup', async () => {
     getPlannerById.mockResolvedValue({
+      intake_month: 3,
       units: [{
         category: 'core',
+        semester: 1,
         unit: {
           unit_code: 'COS10009',
           unit_name: 'Introduction to Programming',
@@ -183,6 +191,7 @@ describe('buildEligibilityUnitsFromPlanner', () => {
       offeringSemesters: [1],
       allOfferingTerms: [1],
       requisiteGroups: [[{ type: 'unit', requisiteType: 'prerequisite', unitCode: 'COS10001' }]],
+      recommendedCalendarTerm: 1,
     });
     expect(map.has('COS40006')).toBe(true);
   });
@@ -201,5 +210,117 @@ describe('buildEligibilityUnitsFromPlanner', () => {
     await buildEligibilityUnitsFromPlanner('p1');
 
     expect(getPlannerById).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ====== Availability comes from the offerings, not the planner slot ===========================
+//
+// A planner slot is where one major recommends fitting a unit in. The offerings row is a statement parsed
+// out of the PDF about when the unit actually runs ("Feb/Mar", "Aug/Sept", "Semester 1"). A unit taught in
+// both semesters is routinely slotted in different semesters by different majors, and a student who failed
+// one legitimately retakes it in whichever semester comes next, so the slot must not gate availability.
+// It is reported instead, because a wrong offerings row shows up as a cohort predicted outside its planner.
+describe('availability follows the offerings, the recommended semester is only reported', () => {
+  test('a unit offered in both semesters is available in either, whatever the planner recommends', () => {
+    const cos10004 = unit({
+      code: 'COS10004',
+      offeringSemesters: [1, 2],
+      allOfferingTerms: [1, 2],
+      recommendedCalendarTerm: 2,   // Cybersecurity slots it in year 2 semester 2
+    });
+
+    expect(isUnitEligible(cos10004, input({ targetTerm: 1 }))).toBe(true);
+    expect(isUnitEligible(cos10004, input({ targetTerm: 2 }))).toBe(true);
+    // Reported for semester 1, since that is not the semester the planner recommends.
+    expect(isOutsideRecommendedTerm(cos10004, 1)).toBe(true);
+    expect(isOutsideRecommendedTerm(cos10004, 2)).toBe(false);
+  });
+
+  test('a unit offered in one semester only is not available in the other', () => {
+    const u = unit({ offeringSemesters: [2], allOfferingTerms: [2], recommendedCalendarTerm: 2 });
+
+    expect(isUnitEligible(u, input({ targetTerm: 1 }))).toBe(false);
+    expect(isUnitEligible(u, input({ targetTerm: 2 }))).toBe(true);
+  });
+
+  test('requisites are still enforced on a unit that is available', () => {
+    const u = unit({
+      recommendedCalendarTerm: 1,
+      requisiteGroups: [[{ type: 'unit', requisiteType: 'prerequisite', unitCode: 'COS10009' }]],
+    });
+
+    expect(isUnitEligible(u, input({ targetTerm: 1 }))).toBe(false);
+    expect(isUnitEligible(u, input({ targetTerm: 1, completedOrInProgress: new Set(['COS10009']) }))).toBe(true);
+  });
+
+  test('isAvailableInTargetTerm reads the offerings and nothing else', () => {
+    expect(isAvailableInTargetTerm(unit({ offeringSemesters: [2], allOfferingTerms: [2] }), 1)).toBe(false);
+    expect(isAvailableInTargetTerm(unit({ offeringSemesters: [2], allOfferingTerms: [2] }), 2)).toBe(true);
+    expect(isAvailableInTargetTerm(unit(), 1)).toBe(true);                          // no data at all
+    expect(isAvailableInTargetTerm(unit({ allOfferingTerms: [4] }), 1)).toBe(false); // winter only
+    // The recommended semester makes no difference to availability.
+    expect(isAvailableInTargetTerm(unit({ recommendedCalendarTerm: 2 }), 1)).toBe(true);
+  });
+
+  test('isOutsideRecommendedTerm stays quiet when there is nothing to compare', () => {
+    expect(isOutsideRecommendedTerm(unit({ recommendedCalendarTerm: null }), 1)).toBe(false);
+    expect(isOutsideRecommendedTerm(unit({ recommendedCalendarTerm: 1 }), 1)).toBe(false);
+    expect(isOutsideRecommendedTerm(unit({ recommendedCalendarTerm: 1 }), 2)).toBe(true);
+  });
+});
+
+// 20 of the 45 loaded planners are September intakes. Their slot semesters run the other way round to the
+// calendar, so a raw slot number would report every one of those cohorts as predicted outside its planner.
+describe('slot semesters convert to calendar terms by intake', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    resetPlannerCache();
+  });
+
+  const plannerWith = (intakeMonth: number, slotSemester: number) => ({
+    intake_month: intakeMonth,
+    units: [{
+      category: 'core',
+      semester: slotSemester,
+      unit: { unit_code: 'COS10004', unit_name: 'Computer Systems', offerings: [], requisite_groups: [] },
+    }],
+    elective_groups: [],
+  });
+
+  test.each([
+    ['February intake, slot 1', 2, 1, 1],
+    ['February intake, slot 2', 2, 2, 2],
+    ['March intake, slot 2',    3, 2, 2],
+    ['September intake, slot 1', 9, 1, 2],
+    ['September intake, slot 2', 9, 2, 1],
+  ])('%s becomes calendar term %i', async (_label, intakeMonth, slotSemester, expected) => {
+    getPlannerById.mockResolvedValue(plannerWith(intakeMonth, slotSemester) as never);
+
+    const map = await buildEligibilityUnitsFromPlanner(`p-${intakeMonth}-${slotSemester}`);
+
+    expect(map.get('COS10004')!.recommendedCalendarTerm).toBe(expected);
+  });
+
+  // A summer or winter slot has no calendar semester to map onto, so there is nothing to compare against.
+  test.each([[3], [4]])('a slot in term %i leaves recommendedCalendarTerm null', async (slotSemester) => {
+    getPlannerById.mockResolvedValue(plannerWith(3, slotSemester) as never);
+
+    const map = await buildEligibilityUnitsFromPlanner(`p-short-${slotSemester}`);
+
+    expect(map.get('COS10004')!.recommendedCalendarTerm).toBeNull();
+  });
+
+  test('an elective-pool unit gets no slot', async () => {
+    getPlannerById.mockResolvedValue({
+      intake_month: 3,
+      units: [],
+      elective_groups: [
+        { units: [{ unit: { unit_code: 'COS40006', unit_name: 'Elective', offerings: [], requisite_groups: [] } }] },
+      ],
+    } as never);
+
+    const map = await buildEligibilityUnitsFromPlanner('p-pool');
+
+    expect(map.get('COS40006')!.recommendedCalendarTerm).toBeNull();
   });
 });
