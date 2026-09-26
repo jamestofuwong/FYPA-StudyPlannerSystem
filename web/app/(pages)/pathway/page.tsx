@@ -1068,21 +1068,36 @@ export default function PathwayPage() {
                                             + Select Unit
                                           </button>
                                     ) : (
-                                      <select
-                                        className={styles.moveSelect}
-                                        value={`${sem.year}-${sem.semester}`}
-                                        onChange={(e) => moveUnitToSlot(u.code, e.target.value)}
-                                        title="Move to another semester"
-                                      >
-                                        {semesters.map((target) => (
+                                    <select
+                                      className={styles.moveSelect}
+                                      value={`${sem.year}-${sem.semester}`}
+                                      onChange={(e) => moveUnitToSlot(u.code, e.target.value)}
+                                      title="Move to another semester"
+                                    >
+                                      {semesters.map((target) => {
+                                        const targetCalTerm = calendarTermFor(target.semester, planIntakeSemester);
+                                        const targetUnitMeta = unitData.get(normaliseCode(u.code));
+                                        const offeringTerms = targetUnitMeta?.offeringSemesters ?? (u as any).offeringSemesters ?? [];
+                                        
+                                        // Empty means unrestricted (available in both semesters)
+                                        const isOffered = offeringTerms.length === 0 || offeringTerms.includes(targetCalTerm);
+                                        const isCurrent = target.year === sem.year && target.semester === sem.semester;
+
+                                        return (
                                           <option
                                             key={`${target.year}-${target.semester}`}
                                             value={`${target.year}-${target.semester}`}
+                                            disabled={!isOffered && !isCurrent}
+                                            title={!isOffered ? `Not offered in ${monthsOf(targetCalTerm)}` : `Move to Y${target.year} S${target.semester}`}
                                           >
-                                            Y{target.year} S{target.semester}
+                                            {isOffered || isCurrent
+                                              ? `Y${target.year} S${target.semester}`
+                                              : `⚠ Y${target.year} S${target.semester}`}
                                           </option>
-                                        ))}
-                                      </select>
+                                        );
+                                      })}
+                                    </select>
+
                                     )}
                                     {u.category === 'elective' && u.code !== 'ELECTIVE' && (
                                       <button
