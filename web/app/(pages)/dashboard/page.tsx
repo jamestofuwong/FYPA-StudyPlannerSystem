@@ -6,6 +6,9 @@ import styles from './page.module.css';
 import { useToast } from '../../../components/providers/ToastProvider';
 import { useStudentSession } from '../../../components/providers/StudentSessionContext';
 import { panelToPath } from '../../../lib/navigation';
+import { calendarTermFor } from '../../../../core/services/scheduling/customPlannerScheduler';
+import { deriveSemesterFromMonth } from '../../../../core/services/classEstimation/scrapedStudentMapper';
+import { monthsOf } from '../pathway/terms';
 import type { ScrapedStudent, ScrapedCourseListItem } from '../../../../core/shared/types/student';
 
 type Enrollment = { EnrollId: number; EnrollmentDesc: string };
@@ -1330,8 +1333,17 @@ export default function DashboardPage() {
                 offering: u.semester 
               }));
 
-            const coreCount = notTaken.filter((u: any) => u.category === 'core').length;
-            const electiveCount = notTaken.filter((u: any) => u.category !== 'core').length;
+            const coreCount = notTaken.filter((u: any) => u.category === 'core' || u.category === 'major_core').length;
+            const electiveCount = notTaken.filter((u: any) => u.category === 'elective' || u.category === 'prescribed_elective').length;
+            const mpuCount = notTaken.filter((u: any) => u.category === 'mpu').length;
+            const wilCount = notTaken.filter((u: any) => u.category === 'wil').length;
+
+            // A planner slot counts from the student's intake, so for a September
+            // intake slot 1 is Aug/Sep. Slots 3 and 4 are summer and winter already,
+            // and calendarTermFor only converts the two semester slots.
+            const intakeSemester = deriveSemesterFromMonth(activePlanner?.intake_month ?? 1);
+            const termLabel = (slot: number) =>
+              monthsOf(slot === 1 || slot === 2 ? calendarTermFor(slot, intakeSemester) : slot);
 
             return (
               <div className={`${styles.insightCard} ${styles.insightOrange}`}>
@@ -1346,6 +1358,8 @@ export default function DashboardPage() {
                   <div className={styles.insightPills}>
                     <span className={`${styles.pill} ${styles.pillRed}`}>Core {coreCount}</span>
                     <span className={`${styles.pill} ${styles.pillMuted}`}>Elective {electiveCount}</span>
+                    <span className={`${styles.pill} ${styles.pillBlue}`}>MPU {mpuCount}</span>
+                    <span className={`${styles.pill} ${styles.suAlt}`}>WIL {wilCount}</span>
                   </div>
                 </div>
                 {notTaken.length === 0 ? (
@@ -1354,9 +1368,9 @@ export default function DashboardPage() {
                   <div className={styles.insightList}>
                     {notTaken.map((u: any) => (
                       <div key={u.code} className={styles.insightRow}>
-                        <InlineCode red={u.category === 'core'}>{u.code}</InlineCode>
+                        <InlineCode red={u.category === 'core' || u.category === 'major_core'}>{u.code}</InlineCode>
                         <span className={styles.insightRowName}>{u.name}</span>
-                        <span className={styles.insightRowMeta}>Sem {u.offering}</span>
+                        <span className={styles.insightRowMeta}>{termLabel(u.offering)}</span>
                       </div>
                     ))}
                   </div>
