@@ -7,37 +7,28 @@ import {
   validateSchedulerConfig,
   type SchedulableUnit,
 } from '../../../../core/services/scheduling/customPlannerScheduler';
+import { toSchedulableUnit } from '../../../../core/shared/scheduling/schedulableUnit';
 
+// Field extraction for this app's Prisma schema. The student app has its own
+// adapter; the mapping rules they share live in core/shared/scheduling.
 function toSchedulable(
   unit: { unit_code: string; unit_name: string; offerings: { offered_in: number }[]; requisite_groups: any[] },
   category: string
 ): SchedulableUnit {
-  const requisiteGroups: RequisiteCondition[][] = (unit.requisite_groups ?? [])
-    .map((group: any) =>
-      group.conditions
-        .map((c: any): RequisiteCondition | null => {
-          if (c.type === 'credit_points') {
-            return { type: 'credit_points', creditPoints: Number(c.credit_points) };
-          }
-          if (c.type === 'unit' && c.unit !== null) {
-            return {
-              type: 'unit',
-              requisiteType: (c.requisite_type ?? 'prerequisite') as 'prerequisite' | 'corequisite' | 'antirequisite',
-              unitCode: c.unit.unit_code.toUpperCase(),
-            };
-          }
-          return null;
-        })
-        .filter((c: RequisiteCondition | null): c is RequisiteCondition => c !== null)
-    )
-    .filter((g: RequisiteCondition[]) => g.length > 0);
-
-  const allOfferingTerms = [...new Set((unit.offerings ?? []).map(o => o.offered_in))].sort((a, b) => a - b);
-  // The scheduler only cycles semesters 1 and 2. A unit offered only in summer (3)
-  // or winter (4) keeps its terms in allOfferingTerms so it is reported, not placed.
-  const offeringSemesters = allOfferingTerms.filter((term): term is 1 | 2 => term === 1 || term === 2);
-
-  return { code: unit.unit_code, name: unit.unit_name, category, offeringSemesters, allOfferingTerms, requisiteGroups };
+  return toSchedulableUnit({
+    code: unit.unit_code,
+    name: unit.unit_name,
+    category,
+    offeringTerms: (unit.offerings ?? []).map((o) => o.offered_in),
+    requisiteGroups: (unit.requisite_groups ?? []).map((group: any) =>
+      (group.conditions ?? []).map((c: any) => ({
+        type: c.type,
+        unitCode: c.unit?.unit_code ?? null,
+        creditPoints: c.credit_points,
+        requisiteType: c.requisite_type,
+      })),
+    ),
+  });
 }
 
 export async function POST(req: NextRequest) {

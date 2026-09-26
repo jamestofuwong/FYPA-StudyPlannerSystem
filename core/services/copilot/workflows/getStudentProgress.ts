@@ -2,36 +2,27 @@ import type { Workflow, WorkflowContext, WorkflowResult } from '../types';
 import { searchStudents, fetchEnrollments, fetchDegreeAudit } from '../../portal/portalSessionService';
 import { selectEnrollment } from './enrollmentSelector';
 
-// Units with an empty grade and no active-enrollment status are portal planning
-// artefacts (e.g. future units scaffolded in the degree audit). Exclude them so
-// the LLM never sees empty-grade entries that it might hallucinate values for.
-const IN_PROGRESS_STATUSES = new Set(['enrolled', 'in progress', 'current', 'registered']);
-
 interface Input {
   studentId: string;
   enrollMode?: string;
 }
 
-interface UnitEntry {
-  code: string;
-  title: string;
-  credits: number;
-  grade: string;
-  status: string;
-  term: string;
-}
-
 interface Output {
   studentId: string;
   studentName: string | null;
-  totalUnits: number;
+  cgpa: number;
+  gradeLevel: string;
   completedCredits: number;
-  units: UnitEntry[];
+  requiredCredits: number;
+  progressPercent: number;
+  enrollmentDate: string | null;
+  graduationDate: string | null;
+  currentSemester: string | null;
 }
 
-export const getStudentUnitsWorkflow: Workflow<Input, Output> = {
-  id: 'get_student_units',
-  description: 'Lists all units (subjects) taken by a student, including grades and credit hours. Fetches live data from the student portal. Use this when the user asks what units a student has taken, their grades, or their course history.',
+export const getStudentProgressWorkflow: Workflow<Input, Output> = {
+  id: 'get_student_progress',
+  description: 'Returns a snapshot of a student\'s academic progress: CGPA, credits completed vs required, grade level, current semester, and graduation date. Use this when the user asks how a student is doing, their GPA, their progress, or their academic standing.',
   params: [
     {
       name: 'studentId',
@@ -49,7 +40,6 @@ export const getStudentUnitsWorkflow: Workflow<Input, Output> = {
   async execute(params: Input, _ctx: WorkflowContext): Promise<WorkflowResult<Output>> {
     const mode = params.enrollMode ?? 'latest';
 
-    // Resolve studentId → dbId via cached student list
     const matches = searchStudents(params.studentId);
     const student = matches.find((s) => s.student_id === params.studentId) ?? matches[0] ?? null;
     if (!student) {
@@ -69,33 +59,28 @@ export const getStudentUnitsWorkflow: Workflow<Input, Output> = {
 
       const scraped = await fetchDegreeAudit(student.db_id, enrollment.EnrollId, params.studentId);
 
-      const units: UnitEntry[] = scraped.courseList
-        .filter((item) => {
-          const grade = (item.grade ?? '').trim();
-          const status = (item.status ?? '').trim().toLowerCase();
-          return grade !== '' || IN_PROGRESS_STATUSES.has(status);
-        })
-        .map((item) => ({
-          code: item.courseId,
-          title: item.courseTitle,
-          credits: item.credits,
-          grade: item.grade,
-          status: item.status,
-          term: item.term,
-        }));
+      const progressPercent =
+        scraped.creditsRequired > 0
+          ? Math.round((scraped.creditsCompleted / scraped.creditsRequired) * 100)
+          : 0;
 
       return {
         ok: true,
         data: {
           studentId: params.studentId,
           studentName: scraped.studentName ?? student.name,
-          totalUnits: units.length,
+          cgpa: scraped.cgpa,
+          gradeLevel: scraped.gradeLevel,
           completedCredits: scraped.creditsCompleted,
-          units,
+          requiredCredits: scraped.creditsRequired,
+          progressPercent,
+          enrollmentDate: scraped.enrollmentDate,
+          graduationDate: scraped.graduationDate,
+          currentSemester: scraped.status,
         },
       };
     } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : 'Failed to fetch student units.' };
+      return { ok: false, error: err instanceof Error ? err.message : 'Failed to fetch student progress.' };
     }
   },
 };

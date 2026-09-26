@@ -1,9 +1,9 @@
-import { NextResponse } from 'next/server';
 import type { ChatMessage, WorkflowContext } from '../../../../../core/services/copilot/types';
 import { routeAndExtract } from '../../../../../core/services/copilot/copilotService';
-import { formatResponse } from '../../../../../core/services/copilot/responseFormatter';
+import { streamResponse } from '../../../../../core/services/copilot/responseFormatter';
 import { workflowRegistry, allWorkflows } from '../../../../../core/services/copilot/workflowRegistry';
 import { ollamaStore } from '../../ollama/store';
+import { getStatus } from '../../../../../core/services/portal/portalSessionService';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -21,20 +21,32 @@ function validateParams(
     .map((p) => p.name);
 }
 
+function workflowLabel(id: string): string {
+  return id
+    .split('_')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+}
+
 export async function POST(req: Request) {
   let body: { messages?: ChatMessage[] };
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    return new Response(
+      JSON.stringify({ type: 'reply', content: 'Invalid JSON body' }) + '\n',
+      { status: 400, headers: { 'Content-Type': 'application/x-ndjson' } }
+    );
   }
 
   const messages = body.messages;
   if (!Array.isArray(messages) || messages.length === 0) {
-    return NextResponse.json({ error: 'messages array is required' }, { status: 400 });
+    return new Response(
+      JSON.stringify({ type: 'reply', content: 'messages array is required' }) + '\n',
+      { status: 400, headers: { 'Content-Type': 'application/x-ndjson' } }
+    );
   }
 
-  // Build workflow context — only web-layer state that core cannot import directly
   const ctx: WorkflowContext = {
     ollamaStatus: {
       ollama: ollamaStore.ollama,
@@ -42,55 +54,112 @@ export async function POST(req: Request) {
     },
   };
 
-  // ── Phase 1: Route & Extract ──────────────────────────────────────────────
-  let route;
-  try {
-    route = await routeAndExtract(messages, allWorkflows);
-  } catch {
-    return NextResponse.json({
-      reply: 'The AI service is currently unavailable. Make sure Ollama is running and the model is ready.',
-    });
-  }
+  const encoder = new TextEncoder();
 
-  if (!route.canHandle) {
-    return NextResponse.json({ reply: CANNOT_HANDLE });
-  }
+  const stream = new ReadableStream({
+    async start(controller) {
+      function emit(data: object) {
+        controller.enqueue(encoder.encode(JSON.stringify(data) + '\n'));
+      }
 
-  if (route.missingParams.length > 0) {
-    return NextResponse.json({
-      reply: `To do that, I need a bit more information. Could you provide: ${route.missingParams.join(', ')}?`,
-    });
-  }
+      try {
+        // ── Phase 1: Route & Extract ────────────────────────────────────────
+        emit({ type: 'status', message: 'Thinking…' });
 
-  const workflow = workflowRegistry.get(route.workflowId!);
-  if (!workflow) {
-    return NextResponse.json({ reply: CANNOT_HANDLE });
-  }
+        // If the model is cold (not yet loaded in memory), the first Ollama
+        // call can stall for several seconds. Emit a dedicated message after
+        // 3 s so the user knows the app hasn't frozen.
+        const coldStartTimer = setTimeout(
+          () => emit({ type: 'status', message: 'Warming up AI model…' }),
+          3000,
+        );
 
-  // Safety net: re-validate params after routing
-  const stillMissing = validateParams(workflow, route.params);
-  if (stillMissing.length > 0) {
-    return NextResponse.json({
-      reply: `I need a bit more information to continue. Could you provide: ${stillMissing.join(', ')}?`,
-    });
-  }
+        let route;
+        try {
+          route = await routeAndExtract(messages, allWorkflows);
+        } catch (err) {
+          clearTimeout(coldStartTimer);
+          console.error('[Copilot] routeAndExtract failed:', err);
+          emit({ type: 'reply', content: 'The AI service is currently unavailable. Make sure Ollama is running and the model is ready.' });
+          controller.close();
+          return;
+        }
+        clearTimeout(coldStartTimer);
 
-  // ── Phase 2: Execute Workflow ─────────────────────────────────────────────
-  const result = await workflow.execute(route.params, ctx);
+        if (!route.canHandle) {
+          emit({ type: 'reply', content: CANNOT_HANDLE });
+          controller.close();
+          return;
+        }
 
-  if (!result.ok) {
-    return NextResponse.json({
-      reply: `I wasn't able to complete that. ${result.error}`,
-    });
-  }
+        if (route.missingParams.length > 0) {
+          emit({ type: 'reply', content: `To do that, I need a bit more information. Could you provide: ${route.missingParams.join(', ')}?` });
+          controller.close();
+          return;
+        }
 
-  // ── Phase 3: Format Response ──────────────────────────────────────────────
-  let reply: string;
-  try {
-    reply = await formatResponse(messages, workflow, result);
-  } catch {
-    reply = `Here is what I found:\n\`\`\`\n${JSON.stringify(result.data, null, 2)}\n\`\`\``;
-  }
+        const workflow = workflowRegistry.get(route.workflowId!);
+        if (!workflow) {
+          emit({ type: 'reply', content: CANNOT_HANDLE });
+          controller.close();
+          return;
+        }
 
-  return NextResponse.json({ reply });
+        const stillMissing = validateParams(workflow, route.params);
+        if (stillMissing.length > 0) {
+          emit({ type: 'reply', content: `I need a bit more information to continue. Could you provide: ${stillMissing.join(', ')}?` });
+          controller.close();
+          return;
+        }
+
+        // ── Portal session check ────────────────────────────────────────────
+        // Workflows that include a studentId param require live portal data.
+        const needsPortal = workflow.params.some((p) => p.name === 'studentId');
+        if (needsPortal && getStatus().sessionStatus !== 'logged-in') {
+          emit({ type: 'reply', content: 'This requires access to the student portal. Please log in to the portal first, then try again.' });
+          controller.close();
+          return;
+        }
+
+        // ── Phase 2: Execute Workflow ───────────────────────────────────────
+        emit({ type: 'status', message: `Calling ${workflowLabel(route.workflowId!)}…` });
+
+        const result = await workflow.execute(route.params, ctx);
+
+        if (!result.ok) {
+          console.warn(`[Copilot] Workflow "${route.workflowId}" returned error:`, result.error);
+          emit({ type: 'reply', content: `I wasn't able to complete that. ${result.error}` });
+          controller.close();
+          return;
+        }
+
+        // ── Phase 3: Stream Response ────────────────────────────────────────
+        emit({ type: 'status', message: 'Generating response…' });
+
+        try {
+          let full = '';
+          for await (const token of streamResponse(messages, workflow, result)) {
+            full += token;
+            emit({ type: 'token', content: token });
+          }
+          emit({ type: 'reply', content: full, workflowId: route.workflowId });
+        } catch (err) {
+          console.error(`[Copilot] streamResponse failed for workflow "${route.workflowId}":`, err);
+          emit({ type: 'reply', content: `Here is what I found:\n\`\`\`\n${JSON.stringify(result.data, null, 2)}\n\`\`\``, workflowId: route.workflowId });
+        }
+        controller.close();
+      } catch (err) {
+        console.error('[Copilot] Unhandled error in chat stream:', err);
+        emit({ type: 'reply', content: 'An unexpected error occurred. Please try again.' });
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'application/x-ndjson',
+      'Cache-Control': 'no-cache',
+    },
+  });
 }
