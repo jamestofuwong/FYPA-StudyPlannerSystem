@@ -192,7 +192,6 @@ SELECT add_unit_offering('MPU3212', 3); SELECT add_unit_offering('MPU3212', 4);
 
 
 SELECT add_unit_offering('ICT20016', 3); SELECT add_unit_offering('ICT20016', 4);
-SELECT add_unit_offering('ICT20016', 2);
 
 -- ======================================================================================================================
 -- Deactivate the old units and link them to their replacements
