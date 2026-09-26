@@ -213,6 +213,15 @@ const codesIn = (el: HTMLElement) =>
 
 const rowOf = (code: string) => screen.getByText(code, { selector: 'code' }).closest('tr') as HTMLElement;
 
+/**
+ * Removing a unit now asks first: Remove opens a confirmation, and only its
+ * "Remove Unit" button takes the unit out of the plan.
+ */
+const confirmRemove = async (code: string) => {
+  fireEvent.click(screen.getByLabelText(`Remove ${code}`));
+  fireEvent.click(await screen.findByRole('button', { name: 'Remove Unit' }));
+};
+
 const openSwap = async (code: string) => {
   await act(async () => { fireEvent.click(screen.getByLabelText(`Swap ${code}`)); });
   return screen.findByRole('dialog');
@@ -488,7 +497,7 @@ describe('swapping a real elective', () => {
 
 describe('filling a gap after a removal', () => {
   const removeE1 = async () => {
-    fireEvent.click(screen.getByLabelText('Remove E1'));
+    await confirmRemove('E1');
     return screen.findByText(/Electives total 87.5 credit points, but 100 are required/i);
   };
 
@@ -503,7 +512,7 @@ describe('filling a gap after a removal', () => {
   test('other warnings do not get one', async () => {
     render(<Harness />);
     await generate();
-    fireEvent.click(screen.getByLabelText('Remove C1'));
+    await confirmRemove('C1');
 
     await screen.findByText(/required to graduate but .* not in this plan/i);
     expect(screen.queryByRole('button', { name: 'Choose elective' })).toBeNull();

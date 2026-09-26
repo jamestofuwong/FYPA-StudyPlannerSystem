@@ -154,6 +154,15 @@ async function generate() {
 
 const pickers = () => screen.getAllByTitle(/Add a unit to this semester|already placed/i);
 
+/**
+ * Removing a unit now asks first: Remove opens a confirmation, and only its
+ * "Remove Unit" button takes the unit out of the plan.
+ */
+const confirmRemove = async (code: string) => {
+  fireEvent.click(screen.getByLabelText(`Remove ${code}`));
+  fireEvent.click(await screen.findByRole('button', { name: 'Remove Unit' }));
+};
+
 describe('pathway editing', () => {
   test('removing a unit offers it again in the add-unit picker', async () => {
     render(<Harness />);
@@ -161,7 +170,7 @@ describe('pathway editing', () => {
 
     expect(within(pickers()[0]).queryByText(/^C1 ·/)).toBeNull();
 
-    fireEvent.click(screen.getByLabelText('Remove C1'));
+    await confirmRemove('C1');
 
     expect(screen.queryByText('C1')).toBeNull();
     expect(within(pickers()[0]).getByText(/^C1 ·/)).toBeTruthy();
@@ -191,7 +200,7 @@ describe('pathway editing', () => {
     render(<Harness />);
     await generate();
 
-    fireEvent.click(screen.getByLabelText('Remove C1'));
+    await confirmRemove('C1');
 
     const missing = await screen.findByText(/required to graduate but .* not in this plan/i);
     expect(missing.textContent).toMatch(/C1/);
@@ -201,7 +210,7 @@ describe('pathway editing', () => {
     render(<Harness />);
     await generate();
 
-    fireEvent.click(screen.getByLabelText('Remove E1'));
+    await confirmRemove('E1');
 
     const shortfall = await screen.findByText(/Electives total .* credit points, but 25 are required/i);
     expect(shortfall.textContent).toMatch(/12\.5/);
@@ -211,7 +220,7 @@ describe('pathway editing', () => {
     render(<Harness />);
     await generate();
 
-    fireEvent.click(screen.getByLabelText('Remove E1'));
+    await confirmRemove('E1');
     await screen.findByText(/Electives total/i);
 
     // Put it back in the other semester, so the category total is whole again
@@ -226,7 +235,7 @@ describe('pathway editing', () => {
 
     expect(screen.getByText(/ICT20016\*Optional is only offered in summer\/winter/i)).toBeTruthy();
 
-    fireEvent.click(screen.getByLabelText('Remove C1'));
+    await confirmRemove('C1');
 
     expect(screen.getByText(/ICT20016\*Optional is only offered in summer\/winter/i)).toBeTruthy();
   });
@@ -248,7 +257,7 @@ describe('pathway editing', () => {
     render(<Harness />);
     await generate();
 
-    fireEvent.click(screen.getByLabelText('Remove C1'));
+    await confirmRemove('C1');
     const callsBefore = fetchMock().mock.calls.length;
 
     await act(async () => { fireEvent.click(screen.getByText(/Regenerate Pathway/i)); });
@@ -268,7 +277,7 @@ describe('pathway editing', () => {
     const { rerender } = render(<Harness />);
     await generate();
 
-    fireEvent.click(screen.getByLabelText('Remove C1'));
+    await confirmRemove('C1');
     expect(screen.queryByText('C1')).toBeNull();
 
     rerender(<Harness showPage={false} />);
@@ -284,7 +293,7 @@ describe('pathway editing', () => {
     render(<Harness />);
     await generate();
 
-    fireEvent.click(screen.getByLabelText('Remove C1'));
+    await confirmRemove('C1');
     fireEvent.click(screen.getByText(/Reset to generated plan/i));
 
     await waitFor(() => expect(screen.getByText('C1')).toBeTruthy());
@@ -452,7 +461,7 @@ describe('terms named by month', () => {
     await generate();
 
     // Stir up as many warnings as one plan can hold
-    fireEvent.click(screen.getByLabelText('Remove C1'));
+    await confirmRemove('C1');
     fireEvent.change(pickers()[0], { target: { value: 'ICT20016*Optional' } });
 
     await waitFor(() => expect(screen.getByText('ICT20016*Optional')).toBeTruthy());
@@ -600,7 +609,7 @@ describe('prescribed electives are compulsory', () => {
 
     expect(screen.queryByText(/required to graduate/i)).toBeNull();
 
-    fireEvent.click(screen.getByLabelText('Remove SWE30009'));
+    await confirmRemove('SWE30009');
 
     const missing = await screen.findByText(/required to graduate but .* not in this plan/i);
     expect(missing.textContent).toMatch(/SWE30009/);
@@ -610,7 +619,7 @@ describe('prescribed electives are compulsory', () => {
     render(<Harness />);
     await generate();
 
-    fireEvent.click(screen.getByLabelText('Remove SWE30009'));
+    await confirmRemove('SWE30009');
     await screen.findByText(/required to graduate but .* not in this plan/i);
 
     // The credit total adds up again, but the compulsory unit is still missing
@@ -626,7 +635,7 @@ describe('prescribed electives are compulsory', () => {
     render(<Harness />);
     await generate();
 
-    fireEvent.click(screen.getByLabelText('Remove E1'));
+    await confirmRemove('E1');
     fireEvent.change(pickers()[1], { target: { value: 'E3' } });
 
     await waitFor(() => expect(screen.getByText('E3')).toBeTruthy());
@@ -635,5 +644,133 @@ describe('prescribed electives are compulsory', () => {
     const compulsory = screen.queryAllByText(/required to graduate but .* not in this plan/i);
     expect(compulsory.map((el) => el.textContent ?? '').join(' ')).not.toMatch(/E1/);
     expect(screen.queryByText(/Electives total/i)).toBeNull();
+  });
+});
+
+// Kelvin's confirmation: Remove opens a modal, and only confirming removes the unit.
+describe('removing a unit asks for confirmation', () => {
+  const overlay = () => document.querySelector('[class*="modalOverlay"]') as HTMLElement;
+  const modalCard = () => document.querySelector('[class*="modalCard"]') as HTMLElement;
+  const stillThere = (code: string) => screen.getAllByText(code, { selector: 'code' }).length > 0;
+
+  test('Remove opens the confirmation and removes nothing yet', async () => {
+    render(<Harness />);
+    await generate();
+
+    fireEvent.click(screen.getByLabelText('Remove C1'));
+
+    expect(await screen.findByText(/Remove Unit from Pathway\?/)).toBeTruthy();
+    expect(within(modalCard()).getByText('C1')).toBeTruthy();
+    expect(within(modalCard()).getByText('Core One')).toBeTruthy();
+    // The row is still in the plan and the plan is not marked edited
+    expect(screen.getByLabelText('Remove C1')).toBeTruthy();
+    expect(screen.queryByText('edited')).toBeNull();
+  });
+
+  test('Cancel closes it without removing', async () => {
+    render(<Harness />);
+    await generate();
+
+    fireEvent.click(screen.getByLabelText('Remove C1'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+
+    expect(screen.queryByText(/Remove Unit from Pathway\?/)).toBeNull();
+    expect(stillThere('C1')).toBe(true);
+    expect(screen.queryByText('edited')).toBeNull();
+  });
+
+  test('the close button in the header closes it without removing', async () => {
+    render(<Harness />);
+    await generate();
+
+    fireEvent.click(screen.getByLabelText('Remove C1'));
+    await screen.findByText(/Remove Unit from Pathway\?/);
+    fireEvent.click(within(document.querySelector('[class*="modalHeader"]') as HTMLElement).getByRole('button'));
+
+    expect(screen.queryByText(/Remove Unit from Pathway\?/)).toBeNull();
+    expect(stillThere('C1')).toBe(true);
+    expect(screen.queryByText('edited')).toBeNull();
+  });
+
+  test('clicking outside the card closes it, and clicking inside does not', async () => {
+    render(<Harness />);
+    await generate();
+
+    fireEvent.click(screen.getByLabelText('Remove C1'));
+    await screen.findByText(/Remove Unit from Pathway\?/);
+
+    fireEvent.click(modalCard());
+    expect(screen.getByText(/Remove Unit from Pathway\?/)).toBeTruthy();
+
+    fireEvent.click(overlay());
+    expect(screen.queryByText(/Remove Unit from Pathway\?/)).toBeNull();
+    expect(stillThere('C1')).toBe(true);
+  });
+
+  test('confirming removes that unit, closes the confirmation and marks the plan edited', async () => {
+    render(<Harness />);
+    await generate();
+
+    fireEvent.click(screen.getByLabelText('Remove C1'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove Unit' }));
+
+    expect(screen.queryByText(/Remove Unit from Pathway\?/)).toBeNull();
+    expect(screen.queryByText('C1', { selector: 'code' })).toBeNull();
+    expect(screen.getByText('edited')).toBeTruthy();
+    // Nothing else went with it
+    for (const code of ['INTRO', 'C2', 'C3', 'ADV', 'E1']) expect(stillThere(code)).toBe(true);
+  });
+
+  test('a cancelled removal does not carry over to the next one', async () => {
+    render(<Harness />);
+    await generate();
+
+    fireEvent.click(screen.getByLabelText('Remove C1'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+
+    fireEvent.click(screen.getByLabelText('Remove C2'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove Unit' }));
+
+    expect(screen.queryByText('C2', { selector: 'code' })).toBeNull();
+    expect(stillThere('C1')).toBe(true);
+  });
+
+  test('removing a unit that others need names them', async () => {
+    render(<Harness />);
+    await generate();
+
+    // ADV needs INTRO
+    fireEvent.click(screen.getByLabelText('Remove INTRO'));
+
+    const card = within(await waitFor(() => modalCard()));
+    expect(card.getByText(/Broken Prerequisite Chain/)).toBeTruthy();
+    expect(card.getByText(/1 other planned unit \(ADV\) depend on this unit/)).toBeTruthy();
+  });
+
+  test('removing a unit nothing needs does not mention a broken chain', async () => {
+    render(<Harness />);
+    await generate();
+
+    fireEvent.click(screen.getByLabelText('Remove C1'));
+
+    const card = within(await waitFor(() => modalCard()));
+    expect(card.queryByText(/Broken Prerequisite Chain/)).toBeNull();
+    expect(card.getByText(/returned to the unplaced pool/)).toBeTruthy();
+  });
+
+  test('a core unit and an elective are described differently', async () => {
+    render(<Harness />);
+    await generate();
+
+    fireEvent.click(screen.getByLabelText('Remove C1'));
+    let card = within(await waitFor(() => modalCard()));
+    expect(card.getByText(/Compulsory Core Unit/)).toBeTruthy();
+    expect(card.queryByText(/Credit Shortfall/)).toBeNull();
+    fireEvent.click(card.getByRole('button', { name: 'Cancel' }));
+
+    fireEvent.click(screen.getByLabelText('Remove E1'));
+    card = within(await waitFor(() => modalCard()));
+    expect(card.getByText(/Credit Shortfall/)).toBeTruthy();
+    expect(card.queryByText(/Compulsory Core Unit/)).toBeNull();
   });
 });

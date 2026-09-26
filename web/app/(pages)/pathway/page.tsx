@@ -185,6 +185,7 @@ export default function PathwayPage() {
     customWilSlot, setCustomWilSlot,
   } = useStudentSession();
   const [customPlanLoading, setCustomPlanLoading] = useState(false);
+  const [unitToRemove, setUnitToRemove] = useState<{ code: string; name: string; category: string } | null>(null);
 
   // Catalogue state. The units are fetched the first time a picker is opened,
   // not with the plan, which is already a large response.
@@ -1113,7 +1114,7 @@ export default function PathwayPage() {
                                     <button
                                       type="button"
                                       className={styles.removeBtn}
-                                      onClick={() => applyEdit(removeUnit(semesters, u.code))}
+                                      onClick={() => setUnitToRemove({ code: u.code, name: u.name, category: u.category })}
                                       title={`Remove ${u.code} from this plan`}
                                       aria-label={`Remove ${u.code}`}
                                     >
@@ -1301,6 +1302,93 @@ export default function PathwayPage() {
               </div>
               );
             })()}
+          </div>
+        );
+      })()}
+      {/* Unit Removal Confirmation Modal */}
+      {unitToRemove && (() => {
+        const isCore = unitToRemove.category === 'core' || unitToRemove.category === 'major_core';
+        const isElective = unitToRemove.category === 'elective' || unitToRemove.category === 'prescribed_elective';
+        
+        // Check if any other planned unit depends on this one as a prerequisite
+        const allPlannedUnits = (customPlan?.semesters ?? []).flatMap((s: any) => s.units);
+        const dependentUnits = allPlannedUnits.filter((other: any) => {
+          if (other.code === unitToRemove.code) return false;
+          const meta = planUnits.find((pu: any) => normaliseCode(pu.code) === normaliseCode(other.code));
+          return meta?.requisiteGroups?.some((g: any) =>
+            g.some((c: any) => c.unitCode && normaliseCode(c.unitCode) === normaliseCode(unitToRemove.code))
+          );
+        });
+
+        return (
+          <div className={styles.modalOverlay} onClick={() => setUnitToRemove(null)}>
+            <div className={styles.modalCard} onClick={(e) => e.stopPropagation()}>
+              <div className={styles.modalHeader}>
+                <span className={styles.modalTitle}>
+                  <span aria-hidden="true">⚠</span> Remove Unit from Pathway?
+                </span>
+                <button
+                  type="button"
+                  className={styles.removeBtn}
+                  onClick={() => setUnitToRemove(null)}
+                  style={{ background: 'transparent', border: 'none', fontSize: 13 }}
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className={styles.modalBody}>
+                <div>
+                  Are you sure you want to remove <InlineCode>{unitToRemove.code}</InlineCode> (<strong>{unitToRemove.name}</strong>) from this study plan?
+                </div>
+
+                <div className={styles.modalWarningBox}>
+                  <strong>Consequences of Removal:</strong>
+                  <ul>
+                    {isCore && (
+                      <li>
+                        <strong>Compulsory Core Unit:</strong> Required to satisfy degree requirements. Removing it will block graduation until completed.
+                      </li>
+                    )}
+                    {isElective && (
+                      <li>
+                        <strong>Credit Shortfall:</strong> Removing this elective reduces total earned credits and may leave the plan short of the graduation requirement.
+                      </li>
+                    )}
+                    {dependentUnits.length > 0 && (
+                      <li>
+                        <strong>Broken Prerequisite Chain:</strong> {dependentUnits.length} other planned unit{dependentUnits.length !== 1 ? 's' : ''} ({dependentUnits.map((d: any) => d.code).join(', ')}) depend on this unit!
+                      </li>
+                    )}
+                    <li>
+                      The unit will be returned to the unplaced pool and can be re-added later.
+                    </li>
+                  </ul>
+                </div>
+              </div>
+
+              <div className={styles.modalActions}>
+                <button
+                  type="button"
+                  className={styles.btnSecondary}
+                  onClick={() => setUnitToRemove(null)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className={styles.btnDanger}
+                  onClick={() => {
+                    const code = unitToRemove.code;
+                    applyEdit(removeUnit(customPlan.semesters, code));
+                    setUnitToRemove(null);
+                    showToast(`Removed ${code} from study pathway.`, 'info');
+                  }}
+                >
+                  Remove Unit
+                </button>
+              </div>
+            </div>
           </div>
         );
       })()}
