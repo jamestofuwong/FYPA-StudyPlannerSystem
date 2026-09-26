@@ -215,7 +215,7 @@ describe('a plan generated on the pathway page', () => {
   });
 });
 
-describe('dashboard tabs and minor cards', () => {
+describe('dashboard tabs', () => {
   test('the pathway tab reads "Student Pathway", not "Extended Plan"', async () => {
     render(<Harness />);
 
@@ -223,21 +223,70 @@ describe('dashboard tabs and minor cards', () => {
     expect(screen.queryByRole('tab', { name: 'Extended Plan' })).toBeNull();
   });
 
-  test('minor cards no longer offer to include the minor in a custom plan', async () => {
+  // The planner in this fixture has a minor, so hasMinors would have been true
+  test('there is no Minors tab, even for a planner that has minors', async () => {
     render(<Harness />);
-    fireEvent.click(await screen.findByRole('tab', { name: 'Minors' }));
+    await screen.findByRole('tab', { name: 'Analytics' });
 
-    await screen.findByText('Data Analytics');
-    expect(screen.queryByText(/Include in Custom Plan/i)).toBeNull();
-    expect(screen.queryByText(/Remove from Plan/i)).toBeNull();
+    expect(screen.queryByRole('tab', { name: 'Minors' })).toBeNull();
+    expect(screen.queryByText('Minors', { selector: '[role="tab"]' })).toBeNull();
   });
 
-  test('minor progress is still shown', async () => {
+  test('exactly four tabs remain, in order', async () => {
     render(<Harness />);
-    fireEvent.click(await screen.findByRole('tab', { name: 'Minors' }));
+    await screen.findByRole('tab', { name: 'Analytics' });
 
-    expect(await screen.findByText('Data Analytics')).toBeTruthy();
-    expect(screen.getByText(/0\/2 units · 0% progress/)).toBeTruthy();
-    expect(screen.getByText(/2 remaining/)).toBeTruthy();
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+      'Analytics',
+      'Graduation',
+      'Unit Plan',
+      'Student Pathway',
+    ]);
+  });
+
+  test('no minor card, progress line or include control appears on any tab', async () => {
+    render(<Harness />);
+
+    // 'Minors' is listed so that a tab that came back would be opened and caught
+    for (const name of ['Analytics', 'Graduation', 'Unit Plan', 'Minors', 'Student Pathway']) {
+      const tab = await screen.findByRole('tab', { name: 'Analytics' }).then(() => screen.queryByRole('tab', { name }));
+      if (tab) fireEvent.click(tab);
+
+      expect(screen.queryByText('Data Analytics')).toBeNull();
+      expect(screen.queryByText(/Minors & Specializations/i)).toBeNull();
+      expect(screen.queryByText(/units · \d+% progress/i)).toBeNull();
+      expect(screen.queryByText(/Include in Custom Plan/i)).toBeNull();
+      expect(screen.queryByText(/Remove from Plan/i)).toBeNull();
+      expect(screen.queryByText(/free elective slots remain/i)).toBeNull();
+    }
+  });
+
+  test('the remaining tabs still render and switch', async () => {
+    render(<Harness />);
+    const tab = async (name: string) => screen.findByRole('tab', { name });
+
+    // Analytics is the default
+    expect((await tab('Analytics')).getAttribute('aria-selected')).toBe('true');
+    expect(await screen.findByText('Not Yet Taken')).toBeTruthy();
+
+    fireEvent.click(await tab('Graduation'));
+    expect((await tab('Graduation')).getAttribute('aria-selected')).toBe('true');
+    expect((await tab('Analytics')).getAttribute('aria-selected')).toBe('false');
+    expect(await screen.findByText('Graduation Check')).toBeTruthy();
+    expect(screen.queryByText('Not Yet Taken')).toBeNull();
+
+    fireEvent.click(await tab('Unit Plan'));
+    expect((await tab('Unit Plan')).getAttribute('aria-selected')).toBe('true');
+    expect((await screen.findAllByText(/YEAR 1 · SEM 1/)).length).toBeGreaterThan(0);
+    expect(screen.queryByText('Graduation Check')).toBeNull();
+
+    fireEvent.click(await tab('Student Pathway'));
+    expect((await tab('Student Pathway')).getAttribute('aria-selected')).toBe('true');
+    expect(await screen.findByRole('button', { name: 'Open Student Pathway' })).toBeTruthy();
+    expect(screen.queryByText(/YEAR 1 · SEM 1/)).toBeNull();
+
+    // And back again
+    fireEvent.click(await tab('Analytics'));
+    expect(await screen.findByText('Not Yet Taken')).toBeTruthy();
   });
 });

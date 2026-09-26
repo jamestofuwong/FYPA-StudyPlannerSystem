@@ -42,7 +42,7 @@ export default function DashboardPage() {
     customPlan, setCustomPlan,
     customPlanStart, setCustomPlanStart,
     setRetakeUnitCodes,
-    injectedMinors, setInjectedMinors,
+    setInjectedMinors,
     setPlanUnits,
     setPlanIntakeSemester,
     setPlanCompletedUnits,
@@ -58,7 +58,7 @@ export default function DashboardPage() {
   const [scraperApiStatus, setScraperApiStatus] = useState<string>('idle');
   const [showExportModal, setShowExportModal] = useState(false);
   const [enrollmentMode, setEnrollmentMode] = useState<'latest' | 'earliest' | 'mpu'>('latest');
-  const [resultTab, setResultTab] = useState<'analytics' | 'graduation' | 'units' | 'minors' | 'pathway'>('analytics');
+  const [resultTab, setResultTab] = useState<'analytics' | 'graduation' | 'units' | 'pathway'>('analytics');
   const [showPlannerPicker, setShowPlannerPicker] = useState(false);
   const [plannerPickerSearch, setPlannerPickerSearch] = useState('');
   const [allPlanners, setAllPlanners] = useState<any[] | null>(null);
@@ -1068,8 +1068,6 @@ export default function DashboardPage() {
         const totalCredits = matchPayload.totalCredits || 0;
         const missingCoreCount = matchPayload.unmatchedCore?.length || 0;
         const isGraduationReady = missingCoreCount === 0 && totalCredits >= 300;
-        const activeMatchPlanner = selectedPlannerIdx === -1 ? manualPlanner : dashboardData?.planners?.[selectedPlannerIdx];
-        const hasMinors = (activeMatchPlanner?.minors ?? []).length > 0;
 
         return (
           <div>
@@ -1275,17 +1273,6 @@ export default function DashboardPage() {
             >
               Unit Plan
             </button>
-            {hasMinors && (
-              <button
-                type="button"
-                role="tab"
-                aria-selected={resultTab === 'minors'}
-                className={`${styles.resultTab} ${resultTab === 'minors' ? styles.resultTabActive : ''}`}
-                onClick={() => setResultTab('minors')}
-              >
-                Minors
-              </button>
-            )}
             <button
               type="button"
               role="tab"
@@ -1709,89 +1696,6 @@ export default function DashboardPage() {
               </div>
             );
           })}
-          </div>
-          )}
-
-          {resultTab === 'minors' && hasMinors && (
-          <div className={styles.resultTabPanel}>
-          {/* Minors & Specializations */}
-          {(() => {
-            const activePlanner = selectedPlannerIdx === -1 ? manualPlanner : dashboardData?.planners?.[selectedPlannerIdx];
-            const minors: any[] = activePlanner?.minors ?? [];
-            if (minors.length === 0) return null;
-
-            const doneCodes = new Set(
-              getCompletedUnitCodes(
-                [...(scrapedStudent?.student?.courseList ?? []), ...(dashboardData?.mpuCourseList ?? [])]
-              )
-            );
-
-            // How many free elective slots the student still needs to fill
-            const remainingElectiveSlots = (activePlanner?.units ?? []).filter(
-              (u: any) => u.category === 'elective' &&
-                (u.unit === null || !doneCodes.has(u.unit?.unit_code?.toUpperCase()))
-            ).length;
-
-            return (
-              <div>
-                <div className={styles.sectionTitle} style={{ marginTop: 20 }}>Minors & Specializations</div>
-                {minors.map((minor: any) => {
-                  const total: number = minor.units.length;
-                  const done: number = minor.units.filter(
-                    (mu: any) => doneCodes.has(mu.unit?.unit_code?.trim().toUpperCase())
-                  ).length;
-                  const missing: number = total - done;
-                  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
-                  const isInjected = injectedMinors.has(minor.id);
-                  const wouldExceedCredits = missing > 0 && remainingElectiveSlots === 0;
-
-                  return (
-                    <div
-                      key={minor.id}
-                      style={{
-                        background: 'var(--card-bg)',
-                        border: `1px solid ${isInjected ? 'rgba(197,134,192,0.6)' : 'rgba(197,134,192,0.3)'}`,
-                        borderRadius: 4,
-                        padding: '12px 14px',
-                        marginBottom: 10,
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
-                        <div>
-                          <div style={{ fontSize: 13, fontWeight: 600 }}>{minor.name}</div>
-                          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-                            {done}/{total} units · {pct}% progress
-                            {missing > 0 && (
-                              <span style={{ color: 'var(--accent-orange)', marginLeft: 6 }}>{missing} remaining</span>
-                            )}
-                          </div>
-                        </div>
-                        {missing === 0 && (
-                          <span style={{ fontSize: 11, color: 'var(--accent-green)', fontWeight: 600 }}>✓ Complete</span>
-                        )}
-                      </div>
-                      <ProgressBar pct={pct} color={pct === 100 ? 'var(--accent-green)' : 'var(--accent-yellow)'} />
-                      {isInjected && (
-                        <div style={{ fontSize: 10, color: 'var(--accent-purple)', marginTop: 6 }}>
-                          {missing} missing unit{missing !== 1 ? 's' : ''} will be injected into the custom pathway.
-                        </div>
-                      )}
-                      {wouldExceedCredits && (
-                        <div style={{ fontSize: 10, color: 'var(--accent-orange)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <span>⚠</span>
-                          <span>
-                            {isInjected
-                              ? 'No free elective slots remain — these units will exceed standard degree credits (extra units added to pathway).'
-                              : 'Note: No free elective slots remain. Including this minor will exceed standard degree credits.'}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          })()}
           </div>
           )}
 
