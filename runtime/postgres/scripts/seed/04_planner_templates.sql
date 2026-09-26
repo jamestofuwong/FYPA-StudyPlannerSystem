@@ -314,7 +314,7 @@ BEGIN
 
         'ICT20016', 'wil', '2', '3', --summer term
 
-        'COS40005 ', 'core', '3', '1',
+        'COS40005', 'core', '3', '1',
         'COS20019', 'major_core', '3', '1',
         'COS40007', 'major_core', '3', '1',
 
