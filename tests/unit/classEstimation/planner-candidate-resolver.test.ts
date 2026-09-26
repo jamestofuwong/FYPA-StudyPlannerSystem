@@ -63,7 +63,7 @@ describe('resolveCandidateUnits', () => {
     expect(result).toBeNull();
   });
 
-  test('includes missing core and major core units directly, they are not re-filtered against completed here', async () => {
+  test('includes the missing core and major core units', async () => {
     getPlannerById.mockResolvedValue({ units: [], elective_groups: [] } as never);
 
     const result = await resolveCandidateUnits(
@@ -71,13 +71,63 @@ describe('resolveCandidateUnits', () => {
         core: { matched: 1, required: 2, missingUnits: ['COS10009'] },
         majorCore: { matched: 0, required: 1, missingUnits: ['COS20015'] },
       }) }),
-      ['COS10009'],
+      [],
     );
 
     expect(result?.candidates).toEqual([
       { code: 'COS10009', category: 'core' },
       { code: 'COS20015', category: 'majorCore' },
     ]);
+  });
+
+  // The bug this guards against: scoringEngine.ts subtracts profile.completedCore, which is built from the
+  // ONE global category unitMasterTableBuilder.ts resolved for a unit across every planner. COS20007 is core
+  // in five planners and major_core in five others, so major_core wins globally and a student who passed it
+  // has it counted in completedMajorCore, never completedCore. The matched planner's missingCore then still
+  // lists it, and before this filter the student was told to enrol in a unit they had already passed.
+  test('a completed unit is never a candidate, whatever category it was scored under', async () => {
+    getPlannerById.mockResolvedValue({ units: [], elective_groups: [] } as never);
+
+    const result = await resolveCandidateUnits(
+      matchResult({ breakdown: breakdown({
+        core: { matched: 1, required: 3, missingUnits: ['COS20007', 'TNE10006'] },
+        majorCore: { matched: 0, required: 2, missingUnits: ['COS30049', 'SWE30003'] },
+      }) }),
+      ['COS20007', 'COS30049'],
+    );
+
+    expect(result?.candidates).toEqual([
+      { code: 'TNE10006', category: 'core' },
+      { code: 'SWE30003', category: 'majorCore' },
+    ]);
+  });
+
+  // A failed unit is not in completedUnitCodes (resolveUnitStates marks it must_retake), so it stays a
+  // candidate. That is the behaviour wanted: a retake is a real seat next semester.
+  test('a unit awaiting a retake stays a candidate', async () => {
+    getPlannerById.mockResolvedValue({ units: [], elective_groups: [] } as never);
+
+    const result = await resolveCandidateUnits(
+      matchResult({ breakdown: breakdown({
+        core: { matched: 0, required: 1, missingUnits: ['COS10009'] },
+      }) }),
+      ['COS20007'],   // the failed COS10009 is absent from the completed list
+    );
+
+    expect(result?.candidates).toEqual([{ code: 'COS10009', category: 'core' }]);
+  });
+
+  test('completed codes match regardless of case or surrounding spaces', async () => {
+    getPlannerById.mockResolvedValue({ units: [], elective_groups: [] } as never);
+
+    const result = await resolveCandidateUnits(
+      matchResult({ breakdown: breakdown({
+        core: { matched: 0, required: 1, missingUnits: ['COS20007'] },
+      }) }),
+      ['  cos20007 '],
+    );
+
+    expect(result?.candidates).toEqual([]);
   });
 
   test('resolves the prescribed pool from elective_groups, excluding completed units', async () => {

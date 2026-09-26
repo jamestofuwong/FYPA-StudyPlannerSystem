@@ -37,12 +37,21 @@ export async function resolveCandidateUnits(
   const completed = new Set(completedUnitCodes.map((code) => code.trim().toUpperCase()));
   const candidates: CandidateUnit[] = [];
 
-  // Core and major core missingUnits are already filtered against completed units by scoringEngine.ts,
-  // no need to re-filter here.
+  // scoringEngine.ts does subtract completed units from these lists, but it subtracts profile.completedCore
+  // and profile.completedMajorCore, which are built by categorising each of the student's units with the ONE
+  // global category unitMasterTableBuilder.ts resolved for it across every planner (major_core beats
+  // prescribed_elective beats core). A unit that is core in the matched planner but major_core in some other
+  // planner therefore lands in completedMajorCore, never in completedCore, so the matched planner's
+  // missingCore still lists it even though the student has passed it. Nine of the 65 units in the loaded
+  // planners sit in more than one category, COS20007 and COS10003 among them, so this is not a corner case.
+  // Filtering against the raw completed set here is category-blind and cannot be fooled that way.
+  // The underlying scoring bug is not fixed here, it also depresses matchPct and belongs to /api/match.
   for (const code of payload.primaryMajor.breakdown.core.missingUnits ?? []) {
+    if (completed.has(code.trim().toUpperCase())) continue;
     candidates.push({ code, category: 'core' });
   }
   for (const code of payload.primaryMajor.breakdown.majorCore.missingUnits ?? []) {
+    if (completed.has(code.trim().toUpperCase())) continue;
     candidates.push({ code, category: 'majorCore' });
   }
 
