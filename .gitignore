@@ -32,6 +32,9 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# Generated mock DPA fixtures (regenerate with: npm run fixtures:dpa)
+tests/fixtures/dpa/
+
 # Local env files
 .env*.local
 .env
