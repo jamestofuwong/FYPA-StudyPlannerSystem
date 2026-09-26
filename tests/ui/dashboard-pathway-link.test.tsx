@@ -64,14 +64,14 @@ const GENERATED = {
   warnings: [],
 };
 
-function Seed({ loaded = true, planners = [PLANNER] }) {
+function Seed({ loaded = true, planners = [PLANNER], enrollment = 'BA-CS' }) {
   const session = useStudentSession();
   useEffect(() => {
     if (!loaded) return;
     session.setStudentLoaded(true);
     session.setScrapedStudent({
       studentId: 'S1',
-      student: { studentName: 'Test Student', courseList: [], selectedEnrollment: 'BA-CS' },
+      student: { studentName: 'Test Student', courseList: [], selectedEnrollment: enrollment },
     });
     session.setDashboardData({
       completedCodes: [],
@@ -84,10 +84,10 @@ function Seed({ loaded = true, planners = [PLANNER] }) {
   return null;
 }
 
-const Harness = ({ page = 'dashboard', loaded = true, planners = [PLANNER] }) => (
+const Harness = ({ page = 'dashboard', loaded = true, planners = [PLANNER], enrollment = 'BA-CS' }) => (
   <ToastProvider>
     <StudentSessionProvider>
-      <Seed loaded={loaded} planners={planners} />
+      <Seed loaded={loaded} planners={planners} enrollment={enrollment} />
       {page === 'dashboard' ? <DashboardPage /> : <PathwayPage />}
     </StudentSessionProvider>
   </ToastProvider>
@@ -182,6 +182,67 @@ describe('pathway to dashboard', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Back to Major Detection/i }));
 
     expect(push()).toHaveBeenCalledWith('/dashboard');
+  });
+
+  test('the loaded pathway keeps its own Back button and shows no empty state', async () => {
+    render(<Harness page="pathway" />);
+
+    expect(await screen.findByRole('button', { name: /Back to Major Detection/i })).toBeTruthy();
+    expect(screen.queryByText('No student loaded')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Go to Major Detection' })).toBeNull();
+  });
+});
+
+describe('the empty pathway states lead back to Major Detection', () => {
+  test('with no student loaded, a Go to Major Detection button goes to the dashboard panel', async () => {
+    render(<Harness page="pathway" loaded={false} />);
+
+    expect(await screen.findByText('No student loaded')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Go to Major Detection' }));
+
+    expect(push()).toHaveBeenCalledTimes(1);
+    expect(push()).toHaveBeenCalledWith('/dashboard');
+  });
+
+  test('with an MPU enrollment, the same button appears and does the same thing', async () => {
+    render(<Harness page="pathway" enrollment="Mata Pelajaran Umum" />);
+
+    expect(await screen.findByText('No pathway for an MPU enrollment')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Go to Major Detection' }));
+
+    expect(push()).toHaveBeenCalledTimes(1);
+    expect(push()).toHaveBeenCalledWith('/dashboard');
+  });
+
+  test('a student with no planner selected is the no-student state, with the same button', async () => {
+    render(<Harness page="pathway" planners={[]} />);
+
+    expect(await screen.findByText('No student loaded')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Go to Major Detection' })).toBeTruthy();
+  });
+
+  test('each empty state offers exactly one button, and it is not the loaded Back button', async () => {
+    const { unmount } = render(<Harness page="pathway" loaded={false} />);
+    await screen.findByText('No student loaded');
+    expect(screen.getAllByRole('button')).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: /Back to Major Detection/i })).toBeNull();
+    unmount();
+
+    render(<Harness page="pathway" enrollment="Mata Pelajaran Umum" />);
+    await screen.findByText('No pathway for an MPU enrollment');
+    expect(screen.getAllByRole('button')).toHaveLength(1);
+  });
+
+  test('it goes to the same panel the dashboard button is the counterpart of, through panelToPath', async () => {
+    // The pathway button from the dashboard pushes /pathway; this one pushes the
+    // dashboard panel through the same helper, so the two paths cannot drift apart
+    const { panelToPath } = jest.requireActual('@/lib/navigation');
+    render(<Harness page="pathway" loaded={false} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Go to Major Detection' }));
+
+    expect(push()).toHaveBeenCalledWith(panelToPath('dashboard'));
+    expect(push()).not.toHaveBeenCalledWith(panelToPath('pathway'));
   });
 });
 

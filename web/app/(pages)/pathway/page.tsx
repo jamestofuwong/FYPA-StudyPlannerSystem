@@ -107,13 +107,33 @@ function warningUnitCode(w: PlanWarning): string | null {
   return 'unitCode' in w ? w.unitCode : null;
 }
 
-function EmptyState({ title, message }: { title: string; message: string }) {
+function EmptyState({
+  title,
+  message,
+  actionLabel,
+  onAction,
+}: {
+  title: string;
+  message: string;
+  actionLabel?: string;
+  onAction?: () => void;
+}) {
   return (
     <div className={styles.panel}>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '60px 20px', textAlign: 'center' }}>
         <div style={{ fontSize: 48, opacity: 0.25 }}>🧭</div>
         <div style={{ fontSize: 14, fontWeight: 600 }}>{title}</div>
         <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>{message}</div>
+        {actionLabel && onAction && (
+          <button
+            type="button"
+            className={styles.btnPrimary}
+            style={{ marginTop: 16 }}
+            onClick={onAction}
+          >
+            {actionLabel}
+          </button>
+        )}
       </div>
     </div>
   );
@@ -374,6 +394,8 @@ export default function PathwayPage() {
       <EmptyState
         title="No student loaded"
         message="Search for a student on the Major Detection page first."
+        actionLabel="Go to Major Detection"
+        onAction={() => router.push(panelToPath('dashboard'))}
       />
     );
   }
@@ -384,6 +406,8 @@ export default function PathwayPage() {
       <EmptyState
         title="No pathway for an MPU enrollment"
         message="Search the student's main enrollment on the Major Detection page."
+        actionLabel="Go to Major Detection"
+        onAction={() => router.push(panelToPath('dashboard'))}
       />
     );
   }
