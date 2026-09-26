@@ -1,10 +1,12 @@
-import { getUnits } from '@student/lib/units'
+'use client'
+
 import Nav from '@student/components/Nav/Nav'
 import UnitCatalog from '@student/components/UnitCatalog/UnitCatalog'
+import { useCatalog } from '@student/components/CatalogProvider'
 import styles from './page.module.css'
 
-export default async function UnitsPage() {
-  const units = await getUnits()
+export default function UnitsPage() {
+  const { units } = useCatalog()
 
   return (
     <div className={styles.page}>

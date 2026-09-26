@@ -1,11 +1,8 @@
 import Nav from '@student/components/Nav/Nav'
 import PlanBuilderClient from './PlanBuilderClient'
-import { getPlannerOptions } from '@student/lib/planners'
 import styles from './page.module.css'
 
-export default async function PlanBuilderPage() {
-  const plannerOptions = await getPlannerOptions()
-
+export default function PlanBuilderPage() {
   return (
     <div className={styles.page}>
       <Nav />
@@ -16,7 +13,7 @@ export default async function PlanBuilderPage() {
             Customise your study plan based on your course, major, intake year, and units already completed.
           </p>
         </div>
-        <PlanBuilderClient plannerOptions={plannerOptions} />
+        <PlanBuilderClient />
       </main>
     </div>
   )

@@ -1,15 +1,14 @@
+'use client'
+
 import Link from 'next/link'
 import Nav from '@student/components/Nav/Nav'
 import FaqAccordion from './FaqAccordion'
+import { useCatalog } from '@student/components/CatalogProvider'
 import styles from './page.module.css'
-import { prisma } from '@/lib/prisma'
 
-export default async function HelpPage() {
-  const [faqItems, generalEnquiries, itHelpDesk] = await Promise.all([
-    prisma.faqItem.findMany({ orderBy: { position: 'asc' } }),
-    prisma.generalEnquiries.findFirst(),
-    prisma.itHelpDesk.findFirst(),
-  ])
+export default function HelpPage() {
+  const { help } = useCatalog()
+  const { faqs: faqItems, generalEnquiries, itHelpDesk } = help
 
   return (
     <div className={styles.page}>
@@ -31,7 +30,7 @@ export default async function HelpPage() {
           <section aria-label="Frequently asked questions">
             <h2 className={styles.sectionTitle}>Frequently Asked Questions</h2>
             {faqItems.length > 0 ? (
-              <FaqAccordion items={faqItems.map(f => ({ question: f.question, answer: f.answer }))} />
+              <FaqAccordion items={faqItems} />
             ) : (
               <p style={{ color: '#6b7280', fontSize: 14 }}>No FAQ items available yet.</p>
             )}

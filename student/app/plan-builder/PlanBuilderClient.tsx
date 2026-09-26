@@ -1,10 +1,9 @@
 'use client'
 
 import { useState, useRef, useEffect, useMemo } from 'react'
-import { MOCK_UNITS } from '@student/lib/data/units-mock'
 import { generatePlan } from '@student/lib/plan-builder'
 import type { GenerationResult } from '@student/lib/plan-builder'
-import type { PlannerCourseOption } from '@student/lib/planners'
+import { useCatalog } from '@student/components/CatalogProvider'
 import type { SemesterBlock } from '@student/lib/types'
 import SemesterTable from '@student/components/SemesterTable/SemesterTable'
 import ElectivePool from '@student/components/ElectivePool/ElectivePool'
@@ -137,11 +136,8 @@ function groupByYear(semesters: SemesterBlock[]): Map<number, SemesterBlock[]> {
   return map
 }
 
-interface Props {
-  plannerOptions: PlannerCourseOption[]
-}
-
-export default function PlanBuilderClient({ plannerOptions }: Props) {
+export default function PlanBuilderClient() {
+  const { plannerOptions, units } = useCatalog()
   // ── Config ──
   const [selectedCourseId, setSelectedCourseId]   = useState('')
   const [selectedPlannerId, setSelectedPlannerId] = useState('')
@@ -242,12 +238,12 @@ export default function PlanBuilderClient({ plannerOptions }: Props) {
 
   const filteredAddUnits = useMemo(() => {
     const q = addQuery.trim().toLowerCase()
-    return MOCK_UNITS.filter(u => {
+    return units.filter(u => {
       if (allCompletedCodes.includes(u.code)) return false
       if (q && !u.code.toLowerCase().includes(q) && !u.name.toLowerCase().includes(q)) return false
       return true
     })
-  }, [allCompletedCodes, addQuery])
+  }, [allCompletedCodes, addQuery, units])
 
   const courseName = selectedCourse?.courseName ?? ''
   const suggestedAddUnits = useMemo(
@@ -425,7 +421,7 @@ export default function PlanBuilderClient({ plannerOptions }: Props) {
                 )}
 
                 {sem.unitCodes.map(code => {
-                  const unit = MOCK_UNITS.find(u => u.code === code)
+                  const unit = units.find(u => u.code === code)
                   return (
                     <div key={code} className={styles.completedRow}>
                       <span className={styles.completedRowCode}>{code}</span>

@@ -1,10 +1,12 @@
-import { getPlanners } from '@student/lib/planners'
+'use client'
+
 import Nav from '@student/components/Nav/Nav'
 import PlannerGrid from '@student/components/PlannerGrid/PlannerGrid'
+import { useCatalog } from '@student/components/CatalogProvider'
 import styles from './page.module.css'
 
-export default async function BrowsePage() {
-  const planners = await getPlanners()
+export default function BrowsePage() {
+  const { planners } = useCatalog()
 
   return (
     <div className={styles.page}>

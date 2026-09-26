@@ -1,12 +1,12 @@
+'use client'
+
 import Link from 'next/link'
 import Nav from '@student/components/Nav/Nav'
+import { useCatalog } from '@student/components/CatalogProvider'
 import styles from './page.module.css'
-import { prisma } from '@/lib/prisma'
 
-export default async function HeadsOfDepartmentPage() {
-  const hods = await prisma.headOfDepartment.findMany({
-    orderBy: [{ position: 'asc' }],
-  })
+export default function HeadsOfDepartmentPage() {
+  const hods = useCatalog().help.hods
 
   // Group by faculty, preserving the order they appear in the sorted list
   const grouped: { faculty: string; heads: typeof hods }[] = []

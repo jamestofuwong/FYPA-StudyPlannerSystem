@@ -1,5 +1,7 @@
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
+import { CatalogProvider } from '@student/components/CatalogProvider'
+import { getCatalog } from '@student/lib/catalog'
 import './globals.css'
 
 const inter = Inter({
@@ -16,14 +18,18 @@ export const metadata: Metadata = {
   },
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+  const catalog = await getCatalog()
+
   return (
     <html lang="en" className={inter.variable}>
-      <body>{children}</body>
+      <body>
+        <CatalogProvider initialCatalog={catalog}>{children}</CatalogProvider>
+      </body>
     </html>
   )
 }
