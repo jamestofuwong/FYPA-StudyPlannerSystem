@@ -1,9 +1,11 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import styles from './page.module.css';
 import { useToast } from '../../../components/providers/ToastProvider';
 import { useStudentSession } from '../../../components/providers/StudentSessionContext';
+import { panelToPath } from '../../../lib/navigation';
 import { Badge, InlineCode } from '../../../components/common/Primitives';
 import MinorProgressCard, { getMinorProgress } from '../../../components/common/MinorProgressCard';
 import {
@@ -165,6 +167,7 @@ function getRemainingMpuUnits(activePlanner: any, dashboardData: any, takenCodes
 
 export default function PathwayPage() {
   const { showToast } = useToast();
+  const router = useRouter();
   const {
     scrapedStudent,
     studentLoaded,
@@ -382,6 +385,15 @@ export default function PathwayPage() {
 
   return (
     <div className={styles.panel}>
+      <div className={styles.planActions} style={{ marginTop: 0 }}>
+        <button
+          type="button"
+          className={styles.btnSecondary}
+          onClick={() => router.push(panelToPath('dashboard'))}
+        >
+          ← Back to Major Detection
+        </button>
+      </div>
       <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
         <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>{scrapedStudent?.studentId}</span>
         {' · '}
