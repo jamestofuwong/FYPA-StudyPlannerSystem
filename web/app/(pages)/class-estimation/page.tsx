@@ -3,6 +3,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import styles from './page.module.css';
 import type { EstimationPreview } from '../../../../core/services/classEstimation/estimationPreview';
+import { describeAcademicNow } from '../../../../core/services/classEstimation/academicCalendar';
+
+/** What /api/class-estimation/preview returns: the preview itself plus the semester it was run for. */
+type PreviewResponse = EstimationPreview & {
+  target: { year: number | null; semester: 1 | 2; label: string; reason: string; overridden: boolean };
+};
 
 type SessionStatus = 'idle' | 'login-pending' | 'logged-in' | 'login-error';
 type RunStatus = 'idle' | 'running' | 'done' | 'error';
@@ -78,10 +84,11 @@ export default function ClassEstimationPage() {
   const [minId, setMinId] = useState('');
   const [maxId, setMaxId] = useState('');
 
-  // Defaults to the semester after the current one: Jul-Dec is semester 2, so next is 1, otherwise next is 2.
-  const [previewTerm, setPreviewTerm] = useState<'1' | '2'>(new Date().getMonth() + 1 >= 7 ? '1' : '2');
+  // The target semester is not a choice. It is derived from today's date, since an estimate is always for the
+  // next teaching semester, and the derivation lives in academicCalendar.ts so the server and page agree.
+  const academicNow = describeAcademicNow();
   const [previewStatus, setPreviewStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
-  const [preview, setPreview] = useState<EstimationPreview | null>(null);
+  const [preview, setPreview] = useState<PreviewResponse | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -289,10 +296,11 @@ export default function ClassEstimationPage() {
     setPreviewError(null);
     setCopied(false);
     try {
-      const res = await fetch(`/api/class-estimation/preview?term=${previewTerm}`);
+      // No term is sent: the route derives it from the date. ?term= exists only as a manual override.
+      const res = await fetch('/api/class-estimation/preview');
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? `Request failed (${res.status})`);
-      setPreview(data as EstimationPreview);
+      setPreview(data as PreviewResponse);
       setPreviewStatus('done');
     } catch (err) {
       setPreview(null);
@@ -646,16 +654,14 @@ export default function ClassEstimationPage() {
           loaded, scraped or imported. Nothing is saved. Try it on a small batch first.
         </p>
 
+        {/* The target semester is derived, not picked, so it is stated with the reason rather than offered. */}
+        <div className={styles.targetRow}>
+          <span className={styles.targetLabel}>Estimating for</span>
+          <span className={styles.targetValue}>{preview?.target?.label ?? academicNow.label}</span>
+          <span className={styles.targetReason}>{preview?.target?.reason ?? academicNow.reason}</span>
+        </div>
+
         <div className={styles.actionRow}>
-          <select
-            className={`${styles.rangeInput} ${styles.termSelect}`}
-            value={previewTerm}
-            onChange={(e) => setPreviewTerm(e.target.value as '1' | '2')}
-            disabled={previewStatus === 'loading' || isRunning}
-          >
-            <option value="1">Target: Semester 1</option>
-            <option value="2">Target: Semester 2</option>
-          </select>
           <button
             className={styles.btnPrimary}
             disabled={previewStatus === 'loading' || isRunning}

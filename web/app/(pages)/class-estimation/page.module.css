@@ -355,9 +355,35 @@
   border-color: var(--accent-blue);
 }
 
-.termSelect {
-  width: auto;
-  font-family: var(--font-sans);
+/* The target semester is derived from the date and displayed, not chosen, so this states it and why. */
+.targetRow {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  background: var(--surface-bg);
+}
+
+.targetLabel {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.targetValue {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.targetReason {
+  font-size: 11px;
+  color: var(--text-muted);
 }
 
 .previewNotes {
