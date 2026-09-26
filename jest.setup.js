@@ -29,3 +29,18 @@ global.fetch = jest.fn(() =>
     ok: true,
   })
 );
+
+/**
+ * The pages read the app router to move between panels, and the router does not
+ * exist outside a mounted Next app. push is one shared function so a test can
+ * read it back with useRouter().push.
+ */
+jest.mock('next/navigation', () => {
+  const push = jest.fn();
+  const router = { push, replace: jest.fn(), back: jest.fn(), prefetch: jest.fn() };
+  return {
+    useRouter: () => router,
+    usePathname: () => '/',
+    useSearchParams: () => new URLSearchParams(),
+  };
+});

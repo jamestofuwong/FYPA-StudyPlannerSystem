@@ -1,9 +1,14 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import styles from './page.module.css';
 import { useToast } from '../../../components/providers/ToastProvider';
 import { useStudentSession } from '../../../components/providers/StudentSessionContext';
+import { panelToPath } from '../../../lib/navigation';
+import { calendarTermFor } from '../../../../core/services/scheduling/customPlannerScheduler';
+import { deriveSemesterFromMonth } from '../../../../core/services/classEstimation/scrapedStudentMapper';
+import { monthsOf } from '../pathway/terms';
 import type { ScrapedStudent, ScrapedCourseListItem } from '../../../../core/shared/types/student';
 
 type Enrollment = { EnrollId: number; EnrollmentDesc: string };
@@ -36,16 +41,24 @@ export default function DashboardPage() {
     dataSource, setDataSource,
     customPlan, setCustomPlan,
     customPlanStart, setCustomPlanStart,
-    retakeUnitCodes, setRetakeUnitCodes,
-    injectedMinors, setInjectedMinors,
+    setRetakeUnitCodes,
+    setInjectedMinors,
+    setPlanUnits,
+    setPlanIntakeSemester,
+    setPlanCompletedUnits,
+    setPlanExtraUnits,
+    setPlanElectiveCandidates,
+    setPlanRequirements,
+    setGeneratedSemesters,
+    setIsPlanEdited,
   } = useStudentSession();
+  const router = useRouter();
   const [openYears, setOpenYears] = useState<Set<string>>(new Set());
   const [internalLoading, setInternalLoading] = useState(false);
   const [scraperApiStatus, setScraperApiStatus] = useState<string>('idle');
   const [showExportModal, setShowExportModal] = useState(false);
   const [enrollmentMode, setEnrollmentMode] = useState<'latest' | 'earliest' | 'mpu'>('latest');
-  const [resultTab, setResultTab] = useState<'analytics' | 'graduation' | 'units' | 'minors' | 'pathway'>('analytics');
-  const [customPlanLoading, setCustomPlanLoading] = useState(false);
+  const [resultTab, setResultTab] = useState<'analytics' | 'graduation' | 'units' | 'pathway'>('analytics');
   const [showPlannerPicker, setShowPlannerPicker] = useState(false);
   const [plannerPickerSearch, setPlannerPickerSearch] = useState('');
   const [allPlanners, setAllPlanners] = useState<any[] | null>(null);
@@ -561,6 +574,14 @@ export default function DashboardPage() {
     setCustomPlanStart(null);
     setRetakeUnitCodes(new Set());
     setInjectedMinors(new Set());
+    setPlanUnits([]);
+    setPlanIntakeSemester(1);
+    setPlanCompletedUnits([]);
+    setPlanExtraUnits([]);
+    setPlanElectiveCandidates([]);
+    setPlanRequirements([]);
+    setGeneratedSemesters([]);
+    setIsPlanEdited(false);
     setScraperError(null);
     setInternalLoading(true);
     try {
@@ -660,113 +681,17 @@ export default function DashboardPage() {
     setCustomPlanStart(null);
     setRetakeUnitCodes(new Set());
     setInjectedMinors(new Set());
+    setPlanUnits([]);
+    setPlanIntakeSemester(1);
+    setPlanCompletedUnits([]);
+    setPlanExtraUnits([]);
+    setPlanElectiveCandidates([]);
+    setPlanRequirements([]);
+    setGeneratedSemesters([]);
+    setIsPlanEdited(false);
     setScraperError(null);
     // REQ-SEC-101: no sessionStorage to remove, data was never persisted
     showToast('Student data cleared.', 'info');
-  };
-
-  const generateCustomPlan = async (overrideInjections?: Set<string>) => {
-    const effectiveInjections = overrideInjections ?? injectedMinors;
-    const activePlanner = selectedPlannerIdx === -1 ? manualPlanner : dashboardData?.planners?.[selectedPlannerIdx];
-    if (!activePlanner || !dashboardData) return;
-
-    const courseList: any[] = scrapedStudent?.student?.courseList ?? [];
-    const mpuCourseList: any[] = dashboardData.mpuCourseList ?? [];
-    const allTranscriptRows = [...courseList, ...mpuCourseList];
-
-    // Only exclude passed and in-progress units. Future pre-enrollments go back
-    // into the pool so the scheduler can repack them, and failed units are rescheduled as retakes.
-    const completedForScheduler = getCompletedUnitCodes(allTranscriptRows);
-    const transcriptStates = resolveUnitStates(allTranscriptRows);
-    const retakeCodes = new Set(
-      [...transcriptStates].filter(([, state]) => state === 'must_retake').map(([code]) => code)
-    );
-
-    const plannerUnits: any[] = activePlanner.units ?? [];
-    const currentOnlyCodes = new Set(
-      courseList
-        .filter((u: any) => u.status === 'Current')
-        .map((u: any) => u.courseId?.trim().toUpperCase())
-        .filter(Boolean)
-    );
-    const activeTermUnits = plannerUnits.filter(
-      (u: any) => u.unit && currentOnlyCodes.has(u.unit.unit_code?.trim().toUpperCase())
-    );
-
-    let startYear = 1;
-    let startSemester: 1 | 2 = 1;
-
-    if (activeTermUnits.length > 0) {
-      const maxYear = Math.max(...activeTermUnits.map((u: any) => u.year_level));
-      const maxSemInYear = Math.max(
-        ...activeTermUnits.filter((u: any) => u.year_level === maxYear).map((u: any) => u.semester)
-      );
-      if (maxSemInYear === 1) {
-        startYear = maxYear;
-        startSemester = 2;
-      } else {
-        startYear = maxYear + 1;
-        startSemester = 1;
-      }
-    } else {
-      const courseListStates = resolveUnitStates(courseList);
-      const completeCodes = new Set(
-        [...courseListStates].filter(([, state]) => state === 'passed').map(([code]) => code)
-      );
-      const completedPlannerUnits = plannerUnits.filter(
-        (u: any) => u.unit && completeCodes.has(u.unit.unit_code?.trim().toUpperCase())
-      );
-      if (completedPlannerUnits.length > 0) {
-        const maxYear = Math.max(...completedPlannerUnits.map((u: any) => u.year_level));
-        const maxSemInYear = Math.max(
-          ...completedPlannerUnits.filter((u: any) => u.year_level === maxYear).map((u: any) => u.semester)
-        );
-        startYear = maxSemInYear === 1 ? maxYear : maxYear + 1;
-        startSemester = maxSemInYear === 1 ? 2 : 1;
-      } else {
-        const allYearSems = [...new Set(plannerUnits.map((u: any) => `${u.year_level}-${u.semester}`))].sort();
-        if (allYearSems.length > 0) {
-          const [y, s] = (allYearSems[0] as string).split('-');
-          startYear = parseInt(y);
-          startSemester = parseInt(s) as 1 | 2;
-        }
-      }
-    }
-
-    setCustomPlanLoading(true);
-    try {
-      const res = await fetch('/api/custom-planner', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          plannerId: activePlanner.id,
-          completedUnitCodes: completedForScheduler,
-          startYear,
-          startSemester,
-          injectedMinorIds: [...effectiveInjections],
-        }),
-      });
-      if (!res.ok) { showToast('Failed to generate custom pathway.', 'error'); return; }
-      const data = await res.json();
-      if (data.success) {
-        setCustomPlan(data.data);
-        setCustomPlanStart({ year: startYear, semester: startSemester });
-        setRetakeUnitCodes(retakeCodes);
-      } else {
-        showToast('Failed to generate custom pathway.', 'error');
-      }
-    } catch {
-      showToast('Failed to generate custom pathway.', 'error');
-    } finally {
-      setCustomPlanLoading(false);
-    }
-  };
-
-  const toggleMinorInjection = (minorId: string) => {
-    const next = new Set(injectedMinors);
-    if (next.has(minorId)) next.delete(minorId); else next.add(minorId);
-    setInjectedMinors(next);
-    if (customPlan) generateCustomPlan(next);
   };
 
   return (
@@ -1143,8 +1068,6 @@ export default function DashboardPage() {
         const totalCredits = matchPayload.totalCredits || 0;
         const missingCoreCount = matchPayload.unmatchedCore?.length || 0;
         const isGraduationReady = missingCoreCount === 0 && totalCredits >= 300;
-        const activeMatchPlanner = selectedPlannerIdx === -1 ? manualPlanner : dashboardData?.planners?.[selectedPlannerIdx];
-        const hasMinors = (activeMatchPlanner?.minors ?? []).length > 0;
 
         return (
           <div>
@@ -1350,17 +1273,6 @@ export default function DashboardPage() {
             >
               Unit Plan
             </button>
-            {hasMinors && (
-              <button
-                type="button"
-                role="tab"
-                aria-selected={resultTab === 'minors'}
-                className={`${styles.resultTab} ${resultTab === 'minors' ? styles.resultTabActive : ''}`}
-                onClick={() => setResultTab('minors')}
-              >
-                Minors
-              </button>
-            )}
             <button
               type="button"
               role="tab"
@@ -1368,7 +1280,7 @@ export default function DashboardPage() {
               className={`${styles.resultTab} ${resultTab === 'pathway' ? styles.resultTabActive : ''}`}
               onClick={() => setResultTab('pathway')}
             >
-              Extended Plan
+              Student Pathway
             </button>
           </div>
 
@@ -1408,8 +1320,17 @@ export default function DashboardPage() {
                 offering: u.semester 
               }));
 
-            const coreCount = notTaken.filter((u: any) => u.category === 'core').length;
-            const electiveCount = notTaken.filter((u: any) => u.category !== 'core').length;
+            const coreCount = notTaken.filter((u: any) => u.category === 'core' || u.category === 'major_core').length;
+            const electiveCount = notTaken.filter((u: any) => u.category === 'elective' || u.category === 'prescribed_elective').length;
+            const mpuCount = notTaken.filter((u: any) => u.category === 'mpu').length;
+            const wilCount = notTaken.filter((u: any) => u.category === 'wil').length;
+
+            // A planner slot counts from the student's intake, so for a September
+            // intake slot 1 is Aug/Sep. Slots 3 and 4 are summer and winter already,
+            // and calendarTermFor only converts the two semester slots.
+            const intakeSemester = deriveSemesterFromMonth(activePlanner?.intake_month ?? 1);
+            const termLabel = (slot: number) =>
+              monthsOf(slot === 1 || slot === 2 ? calendarTermFor(slot, intakeSemester) : slot);
 
             return (
               <div className={`${styles.insightCard} ${styles.insightOrange}`}>
@@ -1424,6 +1345,8 @@ export default function DashboardPage() {
                   <div className={styles.insightPills}>
                     <span className={`${styles.pill} ${styles.pillRed}`}>Core {coreCount}</span>
                     <span className={`${styles.pill} ${styles.pillMuted}`}>Elective {electiveCount}</span>
+                    <span className={`${styles.pill} ${styles.pillBlue}`}>MPU {mpuCount}</span>
+                    <span className={`${styles.pill} ${styles.suAlt}`}>WIL {wilCount}</span>
                   </div>
                 </div>
                 {notTaken.length === 0 ? (
@@ -1432,9 +1355,9 @@ export default function DashboardPage() {
                   <div className={styles.insightList}>
                     {notTaken.map((u: any) => (
                       <div key={u.code} className={styles.insightRow}>
-                        <InlineCode red={u.category === 'core'}>{u.code}</InlineCode>
+                        <InlineCode red={u.category === 'core' || u.category === 'major_core'}>{u.code}</InlineCode>
                         <span className={styles.insightRowName}>{u.name}</span>
-                        <span className={styles.insightRowMeta}>Sem {u.offering}</span>
+                        <span className={styles.insightRowMeta}>{termLabel(u.offering)}</span>
                       </div>
                     ))}
                   </div>
@@ -1776,259 +1699,34 @@ export default function DashboardPage() {
           </div>
           )}
 
-          {resultTab === 'minors' && hasMinors && (
-          <div className={styles.resultTabPanel}>
-          {/* Minors & Specializations */}
-          {(() => {
-            const activePlanner = selectedPlannerIdx === -1 ? manualPlanner : dashboardData?.planners?.[selectedPlannerIdx];
-            const minors: any[] = activePlanner?.minors ?? [];
-            if (minors.length === 0) return null;
-
-            const doneCodes = new Set(
-              getCompletedUnitCodes(
-                [...(scrapedStudent?.student?.courseList ?? []), ...(dashboardData?.mpuCourseList ?? [])]
-              )
-            );
-
-            // How many free elective slots the student still needs to fill
-            const remainingElectiveSlots = (activePlanner?.units ?? []).filter(
-              (u: any) => u.category === 'elective' &&
-                (u.unit === null || !doneCodes.has(u.unit?.unit_code?.toUpperCase()))
-            ).length;
-
-            return (
-              <div>
-                <div className={styles.sectionTitle} style={{ marginTop: 20 }}>Minors & Specializations</div>
-                {minors.map((minor: any) => {
-                  const total: number = minor.units.length;
-                  const done: number = minor.units.filter(
-                    (mu: any) => doneCodes.has(mu.unit?.unit_code?.trim().toUpperCase())
-                  ).length;
-                  const missing: number = total - done;
-                  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
-                  const isInjected = injectedMinors.has(minor.id);
-                  const wouldExceedCredits = missing > 0 && remainingElectiveSlots === 0;
-
-                  return (
-                    <div
-                      key={minor.id}
-                      style={{
-                        background: 'var(--card-bg)',
-                        border: `1px solid ${isInjected ? 'rgba(197,134,192,0.6)' : 'rgba(197,134,192,0.3)'}`,
-                        borderRadius: 4,
-                        padding: '12px 14px',
-                        marginBottom: 10,
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
-                        <div>
-                          <div style={{ fontSize: 13, fontWeight: 600 }}>{minor.name}</div>
-                          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-                            {done}/{total} units · {pct}% progress
-                            {missing > 0 && (
-                              <span style={{ color: 'var(--accent-orange)', marginLeft: 6 }}>{missing} remaining</span>
-                            )}
-                          </div>
-                        </div>
-                        {missing > 0 && (
-                          <button
-                            className={isInjected ? styles.btnDanger : styles.btnSecondary}
-                            style={{ fontSize: 11, whiteSpace: 'nowrap', flexShrink: 0 }}
-                            onClick={() => toggleMinorInjection(minor.id)}
-                            disabled={customPlanLoading}
-                          >
-                            {isInjected ? '✕ Remove from Plan' : '+ Include in Custom Plan'}
-                          </button>
-                        )}
-                        {missing === 0 && (
-                          <span style={{ fontSize: 11, color: 'var(--accent-green)', fontWeight: 600 }}>✓ Complete</span>
-                        )}
-                      </div>
-                      <ProgressBar pct={pct} color={pct === 100 ? 'var(--accent-green)' : 'var(--accent-yellow)'} />
-                      {isInjected && (
-                        <div style={{ fontSize: 10, color: 'var(--accent-purple)', marginTop: 6 }}>
-                          {missing} missing unit{missing !== 1 ? 's' : ''} will be injected into the custom pathway.
-                        </div>
-                      )}
-                      {wouldExceedCredits && (
-                        <div style={{ fontSize: 10, color: 'var(--accent-orange)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <span>⚠</span>
-                          <span>
-                            {isInjected
-                              ? 'No free elective slots remain — these units will exceed standard degree credits (extra units added to pathway).'
-                              : 'Note: No free elective slots remain. Including this minor will exceed standard degree credits.'}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          })()}
-          </div>
-          )}
-
           {resultTab === 'pathway' && (
           <div className={styles.resultTabPanel}>
-          {/* Custom Study Pathway */}
+          {/* Student Pathway link */}
           {(() => {
             const activePlanner = selectedPlannerIdx === -1 ? manualPlanner : dashboardData?.planners?.[selectedPlannerIdx];
-            if (!activePlanner) return null;
-
-            const allTranscriptUnits = [
-              ...(scrapedStudent?.student?.courseList ?? []),
-              ...(dashboardData?.mpuCourseList ?? []),
-            ];
-
-            const transcriptStates = resolveUnitStates(allTranscriptUnits);
-            const completeCodes = new Set(
-              [...transcriptStates].filter(([, state]) => state === 'passed').map(([code]) => code)
-            );
-            const currentCodes = new Set(
-              [...transcriptStates].filter(([, state]) => state === 'in_progress').map(([code]) => code)
-            );
-            // Units that are neither complete nor actively enrolled = truly unplanned
-            const takenCodes = new Set([...completeCodes, ...currentCodes]);
-
-            const isReqUnit = (u: any) =>
-              u.unit !== null &&
-              (u.category === 'core' || u.category === 'major_core' || u.category === 'prescribed_elective');
-
-            const unplannedUnits = (activePlanner?.units ?? []).filter(
-              (u: any) => isReqUnit(u) && !takenCodes.has(u.unit.unit_code?.toUpperCase())
-            );
-            const inProgressUnits = (activePlanner?.units ?? []).filter(
-              (u: any) => isReqUnit(u) && currentCodes.has(u.unit.unit_code?.toUpperCase())
-            );
-
-            // Minor units the student has opted-in to but hasn't taken yet
-            const injectedMinorMissingCount = (activePlanner?.minors ?? [])
-              .filter((m: any) => injectedMinors.has(m.id))
-              .reduce((sum: number, m: any) => {
-                const missingFromMinor = m.units.filter(
-                  (mu: any) => !takenCodes.has(mu.unit?.unit_code?.trim().toUpperCase())
-                ).length;
-                return sum + missingFromMinor;
-              }, 0);
-
-            const totalUnplanned = unplannedUnits.length + injectedMinorMissingCount;
-            if (totalUnplanned === 0) return null;
+            const canOpen = Boolean(dashboardData && activePlanner);
 
             return (
               <div>
-                <div className={styles.sectionTitle} style={{ marginTop: 20 }}>Extended Study Plan</div>
+                <div className={styles.sectionTitle} style={{ marginTop: 20 }}>Student Pathway</div>
 
-                <div style={{ background: 'var(--card-bg)', border: '1px solid rgba(244,135,113,0.35)', borderRadius: 4, padding: '12px 14px', marginBottom: 12 }}>
+                <div style={{ background: 'var(--card-bg)', border: '1px solid rgba(244,135,113,0.35)', borderRadius: 4, padding: '12px 14px' }}>
                   <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>
-                    <span style={{ fontWeight: 600, color: 'var(--accent-orange)' }}>{totalUnplanned}</span> unplanned unit{totalUnplanned !== 1 ? 's' : ''}
-                    {inProgressUnits.length > 0 && (
-                      <span style={{ color: 'var(--accent-green)' }}> · {inProgressUnits.length} in progress this semester</span>
-                    )}.{' '}
-                    Generate a custom pathway to complete this degree.
+                    {canOpen
+                      ? customPlan
+                        ? 'A pathway has been generated for this student.'
+                        : 'Generate and edit a custom pathway for this student on the Student Pathway page.'
+                      : 'Load a student first to open their pathway.'}
                   </div>
                   <button
                     className={styles.btnPrimary}
                     style={{ fontSize: 12 }}
-                    onClick={() => generateCustomPlan()}
-                    disabled={customPlanLoading}
+                    onClick={() => router.push(panelToPath('pathway'))}
+                    disabled={!canOpen}
                   >
-                    {customPlanLoading
-                      ? 'Generating…'
-                      : customPlan
-                      ? 'Regenerate Pathway'
-                      : 'Generate Custom Pathway'}
+                    Open Student Pathway
                   </button>
                 </div>
-
-                {customPlan && (
-                  <div>
-                    {customPlan.semesters.length === 0 ? (
-                      <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '10px 0' }}>
-                        No semesters could be generated — all remaining units may have unresolvable prerequisite or offering conflicts.
-                      </div>
-                    ) : (
-                      customPlan.semesters.map((sem: any) => (
-                        <div
-                          key={`cp-${sem.year}-${sem.semester}`}
-                          style={{ marginBottom: 8, border: '1px solid rgba(244,135,113,0.3)', borderRadius: 4, overflow: 'hidden' }}
-                        >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'rgba(244,135,113,0.06)' }}>
-                            <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--accent-orange)' }}>
-                              YEAR {sem.year} · SEM {sem.semester}
-                            </span>
-                            <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 8 }}>
-                              {sem.units.length} unit{sem.units.length !== 1 ? 's' : ''} · Custom
-                            </span>
-                          </div>
-                          <div style={{ overflowX: 'auto' }}>
-                            <table className={styles.table} style={{ tableLayout: 'fixed', width: '100%' }}>
-                              <colgroup>
-                                <col style={{ width: 110 }} />
-                                <col style={{ width: 'auto' }} />
-                                <col style={{ width: 200 }} />
-                              </colgroup>
-                              <thead>
-                                <tr><th>Unit Code</th><th>Unit Name</th><th>Type</th></tr>
-                              </thead>
-                              <tbody>
-                                {sem.units.map((u: any) => (
-                                  <tr key={u.code}>
-                                    <td>
-                                      <InlineCode red={u.category === 'core' || u.category === 'major_core'}>
-                                        {u.code}
-                                      </InlineCode>
-                                    </td>
-                                    <td>
-                                      {u.name}
-                                      {retakeUnitCodes.has(normaliseUnitCode(u.code)) && (
-                                        <span
-                                          title="Previously attempted and failed — this is a repeat attempt."
-                                          style={{
-                                            marginLeft: 6,
-                                            fontSize: 9,
-                                            fontFamily: 'var(--font-mono)',
-                                            color: 'var(--accent-orange)',
-                                            letterSpacing: '0.05em',
-                                          }}
-                                        >
-                                          RETAKE
-                                        </span>
-                                      )}
-                                    </td>
-                                    <td>
-                                      <Badge
-                                        label={u.category === 'minor' ? 'minor elective' : u.category.replace(/_/g, ' ')}
-                                        cls={
-                                          u.category === 'core' ? 'badgeRed' :
-                                          u.category === 'major_core' ? 'badgeOrange' :
-                                          u.category === 'mpu' ? 'badgeBlue' :
-                                          u.category === 'minor' ? 'badgeYellow' :
-                                          'badgePurple'
-                                        }
-                                      />
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-                      ))
-                    )}
-
-                    {customPlan.unschedulableUnits.length > 0 && (
-                      <div style={{ fontSize: 11, color: 'var(--accent-orange)', padding: '8px 2px', display: 'flex', alignItems: 'flex-start', gap: 6 }}>
-                        <span>⚠</span>
-                        <span>
-                          {customPlan.unschedulableUnits.length} unit{customPlan.unschedulableUnits.length !== 1 ? 's' : ''} could
-                          not be automatically scheduled due to prerequisite or semester-offering conflicts:{' '}
-                          {customPlan.unschedulableUnits.map((u: any) => u.code).join(', ')}.
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                )}
               </div>
             );
           })()}
