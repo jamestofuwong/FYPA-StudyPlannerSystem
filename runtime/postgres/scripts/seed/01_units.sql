@@ -42,7 +42,7 @@ INSERT INTO units (unit_code, unit_name) VALUES
 
 
     ('ICT20016', 'Work-Integrated Learning'),
-    ('ICT20016*Optional', 'Work-Integrated Learning'),
+    ('ICT20016*Optional', 'Work-Integrated Learning'), -- old planner
 
     ('ICT30005', 'Professional Issues in IT'),
     ('ICT30010', 'eForensic Fundamentals'),
@@ -55,21 +55,26 @@ INSERT INTO units (unit_code, unit_name) VALUES
     ('MGT10010', 'Ethics of Innovation'),
 
     -- MPU Units
-    ('MPU3142', 'Malay Language Communication 2'),
+    ('MPU3112', 'Kursus Integriti dan Antirasuh (KIAR) (Malaysian and International Students)'),
+    ('MPU3122', 'Falsafah dan Cabaran Semasa (Malaysian Students Only)'),
+    ('MPU3142', 'Malay Language Communication 2 (International Students Only)'),
     ('MPU3143', 'Malay Language Communication 2'), -- old planner
-
-    ('MPU3182', 'Penghayatan Etika dan Peradaban'),
+    ('MPU3152', 'Citra Malaysia (International Students Only)'),
+    ('MPU3172', 'Aspirasi Negara Bangsa (Malaysian Students Only'),
+    ('MPU3182', 'Penghayatan Etika dan Peradaban (Malaysian Students Only)'),
     ('MPU3183', 'Penghayatan Etika dan Peradaban'), -- old planner
 
-    ('MPU3192', 'Philosophy and Current Issues'),
+    ('MPU3192', 'Philosophy and Current Issues (Malaysian and International Students)'),
     ('MPU3193', 'Philosophy and Current Issues'), -- old planner
 
-    ('MPU3212', 'Bahasa Kebangsaan A'),
-
-    ('MPU3272', 'Integrity and Anti-Corruption'),
+    ('MPU3212', 'Bahasa Kebangsaan A (Malaysian students who do not have SPM Bahasa Melayu credit)'),
+    ('MPU3222', 'Career Development (Malaysian and International Students)'),
+    ('MPU3272', 'Integrity and Anti-Corruption (Malaysian and International Students)'),
     ('MPU3273', 'Integrity and Anti-Corruption'), -- old planner
 
-    ('MPU3412', 'Service Learning'),
+    ('MPU3312', 'Academic Integrity and Professional Conduct (Malaysian and International Students)'),
+
+    ('MPU3412', 'Service Learning (Malaysian and International Students)'),
 
     ('STA10003', 'Foundations of Statistics'),
 
@@ -187,4 +192,26 @@ SELECT add_unit_offering('MPU3212', 3); SELECT add_unit_offering('MPU3212', 4);
 
 
 SELECT add_unit_offering('ICT20016', 3); SELECT add_unit_offering('ICT20016', 4);
-SELECT add_unit_offering('ICT20016', 2);
+
+-- ======================================================================================================================
+-- Deactivate the old units and link them to their replacements
+-- ======================================================================================================================
+UPDATE units
+SET is_active = FALSE,
+    replaced_by_unit_id = (SELECT id FROM units WHERE unit_code = 'MPU3142')
+WHERE unit_code = 'MPU3143';
+
+UPDATE units
+SET is_active = FALSE,
+    replaced_by_unit_id = (SELECT id FROM units WHERE unit_code = 'MPU3182')
+WHERE unit_code = 'MPU3183';
+
+UPDATE units
+SET is_active = FALSE,
+    replaced_by_unit_id = (SELECT id FROM units WHERE unit_code = 'MPU3192')
+WHERE unit_code = 'MPU3193';
+
+UPDATE units
+SET is_active = FALSE,
+    replaced_by_unit_id = (SELECT id FROM units WHERE unit_code = 'MPU3272')
+WHERE unit_code = 'MPU3273';

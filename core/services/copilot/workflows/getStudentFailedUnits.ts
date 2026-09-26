@@ -2,36 +2,31 @@ import type { Workflow, WorkflowContext, WorkflowResult } from '../types';
 import { searchStudents, fetchEnrollments, fetchDegreeAudit } from '../../portal/portalSessionService';
 import { selectEnrollment } from './enrollmentSelector';
 
-// Units with an empty grade and no active-enrollment status are portal planning
-// artefacts (e.g. future units scaffolded in the degree audit). Exclude them so
-// the LLM never sees empty-grade entries that it might hallucinate values for.
-const IN_PROGRESS_STATUSES = new Set(['enrolled', 'in progress', 'current', 'registered']);
-
 interface Input {
   studentId: string;
   enrollMode?: string;
 }
 
-interface UnitEntry {
+interface FailedUnit {
   code: string;
   title: string;
   credits: number;
   grade: string;
-  status: string;
   term: string;
 }
 
 interface Output {
   studentId: string;
   studentName: string | null;
-  totalUnits: number;
-  completedCredits: number;
-  units: UnitEntry[];
+  failedCount: number;
+  failedUnits: FailedUnit[];
 }
 
-export const getStudentUnitsWorkflow: Workflow<Input, Output> = {
-  id: 'get_student_units',
-  description: 'Lists all units (subjects) taken by a student, including grades and credit hours. Fetches live data from the student portal. Use this when the user asks what units a student has taken, their grades, or their course history.',
+const FAILING_GRADES = new Set(['F', 'F*', 'WF', 'WD', 'I']);
+
+export const getStudentFailedUnitsWorkflow: Workflow<Input, Output> = {
+  id: 'get_student_failed_units',
+  description: 'Lists all units a student has failed or withdrawn from. Use this when the user asks about a student\'s failed subjects, poor grades, or units that need to be repeated.',
   params: [
     {
       name: 'studentId',
@@ -49,7 +44,6 @@ export const getStudentUnitsWorkflow: Workflow<Input, Output> = {
   async execute(params: Input, _ctx: WorkflowContext): Promise<WorkflowResult<Output>> {
     const mode = params.enrollMode ?? 'latest';
 
-    // Resolve studentId → dbId via cached student list
     const matches = searchStudents(params.studentId);
     const student = matches.find((s) => s.student_id === params.studentId) ?? matches[0] ?? null;
     if (!student) {
@@ -69,18 +63,13 @@ export const getStudentUnitsWorkflow: Workflow<Input, Output> = {
 
       const scraped = await fetchDegreeAudit(student.db_id, enrollment.EnrollId, params.studentId);
 
-      const units: UnitEntry[] = scraped.courseList
-        .filter((item) => {
-          const grade = (item.grade ?? '').trim();
-          const status = (item.status ?? '').trim().toLowerCase();
-          return grade !== '' || IN_PROGRESS_STATUSES.has(status);
-        })
+      const failedUnits: FailedUnit[] = scraped.courseList
+        .filter((item) => FAILING_GRADES.has((item.grade ?? '').trim().toUpperCase()))
         .map((item) => ({
           code: item.courseId,
           title: item.courseTitle,
           credits: item.credits,
           grade: item.grade,
-          status: item.status,
           term: item.term,
         }));
 
@@ -89,9 +78,8 @@ export const getStudentUnitsWorkflow: Workflow<Input, Output> = {
         data: {
           studentId: params.studentId,
           studentName: scraped.studentName ?? student.name,
-          totalUnits: units.length,
-          completedCredits: scraped.creditsCompleted,
-          units,
+          failedCount: failedUnits.length,
+          failedUnits,
         },
       };
     } catch (err) {
