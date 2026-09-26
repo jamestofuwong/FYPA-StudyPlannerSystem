@@ -7,6 +7,39 @@ import type { EstimationPreview } from '../../../../core/services/classEstimatio
 type SessionStatus = 'idle' | 'login-pending' | 'logged-in' | 'login-error';
 type RunStatus = 'idle' | 'running' | 'done' | 'error';
 
+/**
+ * Where transcripts come from. Portal and mock both run the scrape flow, mock without a login. Imported
+ * reads DPA files instead, which is the path demonstrated to the panel, since scraping is not shown there.
+ */
+type SourceId = 'portal' | 'mock' | 'import';
+
+type SourceOption = { id: SourceId; label: string; requiresLogin: boolean; hint: string };
+
+type ImportedStudent = {
+  studentId: string;
+  unitCount: number;
+  intakeYear: number;
+  intakeSemester: 1 | 2;
+  warnings: string[];
+};
+
+type ImportedFile = {
+  filename: string;
+  ok: boolean;
+  students: ImportedStudent[];
+  rowWarnings: string[];
+  error?: string;
+};
+
+type ImportResult = {
+  preview: boolean;
+  files: ImportedFile[];
+  totalFiles: number;
+  filesFailed: number;
+  totalStudents: number;
+  storedStudents: number;
+};
+
 type ProgressState = {
   current: number;
   total: number;
@@ -52,8 +85,18 @@ export default function ClassEstimationPage() {
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
+  const [source, setSource] = useState<SourceId>('portal');
+  const [mockAvailable, setMockAvailable] = useState(false);
+  const [files, setFiles] = useState<File[]>([]);
+  const [dragging, setDragging] = useState(false);
+  const [importStatus, setImportStatus] = useState<'idle' | 'working' | 'done' | 'error'>('idle');
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [stored, setStored] = useState<{ storedStudents: number; bySource: Record<string, number> } | null>(null);
+
   const esRef = useRef<EventSource | null>(null);
   const logEndRef = useRef<HTMLDivElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Poll session status every 3s
   useEffect(() => {
@@ -68,6 +111,28 @@ export default function ClassEstimationPage() {
     const id = setInterval(poll, 3000);
     return () => clearInterval(id);
   }, []);
+
+  // Which sources this build offers. Mock is hidden in a production build, so the picker has to ask rather
+  // than assume it is available.
+  useEffect(() => {
+    fetch('/api/class-estimation/run', { method: 'OPTIONS' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!data?.sources) return;
+        setMockAvailable(data.sources.some((s: { id: string }) => s.id === 'mock'));
+        if (data.default === 'mock') setSource('mock');
+      })
+      .catch(() => { /* leave the picker on portal only */ });
+  }, []);
+
+  const refreshStored = useCallback(() => {
+    fetch('/api/class-estimation/import')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => data && setStored(data))
+      .catch(() => { /* not fatal, the badge just stays hidden */ });
+  }, []);
+
+  useEffect(() => { refreshStored(); }, [refreshStored]);
 
   // Auto-scroll log to bottom as new entries arrive
   useEffect(() => {
@@ -91,6 +156,60 @@ export default function ClassEstimationPage() {
     setRunStatus('idle');
   };
 
+  const addFiles = (incoming: FileList | null) => {
+    if (!incoming || incoming.length === 0) return;
+    const accepted = Array.from(incoming).filter((f) => /\.(xlsx|xls|csv)$/i.test(f.name));
+    const rejected = Array.from(incoming).length - accepted.length;
+
+    setImportError(rejected > 0 ? `Ignored ${rejected} file(s) that are not .xlsx, .xls or .csv.` : null);
+    setImportResult(null);
+    setImportStatus('idle');
+    // Replace rather than append, so what is listed is exactly what will be sent.
+    setFiles(accepted);
+  };
+
+  /**
+   * preview parses and reports without storing, so a batch can be checked before it replaces whatever the
+   * previous run left in the store.
+   */
+  const runImport = async (preview: boolean) => {
+    if (files.length === 0) return;
+    setImportStatus('working');
+    setImportError(null);
+
+    try {
+      const body = new FormData();
+      for (const file of files) body.append('files', file);
+      if (preview) body.append('preview', '1');
+
+      const res = await fetch('/api/class-estimation/import', { method: 'POST', body });
+      const data = await res.json().catch(() => null);
+
+      if (!data) {
+        setImportStatus('error');
+        setImportError('The import endpoint returned nothing readable.');
+        return;
+      }
+      if (data.error) {
+        setImportStatus('error');
+        setImportError(data.error);
+        return;
+      }
+
+      setImportResult(data as ImportResult);
+      setImportStatus(data.totalStudents > 0 ? 'done' : 'error');
+      if (!preview) {
+        refreshStored();
+        // A fresh cohort invalidates whatever the last preview showed.
+        setPreview(null);
+        setPreviewStatus('idle');
+      }
+    } catch (err) {
+      setImportStatus('error');
+      setImportError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
   const startEstimation = useCallback(() => {
     esRef.current?.close();
 
@@ -104,6 +223,8 @@ export default function ClassEstimationPage() {
     const params = new URLSearchParams();
     if (minId.trim()) params.set('minId', minId.trim());
     if (maxId.trim()) params.set('maxId', maxId.trim());
+    // Only portal and mock run a scrape. Imported records are already in the store.
+    if (source === 'mock') params.set('source', 'mock');
     const qs = params.toString();
     const es = new EventSource(`/api/class-estimation/run${qs ? `?${qs}` : ''}`);
     esRef.current = es;
@@ -146,6 +267,7 @@ export default function ClassEstimationPage() {
               total:     data.total     as number,
             });
             setRunStatus('done');
+            refreshStored();
             es.close();
             esRef.current = null;
             break;
@@ -160,7 +282,7 @@ export default function ClassEstimationPage() {
       es.close();
       esRef.current = null;
     };
-  }, [minId, maxId]);
+  }, [minId, maxId, source, refreshStored]);
 
   const runPreview = async () => {
     setPreviewStatus('loading');
@@ -191,6 +313,27 @@ export default function ClassEstimationPage() {
 
   const isLoggedIn = sessionStatus === 'logged-in';
   const isRunning  = runStatus === 'running';
+
+  // Mock is only listed when the build actually offers it, so a production panel can never be pointed at
+  // generated students. Only the portal option needs a login, which is the whole reason the other two exist.
+  const sourceOptions: SourceOption[] = [
+    {
+      id: 'portal', label: 'Portal', requiresLogin: true,
+      hint: 'Reads live transcripts from the student portal. Needs a portal login.',
+    },
+    ...(mockAvailable
+      ? [{
+          id: 'mock' as const, label: 'Mock Portal', requiresLogin: false,
+          hint: 'Generated students built from the planners in this system. No login needed.',
+        }]
+      : []),
+    {
+      id: 'import', label: 'Imported DPA', requiresLogin: false,
+      hint: 'Reads DPA files exported from the portal, a folder at a time.',
+    },
+  ];
+
+  const canStartScrape = !isRunning && (source !== 'portal' || isLoggedIn);
   const pct = (progress && progress.total > 0)
     ? Math.round((progress.current / progress.total) * 100)
     : 0;
@@ -222,26 +365,163 @@ export default function ClassEstimationPage() {
         </p>
       </div>
 
-      {/* ── Configuration + start ────────────────────────────────────────────── */}
+      {/* ── Where transcripts come from ──────────────────────────────────────── */}
       <div className={styles.card}>
-        <div className={styles.sectionTitle}>Portal Session</div>
+        <div className={styles.sectionTitle}>Student Data Source</div>
 
-        <div className={styles.statusRow}>
-          <span
-            className={styles.statusDot}
-            style={{ background: isLoggedIn ? 'var(--accent-green)' : 'var(--text-muted)' }}
-          />
-          <span style={{ fontSize: 12, color: isLoggedIn ? 'var(--accent-green)' : 'var(--text-muted)' }}>
-            {isLoggedIn
-              ? `Connected · ${studentCount.toLocaleString()} students loaded`
-              : 'Not connected'}
-          </span>
+        <div className={styles.sourceRow}>
+          {sourceOptions.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              className={`${styles.sourceOption} ${source === option.id ? styles.sourceOptionActive : ''}`}
+              onClick={() => setSource(option.id)}
+              disabled={isRunning || importStatus === 'working'}
+            >
+              <span>{option.label}</span>
+              <span className={styles.sourceOptionHint}>{option.hint}</span>
+            </button>
+          ))}
         </div>
 
-        {!isLoggedIn && (
-          <p className={styles.hintText}>
-            Log in to the portal via the top-bar button before running estimation.
-          </p>
+        {stored && stored.storedStudents > 0 && (
+          <div className={styles.storedBadge}>
+            <span className={styles.statusDot} style={{ background: 'var(--accent-green)' }} />
+            {stored.storedStudents.toLocaleString()} student(s) loaded
+            {Object.keys(stored.bySource).length > 0 && ` · from ${Object.entries(stored.bySource).map(([k, n]) => `${k} (${n})`).join(', ')}`}
+          </div>
+        )}
+      </div>
+
+      {/* ── Imported files ───────────────────────────────────────────────────── */}
+      {source === 'import' && (
+        <div className={styles.card}>
+          <div className={styles.sectionTitle}>Import Student DPA Files</div>
+
+          <div
+            className={`${styles.dropZone} ${dragging ? styles.dropZoneActive : ''}`}
+            onClick={() => fileInputRef.current?.click()}
+            onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={(e) => { e.preventDefault(); setDragging(false); addFiles(e.dataTransfer.files); }}
+          >
+            {files.length === 0
+              ? 'Drag DPA files here, or click to choose. One file per student, or one sheet holding many.'
+              : `${files.length} file(s) ready. Drop more to replace this selection.`}
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept=".xlsx,.xls,.csv"
+              style={{ display: 'none' }}
+              onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }}
+            />
+          </div>
+
+          {files.length > 0 && !importResult && (
+            <div className={styles.fileList}>
+              {files.map((file) => (
+                <div key={file.name} className={styles.fileRow}>
+                  <span className={styles.fileName}>{file.name}</span>
+                  <span className={styles.fileNote}>{(file.size / 1024).toFixed(0)} KB</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Per-file outcome, so one unreadable file is visible rather than lost in a total. */}
+          {importResult && (
+            <div className={styles.fileList}>
+              {importResult.files.map((file) => (
+                <div
+                  key={file.filename}
+                  className={`${styles.fileRow} ${file.ok ? styles.fileRowOk : styles.fileRowFail}`}
+                >
+                  <span>{file.ok ? '✓' : '✗'}</span>
+                  <span className={styles.fileName}>{file.filename}</span>
+                  <span className={styles.fileNote}>
+                    {file.ok
+                      ? `${file.students.length} student(s)${file.rowWarnings.length > 0 ? ` · ${file.rowWarnings.length} row warning(s)` : ''}`
+                      : file.error}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {importResult && (
+            <p className={styles.hintText} style={{ marginTop: 8 }}>
+              {importResult.preview
+                ? `Preview only, nothing stored yet: ${importResult.totalStudents} student(s) across ${importResult.totalFiles} file(s)`
+                : `Stored ${importResult.storedStudents} student(s), replacing any previous batch`}
+              {importResult.filesFailed > 0 && ` · ${importResult.filesFailed} file(s) failed`}
+            </p>
+          )}
+
+          {importError && <div className={styles.errorBox}>{importError}</div>}
+
+          <div className={styles.actionRow}>
+            <button
+              className={styles.btnSecondary}
+              disabled={files.length === 0 || importStatus === 'working'}
+              onClick={() => runImport(true)}
+            >
+              {importStatus === 'working' ? 'Reading…' : 'Preview'}
+            </button>
+            <button
+              className={styles.btnPrimary}
+              disabled={files.length === 0 || importStatus === 'working'}
+              onClick={() => runImport(false)}
+            >
+              Import {files.length > 0 ? `${files.length} file(s)` : ''}
+            </button>
+            {files.length > 0 && (
+              <button
+                className={styles.btnSecondary}
+                disabled={importStatus === 'working'}
+                onClick={() => { setFiles([]); setImportResult(null); setImportError(null); setImportStatus('idle'); }}
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Scrape configuration + start ─────────────────────────────────────── */}
+      {source !== 'import' && (
+      <div className={styles.card}>
+        <div className={styles.sectionTitle}>
+          {source === 'mock' ? 'Mock Data' : 'Portal Session'}
+        </div>
+
+        {source === 'mock' ? (
+          <div className={styles.statusRow}>
+            <span className={styles.statusDot} style={{ background: 'var(--accent-green)' }} />
+            <span style={{ fontSize: 12, color: 'var(--accent-green)' }}>
+              Ready · generated from the planners loaded in this system, no login needed
+            </span>
+          </div>
+        ) : (
+          <>
+            <div className={styles.statusRow}>
+              <span
+                className={styles.statusDot}
+                style={{ background: isLoggedIn ? 'var(--accent-green)' : 'var(--text-muted)' }}
+              />
+              <span style={{ fontSize: 12, color: isLoggedIn ? 'var(--accent-green)' : 'var(--text-muted)' }}>
+                {isLoggedIn
+                  ? `Connected · ${studentCount.toLocaleString()} students loaded`
+                  : 'Not connected'}
+              </span>
+            </div>
+
+            {!isLoggedIn && (
+              <p className={styles.hintText}>
+                Log in to the portal via the top-bar button before running estimation.
+              </p>
+            )}
+          </>
         )}
 
         {/* ID range filter */}
@@ -277,7 +557,7 @@ export default function ClassEstimationPage() {
         <div className={styles.actionRow}>
           <button
             className={styles.btnPrimary}
-            disabled={!isLoggedIn || isRunning}
+            disabled={!canStartScrape}
             onClick={startEstimation}
           >
             {runStatus === 'done' ? 'Run Again' : 'Start Estimation'}
@@ -289,6 +569,7 @@ export default function ClassEstimationPage() {
           )}
         </div>
       </div>
+      )}
 
       {/* ── Progress card ────────────────────────────────────────────────────── */}
       {progress && (
@@ -361,8 +642,8 @@ export default function ClassEstimationPage() {
       <div className={styles.card}>
         <div className={styles.sectionTitle}>Pipeline Preview</div>
         <p className={styles.hintText}>
-          Runs matching, candidate resolution, eligibility and ranking over the students the last run scraped.
-          Nothing is saved. Try it on a small ID range first.
+          Runs matching, candidate resolution, eligibility and ranking over whichever students are currently
+          loaded, scraped or imported. Nothing is saved. Try it on a small batch first.
         </p>
 
         <div className={styles.actionRow}>

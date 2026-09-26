@@ -412,3 +412,108 @@
   color: var(--text-muted);
   overflow-x: auto;
 }
+
+/* -- Source picker ------------------------------------------------------------ */
+
+.sourceRow {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.sourceOption {
+  flex: 1 1 140px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  background: var(--panel-bg, transparent);
+  border: 1px solid var(--panel-border);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-primary);
+  text-align: left;
+}
+
+.sourceOption:hover:not(:disabled) {
+  border-color: var(--accent-blue);
+}
+
+.sourceOptionActive {
+  border-color: var(--accent-blue);
+  box-shadow: inset 0 0 0 1px var(--accent-blue);
+}
+
+.sourceOption:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.sourceOptionHint {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+/* -- Import panel ------------------------------------------------------------- */
+
+.dropZone {
+  border: 1px dashed var(--panel-border);
+  border-radius: 4px;
+  padding: 20px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.dropZoneActive {
+  border-color: var(--accent-blue);
+  background: rgba(88, 166, 255, 0.06);
+  color: var(--text-primary);
+}
+
+.fileList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 10px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.fileRow {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 11px;
+  font-family: var(--font-mono, monospace);
+  padding: 4px 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.fileRowOk { color: var(--accent-green); }
+.fileRowFail { color: var(--accent-red); }
+
+.fileName {
+  flex: 1;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.fileNote {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.storedBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 8px;
+}
