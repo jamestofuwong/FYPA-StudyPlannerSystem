@@ -111,6 +111,48 @@ export function moveUnit(
 }
 
 /**
+ * Puts newUnit where oldCode sits, in the same semester and at the same
+ * position in it. An oldCode that is not placed, or a newUnit that is already
+ * placed anywhere, leaves the plan as it was, so a duplicate can never appear.
+ *
+ * Several placeholders can share one code, and they can sit in different
+ * semesters. `at` names the semester of the row that was meant; without it the
+ * first match in plan order is replaced.
+ */
+export function replaceUnit(
+  semesters: ReadonlyArray<CustomSemesterBucket>,
+  oldCode: string,
+  newUnit: PlaceableUnit,
+  at?: { year: number; semester: 1 | 2 },
+): CustomSemesterBucket[] {
+  const oldKey = normaliseCode(oldCode);
+  if (findPlaced(semesters, normaliseCode(newUnit.code))) return copy(semesters);
+
+  const inScope = (bucket: CustomSemesterBucket) =>
+    !at || (bucket.year === at.year && bucket.semester === at.semester);
+  const target = semesters.find(
+    (bucket) => inScope(bucket) && bucket.units.some((unit) => normaliseCode(unit.code) === oldKey),
+  );
+  if (!target) return copy(semesters);
+
+  const replacement: ScheduledUnit = {
+    code: newUnit.code,
+    name: newUnit.name,
+    category: newUnit.category,
+    ...(newUnit.recommended ? { recommended: true } : {}),
+    ...(newUnit.outsidePlanner ? { outsidePlanner: true } : {}),
+  };
+
+  return semesters.map((bucket) => {
+    if (bucket !== target) return { ...bucket, units: [...bucket.units] };
+    const index = bucket.units.findIndex((unit) => normaliseCode(unit.code) === oldKey);
+    const units = [...bucket.units];
+    units[index] = replacement;
+    return { ...bucket, units };
+  });
+}
+
+/**
  * Appends an empty slot after the last one. Semester 1 is followed by semester 2
  * of the same year, semester 2 by semester 1 of the next. These are slot numbers
  * counted from the intake, not calendar terms.

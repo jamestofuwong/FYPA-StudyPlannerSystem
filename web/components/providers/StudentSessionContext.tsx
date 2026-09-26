@@ -53,6 +53,12 @@ export type StudentSessionState = {
    */
   planExtraUnits: SchedulableUnit[];
   setPlanExtraUnits: Dispatch<SetStateAction<SchedulableUnit[]>>;
+  /**
+   * The planner's elective-group units, offered when an advisor chooses or
+   * swaps an elective. They are on the planner but not in the plan pool.
+   */
+  planElectiveCandidates: SchedulableUnit[];
+  setPlanElectiveCandidates: Dispatch<SetStateAction<SchedulableUnit[]>>;
   /** Per-category credit point totals the planner requires. */
   planRequirements: CategoryRequirement[];
   setPlanRequirements: Dispatch<SetStateAction<CategoryRequirement[]>>;
@@ -90,6 +96,7 @@ export function StudentSessionProvider({ children }: { children: ReactNode }) {
   const [planIntakeSemester, setPlanIntakeSemester] = useState<1 | 2>(1);
   const [planCompletedUnits, setPlanCompletedUnits] = useState<SchedulableUnit[]>([]);
   const [planExtraUnits, setPlanExtraUnits] = useState<SchedulableUnit[]>([]);
+  const [planElectiveCandidates, setPlanElectiveCandidates] = useState<SchedulableUnit[]>([]);
   const [planRequirements, setPlanRequirements] = useState<CategoryRequirement[]>([]);
   const [generatedSemesters, setGeneratedSemesters] = useState<CustomSemesterBucket[]>([]);
   const [isPlanEdited, setIsPlanEdited] = useState(false);
@@ -111,6 +118,7 @@ export function StudentSessionProvider({ children }: { children: ReactNode }) {
     setPlanIntakeSemester(1);
     setPlanCompletedUnits([]);
     setPlanExtraUnits([]);
+    setPlanElectiveCandidates([]);
     setPlanRequirements([]);
     setGeneratedSemesters([]);
     setIsPlanEdited(false);
@@ -136,6 +144,7 @@ export function StudentSessionProvider({ children }: { children: ReactNode }) {
         planIntakeSemester, setPlanIntakeSemester,
         planCompletedUnits, setPlanCompletedUnits,
         planExtraUnits, setPlanExtraUnits,
+        planElectiveCandidates, setPlanElectiveCandidates,
         planRequirements, setPlanRequirements,
         generatedSemesters, setGeneratedSemesters,
         isPlanEdited, setIsPlanEdited,

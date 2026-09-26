@@ -353,6 +353,9 @@ export async function POST(req: NextRequest) {
       startSemester,
       intakeSemester,
       requirements,
+      // The planner's elective-group units, for the elective picker. Mapped as
+      // electives, the category an advisor's choice from this list will carry.
+      electiveCandidates: electiveGroupUnits.map((unit) => toSchedulable(unit, 'elective')),
       availableDoubleMajors,
       availableMinors,
       // Categories for units already completed, which the pool leaves out but

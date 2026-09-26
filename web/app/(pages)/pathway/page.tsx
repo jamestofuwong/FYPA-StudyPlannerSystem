@@ -16,6 +16,7 @@ import {
 } from '../../../../core/shared/constants/grades';
 import {
   calendarTermFor,
+  normalLoadFor,
   normaliseCode,
   DEFAULT_SCHEDULER_CONFIG,
   type CustomSemesterBucket,
@@ -24,24 +25,15 @@ import {
 } from '../../../../core/services/scheduling/customPlannerScheduler';
 import { carryForwardWarnings, validatePlan } from '../../../../core/shared/scheduling/planValidator';
 import type { CatalogueUnit } from '../../api/custom-planner/catalogue/route';
+import ElectivePicker, { type PickerSlot, type PickerSource } from './ElectivePicker';
+import { monthsOf, offeringHint } from './terms';
 import {
   addSemester,
   addUnit,
   moveUnit,
   removeUnit,
+  replaceUnit,
 } from '../../../../core/shared/scheduling/planEdits';
-
-/**
- * Calendar terms named by the months they run in.
- *
- * "Semester 2" is ambiguous on this page: the header counts slots from the
- * student's intake, while an offering term is a calendar term, and for a
- * September intake the two are swapped. Months belong to neither counting, so
- * they say the same thing to every reader.
- */
-const TERM_MONTHS: Record<number, string> = { 1: 'Feb/Mar', 2: 'Aug/Sep', 3: 'summer', 4: 'winter' };
-
-const monthsOf = (term: number) => TERM_MONTHS[term] ?? `term ${term}`;
 
 const CATEGORY_NAMES: Record<string, string> = {
   core: 'Core units',
@@ -182,6 +174,7 @@ export default function PathwayPage() {
     planIntakeSemester, setPlanIntakeSemester,
     planCompletedUnits, setPlanCompletedUnits,
     planExtraUnits, setPlanExtraUnits,
+    planElectiveCandidates, setPlanElectiveCandidates,
     planRequirements, setPlanRequirements,
     generatedSemesters, setGeneratedSemesters,
     isPlanEdited, setIsPlanEdited,
@@ -197,9 +190,14 @@ export default function PathwayPage() {
   const [cataloguePrefixes, setCataloguePrefixes] = useState<string[]>([]);
   const [catalogueLoading, setCatalogueLoading] = useState(false);
   const [catalogueLoaded, setCatalogueLoaded] = useState(false);
-  const [openCatalogueSlot, setOpenCatalogueSlot] = useState<string | null>(null);
-  const [catalogueSearch, setCatalogueSearch] = useState('');
-  const [cataloguePrefix, setCataloguePrefix] = useState('ALL');
+  // Where the open picker will put the unit chosen in it. A replace names the row
+  // being swapped; an add is filling a gap and lets the advisor pick the semester.
+  const [picker, setPicker] = useState<
+    | { mode: 'replace'; oldCode: string; year: number; semester: 1 | 2 }
+    | { mode: 'add' }
+    | null
+  >(null);
+  const [pickerSlotKey, setPickerSlotKey] = useState('');
 
   /** Regenerating throws away hand edits, so make the advisor say so first. */
   const confirmDiscardEdits = () =>
@@ -210,12 +208,9 @@ export default function PathwayPage() {
     setIsPlanEdited(true);
   };
 
-  const openCatalogue = async (slot: string) => {
-    if (openCatalogueSlot === slot) {
-      setOpenCatalogueSlot(null);
-      return;
-    }
-    setOpenCatalogueSlot(slot);
+  // Fetched the first time any picker opens, not with the plan, which is
+  // already a large response.
+  const loadCatalogue = async () => {
     if (catalogueLoaded || catalogueLoading) return;
 
     const activePlanner = selectedPlannerIdx === -1 ? manualPlanner : dashboardData?.planners?.[selectedPlannerIdx];
@@ -234,10 +229,14 @@ export default function PathwayPage() {
       setCatalogueLoaded(true);
     } catch {
       showToast('Could not load the unit catalogue.', 'error');
-      setOpenCatalogueSlot(null);
     } finally {
       setCatalogueLoading(false);
     }
+  };
+
+  const openPicker = (target: NonNullable<typeof picker>) => {
+    setPicker(target);
+    void loadCatalogue();
   };
 
   const resetToGenerated = () => {
@@ -331,6 +330,7 @@ export default function PathwayPage() {
         setPlanUnits(data.units ?? []);
         setPlanIntakeSemester(data.intakeSemester === 2 ? 2 : 1);
         setPlanCompletedUnits(data.completedUnits ?? []);
+        setPlanElectiveCandidates(data.electiveCandidates ?? []);
         setPlanRequirements(data.requirements ?? []);
         setGeneratedSemesters(data.data.semesters);
         setAvailableDoubleMajors(data.availableDoubleMajors ?? []);
@@ -621,9 +621,11 @@ export default function PathwayPage() {
               // Completed units are in here too, so the requirement totals can
               // credit what the student has already passed. Catalogue units are
               // on no planner, so without them validatePlan would report every
-              // one as no_offering_data and never check its requisites.
+              // one as no_offering_data and never check its requisites. The planner's
+              // elective list is here for the same reason, and goes first so an entry
+              // the plan already holds for a unit is never overridden by its copy.
               const unitData = new Map(
-                [...planUnits, ...planCompletedUnits, ...planExtraUnits].map((u) => [normaliseCode(u.code), u])
+                [...planElectiveCandidates, ...planUnits, ...planCompletedUnits, ...planExtraUnits].map((u) => [normaliseCode(u.code), u])
               );
               const placedCodes = new Set(
                 semesters.flatMap((s) => s.units.map((u) => normaliseCode(u.code)))
@@ -688,6 +690,9 @@ export default function PathwayPage() {
               const overCapacity = new Map<string, Extract<PlanWarning, { kind: 'over_capacity' }>>();
               const byUnit = new Map<string, string[]>();
               const messages: string[] = [];
+              // Messages that get a Choose elective button: an elective shortfall has no
+              // row left to swap, so this is where an advisor fills the gap.
+              const chooseElectiveMessages = new Set<string>();
               for (const w of warnings) {
                 // Identify which unit this warning is about (if any)
                 const unitCode = warningUnitCode(w);
@@ -710,6 +715,9 @@ export default function PathwayPage() {
 
                 // Normal warning handling continues below...
                 const message = describeWarning(w, DEFAULT_SCHEDULER_CONFIG.maxSemesters, planIntakeSemester);
+                if (message && w.kind === 'requirement_shortfall' && w.category === 'elective') {
+                  chooseElectiveMessages.add(message);
+                }
                 if (w.kind === 'over_capacity') {
                   overCapacity.set(`${w.year}-${w.semester}`, w);
                   continue;
@@ -730,46 +738,97 @@ export default function PathwayPage() {
                 if (unit) applyEdit(addUnit(semesters, unit, bucket.year, bucket.semester));
               };
 
-              const addFromCatalogue = (unit: CatalogueUnit, bucket: CustomSemesterBucket) => {
-                // Kept in the session as well as the plan, so validatePlan can
-                // still read its offerings and requisites after the edit.
-                setPlanExtraUnits((current) =>
-                  current.some((u) => normaliseCode(u.code) === normaliseCode(unit.code))
-                    ? current
-                    : [...current, unit]
+              const completedKeys = new Set(
+                (dashboardData?.completedCodes ?? []).map((code: string) => normaliseCode(code))
+              );
+              const isMpuCode = (code: string) => normaliseCode(code).startsWith('MPU');
+              const poolCategory = new Map(planUnits.map((u) => [normaliseCode(u.code), u.category]));
+              const candidateKeys = new Set(planElectiveCandidates.map((u) => normaliseCode(u.code)));
+
+              // Section one is the planner's own elective list. A prescribed elective
+              // or a double major unit that the plan already names has its own place,
+              // and choosing it here would quietly change its category.
+              const pickerPlannerUnits = planElectiveCandidates.filter((u) => {
+                const key = normaliseCode(u.code);
+                const named = poolCategory.get(key);
+                return (
+                  !placedCodes.has(key) &&
+                  !completedKeys.has(key) &&
+                  !isMpuCode(u.code) &&
+                  (named === undefined || named === 'elective')
                 );
-                applyEdit(addUnit(semesters, unit, bucket.year, bucket.semester));
-                setOpenCatalogueSlot(null);
-                setCatalogueSearch('');
-              };
+              });
 
-              // The route drops units the planner template names, but the pool
-              // also holds recommended electives and injected minor units, which
-              // the picker beside this one already offers. Filtering on the pool
-              // covers all three without the route having to know about them.
-              const pooledCodes = new Set(planUnits.map((u) => normaliseCode(u.code)));
+              // Section two is everything else. The route drops what the planner
+              // template names, but the pool also holds recommended electives and
+              // injected minor units, which the "+ Add unit" dropdown already
+              // offers, so the pool is filtered here too. Units in section one
+              // stay out, so no unit is offered twice.
+              const pickerCatalogueUnits = catalogue.filter((u) => {
+                const key = normaliseCode(u.code);
+                return (
+                  !placedCodes.has(key) &&
+                  !poolCategory.has(key) &&
+                  !candidateKeys.has(key) &&
+                  !completedKeys.has(key) &&
+                  !isMpuCode(u.code)
+                );
+              });
 
-              const catalogueMatches = (term: 1 | 2) => {
-                const query = catalogueSearch.trim().toLowerCase();
-                return catalogue
-                  .filter((u) => cataloguePrefix === 'ALL' || u.prefix === cataloguePrefix)
-                  .filter((u) => !placedCodes.has(normaliseCode(u.code)))
-                  .filter((u) => !pooledCodes.has(normaliseCode(u.code)))
-                  .filter(
-                    (u) =>
-                      query === '' ||
-                      u.code.toLowerCase().includes(query) ||
-                      u.name.toLowerCase().includes(query)
-                  )
-                  .map((u) => ({
-                    unit: u,
-                    offered:
-                      u.offeringSemesters.length === 0
-                        ? 'offering unknown'
-                        : u.offeringSemesters.includes(term)
-                          ? ''
-                          : 'not offered this term',
-                  }));
+              // Semesters as the plan shows them, for the picker that lets the
+              // advisor choose one. The default is the earliest with room under
+              // the normal load, else the last, where the over-capacity note will say so.
+              const normalLoad = normalLoadFor(DEFAULT_SCHEDULER_CONFIG);
+              const shownSemesters = semesters.filter(
+                (sem) => sem.units.some((u) => u.category !== 'mpu') || isPlanEdited
+              );
+              const pickerSlots: PickerSlot[] = shownSemesters.map((sem) => {
+                const term = calendarTermFor(sem.semester, planIntakeSemester);
+                return {
+                  key: `${sem.year}-${sem.semester}`,
+                  label: `Y${sem.year} S${sem.semester} · ${monthsOf(term)}`,
+                  term,
+                };
+              });
+              const roomy = shownSemesters.find(
+                (sem) => sem.units.filter((u) => u.category !== 'mpu').length < normalLoad
+              ) ?? shownSemesters[shownSemesters.length - 1];
+              const defaultSlotKey = roomy ? `${roomy.year}-${roomy.semester}` : '';
+              const activeSlotKey = pickerSlots.some((slot) => slot.key === pickerSlotKey)
+                ? pickerSlotKey
+                : defaultSlotKey;
+              const activeSlot = pickerSlots.find((slot) => slot.key === activeSlotKey);
+
+              const chooseElective = (
+                unit: SchedulableUnit,
+                source: PickerSource,
+                year: number,
+                semester: 1 | 2
+              ) => {
+                if (!picker) return;
+                // The advisor's own choice, so never a recommendation. Only a unit
+                // from outside the planner is tagged as such.
+                const chosen = {
+                  ...unit,
+                  category: 'elective',
+                  recommended: false,
+                  outsidePlanner: source === 'catalogue',
+                };
+                if (source === 'catalogue') {
+                  // Kept in the session as well as the plan, so validatePlan can
+                  // still read its offerings and requisites after the edit.
+                  setPlanExtraUnits((current) =>
+                    current.some((u) => normaliseCode(u.code) === normaliseCode(unit.code))
+                      ? current
+                      : [...current, chosen]
+                  );
+                }
+                applyEdit(
+                  picker.mode === 'replace'
+                    ? replaceUnit(semesters, picker.oldCode, chosen, { year, semester })
+                    : addUnit(semesters, chosen, year, semester)
+                );
+                setPicker(null);
               };
 
               const moveUnitToSlot = (code: string, slot: string) => {
@@ -820,75 +879,26 @@ export default function PathwayPage() {
                         >
                           <option value="">+ Add unit</option>
                           {unplacedUnits.map((u) => {
-                            const offered = u.offeringSemesters.length === 0
-                              ? ' · offering unknown'
-                              : u.offeringSemesters.includes(calendarTerm)
-                                ? ''
-                                : ' · not offered this term';
+                            const hint = offeringHint(u, calendarTerm);
                             return (
                               <option key={u.code} value={u.code}>
-                                {u.code} · {u.name}{offered}
+                                {u.code} · {u.name}{hint ? ` · ${hint}` : ''}
                               </option>
                             );
                           })}
                         </select>
-                        <button
-                          type="button"
-                          className={styles.catalogueBtn}
-                          onClick={() => openCatalogue(slotKey)}
-                          title="Add a unit that is not on this planner, including units from another course"
-                        >
-                          + Add from catalogue
-                        </button>
                       </div>
-                      {openCatalogueSlot === slotKey && (
-                        <div className={styles.cataloguePanel}>
-                          {catalogueLoading ? (
-                            <div className={styles.catalogueEmpty}>Loading units…</div>
-                          ) : (
-                            <>
-                              <div className={styles.catalogueControls}>
-                                <input
-                                  className={styles.catalogueSearch}
-                                  type="search"
-                                  value={catalogueSearch}
-                                  placeholder="Search by code or name"
-                                  aria-label="Search the unit catalogue"
-                                  onChange={(e) => setCatalogueSearch(e.target.value)}
-                                />
-                                <select
-                                  className={styles.catalogueFilter}
-                                  value={cataloguePrefix}
-                                  aria-label="Filter by unit code prefix"
-                                  onChange={(e) => setCataloguePrefix(e.target.value)}
-                                >
-                                  <option value="ALL">All prefixes</option>
-                                  {cataloguePrefixes.map((p) => (
-                                    <option key={p} value={p}>{p}</option>
-                                  ))}
-                                </select>
-                              </div>
-                              <ul className={styles.catalogueList}>
-                                {catalogueMatches(calendarTerm).map(({ unit, offered }) => (
-                                  <li key={unit.code}>
-                                    <button
-                                      type="button"
-                                      className={styles.catalogueItem}
-                                      onClick={() => addFromCatalogue(unit, sem)}
-                                    >
-                                      <span className={styles.catalogueCode}>{unit.code}</span>
-                                      <span className={styles.catalogueName}>{unit.name}</span>
-                                      {offered && <span className={styles.catalogueHint}>· {offered}</span>}
-                                    </button>
-                                  </li>
-                                ))}
-                              </ul>
-                              {catalogueMatches(calendarTerm).length === 0 && (
-                                <div className={styles.catalogueEmpty}>No units match that search.</div>
-                              )}
-                            </>
-                          )}
-                        </div>
+                      {picker?.mode === 'replace' && picker.year === sem.year && picker.semester === sem.semester && (
+                        <ElectivePicker
+                          title={picker.oldCode === 'ELECTIVE' ? 'Choose an elective' : `Swap ${picker.oldCode}`}
+                          plannerUnits={pickerPlannerUnits}
+                          catalogueUnits={pickerCatalogueUnits}
+                          prefixes={cataloguePrefixes}
+                          loading={catalogueLoading}
+                          term={calendarTerm}
+                          onChoose={(unit, source) => chooseElective(unit, source, sem.year, sem.semester)}
+                          onClose={() => setPicker(null)}
+                        />
                       )}
                       <div style={{ overflowX: 'auto' }}>
                         <table className={styles.table} style={{ tableLayout: 'fixed', width: '100%' }}>
@@ -985,6 +995,19 @@ export default function PathwayPage() {
                                 </td>
                                 <td>
                                   <div className={styles.rowActions}>
+                                    {u.code === 'ELECTIVE' ? (
+                                          <button
+                                            type="button"
+                                            className={styles.btnSecondary}
+                                            style={{ fontSize: 11, padding: '3px 8px', borderColor: 'var(--accent-purple)', color: 'var(--accent-purple)' }}
+                                            onClick={() => {
+                                              openPicker({ mode: 'replace', oldCode: u.code, year: sem.year, semester: sem.semester });
+                                            }}
+                                            title="Click to select an elective from the catalogue"
+                                          >
+                                            + Select Unit
+                                          </button>
+                                    ) : (
                                       <select
                                         className={styles.moveSelect}
                                         value={`${sem.year}-${sem.semester}`}
@@ -1000,6 +1023,18 @@ export default function PathwayPage() {
                                           </option>
                                         ))}
                                       </select>
+                                    )}
+                                    {u.category === 'elective' && u.code !== 'ELECTIVE' && (
+                                      <button
+                                        type="button"
+                                        className={styles.swapBtn}
+                                        onClick={() => openPicker({ mode: 'replace', oldCode: u.code, year: sem.year, semester: sem.semester })}
+                                        title={`Swap ${u.code} for another elective`}
+                                        aria-label={`Swap ${u.code}`}
+                                      >
+                                        Swap
+                                      </button>
+                                    )}
                                     <button
                                       type="button"
                                       className={styles.removeBtn}
@@ -1055,9 +1090,41 @@ export default function PathwayPage() {
                       <li key={message} className={styles.warningItem}>
                         <span aria-hidden="true">⚠</span>
                         <span>{message}.</span>
+                        {chooseElectiveMessages.has(message) && (
+                          <button
+                            type="button"
+                            className={styles.swapBtn}
+                            onClick={() => {
+                              setPickerSlotKey('');
+                              if (picker?.mode === 'add') setPicker(null);
+                              else openPicker({ mode: 'add' });
+                            }}
+                          >
+                            Choose elective
+                          </button>
+                        )}
                       </li>
                     ))}
                   </ul>
+                )}
+
+                {picker?.mode === 'add' && activeSlot && (
+                  <ElectivePicker
+                    title="Choose an elective"
+                    plannerUnits={pickerPlannerUnits}
+                    catalogueUnits={pickerCatalogueUnits}
+                    prefixes={cataloguePrefixes}
+                    loading={catalogueLoading}
+                    term={activeSlot.term}
+                    slots={pickerSlots}
+                    slotKey={activeSlotKey}
+                    onSlotChange={setPickerSlotKey}
+                    onChoose={(unit, source) => {
+                      const [year, semester] = activeSlotKey.split('-').map(Number);
+                      chooseElective(unit, source, year, semester as 1 | 2);
+                    }}
+                    onClose={() => setPicker(null)}
+                  />
                 )}
 
                 {(() => {
