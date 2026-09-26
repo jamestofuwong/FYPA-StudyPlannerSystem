@@ -13,12 +13,10 @@
 // EstimationResult that nothing downstream ever read.
 // ============================================================
 
-import {
-  fetchEnrollments,
-  fetchDegreeAudit,
-} from '../portal/portalSessionService';
 import { buildEstimationRecord } from './estimationRecordBuilder';
 import { resetEstimationRecords, pushEstimationRecord } from './estimationStore';
+import { realPortalSource } from './sources/realPortalSource';
+import type { PortalEnrollment, PortalSource, PortalStudentSummary } from './sources/portalSource';
 
 export type ScrapePhase = 'enrollments' | 'audit';
 
@@ -35,10 +33,17 @@ export interface ScrapeSummary {
   skipped: number;
 }
 
+/**
+ * Walks a student list, fetching each transcript and storing it as a record.
+ *
+ * The source is injected rather than imported, so the same loop runs against the live portal or against
+ * generated data. Defaults to the live portal, so an existing caller behaves as it did before.
+ */
 export async function runScrapeForStudents(
-  students: { student_id: string; name: string; db_id: number }[],
+  students: PortalStudentSummary[],
   callbacks: ScrapeCallbacks,
   isCancelled: () => boolean,
+  source: PortalSource = realPortalSource,
 ): Promise<ScrapeSummary> {
   resetEstimationRecords();
 
@@ -54,9 +59,9 @@ export async function runScrapeForStudents(
 
     callbacks.onProgress(current, students.length, student.name, 'enrollments');
 
-    let enrollments: { EnrollId: number; EnrollmentDesc: string }[];
+    let enrollments: PortalEnrollment[];
     try {
-      enrollments = await fetchEnrollments(student.db_id);
+      enrollments = await source.fetchEnrollments(student.db_id);
     } catch (err) {
       failed++;
       callbacks.onStudentError(
@@ -86,10 +91,10 @@ export async function runScrapeForStudents(
     callbacks.onProgress(current, students.length, student.name, 'audit');
 
     try {
-      const scraped = await fetchDegreeAudit(student.db_id, primary.EnrollId, student.student_id);
+      const scraped = await source.fetchDegreeAudit(student.db_id, primary.EnrollId, student.student_id);
 
       pushEstimationRecord(buildEstimationRecord({
-        source: 'portal',
+        source: source.id === 'mock' ? 'mock' : 'portal',
         studentId: student.student_id,
         name: student.name,
         dbId: student.db_id,

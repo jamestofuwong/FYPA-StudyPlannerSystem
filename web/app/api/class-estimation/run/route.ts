@@ -1,23 +1,38 @@
 import { type NextRequest } from 'next/server';
-import { getStudents, getStatus } from '../../../../../core/services/portal/portalSessionService';
 import { runScrapeForStudents } from '../../../../../core/services/classEstimation/scrapeOrchestrator';
+import {
+  resolvePortalSource,
+  defaultPortalSourceId,
+} from '../../../../../core/services/classEstimation/sources/resolvePortalSource';
 
 // Force dynamic so Next.js never caches this streaming response.
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
-  if (getStatus().sessionStatus !== 'logged-in') {
-    return new Response(JSON.stringify({ error: 'Not logged in to portal' }), { status: 401 });
+  const { searchParams } = req.nextUrl;
+
+  // Which transcript source to read. Defaults to the live portal; "mock" serves generated students and
+  // needs no login, which is how the flow gets exercised without portal access.
+  const source = resolvePortalSource(searchParams.get('source'), {
+    count: parseInt(searchParams.get('mockCount') ?? '', 10) || undefined,
+    seed: parseInt(searchParams.get('mockSeed') ?? '', 10) || undefined,
+  });
+
+  const readiness = await source.readiness();
+  if (!readiness.ready) {
+    return new Response(
+      JSON.stringify({ error: readiness.reason ?? `Source "${source.id}" is not ready`, source: source.id }),
+      { status: 409 },
+    );
   }
 
   // ── ID range filter ─────────────────────────────────────────────────────────
-  const { searchParams } = req.nextUrl;
   const minIdParam = searchParams.get('minId');
   const maxIdParam = searchParams.get('maxId');
   const minIdNum = minIdParam ? parseInt(minIdParam, 10) : null;
   const maxIdNum = maxIdParam ? parseInt(maxIdParam, 10) : null;
 
-  let students = getStudents();
+  let students = await source.getStudents();
 
   if (minIdNum !== null || maxIdNum !== null) {
     students = students.filter((s) => {
@@ -47,7 +62,9 @@ export async function GET(req: NextRequest) {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
       };
 
-      send({ type: 'start', total });
+      // The source is named in the start event so a run's provenance is visible in the UI, and generated
+      // students can never be mistaken for a real cohort.
+      send({ type: 'start', total, source: source.id, sourceLabel: source.label });
 
       const summary = await runScrapeForStudents(
         students,
@@ -62,6 +79,7 @@ export async function GET(req: NextRequest) {
             send({ type: 'student-error', studentId, studentName, error }),
         },
         () => cancelled,
+        source,
       );
 
       send({
@@ -70,6 +88,7 @@ export async function GET(req: NextRequest) {
         failed: summary.failed,
         skipped: summary.skipped,
         total: summary.completed + summary.failed + summary.skipped,
+        source: source.id,
       });
       controller.close();
     },
@@ -87,4 +106,12 @@ export async function GET(req: NextRequest) {
       Connection: 'keep-alive',
     },
   });
+}
+
+/** What the source picker offers, and which one a run would use if none is chosen. */
+export async function OPTIONS() {
+  const { availablePortalSources } = await import(
+    '../../../../../core/services/classEstimation/sources/resolvePortalSource'
+  );
+  return Response.json({ sources: availablePortalSources(), default: defaultPortalSourceId() });
 }

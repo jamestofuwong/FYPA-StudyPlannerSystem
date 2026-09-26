@@ -20,6 +20,8 @@
 // Deterministic: the same seed always produces the same cohort, so a failing test can be re-run.
 // ============================================================
 
+import type { ScrapedCourseListItem } from '../../../shared/types/student';
+
 export interface FixtureUnit {
   code: string;
   title: string;
@@ -242,6 +244,23 @@ export function toMultiStudentRows(students: GeneratedStudent[]): unknown[][] {
 /** One sheet for a single student, matching what the portal exports. */
 export function toSingleStudentRows(student: GeneratedStudent): unknown[][] {
   return [[...DPA_HEADER], ...student.rows.map((row) => [...row])];
+}
+
+/**
+ * The same rows as transcript items, for a caller that wants them directly rather than through a
+ * spreadsheet. Used by the mock portal source, so the column order lives in one place.
+ */
+export function toCourseList(student: GeneratedStudent): ScrapedCourseListItem[] {
+  return student.rows.map(([courseId, courseTitle, credits, creditsEarned, status, grade, term]) => ({
+    courseId,
+    courseTitle,
+    level: '',
+    credits,
+    creditsEarned,
+    status,
+    grade,
+    term,
+  }));
 }
 
 // ------------------------------------------------------------------
