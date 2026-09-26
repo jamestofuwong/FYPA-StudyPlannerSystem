@@ -6,6 +6,8 @@ import {
   validateSchedulerConfig,
   resolveNextStudyTerm,
   calendarTermFor,
+  normaliseCode,
+  resolveWilPlacementMilestone,
   type SchedulableUnit,
 } from '../../../../core/services/scheduling/customPlannerScheduler';
 import {
@@ -334,6 +336,21 @@ export async function POST(req: NextRequest) {
     // Final Plan Scheduling
     const result = schedule(remainingUnits);
 
+    // Pass the unscheduled SchedulableUnit objects (which carry category and creditPoints)
+    const unscheduledSchedulables = remainingUnits.filter((u) =>
+      result.unschedulableUnits.some((un) => normaliseCode(un.code) === normaliseCode(u.code))
+    );
+
+    // Resolve timeline break milestones (e.g. WIL placement before FYP A)
+    const inProgressCount = (courseList ?? []).filter((c: any) => c.status === 'in_progress').length;
+    const wilMilestone = resolveWilPlacementMilestone({
+      unscheduledUnits: unscheduledSchedulables,
+      semesters: result.semesters,
+      hasCurrentEnrolledUnits: inProgressCount > 0,
+      intakeSemester,
+      plannerWilCp: planner.wil_cp,
+    });
+
     // A null requirement means the planner never recorded one, so it is left
     // out rather than sent as zero, which would read as "nothing required".
     const requirements = [
@@ -358,6 +375,7 @@ export async function POST(req: NextRequest) {
       electiveCandidates: electiveGroupUnits.map((unit) => toSchedulable(unit, 'elective')),
       availableDoubleMajors,
       availableMinors,
+      breakMilestones: wilMilestone ? [wilMilestone] : [],
       // Categories for units already completed, which the pool leaves out but
       // the requirement totals must still count. A unit the planner only offers
       // as an elective candidate is an elective the student has taken, so it is

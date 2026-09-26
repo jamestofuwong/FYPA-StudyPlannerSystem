@@ -224,3 +224,61 @@
   padding: 2px 6px;
   color: var(--accent-yellow);
 }
+
+
+/* Break Term Milestone Strip (WIL / Intensive Placements) */
+.breakMilestoneStrip {
+  margin-bottom: 8px;
+  padding: 10px 14px;
+  border-radius: 4px;
+  background: rgba(187, 134, 252, 0.08);
+  border: 1px dashed var(--accent-purple);
+}
+
+.breakMilestoneHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.breakMilestoneTitle {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--accent-purple);
+  font-weight: 600;
+}
+
+.breakMilestoneBody {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+.breakMilestoneName {
+  font-weight: 500;
+}
+
+.breakMilestoneTag {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--accent-purple);
+  margin-left: auto;
+}
+
+.breakMoveSelect {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  background: var(--card-bg, #1e1e1e);
+  color: var(--accent-purple, #bb86fc);
+  border: 1px solid rgba(187, 134, 252, 0.4);
+  border-radius: 4px;
+  padding: 3px 8px;
+  cursor: pointer;
+  outline: none;
+}
+
+.breakMoveSelect:hover {
+  border-color: var(--accent-purple, #bb86fc);
+}

@@ -180,8 +180,10 @@ export default function PathwayPage() {
     isPlanEdited, setIsPlanEdited,
     availableDoubleMajors, setAvailableDoubleMajors,
     selectedDoubleMajorId, setSelectedDoubleMajorId,
+    availableMinors, setAvailableMinors,
+    breakMilestones, setBreakMilestones,
+    customWilSlot, setCustomWilSlot,
   } = useStudentSession();
-  const [availableMinors, setAvailableMinors] = useState<any[]>([]);
   const [customPlanLoading, setCustomPlanLoading] = useState(false);
 
   // Catalogue state. The units are fetched the first time a picker is opened,
@@ -325,6 +327,8 @@ export default function PathwayPage() {
       const data = await res.json();
       if (data.success) {
         setCustomPlan(data.data);
+        setBreakMilestones(data.breakMilestones ?? []);
+        setCustomWilSlot(null);
         setCustomPlanStart({ year: data.startYear, semester: data.startSemester });
         setRetakeUnitCodes(retakeCodes);
         setPlanUnits(data.units ?? []);
@@ -849,7 +853,63 @@ export default function PathwayPage() {
                     const slotKey = `${sem.year}-${sem.semester}`;
                     const capacity = overCapacity.get(slotKey);
                     const calendarTerm = calendarTermFor(sem.semester, planIntakeSemester);
+                    const primaryMilestone = breakMilestones[0];
+                    const activeWilSlot = customWilSlot ?? primaryMilestone?.insertBeforeSlotKey;
+                    const isWilSlot = primaryMilestone && activeWilSlot === slotKey;
+
+                    // Derive dynamic title based on the active position
+                    const currentBreakOption = primaryMilestone?.availableBreakSlots?.find((b: any) => b.slotKey === slotKey);
+                    const dynamicBreakTitle = currentBreakOption
+                      ? currentBreakOption.termType === 'summer'
+                        ? `YEAR ${currentBreakOption.year} · SUMMER BREAK (Dec – Feb)`
+                        : `YEAR ${currentBreakOption.year} · WINTER BREAK (June – July)`
+                      : primaryMilestone?.breakTermName;
+
                     return (
+                    <div key={`sem-wrap-${slotKey}`}>
+                      {/* Chronological Break Milestone Strip for WIL with Move Dropdown */}
+                      {isWilSlot && (
+                        <div className={styles.breakMilestoneStrip}>
+                          <div className={styles.breakMilestoneHeader}>
+                            <span className={styles.breakMilestoneTitle}>
+                              {currentBreakOption?.termType === 'winter'} {dynamicBreakTitle} · Intensive Break Period
+                            </span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              {/* Advisor dropdown to switch break term location */}
+                              {primaryMilestone.availableBreakSlots?.length > 1 && (
+                                <select
+                                  className={styles.breakMoveSelect}
+                                  value={activeWilSlot}
+                                  onChange={(e) => setCustomWilSlot(e.target.value)}
+                                  title="Change which break period to take this placement"
+                                >
+                                  {primaryMilestone.availableBreakSlots.map((opt: any) => (
+                                    <option key={opt.slotKey} value={opt.slotKey}>
+                                      Move to: {opt.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              )}
+                              <Badge label="Summer / Winter" cls="badgePurple" />
+                            </div>
+                          </div>
+                          <div className={styles.breakMilestoneBody}>
+                            <InlineCode>{primaryMilestone.unitCode}</InlineCode>
+                            <span className={styles.breakMilestoneName}>{primaryMilestone.unitName}</span>
+                            <span className={styles.breakMilestoneTag}>
+                              {primaryMilestone.unitCode?.toUpperCase().includes('OPTIONAL') ? (
+                                `${primaryMilestone.creditPoints ?? 25} CP · REPLACES 2 ELECTIVES`
+                              ) : primaryMilestone.creditPoints === 0 ? (
+                                '0 CP · COMPULSORY ACCREDITATION HURDLE'
+                              ) : (
+                                `${primaryMilestone.creditPoints ?? 25} CP · COMPULSORY WIL`
+                              )}
+                            </span>
+
+                          </div>
+                        </div>
+                      )}
+
                     <div
                       key={`cp-${sem.year}-${sem.semester}`}
                       style={{ marginBottom: 8, border: '1px solid rgba(244,135,113,0.3)', borderRadius: 4, overflow: 'hidden' }}
@@ -1059,6 +1119,7 @@ export default function PathwayPage() {
                           </tbody>
                         </table>
                       </div>
+                      </div>
                     </div>
                     );
                   })
@@ -1155,86 +1216,6 @@ export default function PathwayPage() {
                     );
                   }
                   return null;
-                })()}
-
-                {/* Summer / Winter Term Units (Optional Break Periods) */}
-                {(() => {
-                  const shortTermWarnings = (customPlan.warnings ?? []).filter(
-                    (w: any) => w.kind === 'short_term_only'
-                  );
-                  const shortTermCodes = new Set(shortTermWarnings.map((w: any) => normaliseCode(w.unitCode)));
-                  const shortTermUnits = (customPlan.unschedulableUnits ?? []).filter((u: any) =>
-                    shortTermCodes.has(normaliseCode(u.code))
-                  );
-
-                  if (shortTermUnits.length === 0) return null;
-
-                  return (
-                    <div className={styles.mpuSection} style={{ marginBottom: 16 }}>
-                      <div className={styles.mpuHeader}>
-                        <div className={styles.sectionTitle} style={{ margin: 0, fontSize: 13 }}>
-                          Summer / Winter Term Units ({shortTermUnits.length})
-                        </div>
-                        <span className={styles.mpuSubtitle}>
-                          Offered during semester breaks · Optional acceleration
-                        </span>
-                      </div>
-
-                      <div className={styles.mpuTableWrap}>
-                        <table className={styles.table} style={{ tableLayout: 'fixed', width: '100%' }}>
-                          <colgroup>
-                            <col style={{ width: 140 }} />
-                            <col style={{ width: 'auto' }} />
-                            <col style={{ width: 160 }} />
-                            <col style={{ width: 140 }} />
-                          </colgroup>
-                          <thead>
-                            <tr>
-                              <th>Unit Code</th>
-                              <th>Unit Title</th>
-                              <th>Offering Term</th>
-                              <th>Status</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {shortTermUnits.map((u: any) => {
-                              const isOptionalProject = u.code.includes('ICT20016');
-                              return (
-                                <tr key={u.code}>
-                                  <td>
-                                    <InlineCode>{u.code}</InlineCode>
-                                  </td>
-                                  <td style={{ whiteSpace: 'normal' }}>
-                                    {u.name}
-                                    {isOptionalProject && (
-                                      <span
-                                        style={{
-                                          marginLeft: 6,
-                                          fontSize: 9,
-                                          fontFamily: 'var(--font-mono)',
-                                          color: 'var(--accent-purple)',
-                                          letterSpacing: '0.05em',
-                                        }}
-                                        title="25 Credit Points · Equivalent to 2 elective units"
-                                      >
-                                        25 CP · REPLACES 2 ELECTIVES
-                                      </span>
-                                    )}
-                                  </td>
-                                  <td>
-                                    <Badge label="Winter Term" cls="badgePurple" />
-                                  </td>
-                                  <td>
-                                    <span className={styles.statusPending}>Optional Break Term</span>
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  );
                 })()}
 
                 {/* Remaining MPU units */}

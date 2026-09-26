@@ -72,6 +72,12 @@ export type StudentSessionState = {
   setAvailableDoubleMajors: React.Dispatch<React.SetStateAction<any[]>>;
   selectedDoubleMajorId: string | null;
   setSelectedDoubleMajorId: React.Dispatch<React.SetStateAction<string | null>>;
+  availableMinors: any[];
+  setAvailableMinors: (minors: any[]) => void;
+  breakMilestones: any[];
+  setBreakMilestones: (milestones: any[]) => void;
+  customWilSlot: string | null;
+  setCustomWilSlot: (slot: string | null) => void;
 
 };
 
@@ -103,6 +109,9 @@ export function StudentSessionProvider({ children }: { children: ReactNode }) {
 
   const [availableDoubleMajors, setAvailableDoubleMajors] = useState<any[]>([]);
   const [selectedDoubleMajorId, setSelectedDoubleMajorId] = useState<string | null>(null);
+  const [availableMinors, setAvailableMinors] = useState<any[]>([]);
+  const [breakMilestones, setBreakMilestones] = useState<any[]>([]);
+  const [customWilSlot, setCustomWilSlot] = useState<string | null>(null);
 
 
   // Switching planner discards the custom plan built for the previous one. This runs
@@ -150,6 +159,9 @@ export function StudentSessionProvider({ children }: { children: ReactNode }) {
         isPlanEdited, setIsPlanEdited,
         availableDoubleMajors, setAvailableDoubleMajors,
         selectedDoubleMajorId, setSelectedDoubleMajorId,
+        availableMinors, setAvailableMinors,
+        breakMilestones, setBreakMilestones,
+        customWilSlot, setCustomWilSlot,
       }}
     >
       {children}

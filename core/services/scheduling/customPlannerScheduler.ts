@@ -779,3 +779,117 @@ export function findMatchingProjectB(
     return hasRequisiteLink || baseTitle === uBaseTitle;
   });
 }
+
+export interface BreakOption {
+  slotKey: string;
+  year: number;
+  termType: 'summer' | 'winter';
+  label: string;
+}
+
+export interface BreakMilestone {
+  unitCode: string;
+  unitName: string;
+  creditPoints: number;
+  // True if this WIL unit replaces standard elective credit
+  isElectiveReplacement: boolean;
+  breakTermName: string;
+  // Key of the semester right before which this break term banner appears
+  insertBeforeSlotKey: string | null;
+  // All valid break slots the advisor can move this unit to
+  availableBreakSlots: BreakOption[];
+}
+
+export function resolveWilPlacementMilestone(input: {
+  unscheduledUnits: SchedulableUnit[];
+  semesters: CustomSemesterBucket[];
+  hasCurrentEnrolledUnits: boolean;
+  intakeSemester: 1 | 2;
+  plannerWilCp: number | null;
+}): BreakMilestone | null {
+  const { unscheduledUnits, semesters, hasCurrentEnrolledUnits, intakeSemester, plannerWilCp } = input;
+
+  // Identify any unit categorized as 'wil'
+  const wilUnit = unscheduledUnits.find((u) => u.category === 'wil');
+  if (!wilUnit || semesters.length === 0) return null;
+
+  const isComputingWil = normaliseCode(wilUnit.code).includes('ICT20016');
+  
+  let creditPoints = wilUnit.creditPoints != null ? Number(wilUnit.creditPoints) : null;
+  if (creditPoints == null || creditPoints === 0) {
+    if (isComputingWil) {
+      creditPoints = 25;
+    } else if (plannerWilCp != null) {
+      creditPoints = Number(plannerWilCp);
+    } else {
+      creditPoints = 0;
+    }
+  }
+
+  const isElectiveReplacement = isComputingWil || creditPoints >= 25;
+  // Generate all valid break positions between existing semesters
+  const availableBreakSlots: BreakOption[] = semesters.map((sem, idx) => {
+    const calTerm = calendarTermFor(sem.semester, intakeSemester);
+    const isSummer = calTerm === 1;
+    const termType: 'summer' | 'winter' = isSummer ? 'summer' : 'winter';
+    const breakYear = idx > 0 ? semesters[idx - 1].year : sem.year;
+    const label = isSummer
+      ? `Year ${breakYear} Summer Break (Dec - Feb) [before Y${sem.year} S${sem.semester}]`
+      : `Year ${breakYear} Winter Break (June - July) [before Y${sem.year} S${sem.semester}]`;
+
+    return {
+      slotKey: `${sem.year}-${sem.semester}`,
+      year: breakYear,
+      termType,
+      label,
+    };
+  });
+
+  // Locate FYP A to establish default recommended slot
+  let projectASlot: { year: number; semester: 1 | 2 } | null = null;
+  for (const s of semesters) {
+    if (
+      s.units.some(
+        (u) =>
+          u.name?.toLowerCase().endsWith('project a') ||
+          u.name?.toLowerCase().endsWith('capstone a') ||
+          normaliseCode(u.code).endsWith('A')
+      )
+    ) {
+      projectASlot = { year: s.year, semester: s.semester };
+      break;
+    }
+  }
+
+  const totalSems = semesters.length;
+  let targetSlot: { year: number; semester: 1 | 2 } | null = null;
+
+  if (projectASlot) {
+    targetSlot = projectASlot;
+  } else if (totalSems === 2) {
+    targetSlot = hasCurrentEnrolledUnits ? semesters[0] : semesters[1];
+  } else if (totalSems === 1) {
+    targetSlot = hasCurrentEnrolledUnits ? semesters[0] : null;
+  }
+
+  const defaultSlotKey = targetSlot
+    ? `${targetSlot.year}-${targetSlot.semester}`
+    : availableBreakSlots[0]?.slotKey ?? null;
+
+  const matchedBreak = availableBreakSlots.find((b) => b.slotKey === defaultSlotKey);
+  const breakTermName = matchedBreak
+    ? matchedBreak.termType === 'summer'
+      ? `YEAR ${matchedBreak.year} · SUMMER BREAK (Dec - Feb)`
+      : `YEAR ${matchedBreak.year} · WINTER BREAK (June - July)`
+    : `YEAR ${semesters[0].year} · BREAK TERM`;
+
+  return {
+    unitCode: wilUnit.code,
+    unitName: wilUnit.name,
+    creditPoints,
+    isElectiveReplacement,
+    breakTermName,
+    insertBeforeSlotKey: defaultSlotKey,
+    availableBreakSlots,
+  };
+}
