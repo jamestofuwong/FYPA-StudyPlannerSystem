@@ -24,19 +24,33 @@ function offeringTermsFromMonths(months: number[]): number[] {
   return months.map((month) => MONTH_TO_TERM[month]).filter((term): term is number => term !== undefined)
 }
 
-/** Next planner slot after the given one. Slots are intake-relative, not calendar terms. */
-function nextSlot(year: number, semester: number): { year: number; semester: 1 | 2 } {
-  return semester === 1 ? { year, semester: 2 } : { year: year + 1, semester: 1 }
+/**
+ * Study years have two semesters. After N finished semesters the next slot is:
+ * 0 → year 1 semester 1, 1 → year 1 semester 2, 2 → year 2 semester 1.
+ * A trailing empty semester does not count; a gap still occupies its slot.
+ */
+function startAfterCompletedSemesters(semesters: { unitCodes: string[] }[]): { year: number; semester: 1 | 2 } {
+  let lastFilled = -1
+  semesters.forEach((semester, index) => {
+    if (semester.unitCodes.some(code => code.trim())) lastFilled = index
+  })
+  const completedCount = lastFilled + 1
+  return {
+    year: Math.floor(completedCount / 2) + 1,
+    semester: completedCount % 2 === 0 ? 1 : 2,
+  }
 }
 
 export async function generatePlanOnServer({
   config,
-  completedUnitCodes,
+  completedSemesters,
 }: GenerationInput): Promise<GenerationResult | null> {
   const planner = await getPlannerById(config.plannerId)
   if (!planner) return null
 
-  const completedCodes = new Set(completedUnitCodes.map(c => c.trim().toUpperCase()))
+  const completedCodes = new Set(
+    completedSemesters.flatMap(semester => semester.unitCodes).map(c => c.trim().toUpperCase()).filter(Boolean),
+  )
 
   // Requisites and availability are not on PlannerDetail, so read them separately
   const template = await prisma.plannerTemplate.findUnique({
@@ -63,7 +77,6 @@ export async function generatePlanOnServer({
   if (!template) return null
 
   const remainingUnits: SchedulableUnit[] = []
-  let lastCompletedSlot: { year: number; semester: number } | null = null
 
   for (const semester of template.semesters) {
     for (const slot of semester.units) {
@@ -71,10 +84,10 @@ export async function generatePlanOnServer({
       if (!slot.unit) continue
       const code = slot.unit.code.trim().toUpperCase()
 
-      if (completedCodes.has(code)) {
-        lastCompletedSlot = { year: semester.year_number, semester: semester.sem_number }
-        continue
-      }
+      // Finished units stay out of the plan. Their place in the template does
+      // not decide the start year — a year-2 unit taken in the student's
+      // first semester must not push the plan to year 3.
+      if (completedCodes.has(code)) continue
 
       remainingUnits.push(
         toSchedulableUnit({
@@ -98,10 +111,7 @@ export async function generatePlanOnServer({
     }
   }
 
-  const firstSlot = template.semesters[0]
-  const start = lastCompletedSlot
-    ? nextSlot(lastCompletedSlot.year, lastCompletedSlot.semester)
-    : { year: firstSlot?.year_number ?? 1, semester: (firstSlot?.sem_number === 2 ? 2 : 1) as 1 | 2 }
+  const start = startAfterCompletedSemesters(completedSemesters)
 
   // The advisor dashboard anchors on Current units before completed ones. There
   // is no enrolment status here, only completed codes, so that branch does not apply.
@@ -129,14 +139,12 @@ export async function generatePlanOnServer({
       plannerUnitsByCode.set(unit.code.trim().toUpperCase(), unit)
     }
   }
-  const labelBySlot = new Map(
-    planner.semesters.map(s => [`${s.year}-${s.semester}`, s.label]),
-  )
-
   const semesters: SemesterBlock[] = result.semesters.map(bucket => ({
     year: bucket.year,
     semester: bucket.semester,
-    label: labelBySlot.get(`${bucket.year}-${bucket.semester}`) ?? `Semester ${bucket.semester}`,
+    // The template may call this slot "Winter Term". The generated plan uses
+    // the semester number the student is continuing from.
+    label: `Semester ${bucket.semester}`,
     units: bucket.units.map((scheduled): Unit => {
       const plannerUnit = plannerUnitsByCode.get(scheduled.code.trim().toUpperCase())
       return {

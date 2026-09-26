@@ -13,9 +13,18 @@ export interface PlanBuilderConfig {
   intakeMonth: number
 }
 
+export interface CompletedSemesterInput {
+  unitCodes: string[]
+}
+
 export interface GenerationInput {
   config: PlanBuilderConfig
-  completedUnitCodes: string[]
+  /**
+   * Semesters the student has already finished, in order.
+   * Unit codes are read from these groups. Two filled entries means year 1 is
+   * done and the plan starts at year 2, semester 1.
+   */
+  completedSemesters: CompletedSemesterInput[]
 }
 
 export interface GenerationResult {
