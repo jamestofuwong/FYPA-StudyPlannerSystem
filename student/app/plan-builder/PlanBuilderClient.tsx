@@ -38,14 +38,14 @@ function missingPrerequisites(prerequisites: string[] | undefined, completed: Se
     .filter(code => code && !completed.has(code))
 }
 
-/** Units already listed in this semester and in earlier ones. Later semesters do not count. */
-function completedCodesThrough(
+/** Units listed in earlier semesters only. A prerequisite in this semester does not unlock another unit here. */
+function completedCodesBefore(
   semesters: { unitCodes: string[] }[],
   index: number,
 ): Set<string> {
   return new Set(
     semesters
-      .slice(0, index + 1)
+      .slice(0, index)
       .flatMap(semester => semester.unitCodes)
       .map(code => code.trim().toUpperCase()),
   )
@@ -239,7 +239,7 @@ export default function PlanBuilderClient() {
       const index = prev.findIndex(semester => semester.id === semId)
       if (index < 0) return prev
       const unit = units.find(item => item.code === code)
-      const missing = missingPrerequisites(unit?.prerequisites, completedCodesThrough(prev, index))
+      const missing = missingPrerequisites(unit?.prerequisites, completedCodesBefore(prev, index))
       if (missing.length > 0) return prev
       return prev.map(semester =>
         semester.id === semId ? { ...semester, unitCodes: [...semester.unitCodes, code] } : semester,
@@ -266,7 +266,7 @@ export default function PlanBuilderClient() {
   function renderAddOption(unit: UnitListing, semesterId: string, semesterIndex: number) {
     const missing = missingPrerequisites(
       unit.prerequisites,
-      completedCodesThrough(completedSemesters, semesterIndex),
+      completedCodesBefore(completedSemesters, semesterIndex),
     )
     const blocked = missing.length > 0
     return (
