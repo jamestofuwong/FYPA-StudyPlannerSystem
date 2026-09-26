@@ -39,7 +39,16 @@ const PLANNER = {
   intake_month: 3,
   major: { name: 'Software Development' },
   course: { name: 'BA-CS' },
-  minors: [],
+  minors: [
+    {
+      id: 'm1',
+      name: 'Data Analytics',
+      units: [
+        { unit: { unit_code: 'COS10022', unit_name: 'Introduction to Data Science' } },
+        { unit: { unit_code: 'COS20015', unit_name: 'Fundamentals of Data Management' } },
+      ],
+    },
+  ],
   units: [
     unit('COS10009', 'Introduction to Programming', 'core', 1, 1),
     unit('COS20007', 'Object-oriented Programming', 'core', 1, 2),
@@ -110,7 +119,7 @@ beforeEach(() => {
 });
 
 const openPathwayTab = async () => {
-  fireEvent.click(await screen.findByRole('tab', { name: 'Extended Plan' }));
+  fireEvent.click(await screen.findByRole('tab', { name: 'Student Pathway' }));
 };
 
 describe('dashboard no longer carries its own planner', () => {
@@ -121,7 +130,8 @@ describe('dashboard no longer carries its own planner', () => {
     expect(screen.queryByText('Extended Study Plan')).toBeNull();
     expect(screen.queryByText(/Generate Custom Pathway/i)).toBeNull();
     expect(screen.queryByText(/Regenerate Pathway/i)).toBeNull();
-    expect(screen.getByText('Student Pathway')).toBeTruthy();
+    // The tab and the section title share the name, so look for the card's own content
+    expect(screen.getByRole('button', { name: 'Open Student Pathway' })).toBeTruthy();
   });
 
   test('opening the dashboard never calls the custom planner', async () => {
@@ -202,5 +212,32 @@ describe('a plan generated on the pathway page', () => {
     await openPathwayTab();
 
     expect(screen.getByText(/A pathway has been generated for this student/i)).toBeTruthy();
+  });
+});
+
+describe('dashboard tabs and minor cards', () => {
+  test('the pathway tab reads "Student Pathway", not "Extended Plan"', async () => {
+    render(<Harness />);
+
+    expect(await screen.findByRole('tab', { name: 'Student Pathway' })).toBeTruthy();
+    expect(screen.queryByRole('tab', { name: 'Extended Plan' })).toBeNull();
+  });
+
+  test('minor cards no longer offer to include the minor in a custom plan', async () => {
+    render(<Harness />);
+    fireEvent.click(await screen.findByRole('tab', { name: 'Minors' }));
+
+    await screen.findByText('Data Analytics');
+    expect(screen.queryByText(/Include in Custom Plan/i)).toBeNull();
+    expect(screen.queryByText(/Remove from Plan/i)).toBeNull();
+  });
+
+  test('minor progress is still shown', async () => {
+    render(<Harness />);
+    fireEvent.click(await screen.findByRole('tab', { name: 'Minors' }));
+
+    expect(await screen.findByText('Data Analytics')).toBeTruthy();
+    expect(screen.getByText(/0\/2 units · 0% progress/)).toBeTruthy();
+    expect(screen.getByText(/2 remaining/)).toBeTruthy();
   });
 });

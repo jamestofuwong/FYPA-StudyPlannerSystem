@@ -688,12 +688,6 @@ export default function DashboardPage() {
     showToast('Student data cleared.', 'info');
   };
 
-  const toggleMinorInjection = (minorId: string) => {
-    const next = new Set(injectedMinors);
-    if (next.has(minorId)) next.delete(minorId); else next.add(minorId);
-    setInjectedMinors(next);
-  };
-
   return (
     <div className={styles.panel}>
       {/* Search bar */}
@@ -1293,7 +1287,7 @@ export default function DashboardPage() {
               className={`${styles.resultTab} ${resultTab === 'pathway' ? styles.resultTabActive : ''}`}
               onClick={() => setResultTab('pathway')}
             >
-              Extended Plan
+              Student Pathway
             </button>
           </div>
 
@@ -1755,15 +1749,6 @@ export default function DashboardPage() {
                             )}
                           </div>
                         </div>
-                        {missing > 0 && (
-                          <button
-                            className={isInjected ? styles.btnDanger : styles.btnSecondary}
-                            style={{ fontSize: 11, whiteSpace: 'nowrap', flexShrink: 0 }}
-                            onClick={() => toggleMinorInjection(minor.id)}
-                          >
-                            {isInjected ? '✕ Remove from Plan' : '+ Include in Custom Plan'}
-                          </button>
-                        )}
                         {missing === 0 && (
                           <span style={{ fontSize: 11, color: 'var(--accent-green)', fontWeight: 600 }}>✓ Complete</span>
                         )}
