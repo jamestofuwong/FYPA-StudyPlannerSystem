@@ -4,6 +4,11 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import styles from './page.module.css';
 import type { EstimationPreview } from '../../../../core/services/classEstimation/estimationPreview';
 import { describeAcademicNow } from '../../../../core/services/classEstimation/academicCalendar';
+import {
+  parseStoredRetentionRate,
+  parseTypedRetentionPercent,
+  retentionRateToPercent,
+} from '../../../../core/services/classEstimation/retention';
 
 /** What /api/class-estimation/preview returns: the preview itself plus the semester it was run for. */
 type PreviewResponse = EstimationPreview & {
@@ -144,10 +149,10 @@ export default function ClassEstimationPage() {
     fetch(`/api/config?key=${RETENTION_KEY}`)
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        const stored = Number(data?.value);
-        if (Number.isFinite(stored) && stored >= 0 && stored <= 1) {
-          setRetention(String(Math.round(stored * 100)));
-        }
+        // parseStoredRetentionRate rejects the unset case, where the route returns null and Number(null)
+        // would be 0, which is how this field once got silently set to zero retention. See retention.ts.
+        const stored = parseStoredRetentionRate(data?.value);
+        if (stored !== null) setRetention(retentionRateToPercent(stored));
       })
       .catch(() => { /* never set, so the built-in default stands */ });
   }, []);
@@ -317,7 +322,15 @@ export default function ClassEstimationPage() {
     setCopied(false);
     try {
       // No term is sent: the route derives it from the date. ?term= exists only as a manual override.
-      const rate = Math.min(100, Math.max(0, Number(retention) || 0)) / 100;
+      //
+      // An empty box is not 0%, so this refuses to run rather than quietly estimating at zero retention
+      // and then saving it as the HoD's figure.
+      const rate = parseTypedRetentionPercent(retention);
+      if (rate === null) {
+        setPreviewStatus('error');
+        setPreviewError('Enter the percentage of students expected back, from 1 to 100.');
+        return;
+      }
 
       // Running with a rate is as good a statement of intent as any, so it is saved then rather than on
       // every keystroke. A failure here is not worth interrupting the estimate for.
@@ -701,7 +714,7 @@ export default function ClassEstimationPage() {
             <input
               className={styles.rangeInput}
               type="number"
-              min={0}
+              min={1}
               max={100}
               value={retention}
               onChange={(e) => setRetention(e.target.value)}

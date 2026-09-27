@@ -19,6 +19,9 @@ import {
   applyRetention,
   resolveRetentionRate,
   projectUnit,
+  parseStoredRetentionRate,
+  parseTypedRetentionPercent,
+  retentionRateToPercent,
 } from '@core/services/classEstimation/retention';
 import type { EstimationRecord } from '@shared/types/classEstimation';
 
@@ -239,5 +242,90 @@ describe('projectUnit', () => {
 
   test('a unit reached only through an elective pool still projects', () => {
     expect(projectUnit('POOL1', 0, 2, 0.85).projected).toBeCloseTo(1.7, 10);
+  });
+});
+
+// ====== Reading a rate from the outside world ================================================
+//
+// The bug these pin: the config route returns null for a key that was never saved, Number(null) is 0, and 0
+// passed a "0 to 1" range check. So the dashboard replaced its 85% default with zero retention, the next
+// preview run saved that as the HoD's figure, and from then on every projection was multiplied by nothing
+// while the UI showed the field as saved. An estimate returning no students looked like a working pipeline.
+
+describe('parseStoredRetentionRate', () => {
+  // The exact shape the config route returns for a key nobody has saved yet.
+  test('an unset key is not a rate of zero', () => {
+    expect(parseStoredRetentionRate(null)).toBeNull();
+    expect(parseStoredRetentionRate(undefined)).toBeNull();
+  });
+
+  test.each([[''], ['   '], ['abc'], ['NaN']])('%p is not a rate', (value) => {
+    expect(parseStoredRetentionRate(value)).toBeNull();
+  });
+
+  // A stored zero is refused too. It can only have got there by mistake, and honouring it would zero every
+  // projection for good, since it is read back on every load.
+  test.each([['0'], ['0.0'], ['-0.5'], ['1.5'], ['100']])('%p is refused', (value) => {
+    expect(parseStoredRetentionRate(value)).toBeNull();
+  });
+
+  test.each([
+    ['1', 1],
+    ['0.85', 0.85],
+    [' 0.7 ', 0.7],
+    ['0.001', 0.001],
+  ])('%p reads as %p', (value, expected) => {
+    expect(parseStoredRetentionRate(value)).toBeCloseTo(expected, 10);
+  });
+
+  // A number rather than a string means something other than the config route supplied it, which is not a
+  // path that should silently work.
+  test('a non-string is refused even when it looks like a rate', () => {
+    expect(parseStoredRetentionRate(0.85)).toBeNull();
+  });
+});
+
+describe('parseTypedRetentionPercent', () => {
+  // Clearing the box is not a request to estimate at zero retention.
+  test.each([[''], ['   '], ['abc']])('%p is not a percentage', (value) => {
+    expect(parseTypedRetentionPercent(value)).toBeNull();
+  });
+
+  test.each([['0'], ['-10'], ['101'], ['1000']])('%p is out of range', (value) => {
+    expect(parseTypedRetentionPercent(value)).toBeNull();
+  });
+
+  test.each([
+    ['100', 1],
+    ['85', 0.85],
+    ['1', 0.01],
+    [' 78 ', 0.78],
+    ['82.5', 0.825],
+  ])('%p reads as %p', (value, expected) => {
+    expect(parseTypedRetentionPercent(value)).toBeCloseTo(expected, 10);
+  });
+});
+
+describe('the save and load round trip', () => {
+  // What the dashboard actually does: type a percentage, store the rate, read it back on the next load.
+  test.each([['100'], ['85'], ['78'], ['50'], ['1']])('%p survives being saved and reloaded', (typed) => {
+    const rate = parseTypedRetentionPercent(typed)!;
+    const stored = String(rate);                       // what the page POSTs to the config route
+    const reloaded = parseStoredRetentionRate(stored); // what it reads back on mount
+
+    expect(reloaded).toBeCloseTo(rate, 10);
+    expect(retentionRateToPercent(reloaded!)).toBe(typed);
+  });
+
+  // The exact case reported: 100% typed in, then the page reloaded.
+  test('100% comes back as 100, not 0', () => {
+    const rate = parseTypedRetentionPercent('100')!;
+    expect(String(rate)).toBe('1');
+    expect(retentionRateToPercent(parseStoredRetentionRate('1')!)).toBe('100');
+  });
+
+  // And the first-ever load, before anything has been saved, must leave the default alone.
+  test('a first load with nothing saved changes nothing', () => {
+    expect(parseStoredRetentionRate(null)).toBeNull();
   });
 });

@@ -69,3 +69,46 @@ export function projectUnit(
     projected: applyRetention(beforeRetention, retentionRate),
   };
 }
+
+// ====== Parsing a rate from the outside world ==============================================
+//
+// Both of these exist because the same mistake was made twice inline: Number() turning something that is
+// not a number into 0, and 0 then passing a "0 to 1" range check. A stored rate of 0 multiplies every
+// projection by nothing, and the UI reported it as saved, so the estimate read as a working pipeline
+// returning no students. Nobody ever means 0%, so neither function will produce it.
+
+/**
+ * A rate read back from SystemConfig, or null if there isn't a usable one.
+ *
+ * An unset key comes back as null from the config route, and Number(null) is 0, which is the trap. So the
+ * value has to be a non-empty string before it is treated as a number at all.
+ */
+export function parseStoredRetentionRate(value: unknown): number | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (trimmed === '') return null;
+
+  const rate = Number(trimmed);
+  if (!Number.isFinite(rate) || rate <= 0 || rate > 1) return null;
+  return rate;
+}
+
+/**
+ * A percentage typed into the dashboard, as a 0-to-1 rate, or null if the box does not hold a usable one.
+ *
+ * An empty box is null rather than 0: Number('') is 0, and running an estimate at zero retention because
+ * someone cleared a field is not a reading anyone asked for.
+ */
+export function parseTypedRetentionPercent(value: string): number | null {
+  const trimmed = value.trim();
+  if (trimmed === '') return null;
+
+  const percent = Number(trimmed);
+  if (!Number.isFinite(percent) || percent <= 0 || percent > 100) return null;
+  return percent / 100;
+}
+
+/** A stored rate back to the percentage the input field shows. */
+export function retentionRateToPercent(rate: number): string {
+  return String(Math.round(rate * 100));
+}

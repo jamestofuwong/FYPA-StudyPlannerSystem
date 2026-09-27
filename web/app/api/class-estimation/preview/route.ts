@@ -3,7 +3,10 @@ import { getEstimationRecords } from '../../../../../core/services/classEstimati
 import { runEstimationPreview } from '../../../../../core/services/classEstimation/estimationPreview';
 import { DEFAULT_CLASS_ESTIMATION_CONFIG } from '../../../../../core/shared/types/classEstimation';
 import { describeAcademicNow } from '../../../../../core/services/classEstimation/academicCalendar';
-import { resolveRetentionRate } from '../../../../../core/services/classEstimation/retention';
+import {
+  resolveRetentionRate,
+  parseStoredRetentionRate,
+} from '../../../../../core/services/classEstimation/retention';
 import { prisma } from '../../../../../core/db/client';
 
 const RETENTION_KEY = 'class_estimation_retention_rate';
@@ -16,7 +19,7 @@ const RETENTION_KEY = 'class_estimation_retention_rate';
 async function storedRetentionRate(fallback: number): Promise<number> {
   try {
     const row = await prisma.systemConfig.findUnique({ where: { key: RETENTION_KEY } });
-    return resolveRetentionRate(row ? Number(row.value) : NaN, fallback);
+    return parseStoredRetentionRate(row?.value) ?? fallback;
   } catch {
     return fallback;   // a config read failing is no reason to fail the estimate
   }
