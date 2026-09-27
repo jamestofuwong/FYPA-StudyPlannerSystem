@@ -4,7 +4,7 @@
  *   npm run fixtures:dpa
  *
  * Options:
- *   --count=30        how many students (default 30)
+ *   --count=500       how many students (default 500)
  *   --seed=1          same seed, same cohort (default 1)
  *   --out=<dir>       output directory (default tests/fixtures/dpa)
  *   --single          also write one file per student, the shape the portal exports
@@ -37,7 +37,7 @@ const flag = (name: string, fallback: string): string => {
   return match ? match.split('=')[1] : fallback;
 };
 
-const count = Number(flag('count', '30'));
+const count = Number(flag('count', '500'));
 const seed = Number(flag('seed', '1'));
 const outDir = path.resolve(process.cwd(), flag('out', path.join('tests', 'fixtures', 'dpa')));
 const alsoSingle = args.includes('--single');

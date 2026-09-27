@@ -543,3 +543,76 @@
   color: var(--text-muted);
   margin-top: 8px;
 }
+
+/* Phase 6. Expected elective enrolment, shown as its own table because the figures are fractional shares
+   of a seat rather than named picks, and putting them beside the certain ones would misread. */
+.electiveBlock {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--panel-border);
+}
+
+.electiveHeading {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+
+.electiveTable {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.electiveRow {
+  display: grid;
+  grid-template-columns: minmax(80px, 1fr) 90px 70px 80px;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.electiveRow:nth-child(even) {
+  background: var(--row-alt);
+}
+
+.electiveHead {
+  background: var(--surface-bg);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.electiveHead:nth-child(even) {
+  background: var(--surface-bg);
+}
+
+.electiveCode {
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+}
+
+.electiveNote {
+  font-size: 11px;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text-muted);
+}
+
+.electiveSeats {
+  font-family: var(--font-mono);
+  text-align: right;
+  color: var(--accent-blue);
+}

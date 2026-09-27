@@ -684,7 +684,8 @@ export default function ClassEstimationPage() {
               {([
                 ['Students', preview.summary.students],
                 ['With planner', preview.summary.withPlanner],
-                ['No major', preview.summary.noMajorOrPlanner],
+                ['Shared core', preview.summary.commonCoreOnly],
+                ['Not estimated', preview.summary.noMajorOrPlanner],
                 ['Errors', preview.summary.errors],
                 ['Candidates', preview.summary.totalCandidates],
                 ['Eligible', preview.summary.totalEligible],
@@ -708,6 +709,12 @@ export default function ClassEstimationPage() {
               <div>
                 Eligible only because the unit has no offering data: {preview.summary.eligibleWithoutOfferingData}
               </div>
+              {preview.summary.outsideRecommendedTerm > 0 && (
+                <div>
+                  Predicted outside the semester their planner recommends: {preview.summary.outsideRecommendedTerm}{' '}
+                  (normal for retakes, worth a look if a whole cohort appears here)
+                </div>
+              )}
               {preview.summary.plannerCounts.map((p) => (
                 <div key={p.plannerId}>
                   {p.students} × {p.majorName} ({p.intakeYear} S{p.intakeSemester})
@@ -717,6 +724,46 @@ export default function ClassEstimationPage() {
                 <div key={warning}>⚠ {n} × {warning}</div>
               ))}
             </div>
+
+            {/* Electives are predicted as shares of a seat, never as named picks, so they get their own
+                table rather than sitting in the picked list and looking like certainties. */}
+            {preview.summary.electiveSeatsByUnit.length > 0 && (
+              <div className={styles.electiveBlock}>
+                <div className={styles.electiveHeading}>
+                  Expected elective enrolment
+                  <span className={styles.electiveNote}>
+                    fractional on purpose, each student is spread over the electives they could take
+                  </span>
+                </div>
+
+                <div className={styles.electiveTable}>
+                  <div className={`${styles.electiveRow} ${styles.electiveHead}`}>
+                    <span>Unit</span>
+                    <span>Type</span>
+                    <span>Taken by</span>
+                    <span>Expected</span>
+                  </div>
+                  {preview.summary.electiveSeatsByUnit.slice(0, 30).map((u) => (
+                    <div key={u.code} className={styles.electiveRow}>
+                      <span className={styles.electiveCode}>{u.code}</span>
+                      <span className={styles.electiveNote}>
+                        {u.category === 'mixed' ? 'both' : u.category === 'prescribed' ? 'prescribed' : 'free'}
+                      </span>
+                      <span className={styles.electiveNote}>{u.popularity}</span>
+                      <span className={styles.electiveSeats}>{u.expectedSeats.toFixed(1)}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {preview.summary.electiveSeatsUnplaced > 0 && (
+                  <p className={styles.hintText} style={{ marginTop: 8 }}>
+                    {preview.summary.electiveSeatsUnplaced.toFixed(1)} elective seat(s) could not be placed:
+                    those students owe a slot but every unit in their pool is either not running next
+                    semester or has requisites they have not met.
+                  </p>
+                )}
+              </div>
+            )}
 
             <div className={styles.previewList}>
               {preview.students.slice(0, 200).map((s) => (
@@ -728,7 +775,9 @@ export default function ClassEstimationPage() {
                         ? `error: ${s.error}`
                         : s.planner
                           ? `${s.planner.majorName} ${s.planner.matchPct.toFixed(0)}% · ${s.candidateCount} candidates → ${s.eligibleCount} eligible → ${s.picked.length} picked`
-                          : `no major detected (${s.matchStatus ?? 'n/a'})`}
+                          : s.basis === 'commonCore'
+                            ? `shared core, major not detectable yet · ${s.candidateCount} candidates → ${s.eligibleCount} eligible → ${s.picked.length} picked`
+                            : `not estimated (${s.matchStatus ?? 'n/a'})`}
                     </span>
                   </summary>
                   <pre className={styles.previewPre}>{JSON.stringify(s, null, 2)}</pre>

@@ -26,7 +26,12 @@ export interface MockPortalOptions {
   seed?: number;
 }
 
-const DEFAULT_COUNT = 30;
+// Roughly a real Bachelor of Computer Science population across all year levels, so the aggregated figures
+// are the scale the HoD would actually see. Measured against the loaded planners, coverage saturates at 300:
+// all 25 major and intake combinations are represented from there on, and nothing about the spread improves
+// past it. 500 sits safely beyond that point and costs nothing, a 1000-student run previews in the same time
+// as a 100-student one because the planner fetch is cached and the per-student work is cheap.
+const DEFAULT_COUNT = 500;
 const DEFAULT_SEED = 1;
 
 // core/db has no per-unit credit field, so the known exceptions are supplied. Same list the fixture script

@@ -198,21 +198,101 @@ describe('runEstimationPreview', () => {
     expect(summary.outsideRecommendedTerm).toBeGreaterThan(0);
   });
 
+  // Phase 6 through the real chain. The fixture pool holds one unit, POOL1, so a student owing one
+  // prescribed slot puts their whole seat on it. The value being unrounded is the point: it is summed
+  // across the cohort before anything is rounded, so a fraction here is correct rather than sloppy.
+  test('elective seats are spread over the pool instead of naming a pick', async () => {
+    const { students, summary } = await runEstimationPreview(
+      [record('S1', scrapedStudent())],
+      { targetTerm: 1, loadCap: 4 },
+    );
+    const [s] = students;
+
+    expect(s.electiveSeats.prescribed).toBe(1);
+    expect(s.electives).toEqual([
+      { code: 'POOL1', category: 'prescribed', expectedSeats: 1, popularity: 0 },
+    ]);
+    // POOL1 is never a named pick, it only ever carries a share.
+    expect(s.picked.map((u) => u.code)).not.toContain('POOL1');
+
+    expect(summary.electiveSeatsByUnit).toEqual([
+      { code: 'POOL1', category: 'prescribed', expectedSeats: 1, popularity: 0 },
+    ]);
+    expect(summary.electiveSeatsUnplaced).toBe(0);
+  });
+
+  // A cohort's fractions are what the estimate rests on, so the batch total has to hold across students
+  // even though no one student's share is a whole seat.
+  test('a batch sums its elective fractions into one figure per unit', async () => {
+    const { summary } = await runEstimationPreview(
+      [record('S1', scrapedStudent()), record('S2', scrapedStudent()), record('S3', scrapedStudent())],
+      { targetTerm: 1, loadCap: 4 },
+    );
+
+    const pool1 = summary.electiveSeatsByUnit.find((u) => u.code === 'POOL1');
+    expect(pool1?.expectedSeats).toBeCloseTo(3, 10);
+  });
+
+  // Popularity comes from what this batch has already passed, since there is no historical data to use.
+  // COS20015 sits in the fixture's transcript, so a pool containing it would be weighted up by every
+  // student holding it. Here it confirms the count reaches the splitter at all.
+  test('popularity is counted from the batch transcripts', async () => {
+    const planner = plannerFixture();
+    // Put a unit the cohort has already passed into the pool alongside one nobody has.
+    planner.elective_groups = [{ id: 'g1', units: [{ unit: dbUnit('POOL1', [1]) }, { unit: dbUnit('COS10022', [1]) }] }];
+    getPlannerById.mockResolvedValue(planner as never);
+    getAllPlannersWithUnits.mockResolvedValue([planner] as never);
+
+    const withCos10022 = scrapedStudent({
+      courseList: [
+        ...scrapedStudent().courseList,
+        { courseId: 'COS10022', courseTitle: 'COS10022', level: '', credits: 12.5, creditsEarned: 12.5, status: 'Complete', grade: 'D', term: '20241' },
+      ],
+    });
+
+    const { summary } = await runEstimationPreview(
+      [record('S1', scrapedStudent()), record('S2', withCos10022)],
+      { targetTerm: 1, loadCap: 4 },
+    );
+
+    // S2 has passed COS10022, so it is not in S2's own pool, but it weights the pool S1 draws from.
+    const cos10022 = summary.electiveSeatsByUnit.find((u) => u.code === 'COS10022');
+    expect(cos10022?.popularity).toBe(1);
+    const pool1 = summary.electiveSeatsByUnit.find((u) => u.code === 'POOL1');
+    // Weights 2 against 1, so the unit someone has passed draws the larger share of S1's single seat.
+    expect(cos10022!.expectedSeats).toBeGreaterThan(pool1!.expectedSeats);
+  });
+
   test('loadCap drops the later-slotted core units and says how many', async () => {
     const { students } = await runEstimationPreview([record('S1', scrapedStudent())], { targetTerm: 2, loadCap: 1 });
     expect(students[0].picked.map((u) => u.code)).toEqual(['COS30008']);
     expect(students[0].droppedByLoadCap).toBe(1);
   });
 
-  test('a student who matches no major is reported, not treated as an error', async () => {
+  // A student with no major detected is still estimated, from the units every candidate planner wants from
+  // them. Every major in the course shares its first-year units, so anyone one or two semesters in has taken
+  // nothing that tells the majors apart, and a fifth of a real cohort sits in that position. No planner or
+  // match percentage is reported for them, because neither was actually determined.
+  test('a student who matches no major is estimated from the shared core, not dropped', async () => {
     const { students, summary } = await runEstimationPreview(
       [record('S2', scrapedStudent({ courseList: [] }))],
       { targetTerm: 2, loadCap: 4 },
     );
-    expect(students[0].planner).toBeNull();
-    expect(students[0].error).toBeUndefined();
-    expect(summary.noMajorOrPlanner).toBe(1);
+    const [s] = students;
+
+    expect(s.planner).toBeNull();
+    expect(s.basis).toBe('commonCore');
+    expect(s.error).toBeUndefined();
+    expect(summary.commonCoreOnly).toBe(1);
+    expect(summary.noMajorOrPlanner).toBe(0);
     expect(summary.errors).toBe(0);
+
+    // The fixture has one planner, so its whole core is shared by definition. COS30008 is the one offered
+    // in semester 2, and with an empty transcript its COS20007 prerequisite is unmet, so nothing is picked
+    // but the candidates were still worked out rather than skipped.
+    expect(s.candidateCount).toBeGreaterThan(0);
+    // Major core and the elective pools are left out: those differ by major, so they would be a guess.
+    expect(s.electives).toEqual([]);
   });
 
   // Every existing route passes preferIntakeYear: false. Without it the pipeline throws for a student whose intake

@@ -96,6 +96,34 @@ export interface RankedCandidateUnit extends CandidateUnit {
 }
 
 // ------------------------------------------------------------------
+// Elective prediction (Phase 6)
+// ------------------------------------------------------------------
+
+/**
+ * One pool unit and the share of a student's elective seats expected to land on it. Fractional on purpose:
+ * nobody can say which elective a given student will pick, only how the cohort tends to spread across the
+ * pool, so a student owing one prescribed slot contributes a fraction of a seat to every unit they could
+ * choose. The fractions for one pool sum to the seats that pool was given. Rounding happens once, at
+ * aggregation, so it is not applied repeatedly per student.
+ */
+export interface ElectiveExpectation {
+  code: string;
+  category: Extract<EstimationUnitCategory, 'prescribed' | 'freeElective'>;
+  expectedSeats: number;
+  /** Students in this batch who have already passed the unit, the weight behind the share. */
+  popularity: number;
+}
+
+export interface ElectiveSplit {
+  expectations: ElectiveExpectation[];
+  /** Elective seats this student is expected to fill next semester, after the load cap. */
+  prescribedSeats: number;
+  freeElectiveSeats: number;
+  /** Seats the student owes but has no eligible pool unit to put them on, so they go uncounted. */
+  unplacedSeats: number;
+}
+
+// ------------------------------------------------------------------
 // Aggregation (Phase 5)
 // ------------------------------------------------------------------
 export interface ClassEstimationConfig {

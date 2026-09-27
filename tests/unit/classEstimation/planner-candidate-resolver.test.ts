@@ -6,7 +6,10 @@
 // paths are covered here, plus the null-result cases (no major detected, planner no longer exists).
 // ============================================================
 
-import { resolveCandidateUnits } from '@core/services/classEstimation/plannerCandidateResolver';
+import {
+  resolveCandidateUnits,
+  resolveCommonCoreUnits,
+} from '@core/services/classEstimation/plannerCandidateResolver';
 import { resetPlannerCache } from '@core/services/classEstimation/plannerCache';
 import * as plannerRepository from '@core/db/repositories/plannerRepository';
 import type { MatchingServiceResult } from '@core/services/matching/matchingService';
@@ -181,5 +184,147 @@ describe('resolveCandidateUnits', () => {
     getPlannerById.mockResolvedValue({ units: [], elective_groups: [] } as never);
     const result = await resolveCandidateUnits(matchResult({ plannerID: 'p-xyz' }), []);
     expect(result?.plannerId).toBe('p-xyz');
+  });
+});
+
+// ====== Students with no detectable major ====================================================
+//
+// Every major in this course shares the same first-year units, so a student one or two semesters in has
+// taken nothing that tells one major from another and no major can be detected. That is roughly a fifth of a
+// real cohort. Dropping them undercounts the estimate; guessing a major predicts units they may never take.
+// Neither is needed, because those students' remaining core units are the same whichever major they pick:
+// all five planners at each intake require the identical 8 core units.
+describe('resolveCommonCoreUnits', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    resetPlannerCache();
+  });
+
+  function noMajorResult(rankedPlanners: Array<{ plannerID: string; missingCore: string[] }>): MatchingServiceResult {
+    return {
+      durationMs: 0,
+      payload: {
+        studentID: 'S1',
+        courseType: 'degree',
+        status: 'noMajorDetected',
+        isOverride: false,
+        primaryMajor: null,
+        secondMajor: null,
+        topAlternatives: [],
+        detectedMinors: [],
+        rankedPlanners,
+        unavailableUnits: [],
+      },
+    } as never;
+  }
+
+  test('proposes only the units every candidate planner still wants', async () => {
+    getPlannerById.mockResolvedValue({ units: [], elective_groups: [] } as never);
+
+    const result = await resolveCommonCoreUnits(
+      noMajorResult([
+        { plannerID: 'ai',    missingCore: ['COS10009', 'COS20007', 'COS10025'] },
+        { plannerID: 'cyber', missingCore: ['COS10009', 'COS20007', 'TNE10006'] },
+        { plannerID: 'ds',    missingCore: ['COS10009', 'COS20007'] },
+      ]),
+      [],
+    );
+
+    // COS10025 and TNE10006 are each wanted by only one planner, so they are left out.
+    expect(result?.candidates).toEqual([
+      { code: 'COS10009', category: 'core' },
+      { code: 'COS20007', category: 'core' },
+    ]);
+    expect(result?.basis).toBe('commonCore');
+  });
+
+  test('the best-scoring planner stands in for the eligibility lookup', async () => {
+    getPlannerById.mockResolvedValue({ units: [], elective_groups: [] } as never);
+
+    const result = await resolveCommonCoreUnits(
+      noMajorResult([
+        { plannerID: 'best', missingCore: ['COS10009'] },
+        { plannerID: 'next', missingCore: ['COS10009'] },
+      ]),
+      [],
+    );
+
+    expect(result?.plannerId).toBe('best');
+    expect(getPlannerById).toHaveBeenCalledWith('best');
+  });
+
+  // Major core and the elective pools differ by major by definition, so proposing any of them would be a
+  // guess. They come back on their own once the student is far enough in for a major to be detected.
+  test('proposes nothing beyond core, whatever else the planner holds', async () => {
+    getPlannerById.mockResolvedValue({
+      units: [{ category: 'elective', unit: { unit_code: 'FREE1' } }],
+      elective_groups: [{ units: [{ unit: { unit_code: 'POOL1' } }] }],
+    } as never);
+
+    const result = await resolveCommonCoreUnits(
+      noMajorResult([{ plannerID: 'p1', missingCore: ['COS10009'] }]),
+      [],
+    );
+
+    expect(result?.candidates.every((c) => c.category === 'core')).toBe(true);
+    expect(result?.candidates.map((c) => c.code)).toEqual(['COS10009']);
+  });
+
+  test('a completed unit is never proposed', async () => {
+    getPlannerById.mockResolvedValue({ units: [], elective_groups: [] } as never);
+
+    const result = await resolveCommonCoreUnits(
+      noMajorResult([
+        { plannerID: 'a', missingCore: ['COS10009', 'COS20007'] },
+        { plannerID: 'b', missingCore: ['COS10009', 'COS20007'] },
+      ]),
+      ['  cos10009 '],
+    );
+
+    expect(result?.candidates).toEqual([{ code: 'COS20007', category: 'core' }]);
+  });
+
+  test('a single candidate planner means its whole remaining core is shared', async () => {
+    getPlannerById.mockResolvedValue({ units: [], elective_groups: [] } as never);
+
+    const result = await resolveCommonCoreUnits(
+      noMajorResult([{ plannerID: 'only', missingCore: ['COS10009', 'COS10004'] }]),
+      [],
+    );
+
+    expect(result?.candidates.map((c) => c.code)).toEqual(['COS10004', 'COS10009']);
+  });
+
+  test('planners with nothing in common produce no candidates rather than an error', async () => {
+    getPlannerById.mockResolvedValue({ units: [], elective_groups: [] } as never);
+
+    const result = await resolveCommonCoreUnits(
+      noMajorResult([
+        { plannerID: 'a', missingCore: ['COS10009'] },
+        { plannerID: 'b', missingCore: ['TNE10006'] },
+      ]),
+      [],
+    );
+
+    expect(result?.candidates).toEqual([]);
+    expect(result?.basis).toBe('commonCore');
+  });
+
+  test('returns null when there are no candidate planners at all', async () => {
+    const result = await resolveCommonCoreUnits(noMajorResult([]), []);
+
+    expect(result).toBeNull();
+    expect(getPlannerById).not.toHaveBeenCalled();
+  });
+
+  test('returns null when the stand-in planner is gone from the DB', async () => {
+    getPlannerById.mockResolvedValue(null as never);
+
+    const result = await resolveCommonCoreUnits(
+      noMajorResult([{ plannerID: 'missing', missingCore: ['COS10009'] }]),
+      [],
+    );
+
+    expect(result).toBeNull();
   });
 });
