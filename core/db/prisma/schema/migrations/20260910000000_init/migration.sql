@@ -1,4 +1,4 @@
--- core/db/prisma/migrations/0_init/migration.sql
+-- core/db/prisma/migrations/20260910000000_init/migration.sql
 
 -- 1. Extensions
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
@@ -39,13 +39,17 @@ CREATE TABLE majors (
 CREATE INDEX idx_majors_course ON majors(course_id);
 
 CREATE TABLE units (
-    id            UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
-    unit_code     VARCHAR(20)   NOT NULL UNIQUE,
-    unit_name     VARCHAR(255)  NOT NULL,
-    created_at    TIMESTAMPTZ   NOT NULL DEFAULT now(),
-    updated_at    TIMESTAMPTZ   NOT NULL DEFAULT now()
+    id                  UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
+    unit_code           VARCHAR(20)   NOT NULL UNIQUE,
+    unit_name           VARCHAR(255)  NOT NULL,
+    is_active           BOOLEAN       NOT NULL DEFAULT TRUE,
+    replaced_by_unit_id UUID          NULL REFERENCES units(id) ON DELETE SET NULL,
+    created_at          TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    updated_at          TIMESTAMPTZ   NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_units_code ON units(unit_code);
+CREATE INDEX idx_units_active ON units(is_active);
+CREATE INDEX idx_units_replaced_by ON units(replaced_by_unit_id);
 
 CREATE TABLE unit_offerings (
     unit_id     UUID          NOT NULL REFERENCES units(id) ON DELETE CASCADE,
@@ -65,13 +69,15 @@ CREATE INDEX idx_requisite_group_unit ON unit_requisite_groups(unit_id);
 CREATE TABLE unit_requisite_conditions (
     id                  UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
     group_id            UUID         NOT NULL REFERENCES unit_requisite_groups(id) ON DELETE CASCADE,
-    type                VARCHAR(20)  NOT NULL CHECK (type IN ('unit', 'credit_points')),
+    type                VARCHAR(20)  NOT NULL CHECK (type IN ('unit', 'credit_points', 'external')),
     unit_id             UUID         NULL REFERENCES units(id) ON DELETE CASCADE,
     credit_points       NUMERIC(5,1) NULL,
     requisite_type      VARCHAR(20)  NULL CHECK (requisite_type IN ('prerequisite', 'corequisite', 'antirequisite')),
+    external_requisite  VARCHAR(255) NULL,
     CONSTRAINT valid_condition CHECK (
-        (type = 'unit' AND unit_id IS NOT NULL AND credit_points IS NULL AND requisite_type IS NOT NULL) OR
-        (type = 'credit_points' AND credit_points IS NOT NULL AND unit_id IS NULL AND requisite_type IS NULL)
+        (type = 'unit' AND unit_id IS NOT NULL AND credit_points IS NULL AND external_requisite IS NULL AND requisite_type IS NOT NULL) OR
+        (type = 'credit_points' AND credit_points IS NOT NULL AND unit_id IS NULL AND external_requisite IS NULL AND requisite_type IS NULL) OR
+        (type = 'external' AND external_requisite IS NOT NULL AND unit_id IS NULL AND credit_points IS NULL)
     )
 );
 CREATE INDEX idx_requisite_cond_group ON unit_requisite_conditions(group_id);
@@ -384,6 +390,9 @@ BEGIN
         ELSIF v_type = 'credit_points' THEN
             INSERT INTO unit_requisite_conditions (group_id, type, credit_points)
             VALUES (v_group_id, 'credit_points', v_value::NUMERIC);
+        ELSIF v_type = 'external' THEN
+            INSERT INTO unit_requisite_conditions (group_id, type, external_requisite)
+            VALUES (v_group_id, 'external', v_value);
         END IF;
         i := i + 2;
     END LOOP;

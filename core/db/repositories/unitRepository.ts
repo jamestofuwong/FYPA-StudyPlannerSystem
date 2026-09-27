@@ -24,6 +24,7 @@ export function formatRequisitesToString(requisite_groups: any): string {
       g.conditions
         ?.map((c: any) => {
           if (c.type === "credit_points") return `${c.credit_points}cp`;
+          if (c.type === "external") return c.external_requisite || "External Requirement";
           const prefix =
             c.requisite_type === "corequisite"
               ? "Co: "
@@ -125,9 +126,10 @@ export async function saveSingleUnit(data: {
       for (const group of parsedGroups) {
         // Collect valid conditions first before creating the group
         const validConditions: Array<{
-          type: 'unit' | 'credit_points';
+          type: 'unit' | 'credit_points' | 'external';
           unit_id: string | null;
           credit_points: number | null;
+          external_requisite?: string | null;
           requisite_type: string | null;
         }> = [];
 
@@ -151,12 +153,26 @@ export async function saveSingleUnit(data: {
               type: 'credit_points',
               unit_id: null,
               credit_points: Number(cp) || 0,
+              external_requisite: null,
               requisite_type: null,
             });
             continue;
           }
-
-          // 2. Check Unit Code
+          // 2. Check External Qualification
+          if (cond.type === 'external' || cond.external_requisite) {
+            const extText = (cond.external_requisite || rawCode).trim();
+            if (extText) {
+              validConditions.push({
+                type: 'external',
+                unit_id: null,
+                credit_points: null,
+                external_requisite: extText,
+                requisite_type: cond.requisite_type || 'prerequisite',
+              });
+            }
+            continue;
+          }
+          // 3. Check Unit Code
           // Clean up any stray punctuation or parentheses
           const cleanCode = rawCode.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
           
@@ -203,6 +219,7 @@ export async function saveSingleUnit(data: {
                 type: validCond.type,
                 unit_id: validCond.unit_id,
                 credit_points: validCond.credit_points,
+                external_requisite: validCond.external_requisite ?? null,
                 requisite_type: validCond.requisite_type,
               },
             });
@@ -459,4 +476,13 @@ export async function overwriteUnitOfferings(
       }
     }
   });
+}
+
+export async function checkUnitsExist(codes: string[]): Promise<string[]> {
+  if (!codes || codes.length === 0) return [];
+  const units = await prisma.unit.findMany({
+    where: { unit_code: { in: codes } },
+    select: { unit_code: true },
+  });
+  return units.map((u) => u.unit_code);
 }
