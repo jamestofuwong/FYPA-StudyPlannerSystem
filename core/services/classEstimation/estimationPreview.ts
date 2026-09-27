@@ -22,7 +22,8 @@ import { filterEligibleUnits } from './eligibilityFilter';
 import { rankAndCapUnits } from './unitRanker';
 import { buildElectivePopularity, splitElectivePicks } from './electiveSplitter';
 import { groupIdenticalStudents, groupingKeyFor, summariseGrouping, type GroupingStats } from './studentGrouping';
-import { projectUnit, type UnitProjection } from './retention';
+import { aggregate, totalsFor, type AggregatedUnit, type AggregationTotals } from './aggregationService';
+import { resolveNewIntakeUnits } from './newIntakeResolver';
 import type {
   CandidateUnit,
   ElectiveExpectation,
@@ -127,11 +128,20 @@ export interface PreviewSummary {
   /** Elective seats owed with no eligible pool unit to place them on, across the batch. */
   electiveSeatsUnplaced: number;
   /**
-   * Phase 7. The projected headcount per unit: whole seats from named picks plus fractional seats from
-   * elective pools, discounted by the retention rate. Left unrounded, Phase 8 rounds once at the end.
+   * The estimate. Named picks plus elective shares, discounted by the retention rate, with the manual
+   * new-intake figure added undiscounted, rounded once at the end. See aggregationService.ts.
    */
-  projectedByUnit: UnitProjection[];
+  projectedByUnit: AggregatedUnit[];
+  totals: AggregationTotals;
   retentionRate: number;
+  newIntakeCount: number;
+  /** The units the new-intake figure was put onto, and anything a reader should know about them. */
+  newIntake: {
+    units: string[];
+    basedOnIntakeYear: number;
+    basedOnIntakeSemester: 1 | 2;
+    warnings: string[];
+  };
   /** How many students the estimator could not tell apart, and how much work that saved. */
   grouping: GroupingStats;
 }
@@ -143,7 +153,11 @@ export interface EstimationPreview {
 
 export interface PreviewOptions {
   targetTerm: 1 | 2;
+  /** The calendar year of the semester being estimated, needed to pick the right planners for new intake. */
+  targetYear: number;
   loadCap: number;
+  /** The HoD's own count of new students expected to arrive. Not discounted by retention. */
+  newIntakeCount: number;
   /** Share of students expected back next semester. See retention.ts for why it is one flat figure. */
   retentionRate: number;
 }
@@ -168,10 +182,11 @@ function withOwnIdentity(computed: StudentPreview, record: EstimationRecord): St
 }
 
 /**
- * The first per-unit headcount in the system. Named picks contribute a whole seat each, elective pools
- * contribute fractions, and the retention rate discounts the lot.
+ * Each student's contributions collected per unit, ready for aggregation. Named picks are whole students,
+ * elective shares are fractions. A unit can arrive from either side or both: a named requirement for one
+ * student and an elective option for another, which the cross-category units in these planners do.
  */
-function projectByUnit(students: StudentPreview[], retentionRate: number): UnitProjection[] {
+function contributionsByUnit(students: StudentPreview[]) {
   const named = new Map<string, number>();
   const elective = new Map<string, number>();
 
@@ -184,13 +199,11 @@ function projectByUnit(students: StudentPreview[], retentionRate: number): UnitP
     }
   }
 
-  // A unit can arrive from either side, or both: a named requirement for one student and an elective
-  // option for another, which is exactly what the cross-category units in these planners do.
-  const codes = new Set([...named.keys(), ...elective.keys()]);
-
-  return [...codes]
-    .map((code) => projectUnit(code, named.get(code) ?? 0, elective.get(code) ?? 0, retentionRate))
-    .sort((a, b) => b.projected - a.projected || a.code.localeCompare(b.code));
+  return [...new Set([...named.keys(), ...elective.keys()])].map((code) => ({
+    code,
+    fromNamedPicks: named.get(code) ?? 0,
+    fromElectives: elective.get(code) ?? 0,
+  }));
 }
 
 /** Adds every student's fractional elective shares together into one figure per unit. */
@@ -240,7 +253,7 @@ export async function runEstimationPreview(
   records: EstimationRecord[],
   options: PreviewOptions,
 ): Promise<EstimationPreview> {
-  const { targetTerm, loadCap, retentionRate } = options;
+  const { targetTerm, targetYear, loadCap, retentionRate, newIntakeCount } = options;
 
   // A fresh run must not see planner data cached by an earlier one, planners may have been edited in between.
   resetPlannerCache();
@@ -271,6 +284,18 @@ export async function runEstimationPreview(
   const students: StudentPreview[] = records.map((record) =>
     withOwnIdentity(resultByKey.get(groupingKeyFor(record))!, record),
   );
+
+  // Only worth a database read when there is an intake figure to place. Its warnings matter even when the
+  // figure is zero though, so the lookup still runs: a reader should learn the target intake has no planners
+  // loaded before they type a number, not after.
+  const newIntakeUnits = await resolveNewIntakeUnits(targetYear, targetTerm);
+
+  const projectedByUnit = aggregate({
+    continuing: contributionsByUnit(students),
+    newIntakeUnits: newIntakeUnits.codes,
+    newIntakeCount,
+    retentionRate,
+  });
 
   const withPlanner = students.filter((s) => s.planner !== null);
   const commonCoreOnly = students.filter((s) => s.basis === 'commonCore');
@@ -308,8 +333,16 @@ export async function runEstimationPreview(
       .sort((a, b) => b.students - a.students || a.code.localeCompare(b.code)),
     electiveSeatsByUnit: sumElectiveSeats(students),
     electiveSeatsUnplaced: students.reduce((sum, s) => sum + s.electiveSeats.unplaced, 0),
-    projectedByUnit: projectByUnit(students, retentionRate),
+    projectedByUnit,
+    totals: totalsFor(projectedByUnit),
     retentionRate,
+    newIntakeCount,
+    newIntake: {
+      units: newIntakeUnits.codes,
+      basedOnIntakeYear: newIntakeUnits.basedOnIntakeYear,
+      basedOnIntakeSemester: newIntakeUnits.basedOnIntakeSemester,
+      warnings: newIntakeUnits.warnings,
+    },
     grouping: summariseGrouping(groups),
   };
 

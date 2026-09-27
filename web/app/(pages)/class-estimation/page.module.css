@@ -616,3 +616,38 @@
   text-align: right;
   color: var(--accent-blue);
 }
+
+/* The projected table carries a new-intake column the elective one does not. */
+.projectedRow {
+  grid-template-columns: minmax(80px, 1fr) 80px 80px 60px 90px;
+}
+
+/* A saved run's timestamp, which opens its per-unit figures. */
+.runLink {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--accent-blue);
+  cursor: pointer;
+  text-align: left;
+}
+
+.runLink:hover {
+  text-decoration: underline;
+}
+
+.runDelete {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.runDelete:hover {
+  color: var(--accent-red);
+}

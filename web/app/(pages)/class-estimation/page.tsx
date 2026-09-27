@@ -51,6 +51,35 @@ type ImportResult = {
   storedStudents: number;
 };
 
+/** A saved estimation run, as /api/class-estimation/runs returns it. */
+type SavedRun = {
+  id: string;
+  createdAt: string;
+  label: string | null;
+  targetYear: number;
+  targetSemester: number;
+  loadCap: number;
+  retentionRate: number;
+  newIntake: number;
+  source: string;
+  studentCount: number;
+  groupCount: number;
+  commonCoreCount: number;
+  unitCount: number;
+  totalHeadcount: number;
+};
+
+type SavedRunDetail = SavedRun & {
+  units: Array<{
+    unitCode: string;
+    fromNamedPicks: number;
+    fromElectives: number;
+    fromNewIntake: number;
+    projected: number;
+    headcount: number;
+  }>;
+};
+
 type ProgressState = {
   current: number;
   total: number;
@@ -78,6 +107,7 @@ const PHASE_LABEL: Record<string, string> = {
 
 /** Where the HoD's retention figure is kept, allowlisted in web/app/api/config/route.ts. */
 const RETENTION_KEY = 'class_estimation_retention_rate';
+const NEW_INTAKE_KEY = 'class_estimation_new_intake';
 
 let _logKey = 0;
 
@@ -100,6 +130,13 @@ export default function ClassEstimationPage() {
   // and saved to SystemConfig, so a figure they worked out themselves is not retyped every session.
   const [retention, setRetention] = useState('85');
   const [retentionSaved, setRetentionSaved] = useState(false);
+  // Brand-new students the HoD expects. They are not in the portal, so there is nothing to derive it from.
+  const [newIntake, setNewIntake] = useState('0');
+  const [runs, setRuns] = useState<SavedRun[]>([]);
+  const [openRun, setOpenRun] = useState<SavedRunDetail | null>(null);
+  const [runLabel, setRunLabel] = useState('');
+  const [runStatusMsg, setRunStatusMsg] = useState<string | null>(null);
+  const [savingRun, setSavingRun] = useState(false);
   const [previewStatus, setPreviewStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
   const [preview, setPreview] = useState<PreviewResponse | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
@@ -155,7 +192,65 @@ export default function ClassEstimationPage() {
         if (stored !== null) setRetention(retentionRateToPercent(stored));
       })
       .catch(() => { /* never set, so the built-in default stands */ });
+
+    fetch(`/api/config?key=${NEW_INTAKE_KEY}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (typeof data?.value !== 'string' || data.value.trim() === '') return;
+        const stored = Number(data.value);
+        if (Number.isInteger(stored) && stored >= 0) setNewIntake(String(stored));
+      })
+      .catch(() => { /* never set, so zero stands */ });
   }, []);
+
+  const refreshRuns = useCallback(() => {
+    fetch('/api/class-estimation/runs')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => { if (Array.isArray(data?.runs)) setRuns(data.runs); })
+      .catch(() => { /* the history panel just stays empty */ });
+  }, []);
+
+  useEffect(() => { refreshRuns(); }, [refreshRuns]);
+
+  /**
+   * The server re-runs the estimate and saves that, rather than storing whatever is on screen. A saved run
+   * has to be a record of what the system predicted, not of what a browser happened to be showing.
+   */
+  const saveRun = async () => {
+    setSavingRun(true);
+    setRunStatusMsg(null);
+    try {
+      const res = await fetch('/api/class-estimation/runs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: runLabel.trim() || undefined }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error ?? `Save failed (${res.status})`);
+
+      setRunStatusMsg(`Saved, ${data.units} unit(s) recorded.`);
+      setRunLabel('');
+      refreshRuns();
+    } catch (err) {
+      setRunStatusMsg(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSavingRun(false);
+    }
+  };
+
+  const viewRun = async (id: string) => {
+    if (openRun?.id === id) { setOpenRun(null); return; }   // clicking the open one closes it
+    const res = await fetch(`/api/class-estimation/runs/${id}`).catch(() => null);
+    if (!res?.ok) { setRunStatusMsg('Could not load that run.'); return; }
+    setOpenRun(await res.json());
+  };
+
+  const deleteRun = async (id: string) => {
+    const res = await fetch(`/api/class-estimation/runs/${id}`, { method: 'DELETE' }).catch(() => null);
+    if (!res?.ok) { setRunStatusMsg('Could not delete that run.'); return; }
+    if (openRun?.id === id) setOpenRun(null);
+    refreshRuns();
+  };
 
   const refreshStored = useCallback(() => {
     fetch('/api/class-estimation/import')
@@ -342,7 +437,20 @@ export default function ClassEstimationPage() {
         .then((res) => setRetentionSaved(res.ok))
         .catch(() => setRetentionSaved(false));
 
-      const res = await fetch(`/api/class-estimation/preview?retentionRate=${rate}`);
+      const intake = Number(newIntake);
+      if (!Number.isInteger(intake) || intake < 0) {
+        setPreviewStatus('error');
+        setPreviewError('New students must be a whole number, 0 or more.');
+        return;
+      }
+
+      fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: NEW_INTAKE_KEY, value: String(intake) }),
+      }).catch(() => { /* not worth interrupting the estimate for */ });
+
+      const res = await fetch(`/api/class-estimation/preview?retentionRate=${rate}&newIntake=${intake}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? `Request failed (${res.status})`);
       setPreview(data as PreviewResponse);
@@ -721,6 +829,17 @@ export default function ClassEstimationPage() {
               disabled={previewStatus === 'loading' || isRunning}
             />
           </div>
+          <div className={styles.rangeField}>
+            <label className={styles.rangeLabel}>New students expected</label>
+            <input
+              className={styles.rangeInput}
+              type="number"
+              min={0}
+              value={newIntake}
+              onChange={(e) => setNewIntake(e.target.value)}
+              disabled={previewStatus === 'loading' || isRunning}
+            />
+          </div>
           <button
             className={styles.btnPrimary}
             disabled={previewStatus === 'loading' || isRunning}
@@ -797,29 +916,49 @@ export default function ClassEstimationPage() {
                 </div>
 
                 <div className={styles.electiveTable}>
-                  <div className={`${styles.electiveRow} ${styles.electiveHead}`}>
+                  <div className={`${styles.electiveRow} ${styles.projectedRow} ${styles.electiveHead}`}>
                     <span>Unit</span>
                     <span>Required</span>
                     <span>Elective</span>
-                    <span>Projected</span>
+                    <span>New</span>
+                    <span>Headcount</span>
                   </div>
-                  {preview.summary.projectedByUnit.slice(0, 40).map((u) => (
-                    <div key={u.code} className={styles.electiveRow}>
+                  {preview.summary.projectedByUnit.slice(0, 60).map((u) => (
+                    <div key={u.code} className={`${styles.electiveRow} ${styles.projectedRow}`}>
                       <span className={styles.electiveCode}>{u.code}</span>
                       <span className={styles.electiveNote}>{u.fromNamedPicks || '-'}</span>
                       <span className={styles.electiveNote}>
                         {u.fromElectives > 0 ? u.fromElectives.toFixed(1) : '-'}
                       </span>
-                      <span className={styles.electiveSeats}>{Math.round(u.projected)}</span>
+                      <span className={styles.electiveNote}>{u.fromNewIntake || '-'}</span>
+                      <span className={styles.electiveSeats}>{u.headcount}</span>
                     </div>
                   ))}
                 </div>
 
                 <p className={styles.hintText} style={{ marginTop: 8 }}>
                   Required counts whole students the planner says still owe the unit. Elective counts shares
-                  of a student spread over the options they could pick. Projected is both, after the
-                  returning-students rate, rounded for display only.
+                  of a student spread over the options they could pick. New is the intake figure, which is not
+                  discounted because it is already what you expect to arrive. Headcount is the lot, rounded
+                  once at the end, so the column need not add up to the total below.
                 </p>
+
+                <div className={styles.previewNotes} style={{ marginTop: 8 }}>
+                  <div>
+                    {preview.summary.totals.units} units · {preview.summary.totals.headcount.toLocaleString()} enrolments
+                    {preview.summary.totals.unitsWithNoStudents > 0 &&
+                      ` · ${preview.summary.totals.unitsWithNoStudents} predicted not to run`}
+                  </div>
+                  {preview.summary.newIntakeCount > 0 && (
+                    <div>
+                      {preview.summary.newIntakeCount} new students placed on{' '}
+                      {preview.summary.newIntake.units.join(', ') || 'no units'}
+                    </div>
+                  )}
+                  {preview.summary.newIntake.warnings.map((warning) => (
+                    <div key={warning}>⚠ {warning}</div>
+                  ))}
+                </div>
               </div>
             )}
 
@@ -888,6 +1027,83 @@ export default function ClassEstimationPage() {
               )}
             </div>
           </>
+        )}
+      </div>
+
+      {/* ── Saved runs ───────────────────────────────────────────────────────── */}
+      <div className={styles.card}>
+        <div className={styles.sectionTitle}>Saved Runs</div>
+        <p className={styles.hintText}>
+          A saved run keeps the figures and the inputs behind them, so an estimate read months later still
+          says which retention rate, load cap and new-intake figure produced it. Saving re-runs the estimate
+          on the server, so what is stored is what the system predicts, not what is on screen.
+        </p>
+
+        <div className={styles.actionRow}>
+          <div className={styles.rangeField} style={{ flex: 1, minWidth: 180 }}>
+            <label className={styles.rangeLabel}>Label (optional)</label>
+            <input
+              className={styles.rangeInput}
+              type="text"
+              placeholder="e.g. before the FTES change"
+              value={runLabel}
+              onChange={(e) => setRunLabel(e.target.value)}
+              disabled={savingRun}
+            />
+          </div>
+          <button className={styles.btnPrimary} disabled={savingRun} onClick={saveRun}>
+            {savingRun ? 'Saving…' : 'Save This Run'}
+          </button>
+        </div>
+
+        {runStatusMsg && <p className={styles.hintText} style={{ marginTop: 8 }}>{runStatusMsg}</p>}
+
+        {runs.length === 0 ? (
+          <p className={styles.hintText} style={{ marginTop: 12 }}>No runs saved yet.</p>
+        ) : (
+          <div className={styles.fileList} style={{ marginTop: 12 }}>
+            {runs.map((run) => (
+              <div key={run.id}>
+                <div className={styles.fileRow}>
+                  <button className={styles.runLink} onClick={() => viewRun(run.id)}>
+                    {new Date(run.createdAt).toLocaleString()}
+                    {run.label ? ` · ${run.label}` : ''}
+                  </button>
+                  <span className={styles.fileNote}>
+                    S{run.targetSemester} {run.targetYear} · {run.studentCount.toLocaleString()} students
+                    {run.newIntake > 0 && ` + ${run.newIntake} new`}
+                    {' · '}{(run.retentionRate * 100).toFixed(0)}% returning
+                    {' · '}{run.totalHeadcount.toLocaleString()} enrolments over {run.unitCount} units
+                    {' · '}{run.source}
+                  </span>
+                  <button className={styles.runDelete} onClick={() => deleteRun(run.id)}>remove</button>
+                </div>
+
+                {openRun?.id === run.id && (
+                  <div className={styles.electiveTable} style={{ margin: '6px 0 12px' }}>
+                    <div className={`${styles.electiveRow} ${styles.projectedRow} ${styles.electiveHead}`}>
+                      <span>Unit</span>
+                      <span>Required</span>
+                      <span>Elective</span>
+                      <span>New</span>
+                      <span>Headcount</span>
+                    </div>
+                    {openRun.units.map((unit) => (
+                      <div key={unit.unitCode} className={`${styles.electiveRow} ${styles.projectedRow}`}>
+                        <span className={styles.electiveCode}>{unit.unitCode}</span>
+                        <span className={styles.electiveNote}>{unit.fromNamedPicks || '-'}</span>
+                        <span className={styles.electiveNote}>
+                          {unit.fromElectives > 0 ? unit.fromElectives.toFixed(1) : '-'}
+                        </span>
+                        <span className={styles.electiveNote}>{unit.fromNewIntake || '-'}</span>
+                        <span className={styles.electiveSeats}>{unit.headcount}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
         )}
       </div>
 

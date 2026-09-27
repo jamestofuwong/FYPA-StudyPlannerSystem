@@ -106,7 +106,7 @@ describe('runEstimationPreview', () => {
   });
 
   test('runs a DD/MM/YYYY student through every phase and reports what each one did', async () => {
-    const { students, summary } = await runEstimationPreview([record('S1', scrapedStudent())], { targetTerm: 2, loadCap: 4, retentionRate: 1 });
+    const { students, summary } = await runEstimationPreview([record('S1', scrapedStudent())], { targetTerm: 2, targetYear: 2027, loadCap: 4, retentionRate: 1, newIntakeCount: 0 });
     const [s] = students;
 
     expect(s.error).toBeUndefined();
@@ -141,14 +141,14 @@ describe('runEstimationPreview', () => {
   // their free elective slots. Here that leaves 0 slots owed, so FREE1 is never even a candidate, which under-counts free
   // electives for any student who really hasn't got WIL approval.
   test('a WIL-exempt student has free elective slots waived, so no free elective candidate is produced', async () => {
-    const { students } = await runEstimationPreview([record('S1', scrapedStudent(), true)], { targetTerm: 2, loadCap: 4, retentionRate: 1 });
+    const { students } = await runEstimationPreview([record('S1', scrapedStudent(), true)], { targetTerm: 2, targetYear: 2027, loadCap: 4, retentionRate: 1, newIntakeCount: 0 });
     const [s] = students;
     expect(s.candidateCount).toBe(3);
     expect([...s.picked, ...s.ineligible].some((u) => u.code === 'FREE1')).toBe(false);
   });
 
   test('a target term flips which units are offered, so eligibility changes with it', async () => {
-    const { students } = await runEstimationPreview([record('S1', scrapedStudent())], { targetTerm: 1, loadCap: 4, retentionRate: 1 });
+    const { students } = await runEstimationPreview([record('S1', scrapedStudent())], { targetTerm: 1, targetYear: 2027, loadCap: 4, retentionRate: 1, newIntakeCount: 0 });
     const [s] = students;
 
     // Semester 1: COS30008 is sem-2 only so it drops out, POOL1 (sem 1) is offered and has no requisites so it gets in.
@@ -172,7 +172,7 @@ describe('runEstimationPreview', () => {
         creditsCompleted: 100,
         courseList: [noCredit('COS10009'), noCredit('COS20007'), noCredit('COS20015')],
       }))],
-      { targetTerm: 2, loadCap: 4, retentionRate: 1 },
+      { targetTerm: 2, targetYear: 2027, loadCap: 4, retentionRate: 1, newIntakeCount: 0 },
     );
 
     expect(students[0].ineligible.find((u) => u.code === 'COS30049')?.reason).toBe('requisites-unmet');
@@ -190,7 +190,7 @@ describe('runEstimationPreview', () => {
 
     const { students, summary } = await runEstimationPreview(
       [record('S1', scrapedStudent())],
-      { targetTerm: 1, loadCap: 4, retentionRate: 1 },
+      { targetTerm: 1, targetYear: 2027, loadCap: 4, retentionRate: 1, newIntakeCount: 0 },
     );
 
     expect(students[0].picked.map((u) => u.code)).toContain('COS30008');
@@ -204,7 +204,7 @@ describe('runEstimationPreview', () => {
   test('elective seats are spread over the pool instead of naming a pick', async () => {
     const { students, summary } = await runEstimationPreview(
       [record('S1', scrapedStudent())],
-      { targetTerm: 1, loadCap: 4, retentionRate: 1 },
+      { targetTerm: 1, targetYear: 2027, loadCap: 4, retentionRate: 1, newIntakeCount: 0 },
     );
     const [s] = students;
 
@@ -226,7 +226,7 @@ describe('runEstimationPreview', () => {
   test('a batch sums its elective fractions into one figure per unit', async () => {
     const { summary } = await runEstimationPreview(
       [record('S1', scrapedStudent()), record('S2', scrapedStudent()), record('S3', scrapedStudent())],
-      { targetTerm: 1, loadCap: 4, retentionRate: 1 },
+      { targetTerm: 1, targetYear: 2027, loadCap: 4, retentionRate: 1, newIntakeCount: 0 },
     );
 
     const pool1 = summary.electiveSeatsByUnit.find((u) => u.code === 'POOL1');
@@ -252,7 +252,7 @@ describe('runEstimationPreview', () => {
 
     const { summary } = await runEstimationPreview(
       [record('S1', scrapedStudent()), record('S2', withCos10022)],
-      { targetTerm: 1, loadCap: 4, retentionRate: 1 },
+      { targetTerm: 1, targetYear: 2027, loadCap: 4, retentionRate: 1, newIntakeCount: 0 },
     );
 
     // S2 has passed COS10022, so it is not in S2's own pool, but it weights the pool S1 draws from.
@@ -272,11 +272,11 @@ describe('runEstimationPreview', () => {
   test('a batch of identical students gives exactly N times one student', async () => {
     const one = await runEstimationPreview(
       [record('S1', scrapedStudent())],
-      { targetTerm: 2, loadCap: 4, retentionRate: 1 },
+      { targetTerm: 2, targetYear: 2027, loadCap: 4, retentionRate: 1, newIntakeCount: 0 },
     );
     const five = await runEstimationPreview(
       [1, 2, 3, 4, 5].map((n) => record(`S${n}`, scrapedStudent())),
-      { targetTerm: 2, loadCap: 4, retentionRate: 1 },
+      { targetTerm: 2, targetYear: 2027, loadCap: 4, retentionRate: 1, newIntakeCount: 0 },
     );
 
     // Five students, one situation, so one pipeline run served all of them.
@@ -297,7 +297,7 @@ describe('runEstimationPreview', () => {
   test('grouped students keep their own identity, in input order', async () => {
     const { students } = await runEstimationPreview(
       ['S3', 'S1', 'S2'].map((id) => record(id, scrapedStudent())),
-      { targetTerm: 2, loadCap: 4, retentionRate: 1 },
+      { targetTerm: 2, targetYear: 2027, loadCap: 4, retentionRate: 1, newIntakeCount: 0 },
     );
 
     expect(students.map((s) => s.studentId)).toEqual(['S3', 'S1', 'S2']);
@@ -315,7 +315,7 @@ describe('runEstimationPreview', () => {
         record('S2', scrapedStudent()),
         record('S3', scrapedStudent({ courseList: [] })),
       ],
-      { targetTerm: 2, loadCap: 4, retentionRate: 1 },
+      { targetTerm: 2, targetYear: 2027, loadCap: 4, retentionRate: 1, newIntakeCount: 0 },
     );
 
     expect(summary.grouping.groups).toBe(2);
@@ -325,19 +325,19 @@ describe('runEstimationPreview', () => {
   test('the retention rate discounts every projection and is reported with them', async () => {
     const full = await runEstimationPreview(
       [record('S1', scrapedStudent())],
-      { targetTerm: 2, loadCap: 4, retentionRate: 1 },
+      { targetTerm: 2, targetYear: 2027, loadCap: 4, retentionRate: 1, newIntakeCount: 0 },
     );
     const discounted = await runEstimationPreview(
       [record('S1', scrapedStudent())],
-      { targetTerm: 2, loadCap: 4, retentionRate: 0.85 },
+      { targetTerm: 2, targetYear: 2027, loadCap: 4, retentionRate: 0.85, newIntakeCount: 0 },
     );
 
     expect(discounted.summary.retentionRate).toBe(0.85);
     for (const unit of discounted.summary.projectedByUnit) {
       const undiscounted = full.summary.projectedByUnit.find((u) => u.code === unit.code)!;
       // The raw prediction is untouched, only the projected figure moves.
-      expect(unit.beforeRetention).toBeCloseTo(undiscounted.beforeRetention, 10);
-      expect(unit.projected).toBeCloseTo(undiscounted.beforeRetention * 0.85, 10);
+      expect(unit.continuingBeforeRetention).toBeCloseTo(undiscounted.continuingBeforeRetention, 10);
+      expect(unit.projected).toBeCloseTo(undiscounted.continuingBeforeRetention * 0.85, 10);
     }
   });
 
@@ -348,23 +348,23 @@ describe('runEstimationPreview', () => {
   test('named picks and elective shares are kept apart on their own rows', async () => {
     const { summary } = await runEstimationPreview(
       [record('S1', scrapedStudent())],
-      { targetTerm: 1, loadCap: 4, retentionRate: 1 },
+      { targetTerm: 1, targetYear: 2027, loadCap: 4, retentionRate: 1, newIntakeCount: 0 },
     );
 
     const pool1 = summary.projectedByUnit.find((u) => u.code === 'POOL1');
     expect(pool1).toBeDefined();
     expect(pool1!.fromNamedPicks).toBe(0);           // never a named pick, it is pool-only
     expect(pool1!.fromElectives).toBeGreaterThan(0);
-    expect(pool1!.beforeRetention).toBeCloseTo(pool1!.fromElectives, 10);
+    expect(pool1!.continuingBeforeRetention).toBeCloseTo(pool1!.fromElectives, 10);
 
     const named = summary.projectedByUnit.find((u) => u.code === 'COS30049');
     expect(named!.fromNamedPicks).toBe(1);
     expect(named!.fromElectives).toBe(0);
-    expect(named!.beforeRetention).toBe(1);
+    expect(named!.continuingBeforeRetention).toBe(1);
   });
 
   test('loadCap drops the later-slotted core units and says how many', async () => {
-    const { students } = await runEstimationPreview([record('S1', scrapedStudent())], { targetTerm: 2, loadCap: 1, retentionRate: 1 });
+    const { students } = await runEstimationPreview([record('S1', scrapedStudent())], { targetTerm: 2, targetYear: 2027, loadCap: 1, retentionRate: 1, newIntakeCount: 0 });
     expect(students[0].picked.map((u) => u.code)).toEqual(['COS30008']);
     expect(students[0].droppedByLoadCap).toBe(1);
   });
@@ -376,7 +376,7 @@ describe('runEstimationPreview', () => {
   test('a student who matches no major is estimated from the shared core, not dropped', async () => {
     const { students, summary } = await runEstimationPreview(
       [record('S2', scrapedStudent({ courseList: [] }))],
-      { targetTerm: 2, loadCap: 4, retentionRate: 1 },
+      { targetTerm: 2, targetYear: 2027, loadCap: 4, retentionRate: 1, newIntakeCount: 0 },
     );
     const [s] = students;
 
@@ -400,7 +400,7 @@ describe('runEstimationPreview', () => {
   test('a student whose intake year has no planner falls back instead of erroring', async () => {
     const { students } = await runEstimationPreview(
       [record('S3', scrapedStudent({ enrollmentDate: '10/03/2019' }))],
-      { targetTerm: 2, loadCap: 4, retentionRate: 1 },
+      { targetTerm: 2, targetYear: 2027, loadCap: 4, retentionRate: 1, newIntakeCount: 0 },
     );
     expect(students[0].intake.year).toBe(2019);
     expect(students[0].error).toBeUndefined();
@@ -409,14 +409,14 @@ describe('runEstimationPreview', () => {
 
   test('throws a readable error when no planners are loaded at all', async () => {
     getAllPlannersWithUnits.mockResolvedValue([] as never);
-    await expect(runEstimationPreview([record('S1', scrapedStudent())], { targetTerm: 2, loadCap: 4, retentionRate: 1 }))
+    await expect(runEstimationPreview([record('S1', scrapedStudent())], { targetTerm: 2, targetYear: 2027, loadCap: 4, retentionRate: 1, newIntakeCount: 0 }))
       .rejects.toThrow('No planner templates are loaded');
   });
 
   test('counts each mapper warning once per student that has it', async () => {
     const { summary } = await runEstimationPreview(
       [record('S1', scrapedStudent()), record('S2', scrapedStudent())],
-      { targetTerm: 2, loadCap: 4, retentionRate: 1 },
+      { targetTerm: 2, targetYear: 2027, loadCap: 4, retentionRate: 1, newIntakeCount: 0 },
     );
     const hasWilWarning = Object.entries(summary.mappingWarningCounts).find(([w]) => w.startsWith('hasWIL defaulted'));
     expect(hasWilWarning?.[1]).toBe(2);

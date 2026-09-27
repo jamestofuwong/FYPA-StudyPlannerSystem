@@ -37,39 +37,6 @@ export function applyRetention(expected: number, retentionRate: number): number 
   return expected * retentionRate;
 }
 
-/**
- * How a projected figure was arrived at, carried alongside it so a headcount is never a bare number.
- * Rounding is deliberately absent: it belongs at the very end, in Phase 8, applied once to the final figure
- * rather than accumulating error at each step.
- */
-export interface UnitProjection {
-  code: string;
-  /** Whole seats from students predicted into this specific unit. */
-  fromNamedPicks: number;
-  /** Fractional seats from students spread across an elective pool containing this unit. */
-  fromElectives: number;
-  /** fromNamedPicks + fromElectives, before any discount. */
-  beforeRetention: number;
-  /** beforeRetention after the retention rate. This is the projected headcount. */
-  projected: number;
-}
-
-export function projectUnit(
-  code: string,
-  fromNamedPicks: number,
-  fromElectives: number,
-  retentionRate: number,
-): UnitProjection {
-  const beforeRetention = fromNamedPicks + fromElectives;
-  return {
-    code,
-    fromNamedPicks,
-    fromElectives,
-    beforeRetention,
-    projected: applyRetention(beforeRetention, retentionRate),
-  };
-}
-
 // ====== Parsing a rate from the outside world ==============================================
 //
 // Both of these exist because the same mistake was made twice inline: Number() turning something that is

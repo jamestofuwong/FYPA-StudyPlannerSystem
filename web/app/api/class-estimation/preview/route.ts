@@ -10,6 +10,19 @@ import {
 import { prisma } from '../../../../../core/db/client';
 
 const RETENTION_KEY = 'class_estimation_retention_rate';
+const NEW_INTAKE_KEY = 'class_estimation_new_intake';
+
+/** The HoD's saved new-intake figure, or 0 if they have never set one. */
+async function storedNewIntake(): Promise<number> {
+  try {
+    const row = await prisma.systemConfig.findUnique({ where: { key: NEW_INTAKE_KEY } });
+    if (!row || typeof row.value !== 'string' || row.value.trim() === '') return 0;
+    const stored = Number(row.value);
+    return Number.isInteger(stored) && stored >= 0 ? stored : 0;
+  } catch {
+    return 0;
+  }
+}
 
 /**
  * The retention rate to use when the caller does not name one: the HoD's saved figure, or the built-in
@@ -57,6 +70,13 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'retentionRate must be a number from 0 to 1' }, { status: 400 });
   }
 
+  // Brand-new students, who are not in the portal yet, so the figure is typed rather than derived.
+  const intakeParam = searchParams.get('newIntake');
+  const newIntakeCount = intakeParam !== null ? Number(intakeParam) : await storedNewIntake();
+  if (!Number.isInteger(newIntakeCount) || newIntakeCount < 0) {
+    return NextResponse.json({ error: 'newIntake must be a whole number of students, 0 or more' }, { status: 400 });
+  }
+
   const records = getEstimationRecords();
   if (records.length === 0) {
     return NextResponse.json(
@@ -66,7 +86,13 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const preview = await runEstimationPreview(records, { targetTerm: term, loadCap, retentionRate });
+    const preview = await runEstimationPreview(records, {
+      targetTerm: term,
+      targetYear: termParam ? new Date().getFullYear() : academicNow.next.year,
+      loadCap,
+      retentionRate,
+      newIntakeCount,
+    });
     // The derived target travels with the result so the page can state which semester it is looking at, and
     // say so when ?term= was used to override the derivation.
     return NextResponse.json({

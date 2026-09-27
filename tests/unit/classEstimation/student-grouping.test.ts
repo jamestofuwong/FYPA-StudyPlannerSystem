@@ -18,7 +18,6 @@ import {
 import {
   applyRetention,
   resolveRetentionRate,
-  projectUnit,
   parseStoredRetentionRate,
   parseTypedRetentionPercent,
   retentionRateToPercent,
@@ -217,31 +216,6 @@ describe('applyRetention', () => {
   // Rounding belongs at the very end, once, so this has to stay fractional however awkward the figure.
   test('leaves the result unrounded', () => {
     expect(applyRetention(7, 0.85)).toBeCloseTo(5.95, 10);
-  });
-});
-
-describe('projectUnit', () => {
-  test('adds named picks and elective shares, then discounts', () => {
-    const projection = projectUnit('COS10004', 40, 3.5, 0.85);
-
-    expect(projection).toEqual({
-      code: 'COS10004',
-      fromNamedPicks: 40,
-      fromElectives: 3.5,
-      beforeRetention: 43.5,
-      projected: 43.5 * 0.85,
-    });
-  });
-
-  // Applying the rate once to the total is the same as applying it to each part, and this pins that so a
-  // later refactor cannot start discounting one side twice.
-  test('discounting the total matches discounting each part', () => {
-    const projection = projectUnit('X', 12, 4.25, 0.7);
-    expect(projection.projected).toBeCloseTo(12 * 0.7 + 4.25 * 0.7, 10);
-  });
-
-  test('a unit reached only through an elective pool still projects', () => {
-    expect(projectUnit('POOL1', 0, 2, 0.85).projected).toBeCloseTo(1.7, 10);
   });
 });
 
