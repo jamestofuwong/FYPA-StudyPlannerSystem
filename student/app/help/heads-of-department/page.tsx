@@ -1,12 +1,10 @@
-'use client'
-
 import Link from 'next/link'
 import Nav from '@student/components/Nav/Nav'
-import { useCatalog } from '@student/components/CatalogProvider'
+import { getCachedHelp } from '@student/lib/catalog'
 import styles from './page.module.css'
 
-export default function HeadsOfDepartmentPage() {
-  const hods = useCatalog().help.hods
+export default async function HeadsOfDepartmentPage() {
+  const hods = (await getCachedHelp()).hods
 
   // Group by faculty, preserving the order they appear in the sorted list
   const grouped: { faculty: string; heads: typeof hods }[] = []

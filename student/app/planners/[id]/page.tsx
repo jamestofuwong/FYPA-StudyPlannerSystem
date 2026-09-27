@@ -1,9 +1,6 @@
-'use client'
-
-import { use } from 'react'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import { useCatalog } from '@student/components/CatalogProvider'
+import { getCachedPlanner } from '@student/lib/catalog'
 import type { SemesterBlock } from '@student/lib/types'
 import Nav from '@student/components/Nav/Nav'
 import SemesterTable from '@student/components/SemesterTable/SemesterTable'
@@ -53,10 +50,9 @@ function groupByYear(semesters: SemesterBlock[]): Map<number, SemesterBlock[]> {
   return map
 }
 
-export default function PlannerDetailPage({ params }: Props) {
-  const { id } = use(params)
-  const { plannersById } = useCatalog()
-  const planner = plannersById[id]
+export default async function PlannerDetailPage({ params }: Props) {
+  const { id } = await params
+  const planner = await getCachedPlanner(id)
   if (!planner) notFound()
 
   const byYear = groupByYear(planner.semesters)

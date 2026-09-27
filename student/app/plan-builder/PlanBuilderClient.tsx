@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { generatePlan } from '@student/lib/plan-builder'
 import type { GenerationResult } from '@student/lib/plan-builder'
-import { useCatalog } from '@student/components/CatalogProvider'
+import type { PlannerCourseOption } from '@student/lib/planners'
 import type { SemesterBlock, UnitListing } from '@student/lib/types'
 import SemesterTable from '@student/components/SemesterTable/SemesterTable'
 import ElectivePool from '@student/components/ElectivePool/ElectivePool'
@@ -156,8 +156,13 @@ function groupByYear(semesters: SemesterBlock[]): Map<number, SemesterBlock[]> {
   return map
 }
 
-export default function PlanBuilderClient() {
-  const { plannerOptions, units } = useCatalog()
+export default function PlanBuilderClient({
+  plannerOptions,
+  units,
+}: {
+  plannerOptions: PlannerCourseOption[]
+  units: UnitListing[]
+}) {
   // ── Config ──
   const [selectedCourseId, setSelectedCourseId]   = useState('')
   const [selectedPlannerId, setSelectedPlannerId] = useState('')

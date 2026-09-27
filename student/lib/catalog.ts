@@ -1,15 +1,25 @@
 import 'server-only'
+import { revalidateTag, unstable_cache } from 'next/cache'
 import { prisma } from './prisma'
 import { getPlannerById, getPlannerOptions, getPlanners } from './planners'
 import { getUnit, getUnits } from './units'
-import type { StudentCatalog } from './catalog-types'
+import type { StudentHelp } from './catalog-types'
 
-// One read of every public student page: planners, units, plan-builder options, and help.
-export async function getCatalog(): Promise<StudentCatalog> {
-  const [planners, units, plannerOptions, faqs, generalEnquiries, itHelpDesk, hods] = await Promise.all([
-    getPlanners(),
-    getUnits(),
-    getPlannerOptions(),
+export const STUDENT_CACHE = {
+  planners: 'student-planners',
+  units: 'student-units',
+  help: 'student-help',
+} as const
+
+type StudentCacheTag = (typeof STUDENT_CACHE)[keyof typeof STUDENT_CACHE]
+
+/** Drop the cached student pages that read this tag. CMS saves call this. */
+export function revalidateStudentCache(tag: StudentCacheTag) {
+  revalidateTag(tag, 'max')
+}
+
+async function readHelp(): Promise<StudentHelp> {
+  const [faqs, generalEnquiries, itHelpDesk, hods] = await Promise.all([
     prisma.faqItem.findMany({ orderBy: { position: 'asc' }, select: { question: true, answer: true } }),
     prisma.generalEnquiries.findFirst({
       select: { venue_name: true, location: true, hours: true, closed_note: true },
@@ -22,33 +32,29 @@ export async function getCatalog(): Promise<StudentCatalog> {
       select: { id: true, faculty: true, department: true, name: true, email: true, position: true },
     }),
   ])
-
-  const [plannerDetails, unitDetails] = await Promise.all([
-    Promise.all(planners.map(planner => getPlannerById(planner.id))),
-    Promise.all(units.map(unit => getUnit(unit.code))),
-  ])
-
-  const plannersById: StudentCatalog['plannersById'] = {}
-  plannerDetails.forEach(detail => {
-    if (detail) plannersById[detail.id] = detail
-  })
-
-  const unitsByCode: StudentCatalog['unitsByCode'] = {}
-  unitDetails.forEach(detail => {
-    if (detail) unitsByCode[detail.code.toUpperCase()] = detail
-  })
-
-  return {
-    planners,
-    plannersById,
-    units,
-    unitsByCode,
-    plannerOptions,
-    help: {
-      faqs,
-      generalEnquiries,
-      itHelpDesk,
-      hods,
-    },
-  }
+  return { faqs, generalEnquiries, itHelpDesk, hods }
 }
+
+export const getCachedPlanners = unstable_cache(getPlanners, ['student-planners'], {
+  tags: [STUDENT_CACHE.planners],
+})
+
+export const getCachedPlanner = unstable_cache(getPlannerById, ['student-planner'], {
+  tags: [STUDENT_CACHE.planners],
+})
+
+export const getCachedPlannerOptions = unstable_cache(getPlannerOptions, ['student-planner-options'], {
+  tags: [STUDENT_CACHE.planners],
+})
+
+export const getCachedUnits = unstable_cache(getUnits, ['student-units'], {
+  tags: [STUDENT_CACHE.units],
+})
+
+export const getCachedUnit = unstable_cache(getUnit, ['student-unit'], {
+  tags: [STUDENT_CACHE.units],
+})
+
+export const getCachedHelp = unstable_cache(readHelp, ['student-help'], {
+  tags: [STUDENT_CACHE.help],
+})

@@ -1,10 +1,7 @@
-'use client'
-
-import { use } from 'react'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import Nav from '@student/components/Nav/Nav'
-import { useCatalog } from '@student/components/CatalogProvider'
+import { getCachedUnit } from '@student/lib/catalog'
 import styles from './page.module.css'
 
 interface Props {
@@ -16,10 +13,9 @@ function unitYear(code: string): number {
   return match ? parseInt(match[0]) : 0
 }
 
-export default function UnitDetailPage({ params }: Props) {
-  const { code } = use(params)
-  const { unitsByCode } = useCatalog()
-  const unit = unitsByCode[code.toUpperCase()]
+export default async function UnitDetailPage({ params }: Props) {
+  const { code } = await params
+  const unit = await getCachedUnit(code)
 
   if (!unit) notFound()
 

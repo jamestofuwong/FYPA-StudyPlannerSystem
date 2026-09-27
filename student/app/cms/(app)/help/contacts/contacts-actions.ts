@@ -1,5 +1,6 @@
 'use server'
 import { revalidatePath } from 'next/cache'
+import { revalidateStudentCache, STUDENT_CACHE } from '@/lib/catalog'
 import { prisma } from '@/lib/prisma'
 
 export async function saveGeneralEnquiries(formData: FormData) {
@@ -17,6 +18,7 @@ export async function saveGeneralEnquiries(formData: FormData) {
   }
   revalidatePath('/help')
   revalidatePath('/cms/help/contacts')
+  revalidateStudentCache(STUDENT_CACHE.help)
 }
 
 export async function saveItHelpDesk(formData: FormData) {
@@ -36,4 +38,5 @@ export async function saveItHelpDesk(formData: FormData) {
   }
   revalidatePath('/help')
   revalidatePath('/cms/help/contacts')
+  revalidateStudentCache(STUDENT_CACHE.help)
 }

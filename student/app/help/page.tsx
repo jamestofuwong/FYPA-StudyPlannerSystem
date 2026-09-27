@@ -1,13 +1,11 @@
-'use client'
-
 import Link from 'next/link'
 import Nav from '@student/components/Nav/Nav'
 import FaqAccordion from './FaqAccordion'
-import { useCatalog } from '@student/components/CatalogProvider'
+import { getCachedHelp } from '@student/lib/catalog'
 import styles from './page.module.css'
 
-export default function HelpPage() {
-  const { help } = useCatalog()
+export default async function HelpPage() {
+  const help = await getCachedHelp()
   const { faqs: faqItems, generalEnquiries, itHelpDesk } = help
 
   return (

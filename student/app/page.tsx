@@ -1,12 +1,10 @@
-'use client'
-
 import Nav from '@student/components/Nav/Nav'
 import PlannerGrid from '@student/components/PlannerGrid/PlannerGrid'
-import { useCatalog } from '@student/components/CatalogProvider'
+import { getCachedPlanners } from '@student/lib/catalog'
 import styles from './page.module.css'
 
-export default function BrowsePage() {
-  const { planners } = useCatalog()
+export default async function BrowsePage() {
+  const planners = await getCachedPlanners()
 
   return (
     <div className={styles.page}>

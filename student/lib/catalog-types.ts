@@ -1,6 +1,3 @@
-import type { PlannerCourseOption } from './planners'
-import type { PlannerDetail, PlannerSummary, UnitDetail, UnitListing } from './types'
-
 export interface HelpFaq {
   question: string
   answer: string
@@ -31,16 +28,9 @@ export interface HeadOfDepartmentInfo {
   position: number
 }
 
-export interface StudentCatalog {
-  planners: PlannerSummary[]
-  plannersById: Record<string, PlannerDetail>
-  units: UnitListing[]
-  unitsByCode: Record<string, UnitDetail>
-  plannerOptions: PlannerCourseOption[]
-  help: {
-    faqs: HelpFaq[]
-    generalEnquiries: GeneralEnquiriesInfo | null
-    itHelpDesk: ItHelpDeskInfo | null
-    hods: HeadOfDepartmentInfo[]
-  }
+export interface StudentHelp {
+  faqs: HelpFaq[]
+  generalEnquiries: GeneralEnquiriesInfo | null
+  itHelpDesk: ItHelpDeskInfo | null
+  hods: HeadOfDepartmentInfo[]
 }
