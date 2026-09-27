@@ -8,7 +8,6 @@ import type { SemesterBlock } from '@student/lib/types'
 import Nav from '@student/components/Nav/Nav'
 import SemesterTable from '@student/components/SemesterTable/SemesterTable'
 import ElectivePool from '@student/components/ElectivePool/ElectivePool'
-import CategoryLegend, { categoriesInPlan } from '@student/components/CategoryLegend/CategoryLegend'
 import styles from './page.module.css'
 
 interface Props {
@@ -102,7 +101,6 @@ export default function PlannerDetailPage({ params }: Props) {
 
           {/* LEFT: Year sections */}
           <section aria-label="Study plan by year">
-            <CategoryLegend categories={categoriesInPlan(planner.semesters)} />
             {[...byYear.entries()].map(([year, blocks]) => (
               <div key={year}>
                 <h2 className={styles.yearHeading}>
