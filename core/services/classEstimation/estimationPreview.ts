@@ -21,6 +21,8 @@ import {
 import { filterEligibleUnits } from './eligibilityFilter';
 import { rankAndCapUnits } from './unitRanker';
 import { buildElectivePopularity, splitElectivePicks } from './electiveSplitter';
+import { groupIdenticalStudents, groupingKeyFor, summariseGrouping, type GroupingStats } from './studentGrouping';
+import { projectUnit, type UnitProjection } from './retention';
 import type {
   CandidateUnit,
   ElectiveExpectation,
@@ -124,6 +126,14 @@ export interface PreviewSummary {
   }>;
   /** Elective seats owed with no eligible pool unit to place them on, across the batch. */
   electiveSeatsUnplaced: number;
+  /**
+   * Phase 7. The projected headcount per unit: whole seats from named picks plus fractional seats from
+   * elective pools, discounted by the retention rate. Left unrounded, Phase 8 rounds once at the end.
+   */
+  projectedByUnit: UnitProjection[];
+  retentionRate: number;
+  /** How many students the estimator could not tell apart, and how much work that saved. */
+  grouping: GroupingStats;
 }
 
 export interface EstimationPreview {
@@ -134,8 +144,54 @@ export interface EstimationPreview {
 export interface PreviewOptions {
   targetTerm: 1 | 2;
   loadCap: number;
+  /** Share of students expected back next semester. See retention.ts for why it is one flat figure. */
+  retentionRate: number;
 }
 
+
+/**
+ * The group's computed result, re-labelled with one member's own identity.
+ *
+ * Only the fields the pipeline never read are swapped: who the student is and what the mapper warned about
+ * for them. Everything the estimate is made of stays exactly as computed, which is what keeps a grouped run
+ * identical to an ungrouped one.
+ */
+function withOwnIdentity(computed: StudentPreview, record: EstimationRecord): StudentPreview {
+  return {
+    ...computed,
+    studentId: record.studentId,
+    name: record.name,
+    course: record.scraped?.course ?? '',
+    creditsScraped: record.scraped?.creditsCompleted ?? 0,
+    mappingWarnings: record.mappingWarnings,
+  };
+}
+
+/**
+ * The first per-unit headcount in the system. Named picks contribute a whole seat each, elective pools
+ * contribute fractions, and the retention rate discounts the lot.
+ */
+function projectByUnit(students: StudentPreview[], retentionRate: number): UnitProjection[] {
+  const named = new Map<string, number>();
+  const elective = new Map<string, number>();
+
+  for (const student of students) {
+    for (const unit of student.picked) {
+      named.set(unit.code, (named.get(unit.code) ?? 0) + 1);
+    }
+    for (const expectation of student.electives) {
+      elective.set(expectation.code, (elective.get(expectation.code) ?? 0) + expectation.expectedSeats);
+    }
+  }
+
+  // A unit can arrive from either side, or both: a named requirement for one student and an elective
+  // option for another, which is exactly what the cross-category units in these planners do.
+  const codes = new Set([...named.keys(), ...elective.keys()]);
+
+  return [...codes]
+    .map((code) => projectUnit(code, named.get(code) ?? 0, elective.get(code) ?? 0, retentionRate))
+    .sort((a, b) => b.projected - a.projected || a.code.localeCompare(b.code));
+}
 
 /** Adds every student's fractional elective shares together into one figure per unit. */
 function sumElectiveSeats(students: StudentPreview[]): PreviewSummary['electiveSeatsByUnit'] {
@@ -184,7 +240,7 @@ export async function runEstimationPreview(
   records: EstimationRecord[],
   options: PreviewOptions,
 ): Promise<EstimationPreview> {
-  const { targetTerm, loadCap } = options;
+  const { targetTerm, loadCap, retentionRate } = options;
 
   // A fresh run must not see planner data cached by an earlier one, planners may have been edited in between.
   resetPlannerCache();
@@ -198,10 +254,23 @@ export async function runEstimationPreview(
   // not recomputed per student.
   const electivePopularity = buildElectivePopularity(records);
 
-  const students: StudentPreview[] = [];
-  for (const record of records) {
-    students.push(await previewStudent(record, planners, unitMasterTable, options, electivePopularity));
+  // Phase 7. Students the estimator cannot tell apart share one pipeline run. The pipeline is stateless and
+  // the planner data is fixed for the run, so the same input gives the same output, which is what makes
+  // this safe. See studentGrouping.ts for why the key covers what it covers.
+  const groups = groupIdenticalStudents(records);
+  const resultByKey = new Map<string, StudentPreview>();
+  for (const group of groups) {
+    resultByKey.set(
+      group.key,
+      await previewStudent(group.representative, planners, unitMasterTable, options, electivePopularity),
+    );
   }
+
+  // Rebuilt in the order the records arrived, each carrying its own identity and its own mapper warnings,
+  // so grouping is invisible to everything downstream and to the UI.
+  const students: StudentPreview[] = records.map((record) =>
+    withOwnIdentity(resultByKey.get(groupingKeyFor(record))!, record),
+  );
 
   const withPlanner = students.filter((s) => s.planner !== null);
   const commonCoreOnly = students.filter((s) => s.basis === 'commonCore');
@@ -239,6 +308,9 @@ export async function runEstimationPreview(
       .sort((a, b) => b.students - a.students || a.code.localeCompare(b.code)),
     electiveSeatsByUnit: sumElectiveSeats(students),
     electiveSeatsUnplaced: students.reduce((sum, s) => sum + s.electiveSeats.unplaced, 0),
+    projectedByUnit: projectByUnit(students, retentionRate),
+    retentionRate,
+    grouping: summariseGrouping(groups),
   };
 
   return { summary, students };

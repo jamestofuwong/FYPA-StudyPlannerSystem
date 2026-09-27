@@ -87,6 +87,9 @@ export default function ClassEstimationPage() {
   // The target semester is not a choice. It is derived from today's date, since an estimate is always for the
   // next teaching semester, and the derivation lives in academicCalendar.ts so the server and page agree.
   const academicNow = describeAcademicNow();
+  // The HoD's own figure for how many students come back next semester. There is no visa or graduation
+  // status in the portal to derive it from, so it is an input rather than something inferred.
+  const [retention, setRetention] = useState('85');
   const [previewStatus, setPreviewStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
   const [preview, setPreview] = useState<PreviewResponse | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
@@ -297,7 +300,8 @@ export default function ClassEstimationPage() {
     setCopied(false);
     try {
       // No term is sent: the route derives it from the date. ?term= exists only as a manual override.
-      const res = await fetch('/api/class-estimation/preview');
+      const rate = Math.min(100, Math.max(0, Number(retention) || 0)) / 100;
+      const res = await fetch(`/api/class-estimation/preview?retentionRate=${rate}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? `Request failed (${res.status})`);
       setPreview(data as PreviewResponse);
@@ -662,6 +666,18 @@ export default function ClassEstimationPage() {
         </div>
 
         <div className={styles.actionRow}>
+          <div className={styles.rangeField}>
+            <label className={styles.rangeLabel}>Students returning (%)</label>
+            <input
+              className={styles.rangeInput}
+              type="number"
+              min={0}
+              max={100}
+              value={retention}
+              onChange={(e) => setRetention(e.target.value)}
+              disabled={previewStatus === 'loading' || isRunning}
+            />
+          </div>
           <button
             className={styles.btnPrimary}
             disabled={previewStatus === 'loading' || isRunning}
@@ -724,6 +740,45 @@ export default function ClassEstimationPage() {
                 <div key={warning}>⚠ {n} × {warning}</div>
               ))}
             </div>
+
+            {/* The actual answer. Everything below this is the workings behind it. */}
+            {preview.summary.projectedByUnit.length > 0 && (
+              <div className={styles.electiveBlock}>
+                <div className={styles.electiveHeading}>
+                  Projected enrolment
+                  <span className={styles.electiveNote}>
+                    {(preview.summary.retentionRate * 100).toFixed(0)}% of students assumed returning
+                    {preview.summary.grouping.workSaved > 0 &&
+                      ` · ${preview.summary.grouping.groups} distinct situations across ${preview.summary.grouping.students} students`}
+                  </span>
+                </div>
+
+                <div className={styles.electiveTable}>
+                  <div className={`${styles.electiveRow} ${styles.electiveHead}`}>
+                    <span>Unit</span>
+                    <span>Required</span>
+                    <span>Elective</span>
+                    <span>Projected</span>
+                  </div>
+                  {preview.summary.projectedByUnit.slice(0, 40).map((u) => (
+                    <div key={u.code} className={styles.electiveRow}>
+                      <span className={styles.electiveCode}>{u.code}</span>
+                      <span className={styles.electiveNote}>{u.fromNamedPicks || '-'}</span>
+                      <span className={styles.electiveNote}>
+                        {u.fromElectives > 0 ? u.fromElectives.toFixed(1) : '-'}
+                      </span>
+                      <span className={styles.electiveSeats}>{Math.round(u.projected)}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <p className={styles.hintText} style={{ marginTop: 8 }}>
+                  Required counts whole students the planner says still owe the unit. Elective counts shares
+                  of a student spread over the options they could pick. Projected is both, after the
+                  returning-students rate, rounded for display only.
+                </p>
+              </div>
+            )}
 
             {/* Electives are predicted as shares of a seat, never as named picks, so they get their own
                 table rather than sitting in the picked list and looking like certainties. */}
