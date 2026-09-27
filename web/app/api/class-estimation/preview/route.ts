@@ -4,6 +4,23 @@ import { runEstimationPreview } from '../../../../../core/services/classEstimati
 import { DEFAULT_CLASS_ESTIMATION_CONFIG } from '../../../../../core/shared/types/classEstimation';
 import { describeAcademicNow } from '../../../../../core/services/classEstimation/academicCalendar';
 import { resolveRetentionRate } from '../../../../../core/services/classEstimation/retention';
+import { prisma } from '../../../../../core/db/client';
+
+const RETENTION_KEY = 'class_estimation_retention_rate';
+
+/**
+ * The retention rate to use when the caller does not name one: the HoD's saved figure, or the built-in
+ * default if they have never set one. Read here rather than left to the page so any caller gets their rate
+ * without having to know it is stored, and so a stored figure is what a run actually uses.
+ */
+async function storedRetentionRate(fallback: number): Promise<number> {
+  try {
+    const row = await prisma.systemConfig.findUnique({ where: { key: RETENTION_KEY } });
+    return resolveRetentionRate(row ? Number(row.value) : NaN, fallback);
+  } catch {
+    return fallback;   // a config read failing is no reason to fail the estimate
+  }
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -32,7 +49,7 @@ export async function GET(req: NextRequest) {
   const retentionParam = searchParams.get('retentionRate');
   const retentionRate = retentionParam
     ? resolveRetentionRate(Number(retentionParam), NaN)
-    : DEFAULT_CLASS_ESTIMATION_CONFIG.retentionRate;
+    : await storedRetentionRate(DEFAULT_CLASS_ESTIMATION_CONFIG.retentionRate);
   if (!Number.isFinite(retentionRate)) {
     return NextResponse.json({ error: 'retentionRate must be a number from 0 to 1' }, { status: 400 });
   }

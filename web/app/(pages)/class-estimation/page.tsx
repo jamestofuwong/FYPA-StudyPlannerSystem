@@ -71,6 +71,9 @@ const PHASE_LABEL: Record<string, string> = {
   audit:       'Fetching degree audit…',
 };
 
+/** Where the HoD's retention figure is kept, allowlisted in web/app/api/config/route.ts. */
+const RETENTION_KEY = 'class_estimation_retention_rate';
+
 let _logKey = 0;
 
 export default function ClassEstimationPage() {
@@ -88,8 +91,10 @@ export default function ClassEstimationPage() {
   // next teaching semester, and the derivation lives in academicCalendar.ts so the server and page agree.
   const academicNow = describeAcademicNow();
   // The HoD's own figure for how many students come back next semester. There is no visa or graduation
-  // status in the portal to derive it from, so it is an input rather than something inferred.
+  // status in the portal to derive it from, so it is an input rather than something inferred. Loaded from
+  // and saved to SystemConfig, so a figure they worked out themselves is not retyped every session.
   const [retention, setRetention] = useState('85');
+  const [retentionSaved, setRetentionSaved] = useState(false);
   const [previewStatus, setPreviewStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
   const [preview, setPreview] = useState<PreviewResponse | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
@@ -133,6 +138,18 @@ export default function ClassEstimationPage() {
         if (data.default === 'mock') setSource('mock');
       })
       .catch(() => { /* leave the picker on portal only */ });
+  }, []);
+
+  useEffect(() => {
+    fetch(`/api/config?key=${RETENTION_KEY}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        const stored = Number(data?.value);
+        if (Number.isFinite(stored) && stored >= 0 && stored <= 1) {
+          setRetention(String(Math.round(stored * 100)));
+        }
+      })
+      .catch(() => { /* never set, so the built-in default stands */ });
   }, []);
 
   const refreshStored = useCallback(() => {
@@ -301,6 +318,17 @@ export default function ClassEstimationPage() {
     try {
       // No term is sent: the route derives it from the date. ?term= exists only as a manual override.
       const rate = Math.min(100, Math.max(0, Number(retention) || 0)) / 100;
+
+      // Running with a rate is as good a statement of intent as any, so it is saved then rather than on
+      // every keystroke. A failure here is not worth interrupting the estimate for.
+      fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: RETENTION_KEY, value: String(rate) }),
+      })
+        .then((res) => setRetentionSaved(res.ok))
+        .catch(() => setRetentionSaved(false));
+
       const res = await fetch(`/api/class-estimation/preview?retentionRate=${rate}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? `Request failed (${res.status})`);
@@ -667,7 +695,9 @@ export default function ClassEstimationPage() {
 
         <div className={styles.actionRow}>
           <div className={styles.rangeField}>
-            <label className={styles.rangeLabel}>Students returning (%)</label>
+            <label className={styles.rangeLabel}>
+              Students returning (%){retentionSaved ? ' · saved' : ''}
+            </label>
             <input
               className={styles.rangeInput}
               type="number"

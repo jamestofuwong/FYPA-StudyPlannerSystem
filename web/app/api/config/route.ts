@@ -3,7 +3,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '../../../../core/db/client';
 
-const ALLOWED_KEYS = ['second_major_threshold'] as const;
+const ALLOWED_KEYS = [
+  'second_major_threshold',
+  // Share of students the HoD expects back next semester, stored as a decimal from 0 to 1. Kept here so a
+  // figure they worked out themselves survives a restart instead of resetting to the built-in default.
+  'class_estimation_retention_rate',
+] as const;
 type AllowedKey = typeof ALLOWED_KEYS[number];
 
 function isAllowedKey(k: string): k is AllowedKey {
