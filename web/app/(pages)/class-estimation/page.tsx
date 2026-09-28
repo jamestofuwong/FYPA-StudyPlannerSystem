@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import Link from 'next/link';
+import { useScrollToTopOnMount } from '../../../lib/scrollToTop';
 import styles from './page.module.css';
 import type { EstimationPreview } from '../../../../core/services/classEstimation/estimationPreview';
 import { describeAcademicNow } from '../../../../core/services/classEstimation/academicCalendar';
@@ -111,16 +113,72 @@ const NEW_INTAKE_KEY = 'class_estimation_new_intake';
 
 let _logKey = 0;
 
+/**
+ * What the page was showing, kept so leaving for the Head of Department view and coming back does not throw
+ * the last run away. Next.js unmounts a page on navigation, and every useState below goes with it.
+ *
+ * Module-level on purpose rather than sessionStorage. The preview holds student IDs and names, and
+ * REQ-SEC-101 keeps student data in RAM only, the same rule the dashboard follows. A module variable is RAM:
+ * it survives moving between pages and is gone on reload or when the app closes, which is what the
+ * lifetime the server-side estimation store already has.
+ */
+type EstimatorMemory = {
+  runStatus: RunStatus;
+  progress: ProgressState | null;
+  summary: Summary | null;
+  log: LogEntry[];
+  errorMsg: string | null;
+  minId: string;
+  maxId: string;
+  retention: string;
+  newIntake: string;
+  openRun: SavedRunDetail | null;
+  runLabel: string;
+  runStatusMsg: string | null;
+  previewStatus: 'idle' | 'loading' | 'done' | 'error';
+  preview: PreviewResponse | null;
+  previewError: string | null;
+  source: SourceId;
+  files: File[];
+  importStatus: 'idle' | 'working' | 'done' | 'error';
+  importResult: ImportResult | null;
+  importError: string | null;
+};
+
+let estimatorMemory: EstimatorMemory | null = null;
+
+/**
+ * The remembered state, with anything that was still in flight settled. Leaving the page closes the scrape's
+ * EventSource, which cancels it on the server, and drops any pending fetch, so none of them can be resumed.
+ * Restoring them as still running would leave a spinner that never finishes.
+ */
+function recallEstimator(): EstimatorMemory | null {
+  if (!estimatorMemory) return null;
+  const memory = { ...estimatorMemory };
+
+  if (memory.runStatus === 'running') {
+    memory.runStatus = 'idle';
+    memory.errorMsg = 'Stopped when you left the page. Students fetched before then are still loaded.';
+  }
+  if (memory.previewStatus === 'loading') memory.previewStatus = memory.preview ? 'done' : 'idle';
+  if (memory.importStatus === 'working') memory.importStatus = memory.importResult ? 'done' : 'idle';
+
+  return memory;
+}
+
 export default function ClassEstimationPage() {
+  // Read once per visit, so the initial values below are stable for the life of this mount.
+  const [remembered] = useState(recallEstimator);
+
   const [sessionStatus, setSessionStatus] = useState<SessionStatus>('idle');
   const [studentCount, setStudentCount] = useState(0);
-  const [runStatus, setRunStatus] = useState<RunStatus>('idle');
-  const [progress, setProgress] = useState<ProgressState | null>(null);
-  const [summary, setSummary] = useState<Summary | null>(null);
-  const [log, setLog] = useState<LogEntry[]>([]);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [minId, setMinId] = useState('');
-  const [maxId, setMaxId] = useState('');
+  const [runStatus, setRunStatus] = useState<RunStatus>(remembered?.runStatus ?? 'idle');
+  const [progress, setProgress] = useState<ProgressState | null>(remembered?.progress ?? null);
+  const [summary, setSummary] = useState<Summary | null>(remembered?.summary ?? null);
+  const [log, setLog] = useState<LogEntry[]>(remembered?.log ?? []);
+  const [errorMsg, setErrorMsg] = useState<string | null>(remembered?.errorMsg ?? null);
+  const [minId, setMinId] = useState(remembered?.minId ?? '');
+  const [maxId, setMaxId] = useState(remembered?.maxId ?? '');
 
   // The target semester is not a choice. It is derived from today's date, since an estimate is always for the
   // next teaching semester, and the derivation lives in academicCalendar.ts so the server and page agree.
@@ -128,31 +186,49 @@ export default function ClassEstimationPage() {
   // The HoD's own figure for how many students come back next semester. There is no visa or graduation
   // status in the portal to derive it from, so it is an input rather than something inferred. Loaded from
   // and saved to SystemConfig, so a figure they worked out themselves is not retyped every session.
-  const [retention, setRetention] = useState('85');
+  const [retention, setRetention] = useState(remembered?.retention ?? '85');
   const [retentionSaved, setRetentionSaved] = useState(false);
   // Brand-new students the HoD expects. They are not in the portal, so there is nothing to derive it from.
-  const [newIntake, setNewIntake] = useState('0');
+  const [newIntake, setNewIntake] = useState(remembered?.newIntake ?? '0');
   const [runs, setRuns] = useState<SavedRun[]>([]);
-  const [openRun, setOpenRun] = useState<SavedRunDetail | null>(null);
-  const [runLabel, setRunLabel] = useState('');
-  const [runStatusMsg, setRunStatusMsg] = useState<string | null>(null);
+  const [openRun, setOpenRun] = useState<SavedRunDetail | null>(remembered?.openRun ?? null);
+  const [runLabel, setRunLabel] = useState(remembered?.runLabel ?? '');
+  const [runStatusMsg, setRunStatusMsg] = useState<string | null>(remembered?.runStatusMsg ?? null);
   const [savingRun, setSavingRun] = useState(false);
-  const [previewStatus, setPreviewStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
-  const [preview, setPreview] = useState<PreviewResponse | null>(null);
-  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [previewStatus, setPreviewStatus] = useState<'idle' | 'loading' | 'done' | 'error'>(
+    remembered?.previewStatus ?? 'idle',
+  );
+  const [preview, setPreview] = useState<PreviewResponse | null>(remembered?.preview ?? null);
+  const [previewError, setPreviewError] = useState<string | null>(remembered?.previewError ?? null);
   const [copied, setCopied] = useState(false);
 
-  const [source, setSource] = useState<SourceId>('portal');
+  const [source, setSource] = useState<SourceId>(remembered?.source ?? 'portal');
   const [mockAvailable, setMockAvailable] = useState(false);
-  const [files, setFiles] = useState<File[]>([]);
+  const [files, setFiles] = useState<File[]>(remembered?.files ?? []);
   const [dragging, setDragging] = useState(false);
-  const [importStatus, setImportStatus] = useState<'idle' | 'working' | 'done' | 'error'>('idle');
-  const [importResult, setImportResult] = useState<ImportResult | null>(null);
-  const [importError, setImportError] = useState<string | null>(null);
+  const [importStatus, setImportStatus] = useState<'idle' | 'working' | 'done' | 'error'>(
+    remembered?.importStatus ?? 'idle',
+  );
+  const [importResult, setImportResult] = useState<ImportResult | null>(remembered?.importResult ?? null);
+  const [importError, setImportError] = useState<string | null>(remembered?.importError ?? null);
   const [stored, setStored] = useState<{ storedStudents: number; bySource: Record<string, number> } | null>(null);
 
+  // Kept current after every render rather than on unmount. An unmount handler would need every value in its
+  // dependency list to see the latest ones, and missing one would restore a stale screen without complaint.
+  useEffect(() => {
+    estimatorMemory = {
+      runStatus, progress, summary, log, errorMsg, minId, maxId, retention, newIntake,
+      openRun, runLabel, runStatusMsg, previewStatus, preview, previewError,
+      source, files, importStatus, importResult, importError,
+    };
+  });
+
   const esRef = useRef<EventSource | null>(null);
-  const logEndRef = useRef<HTMLDivElement | null>(null);
+  const logWrapRef = useRef<HTMLDivElement | null>(null);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+
+  // Start at the top on arrival rather than wherever the previous page was scrolled to. See scrollToTop.ts.
+  useScrollToTopOnMount(rootRef);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Poll session status every 3s
@@ -177,12 +253,17 @@ export default function ClassEstimationPage() {
       .then((data) => {
         if (!data?.sources) return;
         setMockAvailable(data.sources.some((s: { id: string }) => s.id === 'mock'));
-        if (data.default === 'mock') setSource('mock');
+        // Only a first visit takes the environment's default; a returning one keeps the source it was on.
+        if (data.default === 'mock' && !remembered) setSource('mock');
       })
       .catch(() => { /* leave the picker on portal only */ });
   }, []);
 
   useEffect(() => {
+    // Coming back to the page, the fields already hold what was last typed, which may be newer than what
+    // was saved: saving only happens on a run. Loading the saved figures over them would undo that typing.
+    if (remembered) return;
+
     fetch(`/api/config?key=${RETENTION_KEY}`)
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
@@ -261,9 +342,12 @@ export default function ClassEstimationPage() {
 
   useEffect(() => { refreshStored(); }, [refreshStored]);
 
-  // Auto-scroll log to bottom as new entries arrive
+  // Keep the newest log line in view by scrolling the log box itself. scrollIntoView was used here before, and
+  // it scrolls every scrollable ancestor too, so with the log now restored on return to this page it dragged
+  // the whole page down to the log on arrival, and during a scrape it made the page jump with every student.
   useEffect(() => {
-    logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const box = logWrapRef.current;
+    if (box) box.scrollTop = box.scrollHeight;
   }, [log]);
 
   // Close EventSource on unmount
@@ -516,14 +600,21 @@ export default function ClassEstimationPage() {
     runStatus === 'done' ? 'Completed' : 'Stopped';
 
   return (
-    <div className={styles.panel}>
+    <div className={styles.panel} ref={rootRef}>
 
       {/* ── Page header ─────────────────────────────────────────────────────── */}
       <div className={styles.header}>
-        <h1 className={styles.title}>Class Estimation</h1>
-        <p className={styles.subtitle}>
-          Estimate next-semester enrollment headcount for each unit
-        </p>
+        <div>
+          <h1 className={styles.title}>Class Estimation</h1>
+          <p className={styles.subtitle}>
+            Estimate next-semester enrollment headcount for each unit
+          </p>
+        </div>
+        {/* The read-only view of a saved run, without the scrape controls or the per-student diagnostics.
+            A button rather than a text link, since it is the page most people will actually want. */}
+        <Link href="/class-estimation/report" className={styles.reportLink}>
+          Head of Department view →
+        </Link>
       </div>
 
       {/* ── Where transcripts come from ──────────────────────────────────────── */}
@@ -1076,7 +1167,7 @@ export default function ClassEstimationPage() {
                     {' · '}{run.totalHeadcount.toLocaleString()} enrolments over {run.unitCount} units
                     {' · '}{run.source}
                   </span>
-                  <button className={styles.runDelete} onClick={() => deleteRun(run.id)}>remove</button>
+                  <button className={styles.runDelete} onClick={() => deleteRun(run.id)}>Remove</button>
                 </div>
 
                 {openRun?.id === run.id && (
@@ -1116,7 +1207,7 @@ export default function ClassEstimationPage() {
               ({log.length.toLocaleString()} entries)
             </span>
           </div>
-          <div className={styles.logWrap}>
+          <div className={styles.logWrap} ref={logWrapRef}>
             {log.map((entry) => (
               <div
                 key={entry.key}
@@ -1126,7 +1217,6 @@ export default function ClassEstimationPage() {
                 {entry.text}
               </div>
             ))}
-            <div ref={logEndRef} />
           </div>
         </div>
       )}

@@ -11,6 +11,11 @@
 /* ── Header ─────────────────────────────────────────────────────────────────── */
 
 .header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
   margin-bottom: 4px;
 }
 
@@ -639,9 +644,12 @@
 }
 
 .runDelete {
+  /* The row is a flex container, so this takes up the slack and pins the button to the far right. */
+  margin-left: auto;
+  flex-shrink: 0;
   background: none;
   border: none;
-  padding: 0;
+  padding: 0 0 0 12px;
   font-family: var(--font-sans);
   font-size: 11px;
   color: var(--text-muted);
@@ -650,4 +658,26 @@
 
 .runDelete:hover {
   color: var(--accent-red);
+}
+
+/* Through to the Head of Department view, which reads a saved run rather than the live cohort. */
+.reportLink {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 8px 14px;
+  border: 1px solid var(--accent-blue);
+  border-radius: 6px;
+  background: var(--active-bg);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent-blue);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+
+.reportLink:hover {
+  background: var(--accent-blue);
+  color: #fff;
 }
