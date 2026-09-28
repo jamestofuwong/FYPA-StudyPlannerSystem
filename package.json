@@ -21,7 +21,7 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "postinstall": "patch-package && prisma generate --schema core/db/prisma/schema",
-    "backtest": "tsx scripts/backtest.ts"
+    "backtest": "cross-env DOTENV_CONFIG_QUIET=true tsx scripts/backtest.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.2",
