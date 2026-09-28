@@ -20,7 +20,8 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "postinstall": "patch-package && prisma generate --schema core/db/prisma/schema"
+    "postinstall": "patch-package && prisma generate --schema core/db/prisma/schema",
+    "backtest": "tsx scripts/backtest.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.2",
@@ -87,7 +88,10 @@
       "web/**",
       "!web/.next/cache/**",
       "!node_modules/lucide-react/dist/esm/**",
-      { "from": "node_modules/@local", "to": "node_modules/@local" },
+      {
+        "from": "node_modules/@local",
+        "to": "node_modules/@local"
+      },
       "core/**",
       "electron/**",
       "runtime/**",

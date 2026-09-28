@@ -21,6 +21,7 @@
 // ============================================================
 
 import type { ScrapedCourseListItem } from '../../../shared/types/student';
+import { intakeSemesterFromMonth } from '../../matching/plannerTemplateBuilder';
 
 export interface FixtureUnit {
   code: string;
@@ -35,6 +36,14 @@ export interface FixtureUnit {
 export interface FixturePlanner {
   majorName: string;
   units: FixtureUnit[];
+  /**
+   * The intake this planner is for. A student's planner is fixed by when they started, so when this is set a
+   * student on this planner always gets this intake. Without it, students were given a planner and an intake
+   * independently, so one could claim a 2025 intake while following the 2022 curriculum, and the matcher,
+   * rightly comparing them against 2025 planners, then missed every unit that only existed in 2022.
+   */
+  intakeYear?: number;
+  intakeSemester?: 1 | 2;
 }
 
 export interface GenerateOptions {
@@ -155,7 +164,10 @@ export function generateStudents(options: GenerateOptions): GeneratedStudent[] {
 
   for (let i = 0; i < count; i++) {
     const planner = planners[plannerPicks[i]];
-    const [intakeYear, intakeSemester] = intakes[intakePicks[i]];
+    // The planner's own intake wins. The intakes list only covers planners that do not carry one.
+    const [fallbackYear, fallbackSemester] = intakes[intakePicks[i]];
+    const intakeYear = planner.intakeYear ?? fallbackYear;
+    const intakeSemester = planner.intakeSemester ?? fallbackSemester;
     const ordered = unitsInPlannerOrder(planner);
 
     // Spread progress across the cohort so year 1 and final-year students both appear. At least one
@@ -272,6 +284,7 @@ export interface DbPlannerLike {
   major?: { name: string } | null;
   course?: { name: string } | null;
   intake_year?: number;
+  intake_month?: number | null;
   units: Array<{
     category: string;
     year_level: number;
@@ -324,7 +337,13 @@ export function plannerToFixture(
 
   const majorName = planner.major?.name ?? planner.course?.name ?? 'Unknown major';
   const label = planner.intake_year ? `${majorName} (${planner.intake_year})` : majorName;
-  return { majorName: label, units };
+  return {
+    majorName: label,
+    units,
+    ...(planner.intake_year
+      ? { intakeYear: planner.intake_year, intakeSemester: intakeSemesterFromMonth(planner.intake_month) }
+      : {}),
+  };
 }
 
 /** Maps a set of planners, dropping any with no usable units. */

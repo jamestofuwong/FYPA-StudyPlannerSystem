@@ -423,3 +423,62 @@ describe('round trip through the real parser', () => {
     });
   });
 });
+
+// A student's planner is fixed by when they started. The generator used to pick a planner and an intake
+// independently, so a student could claim a 2025 intake while following the 2022 curriculum. The matcher,
+// rightly comparing them against 2025 planners, then missed every unit that only existed in 2022, and the
+// accuracy backtest blamed the estimator for what was a flaw in the test data.
+describe('a generated student follows the planner for their own intake', () => {
+  const planner = (year: number, month: number, code: string): FixturePlanner => ({
+    majorName: `Major (${year})`,
+    intakeYear: year,
+    intakeSemester: month >= 7 ? 2 : 1,
+    units: [
+      { code, title: code, yearLevel: 1, semester: 1 },
+      { code: `${code}B`, title: code, yearLevel: 1, semester: 2 },
+    ],
+  });
+
+  const codesOf = (student: { rows: Array<[string, ...unknown[]]> }) => student.rows.map((row) => row[0]);
+
+  test('the intake comes from the planner, not the intakes list', () => {
+    const students = generateStudents({
+      planners: [planner(2022, 3, 'OLD1'), planner(2025, 9, 'NEW1')],
+      count: 20,
+      seed: 4,
+      intakes: [[2030, 1]],   // would be used if the planner carried no intake
+    });
+
+    const onOld = students.filter((student) => codesOf(student).includes('OLD1'));
+    const onNew = students.filter((student) => codesOf(student).includes('NEW1'));
+    // Both planners were actually used, so the checks below assert something.
+    expect(onOld.length).toBeGreaterThan(0);
+    expect(onNew.length).toBeGreaterThan(0);
+    for (const student of onOld) expect(student.intake).toEqual({ year: 2022, semester: 1 });
+    for (const student of onNew) expect(student.intake).toEqual({ year: 2025, semester: 2 });
+  });
+
+  test('a planner without an intake still falls back to the intakes list', () => {
+    const students = generateStudents({
+      planners: [{ majorName: 'No intake', units: [{ code: 'X', title: 'X', yearLevel: 1, semester: 1 }] }],
+      count: 4,
+      seed: 4,
+      intakes: [[2030, 1]],
+    });
+    expect(students).toHaveLength(4);
+    for (const student of students) expect(student.intake).toEqual({ year: 2030, semester: 1 });
+  });
+
+  test('plannerToFixture carries the intake of the planner, reading the semester off its month', () => {
+    const dbRow = (intakeMonth: number) => ({
+      major: { name: 'Computer Science' },
+      course: { name: 'Bachelor of Computer Science' },
+      intake_year: 2025,
+      intake_month: intakeMonth,
+      units: [{ category: 'core', year_level: 1, semester: 1, unit: { unit_code: 'COS10009', unit_name: 'Intro' } }],
+    });
+
+    expect(plannerToFixture(dbRow(3))).toMatchObject({ intakeYear: 2025, intakeSemester: 1 });
+    expect(plannerToFixture(dbRow(9))).toMatchObject({ intakeYear: 2025, intakeSemester: 2 });
+  });
+});
