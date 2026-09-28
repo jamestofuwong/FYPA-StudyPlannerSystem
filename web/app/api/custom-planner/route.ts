@@ -360,12 +360,18 @@ export async function POST(req: NextRequest) {
       { category: 'wil', creditPoints: planner.wil_cp, unitCount: planner.wil_count, planCategories: ['wil'] },
     ].filter((r) => r.creditPoints != null);
 
+    // Collect all planner MPU units with full database offerings
+    const plannerMpuUnits = planner.units
+      .filter((tu) => tu.unit !== null && tu.category === 'mpu')
+      .map((tu) => toSchedulable(tu.unit!, 'mpu'));
+
     // The pool is returned so the page can validate edits and offer the same
     // units in its add-unit picker, without asking for them again.
     return NextResponse.json({
       success: true,
       data: result,
       units: remainingUnits,
+      mpuUnits: plannerMpuUnits,
       startYear,
       startSemester,
       intakeSemester,

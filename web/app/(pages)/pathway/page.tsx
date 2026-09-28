@@ -50,6 +50,10 @@ function listCodes(codes: string[]): string {
   return `${codes.slice(0, -1).join(', ')} and ${codes[codes.length - 1]}`;
 }
 
+const YEAR_WORDS: Record<number, string> = {
+  1: 'One', 2: 'Two', 3: 'Three', 4: 'Four', 5: 'Five', 6: 'Six', 7: 'Seven', 8: 'Eight'
+};
+
 function describeWarning(w: PlanWarning, maxSemesters: number, intakeSemester: 1 | 2): string | null {
   switch (w.kind) {
     case 'requisite_violation': {
@@ -207,6 +211,7 @@ export default function PathwayPage() {
   } = useStudentSession();
   const [customPlanLoading, setCustomPlanLoading] = useState(false);
   const [unitToRemove, setUnitToRemove] = useState<{ code: string; name: string; category: string } | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
 
   // Catalogue state. The units are fetched the first time a picker is opened,
   // not with the plan, which is already a large response.
@@ -353,7 +358,7 @@ export default function PathwayPage() {
         setCustomWilSlot(null);
         setCustomPlanStart({ year: data.startYear, semester: data.startSemester });
         setRetakeUnitCodes(retakeCodes);
-        setPlanUnits(data.units ?? []);
+        setPlanUnits([...(data.units ?? []), ...(data.mpuUnits ?? [])]);
         setPlanIntakeSemester(data.intakeSemester === 2 ? 2 : 1);
         setPlanCompletedUnits(data.completedUnits ?? []);
         setPlanElectiveCandidates(data.electiveCandidates ?? []);
@@ -887,6 +892,284 @@ export default function PathwayPage() {
                 }
               };
 
+              const handleDirectPdfDownload = async () => {
+                setIsExporting(true);
+                showToast('Generating official study plan PDF...', 'info');
+
+                try {
+                  const { default: jsPDF } = await import('jspdf');
+                  const { default: autoTable } = await import('jspdf-autotable');
+
+                  const primaryMilestone = breakMilestones?.[0];
+                  const activeWilSlot = customWilSlot ?? primaryMilestone?.insertBeforeSlotKey;
+                  const allTranscriptUnits = [
+                    ...(scrapedStudent?.student?.courseList ?? []),
+                    ...(dashboardData?.mpuCourseList ?? []),
+                  ];
+                  const transcriptStates = resolveUnitStates(allTranscriptUnits);
+                  const completeCodes = new Set(
+                    [...transcriptStates].filter(([, state]) => state === 'passed').map(([code]) => code)
+                  );
+                  const currentCodes = new Set(
+                    [...transcriptStates].filter(([, state]) => state === 'in_progress').map(([code]) => code)
+                  );
+                  const takenCodes = new Set([...completeCodes, ...currentCodes]);
+                  const activePlanner = selectedPlannerIdx === -1 ? manualPlanner : dashboardData?.planners?.[selectedPlannerIdx];
+                  const remainingMpus = getRemainingMpuUnits(activePlanner, dashboardData, takenCodes);
+
+                  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+                  // Header: Course Title & Major
+                  doc.setFont('helvetica', 'bold');
+                  doc.setFontSize(16);
+                  doc.setTextColor(0, 0, 0);
+                  doc.text((selectedPlanner?.course?.name ?? 'Course Study Plan').toUpperCase(), 14, 18);
+
+                  doc.setFontSize(11);
+                  doc.setFont('helvetica', 'bold');
+                  doc.setTextColor(0, 0, 0);
+                  doc.text(`Major: ${selectedPlanner?.major?.name ?? 'Standard Pathway'}`, 14, 25);
+
+                  doc.setFont('helvetica', 'normal');
+                  doc.setFontSize(9);
+                  doc.setTextColor(0, 0, 0);
+                  const intakeSem = selectedPlanner?.intake_month != null && selectedPlanner.intake_month >= 7 ? 'Semester 2' : 'Semester 1';
+                  doc.text(`Intake: Year ${selectedPlanner?.intake_year ?? ''} (${intakeSem}) · Custom Study Pathway`, 14, 30);
+
+                  let currentY = 36;
+
+                  // Group Semesters by Academic Year
+                  const yearsMap = new Map<number, CustomSemesterBucket[]>();
+                  for (const s of semesters) {
+                    if (!yearsMap.has(s.year)) yearsMap.set(s.year, []);
+                    yearsMap.get(s.year)!.push(s);
+                  }
+
+                  const hexToRgb = (hex: string): [number, number, number] => {
+                    const clean = hex.replace('#', '');
+                    return [
+                      parseInt(clean.substring(0, 2), 16),
+                      parseInt(clean.substring(2, 4), 16),
+                      parseInt(clean.substring(4, 6), 16),
+                    ];
+                  };
+
+                  const getCategoryColor = (category: string): [number, number, number] => {
+                    if (category === 'core') return hexToRgb('#c6d9f1');
+                    if (category === 'major_core') return hexToRgb('#fde9d9');
+                    if (category === 'wil') return hexToRgb('#b2a1c7');
+                    if (category === 'mpu') return hexToRgb('#e5b8b7');
+                    return hexToRgb('#d6e3bc'); // Electives
+                  };
+
+                  const getCategoryLabel = (category: string, code: string) => {
+                    if (code === 'ELECTIVE') return 'Elective';
+                    if (category === 'core') return 'Core';
+                    if (category === 'major_core') return 'Major Core';
+                    if (category === 'prescribed_elective') return 'Prescribed Elective';
+                    if (category === 'double_major') return 'Double Major';
+                    if (category === 'minor') return 'Minor Elective';
+                    if (category === 'wil') return 'Work-Integrated Learning';
+                    if (category === 'mpu') return 'MPU';
+                    return 'Elective';
+                  };
+
+                  // Render Year by Year
+                  for (const [yearNum, sems] of Array.from(yearsMap.entries())) {
+                    if (currentY > 240) {
+                      doc.addPage();
+                      currentY = 18;
+                    }
+
+                    // Year Text
+                    doc.setFont('helvetica', 'bold');
+                    doc.setFontSize(14);
+                    doc.setTextColor(0, 0, 0);
+                    doc.text(`Year ${YEAR_WORDS[yearNum] ?? yearNum}`, 14, currentY);
+                    currentY += 4;
+
+                    for (const sem of sems) {
+                      const slotKey = `${sem.year}-${sem.semester}`;
+                      const isWilSlot = primaryMilestone && activeWilSlot === slotKey;
+                      const calTerm = calendarTermFor(sem.semester, planIntakeSemester);
+                      const semMonths = calTerm === 1 ? 'Feb/Mar' : 'Aug/Sept';
+
+                      // If WIL break milestone sits before this semester
+                      if (isWilSlot) {
+                        const currentBreakOption = primaryMilestone?.availableBreakSlots?.find((b: any) => b.slotKey === slotKey);
+                        const breakTitle = currentBreakOption?.termType === 'winter'
+                          ? `Winter Term | July ${currentBreakOption?.year ?? sem.year}`
+                          : `Summer Term | Jan ${currentBreakOption?.year ?? sem.year}`;
+
+                        autoTable(doc, {
+                          startY: currentY,
+                          margin: { left: 14, right: 14 },
+                          head: [
+                            [
+                              {
+                                content: breakTitle,
+                                colSpan: 3,
+                                styles: { fillColor: [64, 64, 64], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 10 },
+                              },
+                            ],
+                            ['Unit Code', 'Unit Name', 'Category'],
+                          ],
+                          body: [
+                            [
+                              { content: primaryMilestone.unitCode, styles: { fontStyle: 'normal' as const } },
+                              primaryMilestone.unitName,
+                              'Work-Integrated Learning',
+                            ],
+                          ],
+
+                          headStyles: { fillColor: [224, 224, 224], textColor: [0, 0, 0], fontStyle: 'bold', fontSize: 9 },
+                          bodyStyles: { fillColor: getCategoryColor('wil'), textColor: [0, 0, 0], fontSize: 9 },
+                          theme: 'plain',
+                          columnStyles: {
+                            0: { cellWidth: 35 },
+                            1: { cellWidth: 105 },
+                            2: { cellWidth: 42 },
+                          },
+                        });
+                        currentY = (doc as any).lastAutoTable.finalY + 15;
+                      }
+
+                      // Regular Semester Table
+                      const semTitle = `Semester ${sem.semester} | ${semMonths} ${sem.year}`;
+                      const semRows = sem.units
+                        .filter((u: any) => u.category !== 'mpu')
+                        .map((u: any) => [
+                          { content: u.code, styles: { fontStyle: 'normal' as const, fillColor: getCategoryColor(u.category) } },
+                          { content: u.name, styles: { fillColor: getCategoryColor(u.category) } },
+                          { content: getCategoryLabel(u.category, u.code), styles: { fillColor: getCategoryColor(u.category) } },
+                        ]);
+
+
+                      autoTable(doc, {
+                        startY: currentY,
+                        margin: { left: 14, right: 14 },
+                        head: [
+                          [
+                            {
+                              content: semTitle,
+                              colSpan: 3,
+                              styles: { fillColor: [64, 64, 64], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 10 },
+                            },
+                          ],
+                          ['Unit Code', 'Unit Name', 'Category'],
+                        ],
+                        body: semRows,
+                        headStyles: { fillColor: [191, 191, 191], textColor: [0, 0, 0], fontSize: 9 },
+                        bodyStyles: { textColor: [0, 0, 0], fontSize: 9 },
+                        theme: 'plain',
+                        columnStyles: {
+                          0: { cellWidth: 35 },
+                          1: { cellWidth: 105 },
+                          2: { cellWidth: 42 },
+                        },
+                      });
+                      currentY = (doc as any).lastAutoTable.finalY + 15;
+                    }
+                  }
+
+                  // MPU Units Section
+                  if (remainingMpus.length > 0) {
+                    if (currentY > 220) {
+                      doc.addPage();
+                      currentY = 18;
+                    }
+
+                    if (currentY > 40) {
+                      currentY += 6;
+                    }
+
+                    doc.setFont('helvetica', 'bold');
+                    doc.setFontSize(14);
+                    doc.setTextColor(0, 0, 0);
+                    doc.text('MPU Units', 14, currentY);
+                    currentY += 4;
+
+                    const getMpuOfferingText = (code: string) => {
+                      const cleanCode = normaliseCode(code);
+                      const meta = unitData.get(cleanCode);
+                      const plannerUnit = (activePlanner?.units ?? []).find(
+                        (tu: any) => normaliseCode(tu.unit?.unit_code ?? '') === cleanCode
+                      );
+
+                      // Collect all raw semester numbers from the database
+                      const rawOfferings: any[] = plannerUnit?.unit?.unit_offerings ?? (meta as any)?.unit?.unit_offerings ?? [];
+                      const termNumbers = new Set<number>([
+                        ...(meta?.offeringSemesters ?? []),
+                        ...rawOfferings.map((o) => Number(o.semester ?? o.term_id ?? o.semester_id)).filter((n) => !isNaN(n) && n > 0),
+                      ]);
+
+                      const hasSem1 = termNumbers.has(1);
+                      const hasSem2 = termNumbers.has(2);
+                      const hasSummer = termNumbers.has(3);
+                      const hasWinter = termNumbers.has(4);
+
+                      // If it only runs in short terms (3 = summer, 4 = winter)
+                      if (!hasSem1 && !hasSem2) {
+                        if (hasSummer && hasWinter) return 'Short Term Only (Winter / Summer)';
+                        if (hasSummer) return 'Short Term Only (Summer)';
+                        if (hasWinter) return 'Short Term Only (Winter)';
+                        return 'Short Term Only (Winter / Summer)';
+                      }
+
+                      // Standard semester offerings
+                      if (hasSem1 && hasSem2) return 'Semester 1 & 2';
+                      if (hasSem1) return 'Semester 1 (Feb/Mar)';
+                      if (hasSem2) return 'Semester 2 (Aug/Sept)';
+
+                      return 'Semester 1 & 2';
+                    };
+
+                    const mpuBannerTitle = 'General Studies (MPU) | Flexible Schedule (Can be completed in any semester)';
+
+                    const mpuRows = remainingMpus.map((mpu) => [
+                      { content: mpu.code, styles: { fontStyle: 'normal' as const, fillColor: getCategoryColor('mpu') } },
+                      { content: mpu.name, styles: { fillColor: getCategoryColor('mpu') } },
+                      { content: 'MPU', styles: { fillColor: getCategoryColor('mpu') } },
+                      { content: getMpuOfferingText(mpu.code), styles: { fillColor: getCategoryColor('mpu') } },
+                    ]);
+
+                    autoTable(doc, {
+                      startY: currentY,
+                      margin: { left: 14, right: 14 },
+                      head: [
+                        [
+                          {
+                            content: mpuBannerTitle,
+                            colSpan: 4,
+                            styles: { fillColor: [64, 64, 64], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 10 },
+                          },
+                        ],
+                        ['Unit Code', 'Unit Name', 'Category', 'Semester Offered'],
+                      ],
+                      body: mpuRows,
+                      headStyles: { fillColor: [191, 191, 191], textColor: [0, 0, 0], fontSize: 9 },
+                      bodyStyles: { textColor: [0, 0, 0], fontSize: 9 },
+                      theme: 'plain',
+                      columnStyles: {
+                        0: { cellWidth: 30 },
+                        1: { cellWidth: 85 },
+                        2: { cellWidth: 27 },
+                        3: { cellWidth: 40 },
+                      },
+                    });
+                  }
+
+                  const fileName = `${(selectedPlanner?.course?.name ?? 'Course').replace(/[^a-zA-Z0-9]/g, '_')}_Study_Plan.pdf`;
+                  doc.save(fileName);
+                  showToast('Please choose your save location in the dialog to save your PDF.', 'info');
+                } catch (err) {
+                  console.error(err);
+                  showToast('Failed to generate PDF.', 'error');
+                } finally {
+                  setIsExporting(false);
+                }
+              };
+
               return (
               <div>
                 {semesters.length === 0 ? (
@@ -1205,6 +1488,15 @@ export default function PathwayPage() {
                       ↺ Reset to generated plan
                     </button>
                   )}
+                  <button
+                    type="button"
+                    className={styles.btnSecondary}
+                    onClick={handleDirectPdfDownload}
+                    disabled={isExporting}
+                    title="Directly download official custom study planner as PDF"
+                  >
+                    {isExporting ? '⏳ Generating PDF...' : '💾 Download PDF'}
+                  </button>
                 </div>
 
                 {warnings.length > 0 && (
