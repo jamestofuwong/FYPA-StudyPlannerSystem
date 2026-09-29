@@ -6,6 +6,7 @@ import {
   type PlanWarning,
   type SchedulableUnit,
 } from '@core/services/scheduling/customPlannerScheduler';
+import { toSchedulableUnit } from '@core/shared/scheduling/schedulableUnit';
 
 function unit(
   code: string,
@@ -424,6 +425,9 @@ describe('Custom Planner Scheduler', () => {
         'core',
       );
       expect(result.requisiteGroups).toEqual([[{ type: 'unit', requisiteType: 'prerequisite', unitCode: 'BASE' }]]);
+    });
+  });
+
   const warningsOf = <K extends PlanWarning['kind']>(
     result: ReturnType<typeof buildCustomPlan>,
     kind: K,
@@ -591,6 +595,35 @@ describe('Custom Planner Scheduler', () => {
       expect(warningsOf(result, 'short_term_only')).toEqual([
         { kind: 'short_term_only', unitCode: 'MPU3212', offeringTerms: [3, 4] },
         { kind: 'short_term_only', unitCode: 'ICT20016*Optional', offeringTerms: [4] },
+      ]);
+    });
+
+    // Guards the pool that web/app/api/custom-planner/route.ts hands the scheduler: a mapper
+    // that drops terms 3 and 4 without recording allOfferingTerms leaves offeringSemesters
+    // empty, which the scheduler reads as "offered any semester" and places the unit anyway.
+    test('a term-4-only unit mapped the way the route maps its pool is not placed', () => {
+      const row = {
+        unit_code: 'MPU3212',
+        unit_name: 'Community Service',
+        offerings: [{ offered_in: 4 }],
+        requisite_groups: [] as any[],
+      };
+      const pool = [
+        toSchedulableUnit({
+          code: row.unit_code,
+          name: row.unit_name,
+          category: 'mpu',
+          offeringTerms: row.offerings.map((o) => o.offered_in),
+          requisiteGroups: row.requisite_groups,
+        }),
+      ];
+
+      const result = buildCustomPlan(pool, [], 2024, 1);
+
+      expect(result.semesters.flatMap((s) => s.units)).toEqual([]);
+      expect(result.unschedulableUnits.map((u) => u.code)).toEqual(['MPU3212']);
+      expect(warningsOf(result, 'short_term_only')).toEqual([
+        { kind: 'short_term_only', unitCode: 'MPU3212', offeringTerms: [4] },
       ]);
     });
 
