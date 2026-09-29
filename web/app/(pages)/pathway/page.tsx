@@ -1029,7 +1029,7 @@ export default function PathwayPage() {
                 if (unselectedElectiveCount > 0) {
                   showToast(
                     `Please select a unit for all elective slots (${unselectedElectiveCount} remaining) before downloading the PDF.`,
-                    'error'
+                    'info'
                   );
                   return;
                 }
@@ -1118,7 +1118,7 @@ export default function PathwayPage() {
 
                   // Render Year by Year
                   for (const [yearNum, sems] of Array.from(yearsMap.entries())) {
-                    if (currentY > 240) {
+                    if (currentY > 230) {
                       doc.addPage();
                       currentY = 18;
                     }
@@ -1130,55 +1130,62 @@ export default function PathwayPage() {
                     doc.text(`Year ${YEAR_WORDS[yearNum] ?? yearNum}`, 14, currentY);
                     currentY += 4;
 
+                    // Build unified rows for the entire academic year (Sem 1, break milestone, Sem 2)
+                    const yearRows: any[] = [];
+
                     for (const sem of sems) {
                       const slotKey = `${sem.year}-${sem.semester}`;
                       const isWilSlot = primaryMilestone && activeWilSlot === slotKey;
                       const calTerm = calendarTermFor(sem.semester, planIntakeSemester);
                       const semMonths = calTerm === 1 ? 'Feb/Mar' : 'Aug/Sept';
 
-                      // If WIL break milestone sits before this semester
+                      const colHeaderRow = [
+                        { content: 'Unit Code', styles: { fillColor: [191, 191, 191], textColor: [0, 0, 0], fontStyle: 'bold' as const, fontSize: 9 } },
+                        { content: 'Unit Name', styles: { fillColor: [191, 191, 191], textColor: [0, 0, 0], fontStyle: 'bold' as const, fontSize: 9 } },
+                        { content: 'Category', styles: { fillColor: [191, 191, 191], textColor: [0, 0, 0], fontStyle: 'bold' as const, fontSize: 9 } },
+                      ];
+
+                      // If an intensive break milestone (e.g. WIL placement) sits before this semester
                       if (isWilSlot) {
                         const currentBreakOption = primaryMilestone?.availableBreakSlots?.find((b: any) => b.slotKey === slotKey);
                         const breakTitle = currentBreakOption?.termType === 'winter'
-                          ? `Winter Term | July ${currentBreakOption?.year ?? sem.year}`
-                          : `Summer Term | Jan ${currentBreakOption?.year ?? sem.year}`;
-
-                        autoTable(doc, {
-                          startY: currentY,
-                          margin: { left: 14, right: 14 },
-                          head: [
-                            [
-                              {
-                                content: breakTitle,
-                                colSpan: 3,
-                                styles: { fillColor: [64, 64, 64], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 10 },
-                              },
-                            ],
-                            ['Unit Code', 'Unit Name', 'Category'],
-                          ],
-                          body: [
-                            [
-                              { content: primaryMilestone.unitCode, styles: { fontStyle: 'normal' as const } },
-                              primaryMilestone.unitName,
-                              'Work-Integrated Learning',
-                            ],
-                          ],
-
-                          headStyles: { fillColor: [191, 191, 191], textColor: [0, 0, 0], fontSize: 9 },
-                          bodyStyles: { fillColor: getCategoryColor('wil'), textColor: [0, 0, 0], fontSize: 9 },
-                          theme: 'plain',
-                          columnStyles: {
-                            0: { cellWidth: 35 },
-                            1: { cellWidth: 105 },
-                            2: { cellWidth: 42 },
+                          ? 'Winter Term'
+                          : 'Summer Term';
+                        // Title Banner
+                        yearRows.push([
+                          {
+                            content: breakTitle,
+                            colSpan: 3,
+                            styles: { fillColor: [64, 64, 64], textColor: [255, 255, 255], fontStyle: 'bold' as const, fontSize: 10 },
                           },
-                        });
-                        currentY = (doc as any).lastAutoTable.finalY + 15;
+                        ]);
+
+                        // Column Headers
+                        yearRows.push(colHeaderRow);
+
+                        // Unit Row
+                        yearRows.push([
+                          { content: primaryMilestone.unitCode, styles: { fontStyle: 'normal' as const, fillColor: getCategoryColor('wil') } },
+                          { content: primaryMilestone.unitName, styles: { fillColor: getCategoryColor('wil') } },
+                          { content: 'Work-Integrated Learning', styles: { fillColor: getCategoryColor('wil') } },
+                        ]);
                       }
 
-                      // Regular Semester Table
-                      const semTitle = `Semester ${sem.semester} | ${semMonths} ${sem.year}`;
-                      const semRows = sem.units
+                      // Regular Semester: Title Banner
+                      const semTitle = `Semester ${sem.semester} | ${semMonths}`;
+                      yearRows.push([
+                        {
+                          content: semTitle,
+                          colSpan: 3,
+                          styles: { fillColor: [64, 64, 64], textColor: [255, 255, 255], fontStyle: 'bold' as const, fontSize: 10 },
+                        },
+                      ]);
+
+                      // Column Headers
+                      yearRows.push(colHeaderRow);
+
+                      // Unit Rows
+                      const semUnits = sem.units
                         .filter((u: any) => u.category !== 'mpu')
                         .map((u: any) => [
                           { content: u.code, styles: { fontStyle: 'normal' as const, fillColor: getCategoryColor(u.category) } },
@@ -1186,32 +1193,25 @@ export default function PathwayPage() {
                           { content: getCategoryLabel(u.category, u.code), styles: { fillColor: getCategoryColor(u.category) } },
                         ]);
 
-
-                      autoTable(doc, {
-                        startY: currentY,
-                        margin: { left: 14, right: 14 },
-                        head: [
-                          [
-                            {
-                              content: semTitle,
-                              colSpan: 3,
-                              styles: { fillColor: [64, 64, 64], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 10 },
-                            },
-                          ],
-                          ['Unit Code', 'Unit Name', 'Category'],
-                        ],
-                        body: semRows,
-                        headStyles: { fillColor: [191, 191, 191], textColor: [0, 0, 0], fontSize: 9 },
-                        bodyStyles: { textColor: [0, 0, 0], fontSize: 9 },
-                        theme: 'plain',
-                        columnStyles: {
-                          0: { cellWidth: 35 },
-                          1: { cellWidth: 105 },
-                          2: { cellWidth: 42 },
-                        },
-                      });
-                      currentY = (doc as any).lastAutoTable.finalY + 15;
+                      yearRows.push(...semUnits);
                     }
+
+                    // Render one single continuous table for the year
+                    autoTable(doc, {
+                      startY: currentY,
+                      margin: { left: 14, right: 14 },
+                      body: yearRows,
+                      bodyStyles: { textColor: [0, 0, 0], fontSize: 9 },
+                      theme: 'plain',
+                      columnStyles: {
+                        0: { cellWidth: 35 },
+                        1: { cellWidth: 105 },
+                        2: { cellWidth: 42 },
+                      },
+                    });
+
+                    // Space before the next Year header
+                    currentY = (doc as any).lastAutoTable.finalY + 14;
                   }
 
                   // MPU Units Section
