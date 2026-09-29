@@ -215,6 +215,9 @@ export default function PathwayPage() {
   const [unitToRemove, setUnitToRemove] = useState<{ code: string; name: string; category: string } | null>(null);
   const [isExporting, setIsExporting] = useState(false);
 
+  // Target semester for adding an extra unit beyond degree requirements
+  const [extraUnitTargetSemester, setExtraUnitTargetSemester] = useState<{ year: number; semester: 1 | 2 } | null>(null);
+  
   // Catalogue state. The units are fetched the first time a picker is opened,
   // not with the plan, which is already a large response.
   const [catalogue, setCatalogue] = useState<CatalogueUnit[]>([]);
@@ -225,6 +228,7 @@ export default function PathwayPage() {
   // being swapped; an add is filling a gap and lets the advisor pick the semester.
   const [picker, setPicker] = useState<
     | { mode: 'replace'; oldCode: string; year: number; semester: 1 | 2 }
+    | { mode: 'add_extra'; year: number; semester: 1 | 2; isExtraUnit: boolean }
     | { mode: 'add' }
     | null
   >(null);
@@ -969,7 +973,8 @@ export default function PathwayPage() {
                 unit: SchedulableUnit,
                 source: PickerSource,
                 year: number,
-                semester: 1 | 2
+                semester: 1 | 2,
+                isExtra: boolean = false
               ) => {
                 if (!picker) return;
                 // The advisor's own choice, so never a recommendation. Only a unit
@@ -979,6 +984,7 @@ export default function PathwayPage() {
                   category: 'elective',
                   recommended: false,
                   outsidePlanner: source === 'catalogue',
+                  isExtraUnit: isExtra || (picker as any).isExtraUnit || false,
                 };
                 if (source === 'catalogue') {
                   // Kept in the session as well as the plan, so validatePlan can
@@ -1408,11 +1414,20 @@ export default function PathwayPage() {
                           className={styles.addUnitSelect}
                           style={capacity ? undefined : { marginLeft: 'auto' }}
                           value=""
-                          disabled={unplacedUnits.length === 0}
-                          onChange={(e) => { addUnitToSemester(e.target.value, sem); e.currentTarget.value = ''; }}
-                          title={unplacedUnits.length === 0 ? 'Every remaining unit is already placed' : 'Add a unit to this semester'}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            e.target.value = ''; // Reset immediately
+                            if (val === '__EXTRA_UNIT__') {
+                              setExtraUnitTargetSemester({ year: sem.year, semester: sem.semester });
+                            } else if (val) {
+                              addUnitToSemester(val, sem);
+                            }
+                          }}
+                          title="Add a unit to this semester"
                         >
-                          <option value="">+ Add unit</option>
+                          <option value="" disabled hidden>
+                            + Add unit
+                          </option>
                           {unplacedUnits.map((u) => {
                             if (u.code === 'ELECTIVE') {
                               return (
@@ -1428,18 +1443,35 @@ export default function PathwayPage() {
                               </option>
                             );
                           })}
+                          <option value="__EXTRA_UNIT__">
+                            + Add Extra Unit (From Catalogue)
+                          </option>
                         </select>
                       </div>
-                      {picker?.mode === 'replace' && picker.year === sem.year && picker.semester === sem.semester && (
+                      {picker && picker.mode !== 'add' && picker.year === sem.year && picker.semester === sem.semester && (
                         <ElectivePicker
-                          title={picker.oldCode === 'ELECTIVE' ? 'Choose an elective' : `Swap ${picker.oldCode}`}
+                          title={
+                            picker.mode === 'add_extra'
+                              ? `Add Extra Unit · Y${sem.year} S${sem.semester}`
+                              : picker.oldCode === 'ELECTIVE'
+                              ? 'Choose an elective'
+                              : `Swap ${picker.oldCode}`
+                          }
                           plannerUnits={pickerPlannerUnits}
                           catalogueUnits={pickerCatalogueUnits}
                           prefixes={cataloguePrefixes}
                           loading={catalogueLoading}
                           term={calendarTerm}
                           getUnmetPrereqReason={getUnmetPrereqReasonForSlot(sem.year, sem.semester)}
-                          onChoose={(unit, source) => chooseElective(unit, source, sem.year, sem.semester)}
+                          onChoose={(unit, source) =>
+                            chooseElective(
+                              unit,
+                              source,
+                              sem.year,
+                              sem.semester,
+                              picker.mode === 'add_extra'
+                            )
+                          }
                           onClose={() => setPicker(null)}
                         />
                       )}
@@ -1519,6 +1551,7 @@ export default function PathwayPage() {
                                 <td>
                                   <Badge
                                     label={
+                                      (u as any).isExtraUnit ? 'Extra Unit' :
                                       u.code === 'ELECTIVE' ? 'Elective Slot' :
                                       u.category === 'double_major' ? 'Double Major' :
                                       u.category === 'prescribed_elective' ? 'Prescribed Elec' :
@@ -1526,6 +1559,7 @@ export default function PathwayPage() {
                                       u.category.replace(/_/g, ' ')
                                     }
                                     cls={
+                                      (u as any).isExtraUnit ? 'badgeBlue' :
                                       u.code === 'ELECTIVE' ? 'badgePurple' :
                                       u.category === 'core' ? 'badgeRed' :
                                       u.category === 'major_core' ? 'badgeOrange' :
@@ -1855,14 +1889,17 @@ export default function PathwayPage() {
                           value=""
                           disabled={totalAvailableToAdd === 0}
                           onChange={(e) => {
-                            if (e.target.value) {
-                              addMpuUnit(e.target.value);
-                              e.currentTarget.value = '';
+                            const val = e.target.value;
+                            e.target.value = ''; // Reset immediately
+                            if (val) {
+                              addMpuUnit(val);
                             }
                           }}
                           title={totalAvailableToAdd === 0 ? 'All eligible MPU units are already included' : 'Add an MPU unit'}
                         >
-                          <option value="">+ Add MPU unit</option>
+                          <option value="" disabled hidden>
+                            + Add MPU unit
+                          </option>
                           {unplacedPlannerMpus.length > 0 && (
                             <optgroup label="From this planner">
                               {unplacedPlannerMpus.map((u: any) => (
@@ -2045,6 +2082,64 @@ export default function PathwayPage() {
           </div>
         );
       })()}
+      {/* Extra Unit Confirmation Modal */}
+      {extraUnitTargetSemester && (
+        <div className={styles.modalOverlay} onClick={() => setExtraUnitTargetSemester(null)}>
+          <div className={styles.modalCard} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.modalHeader}>
+              <span className={styles.modalTitle}>
+                <span aria-hidden="true">⚠</span> Add Extra Unit (Beyond Degree Requirements)
+              </span>
+              <button
+                type="button"
+                className={styles.removeBtn}
+                onClick={() => setExtraUnitTargetSemester(null)}
+                style={{ background: 'transparent', border: 'none', fontSize: 13 }}
+              >
+                ✕
+              </button>
+            </div>
+            <div className={styles.modalBody}>
+              <div>
+                You are adding an extra unit into <strong>Year {extraUnitTargetSemester.year} Semester {extraUnitTargetSemester.semester}</strong>.
+              </div>
+              <div className={styles.modalWarningBox}>
+                <strong>Important Advising Notice:</strong>
+                <ul>
+                  <li>
+                    <strong>Degree Cap Exceeded:</strong> This student is already on track to satisfy standard graduation credit point requirements.
+                  </li>
+                </ul>
+              </div>
+            </div>
+            <div className={styles.modalActions}>
+              <button
+                type="button"
+                className={styles.btnSecondary}
+                onClick={() => setExtraUnitTargetSemester(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className={styles.btnPrimary}
+                onClick={() => {
+                  const target = extraUnitTargetSemester;
+                  setExtraUnitTargetSemester(null);
+                  openPicker({
+                    mode: 'add_extra',
+                    year: target.year,
+                    semester: target.semester,
+                    isExtraUnit: true,
+                  });
+                }}
+              >
+                Confirm & Choose Unit
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
