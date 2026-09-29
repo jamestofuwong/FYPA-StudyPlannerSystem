@@ -1419,9 +1419,8 @@ export default function DashboardPage() {
                 <div className={styles.gradMuted}>Select a planner to run the graduation check.</div>
               );
 
-              const transcriptStates = resolveUnitStates(
-                  [...(scrapedStudent?.student?.courseList ?? []), ...(dashboardData?.mpuCourseList ?? [])]
-              );
+              const allTranscriptUnits = [...(scrapedStudent?.student?.courseList ?? []), ...(dashboardData?.mpuCourseList ?? [])];
+              const transcriptStates = resolveUnitStates(allTranscriptUnits);
               const transcriptCodes = new Set(
                   [...transcriptStates].filter(([, state]) => state === 'passed').map(([code]) => code)
               );
@@ -1439,7 +1438,67 @@ export default function DashboardPage() {
               const creditsOk = creditsCompleted >= creditsRequired;
               const isEligible = (coreMissing.length + prescribedMissing.length === 0) && creditsOk;
               const creditPct = Math.min((creditsCompleted / creditsRequired) * 100, 100);
-              
+
+              // Credit points actually earned per unit code, for the per-category bars
+              // below. Keyed on the highest creditsEarned across that code's rows, so a
+              // retake's zero-credit fail attempt never masks the credits from the
+              // attempt that actually passed. A row's grade disagreeing with its
+              // credits (e.g. a fail that still shows credit) is a data anomaly already
+              // surfaced separately by findGradeCreditAnomalies, not handled here.
+              const creditsEarnedByCode = new Map<string, number>();
+              for (const row of allTranscriptUnits as any[]) {
+                const code = normaliseUnitCode(row?.courseId);
+                if (!code) continue;
+                const earned = Number(row?.creditsEarned ?? 0) || 0;
+                if (earned > (creditsEarnedByCode.get(code) ?? 0)) creditsEarnedByCode.set(code, earned);
+              }
+
+              // Credits earned toward one planner category, counting only units this
+              // PLANNER names in that category and that the transcript shows passed.
+              // Independent of any custom-plan editing: this reads the real planner and
+              // the real transcript, the same two sources coreMissing/prescribedMissing
+              // above already use, not the pathway page's generated-plan totals.
+              const achievedFor = (categories: string[]) =>
+                (activePlanner?.units ?? [])
+                  .filter((u: any) => u.unit !== null && categories.includes(u.category))
+                  .reduce((sum: number, u: any) => {
+                    const code = normaliseUnitCode(u.unit.unit_code);
+                    return transcriptCodes.has(code) ? sum + (creditsEarnedByCode.get(code) ?? 0) : sum;
+                  }, 0);
+
+              // core_cp/major_cp/elective_cp/wil_cp are each independently nullable: the
+              // planner never recorded that requirement, not that it is zero. There is no
+              // mpu_cp column at all, so MPU gets no credit bar here (see the Not Yet
+              // Taken card for its unit count instead). Core and Major share one bar, as
+              // the Core & Major card below already treats them as one group; Elective
+              // combines elective_cp with prescribed_elective units, matching
+              // planCategories: ['elective', 'prescribed_elective'] in planValidator.ts.
+              const creditBars: { key: string; label: string; achieved: number; required: number }[] = [];
+              if (activePlanner?.core_cp != null || activePlanner?.major_cp != null) {
+                creditBars.push({
+                  key: 'core-major',
+                  label: 'Core & Major Credits',
+                  achieved: achievedFor(['core', 'major_core']),
+                  required: (activePlanner?.core_cp ?? 0) + (activePlanner?.major_cp ?? 0),
+                });
+              }
+              if (activePlanner?.elective_cp != null) {
+                creditBars.push({
+                  key: 'elective',
+                  label: 'Elective Credits',
+                  achieved: achievedFor(['elective', 'prescribed_elective']),
+                  required: activePlanner.elective_cp,
+                });
+              }
+              if (activePlanner?.wil_cp != null) {
+                creditBars.push({
+                  key: 'wil',
+                  label: 'WIL Credits',
+                  achieved: achievedFor(['wil']),
+                  required: activePlanner.wil_cp,
+                });
+              }
+
               return (
                 <div className={styles.gradStack}>
                 <div className={`${styles.gradCard} ${isEligible ? styles.gradCardOk : ''}`}>
@@ -1458,17 +1517,40 @@ export default function DashboardPage() {
                   </div>
 
                   <div className={styles.gradBody}>
-                    <div className={styles.gradReq}>
-                      <div className={styles.gradReqTop}>
-                        <span className={styles.gradReqLabel}>Credits</span>
-                        <span className={`${styles.gradReqValue} ${creditsOk ? styles.gradOk : styles.gradWarn}`}>
-                          {creditsCompleted}/{creditsRequired} CP
-                        </span>
+                    {creditBars.length > 0 ? (
+                      creditBars.map((bar) => {
+                        const barOk = bar.achieved >= bar.required;
+                        const barPct = bar.required > 0 ? Math.min((bar.achieved / bar.required) * 100, 100) : 100;
+                        return (
+                          <div key={bar.key} className={styles.gradReq}>
+                            <div className={styles.gradReqTop}>
+                              <span className={styles.gradReqLabel}>{bar.label}</span>
+                              <span className={`${styles.gradReqValue} ${barOk ? styles.gradOk : styles.gradWarn}`}>
+                                {bar.achieved}/{bar.required} CP
+                              </span>
+                            </div>
+                            <div className={styles.gradBar}>
+                              <ProgressBar pct={barPct} color={barOk ? 'var(--accent-green)' : 'var(--accent-purple)'} />
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      // No planner category ever recorded a _cp requirement (all four
+                      // null): nothing to break down, so fall back to the original
+                      // combined bar rather than showing an empty section.
+                      <div className={styles.gradReq}>
+                        <div className={styles.gradReqTop}>
+                          <span className={styles.gradReqLabel}>Credits</span>
+                          <span className={`${styles.gradReqValue} ${creditsOk ? styles.gradOk : styles.gradWarn}`}>
+                            {creditsCompleted}/{creditsRequired} CP
+                          </span>
+                        </div>
+                        <div className={styles.gradBar}>
+                          <ProgressBar pct={creditPct} color={creditsOk ? 'var(--accent-green)' : 'var(--accent-purple)'} />
+                        </div>
                       </div>
-                      <div className={styles.gradBar}>
-                        <ProgressBar pct={creditPct} color={creditsOk ? 'var(--accent-green)' : 'var(--accent-purple)'} />
-                      </div>
-                    </div>
+                    )}
                   </div>
                 </div>
 
