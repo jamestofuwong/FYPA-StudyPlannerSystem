@@ -37,6 +37,14 @@ const nextConfig: NextConfig = {
     // resolves. Rooting at student/ puts those imports outside the bundler root.
     root: path.join(__dirname, '..'),
   },
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: securityHeaders,
+      },
+    ]
+  },
 };
 
 export default nextConfig;
