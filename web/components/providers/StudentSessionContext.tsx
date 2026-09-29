@@ -82,6 +82,10 @@ export type StudentSessionState = {
   removedUnitSlots: Record<string, { year: number; semester: 1 | 2 }>;
   setRemovedUnitSlots: React.Dispatch<React.SetStateAction<Record<string, { year: number; semester: 1 | 2 }>>>;
 
+  customMpuList: { code: string; name: string }[] | null;
+  setCustomMpuList: React.Dispatch<React.SetStateAction<{ code: string; name: string }[] | null>>;
+  allDatabaseMpus: { code: string; name: string }[];
+  setAllDatabaseMpus: React.Dispatch<React.SetStateAction<{ code: string; name: string }[]>>;
 };
 
 const StudentSessionContext = createContext<StudentSessionState | null>(null);
@@ -116,6 +120,8 @@ export function StudentSessionProvider({ children }: { children: ReactNode }) {
   const [breakMilestones, setBreakMilestones] = useState<any[]>([]);
   const [customWilSlot, setCustomWilSlot] = useState<string | null>(null);
   const [removedUnitSlots, setRemovedUnitSlots] = useState<Record<string, { year: number; semester: 1 | 2 }>>({});
+  const [customMpuList, setCustomMpuList] = useState<{ code: string; name: string }[] | null>(null);
+  const [allDatabaseMpus, setAllDatabaseMpus] = useState<{ code: string; name: string }[]>([]);
 
 
   // Switching planner discards the custom plan built for the previous one. This runs
@@ -137,6 +143,7 @@ export function StudentSessionProvider({ children }: { children: ReactNode }) {
     setIsPlanEdited(false);
     setAvailableDoubleMajors([]);
     setSelectedDoubleMajorId(null);
+    setCustomMpuList(null);
   }, [selectedPlannerIdx, dashboardData, manualPlanner]);
 
   return (
@@ -167,7 +174,8 @@ export function StudentSessionProvider({ children }: { children: ReactNode }) {
         breakMilestones, setBreakMilestones,
         customWilSlot, setCustomWilSlot,
         removedUnitSlots, setRemovedUnitSlots,
-
+        customMpuList, setCustomMpuList,
+        allDatabaseMpus, setAllDatabaseMpus,
       }}
     >
       {children}

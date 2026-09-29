@@ -208,6 +208,8 @@ export default function PathwayPage() {
     breakMilestones, setBreakMilestones,
     customWilSlot, setCustomWilSlot,
     removedUnitSlots, setRemovedUnitSlots,
+    customMpuList, setCustomMpuList,
+    allDatabaseMpus, setAllDatabaseMpus,
   } = useStudentSession();
   const [customPlanLoading, setCustomPlanLoading] = useState(false);
   const [unitToRemove, setUnitToRemove] = useState<{ code: string; name: string; category: string } | null>(null);
@@ -363,6 +365,7 @@ export default function PathwayPage() {
         setPlanCompletedUnits(data.completedUnits ?? []);
         setPlanElectiveCandidates(data.electiveCandidates ?? []);
         setPlanRequirements(data.requirements ?? []);
+        setAllDatabaseMpus(data.allMpuUnits ?? []);
         setGeneratedSemesters(data.data.semesters);
         setAvailableDoubleMajors(data.availableDoubleMajors ?? []);
         setAvailableMinors(data.availableMinors ?? []);
@@ -1057,8 +1060,8 @@ export default function PathwayPage() {
                   );
                   const takenCodes = new Set([...completeCodes, ...currentCodes]);
                   const activePlanner = selectedPlannerIdx === -1 ? manualPlanner : dashboardData?.planners?.[selectedPlannerIdx];
-                  const remainingMpus = getRemainingMpuUnits(activePlanner, dashboardData, takenCodes);
-
+                  const defaultRemainingMpus = getRemainingMpuUnits(activePlanner, dashboardData, takenCodes);
+                  const remainingMpus = customMpuList ?? defaultRemainingMpus;
                   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
                   // Header: Course Title & Major
@@ -1789,22 +1792,100 @@ export default function PathwayPage() {
 
                 {/* Remaining MPU units */}
                 {(() => {
-                  const remainingMpus = getRemainingMpuUnits(activePlanner, dashboardData, takenCodes);
+                  const defaultRemainingMpus = getRemainingMpuUnits(activePlanner, dashboardData, takenCodes);
+                  const activeMpus = customMpuList ?? defaultRemainingMpus;
+                  const currentMpuCodes = new Set(activeMpus.map((m) => m.code));
+
+                  // All MPU units defined on the degree planner
+                  const plannerMpuCodes = new Set(
+                    (activePlanner?.units ?? [])
+                      .filter((tu: any) => tu.category === 'mpu' && tu.unit)
+                      .map((tu: any) => tu.unit.unit_code?.trim().toUpperCase())
+                  );
+
+                  // Planner MPU units currently not in the table
+                  const unplacedPlannerMpus = (activePlanner?.units ?? [])
+                    .filter((tu: any) => tu.category === 'mpu' && tu.unit)
+                    .map((tu: any) => ({
+                      code: tu.unit.unit_code?.trim().toUpperCase(),
+                      name: tu.unit.unit_name,
+                    }))
+                    .filter((u: any) => u.code && !currentMpuCodes.has(u.code) && !takenCodes.has(u.code));
+
+                  // All other MPU units in the entire database not on this planner and not in the table
+                  const otherAvailableMpus = allDatabaseMpus
+                    .filter(
+                      (u) =>
+                        u.code &&
+                        !plannerMpuCodes.has(u.code) &&
+                        !currentMpuCodes.has(u.code) &&
+                        !takenCodes.has(u.code)
+                    );
+
+                  const removeMpuUnit = (code: string) => {
+                    const next = activeMpus.filter((m) => m.code !== code);
+                    setCustomMpuList(next);
+                    setIsPlanEdited(true);
+                    showToast(`Removed ${code} from MPU requirements.`, 'info');
+                  };
+
+                  const addMpuUnit = (code: string) => {
+                    const found =
+                      unplacedPlannerMpus.find((m: any) => m.code === code) ||
+                      otherAvailableMpus.find((m: any) => m.code === code);
+                    if (!found) return;
+
+                    const next = [...activeMpus, found];
+                    setCustomMpuList(next);
+                    setIsPlanEdited(true);
+                    showToast(`Added ${found.code} to MPU requirements.`, 'info');
+                  };
+
+                  const totalAvailableToAdd = unplacedPlannerMpus.length + otherAvailableMpus.length;
 
                   return (
                     <div className={styles.mpuSection}>
                       <div className={styles.mpuHeader}>
                         <div className={styles.sectionTitle} style={{ margin: 0, fontSize: 13 }}>
-                          Remaining MPU Units ({remainingMpus.length})
+                          Remaining MPU Units ({activeMpus.length})
                         </div>
-                        <span className={styles.mpuSubtitle}>
-                          -
-                        </span>
+                        <select
+                          className={styles.addUnitSelect}
+                          style={{ marginLeft: 'auto' }}
+                          value=""
+                          disabled={totalAvailableToAdd === 0}
+                          onChange={(e) => {
+                            if (e.target.value) {
+                              addMpuUnit(e.target.value);
+                              e.currentTarget.value = '';
+                            }
+                          }}
+                          title={totalAvailableToAdd === 0 ? 'All eligible MPU units are already included' : 'Add an MPU unit'}
+                        >
+                          <option value="">+ Add MPU unit</option>
+                          {unplacedPlannerMpus.length > 0 && (
+                            <optgroup label="From this planner">
+                              {unplacedPlannerMpus.map((u: any) => (
+                                <option key={u.code} value={u.code}>
+                                  {u.code} · {u.name}
+                                </option>
+                              ))}
+                            </optgroup>
+                          )}
+                          {otherAvailableMpus.length > 0 && (
+                            <optgroup label="Other MPU units">
+                              {otherAvailableMpus.map((u: any) => (
+                                <option key={u.code} value={u.code}>
+                                  {u.code} · {u.name}
+                                </option>
+                              ))}
+                            </optgroup>
+                          )}
+                        </select>
                       </div>
-
-                      {remainingMpus.length === 0 ? (
+                      {activeMpus.length === 0 ? (
                         <div className={styles.mpuEmptyAlert}>
-                          ✓ All required MPU units have been completed or are currently in progress!
+                          ✓ All required MPU units have been completed, exempted, or satisfied
                         </div>
                       ) : (
                         <div className={styles.mpuTableWrap}>
@@ -1813,38 +1894,39 @@ export default function PathwayPage() {
                               <col style={{ width: 120 }} />
                               <col style={{ width: 'auto' }} />
                               <col style={{ width: 140 }} />
-                              <col style={{ width: 140 }} />
+                              <col style={{ width: 80 }} />
                             </colgroup>
                             <thead>
                               <tr>
                                 <th>Unit Code</th>
                                 <th>Unit Title</th>
                                 <th>Type</th>
-                                <th>Status</th>
+                                <th style={{ textAlign: 'center' }}>Edit</th>
                               </tr>
                             </thead>
                             <tbody>
-                              {remainingMpus.map((mpu) => {
-                                const isCurrent = currentCodes.has(mpu.code);
-                                return (
-                                  <tr key={mpu.code}>
-                                    <td>
-                                      <InlineCode>{mpu.code}</InlineCode>
-                                    </td>
-                                    <td style={{ whiteSpace: 'normal' }}>{mpu.name}</td>
-                                    <td>
-                                      <Badge label="MPU" cls="badgeBlue" />
-                                    </td>
-                                    <td>
-                                      {isCurrent ? (
-                                        <span className={styles.statusInProgress}>● In Progress</span>
-                                      ) : (
-                                        <span className={styles.statusPending}>Pending</span>
-                                      )}
-                                    </td>
-                                  </tr>
-                                );
-                              })}
+                              {activeMpus.map((mpu) => (
+                                <tr key={mpu.code}>
+                                  <td>
+                                    <InlineCode>{mpu.code}</InlineCode>
+                                  </td>
+                                  <td style={{ whiteSpace: 'normal' }}>{mpu.name}</td>
+                                  <td>
+                                    <Badge label="MPU" cls="badgeBlue" />
+                                  </td>
+                                  <td style={{ textAlign: 'center' }}>
+                                    <button
+                                      type="button"
+                                      className={styles.removeBtn}
+                                      onClick={() => removeMpuUnit(mpu.code)}
+                                      title={`Remove ${mpu.code} from MPU requirements`}
+                                      aria-label={`Remove ${mpu.code}`}
+                                    >
+                                      ✕
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
                             </tbody>
                           </table>
                         </div>
