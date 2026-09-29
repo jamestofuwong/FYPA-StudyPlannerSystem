@@ -1,4 +1,4 @@
-export type PanelId = 'dashboard' | 'pathway' | 'import' | 'scraping' | 'planners' | 'cloud-sync' | 'settings' | 'user-guide' | 'class-estimation' | 'copilot';
+export type PanelId = 'dashboard' | 'pathway' | 'import' | 'scraping' | 'planners' | 'units' | 'cloud-sync' | 'settings' | 'user-guide' | 'class-estimation' | 'copilot';
 
 export const PANEL_IDS: PanelId[] = ['dashboard', 'pathway', 'import', 'scraping', 'planners', 'cloud-sync', 'settings', 'user-guide', 'class-estimation', 'copilot'];
 
@@ -51,7 +51,6 @@ export const NAV_SECTIONS: NavSection[] = [
     label: 'Major Detection',
     items: [
       { id: 'dashboard', icon: '🎓', label: 'Major Detection' },
-      { id: 'pathway', icon: '🧭', label: 'Student Pathway' },
     ],
   },
   {

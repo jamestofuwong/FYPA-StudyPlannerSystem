@@ -5,6 +5,11 @@ import {
   type Dispatch, type ReactNode, type SetStateAction,
 } from 'react';
 import type { ScrapedStudent } from '../../../core/shared/types/student';
+import type {
+  CustomSemesterBucket,
+  SchedulableUnit,
+} from '../../../core/services/scheduling/customPlannerScheduler';
+import type { CategoryRequirement } from '../../../core/shared/scheduling/planValidator';
 
 type LoadedStudent = { student: ScrapedStudent; studentId: string };
 type DataSource = 'scrape' | 'import_xlsx' | 'import_manual' | 'import_paste';
@@ -33,6 +38,50 @@ export type StudentSessionState = {
   setRetakeUnitCodes: Dispatch<SetStateAction<Set<string>>>;
   injectedMinors: Set<string>;
   setInjectedMinors: Dispatch<SetStateAction<Set<string>>>;
+  /** Offering and requisite data for every unit the plan could contain. */
+  planUnits: SchedulableUnit[];
+  setPlanUnits: Dispatch<SetStateAction<SchedulableUnit[]>>;
+  /** From the planner's intake month, so the page never re-derives that rule. */
+  planIntakeSemester: 1 | 2;
+  setPlanIntakeSemester: Dispatch<SetStateAction<1 | 2>>;
+  /** Units the student already passed, which still count toward the totals. */
+  planCompletedUnits: SchedulableUnit[];
+  setPlanCompletedUnits: Dispatch<SetStateAction<SchedulableUnit[]>>;
+  /**
+   * Units the advisor added from the catalogue, which are on no planner. They
+   * belong here so validatePlan can see their offerings and requisites.
+   */
+  planExtraUnits: SchedulableUnit[];
+  setPlanExtraUnits: Dispatch<SetStateAction<SchedulableUnit[]>>;
+  /**
+   * The planner's elective-group units, offered when an advisor chooses or
+   * swaps an elective. They are on the planner but not in the plan pool.
+   */
+  planElectiveCandidates: SchedulableUnit[];
+  setPlanElectiveCandidates: Dispatch<SetStateAction<SchedulableUnit[]>>;
+  /** Per-category credit point totals the planner requires. */
+  planRequirements: CategoryRequirement[];
+  setPlanRequirements: Dispatch<SetStateAction<CategoryRequirement[]>>;
+  /** The scheduler's own output, kept so edits can be reset. */
+  generatedSemesters: CustomSemesterBucket[];
+  setGeneratedSemesters: Dispatch<SetStateAction<CustomSemesterBucket[]>>;
+  isPlanEdited: boolean;
+  setIsPlanEdited: Dispatch<SetStateAction<boolean>>;
+
+  availableDoubleMajors: any[];
+  setAvailableDoubleMajors: React.Dispatch<React.SetStateAction<any[]>>;
+  selectedDoubleMajorId: string | null;
+  setSelectedDoubleMajorId: React.Dispatch<React.SetStateAction<string | null>>;
+  availableMinors: any[];
+  setAvailableMinors: (minors: any[]) => void;
+  breakMilestones: any[];
+  setBreakMilestones: (milestones: any[]) => void;
+  customWilSlot: string | null;
+  setCustomWilSlot: (slot: string | null) => void;
+
+  removedUnitSlots: Record<string, { year: number; semester: 1 | 2 }>;
+  setRemovedUnitSlots: React.Dispatch<React.SetStateAction<Record<string, { year: number; semester: 1 | 2 }>>>;
+
 };
 
 const StudentSessionContext = createContext<StudentSessionState | null>(null);
@@ -52,6 +101,22 @@ export function StudentSessionProvider({ children }: { children: ReactNode }) {
   // Units in the generated pathway that are repeat attempts after a failed grade
   const [retakeUnitCodes, setRetakeUnitCodes] = useState<Set<string>>(new Set());
   const [injectedMinors, setInjectedMinors] = useState<Set<string>>(new Set());
+  const [planUnits, setPlanUnits] = useState<SchedulableUnit[]>([]);
+  const [planIntakeSemester, setPlanIntakeSemester] = useState<1 | 2>(1);
+  const [planCompletedUnits, setPlanCompletedUnits] = useState<SchedulableUnit[]>([]);
+  const [planExtraUnits, setPlanExtraUnits] = useState<SchedulableUnit[]>([]);
+  const [planElectiveCandidates, setPlanElectiveCandidates] = useState<SchedulableUnit[]>([]);
+  const [planRequirements, setPlanRequirements] = useState<CategoryRequirement[]>([]);
+  const [generatedSemesters, setGeneratedSemesters] = useState<CustomSemesterBucket[]>([]);
+  const [isPlanEdited, setIsPlanEdited] = useState(false);
+
+  const [availableDoubleMajors, setAvailableDoubleMajors] = useState<any[]>([]);
+  const [selectedDoubleMajorId, setSelectedDoubleMajorId] = useState<string | null>(null);
+  const [availableMinors, setAvailableMinors] = useState<any[]>([]);
+  const [breakMilestones, setBreakMilestones] = useState<any[]>([]);
+  const [customWilSlot, setCustomWilSlot] = useState<string | null>(null);
+  const [removedUnitSlots, setRemovedUnitSlots] = useState<Record<string, { year: number; semester: 1 | 2 }>>({});
+
 
   // Switching planner discards the custom plan built for the previous one. This runs
   // here rather than in a page so that revisiting a page does not clear the plan.
@@ -62,6 +127,16 @@ export function StudentSessionProvider({ children }: { children: ReactNode }) {
     setCustomPlanStart(null);
     setRetakeUnitCodes(new Set());
     setInjectedMinors(new Set());
+    setPlanUnits([]);
+    setPlanIntakeSemester(1);
+    setPlanCompletedUnits([]);
+    setPlanExtraUnits([]);
+    setPlanElectiveCandidates([]);
+    setPlanRequirements([]);
+    setGeneratedSemesters([]);
+    setIsPlanEdited(false);
+    setAvailableDoubleMajors([]);
+    setSelectedDoubleMajorId(null);
   }, [selectedPlannerIdx, dashboardData, manualPlanner]);
 
   return (
@@ -78,6 +153,21 @@ export function StudentSessionProvider({ children }: { children: ReactNode }) {
         customPlanStart, setCustomPlanStart,
         retakeUnitCodes, setRetakeUnitCodes,
         injectedMinors, setInjectedMinors,
+        planUnits, setPlanUnits,
+        planIntakeSemester, setPlanIntakeSemester,
+        planCompletedUnits, setPlanCompletedUnits,
+        planExtraUnits, setPlanExtraUnits,
+        planElectiveCandidates, setPlanElectiveCandidates,
+        planRequirements, setPlanRequirements,
+        generatedSemesters, setGeneratedSemesters,
+        isPlanEdited, setIsPlanEdited,
+        availableDoubleMajors, setAvailableDoubleMajors,
+        selectedDoubleMajorId, setSelectedDoubleMajorId,
+        availableMinors, setAvailableMinors,
+        breakMilestones, setBreakMilestones,
+        customWilSlot, setCustomWilSlot,
+        removedUnitSlots, setRemovedUnitSlots,
+
       }}
     >
       {children}

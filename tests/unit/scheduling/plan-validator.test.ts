@@ -1,4 +1,4 @@
-import { validatePlan } from '@core/shared/scheduling/planValidator';
+import { carryForwardWarnings, validatePlan } from '@core/shared/scheduling/planValidator';
 import {
   buildCustomPlan,
   type CustomSemesterBucket,
@@ -223,7 +223,8 @@ describe('validatePlan', () => {
         completedUnitCodes: [],
         unitData: unitData(units),
       })).toEqual([
-        { kind: 'not_offered', unitCode: 'SEM2-ONLY', offeringTerms: [2] },
+        // placedIn names the slot, so the page can say which term that slot is
+        { kind: 'not_offered', unitCode: 'SEM2-ONLY', offeringTerms: [2], placedIn: { year: 2024, semester: 1 } },
       ]);
     });
 
@@ -275,7 +276,7 @@ describe('validatePlan', () => {
         intakeSemester: 2,
         unitData: unitData(units),
       })).toEqual([
-        { kind: 'not_offered', unitCode: 'SEM2-ONLY', offeringTerms: [2] },
+        { kind: 'not_offered', unitCode: 'SEM2-ONLY', offeringTerms: [2], placedIn: { year: 2024, semester: 2 } },
       ]);
     });
   });
@@ -379,5 +380,331 @@ describe('validatePlan', () => {
 
   test('an empty plan with nothing required is clean', () => {
     expect(validatePlan({ semesters: [], completedUnitCodes: [] })).toEqual([]);
+  });
+
+  // The seed records these per planner, e.g. 8 core units totalling 100 credit
+  // points, and 1 WIL unit totalling 25.
+  describe('requirement shortfalls', () => {
+    const coreUnits = ['CORE1', 'CORE2'].map((c) => unit(c));
+    const electives = ['E1', 'E2'].map((c) => unit(c, { category: 'elective' }));
+    const wil = unit('ICT20016', { category: 'wil' });
+    const all = [...coreUnits, ...electives, wil];
+
+    const requirements = [
+      { category: 'core', creditPoints: 25, unitCount: 2, planCategories: ['core'] },
+      { category: 'elective', creditPoints: 25, unitCount: 2, planCategories: ['elective', 'prescribed_elective'] },
+      { category: 'wil', creditPoints: 25, unitCount: 1, planCategories: ['wil'] },
+    ];
+
+    test('a complete plan reports no shortfall', () => {
+      expect(validatePlan({
+        semesters: [bucket(2024, 1, ...coreUnits, ...electives, wil)],
+        completedUnitCodes: [],
+        unitData: unitData(all),
+        requirements,
+      }).filter((w) => w.kind === 'requirement_shortfall')).toEqual([]);
+    });
+
+    test('a WIL unit counts 25 credit points, so one satisfies the category', () => {
+      const warnings = validatePlan({
+        semesters: [bucket(2024, 1, wil)],
+        completedUnitCodes: [],
+        unitData: unitData(all),
+        requirements: [requirements[2]],
+      });
+      expect(warnings.filter((w) => w.kind === 'requirement_shortfall')).toEqual([]);
+    });
+
+    test('removing an elective reports the gap with have and need', () => {
+      const warnings = validatePlan({
+        semesters: [bucket(2024, 1, ...coreUnits, electives[0], wil)],
+        completedUnitCodes: [],
+        unitData: unitData(all),
+        requirements,
+      });
+      expect(warnings.filter((w) => w.kind === 'requirement_shortfall')).toEqual([
+        { kind: 'requirement_shortfall', category: 'elective', have: 12.5, need: 25 },
+      ]);
+    });
+
+    test('swapping one elective for another reports nothing', () => {
+      const swapped = unit('E3', { category: 'elective' });
+      const warnings = validatePlan({
+        semesters: [bucket(2024, 1, ...coreUnits, electives[0], swapped, wil)],
+        completedUnitCodes: [],
+        unitData: unitData([...all, swapped]),
+        requirements,
+      });
+      expect(warnings.filter((w) => w.kind === 'requirement_shortfall')).toEqual([]);
+    });
+
+    test('prescribed electives count toward the elective requirement', () => {
+      const prescribed = unit('P1', { category: 'prescribed_elective' });
+      const warnings = validatePlan({
+        semesters: [bucket(2024, 1, electives[0], prescribed)],
+        completedUnitCodes: [],
+        unitData: unitData([...all, prescribed]),
+        requirements: [requirements[1]],
+      });
+      expect(warnings.filter((w) => w.kind === 'requirement_shortfall')).toEqual([]);
+    });
+
+    test('completed units count toward the total', () => {
+      const warnings = validatePlan({
+        semesters: [bucket(2024, 1, electives[0])],
+        completedUnitCodes: ['E2'],
+        unitData: unitData(all),
+        requirements: [requirements[1]],
+      });
+      expect(warnings.filter((w) => w.kind === 'requirement_shortfall')).toEqual([]);
+    });
+
+    test("a unit's own credit points win over the derived rate", () => {
+      const heavy = unit('BIG', { category: 'elective', creditPoints: 25 });
+      const warnings = validatePlan({
+        semesters: [bucket(2024, 1, heavy)],
+        completedUnitCodes: [],
+        unitData: unitData([heavy]),
+        requirements: [requirements[1]],
+      });
+      expect(warnings.filter((w) => w.kind === 'requirement_shortfall')).toEqual([]);
+    });
+
+    test('a null unit count falls back to the default rate', () => {
+      const warnings = validatePlan({
+        semesters: [bucket(2024, 1, electives[0])],
+        completedUnitCodes: [],
+        unitData: unitData(all),
+        requirements: [{ category: 'elective', creditPoints: 25, unitCount: null, planCategories: ['elective'] }],
+      });
+      expect(warnings).toEqual([
+        { kind: 'requirement_shortfall', category: 'elective', have: 12.5, need: 25 },
+      ]);
+    });
+
+    test('a requirement the planner never recorded is skipped, not treated as zero', () => {
+      // The route leaves null requirements out entirely
+      const warnings = validatePlan({
+        semesters: [bucket(2024, 1, ...coreUnits)],
+        completedUnitCodes: [],
+        unitData: unitData(all),
+        requirements: [requirements[0]],
+      });
+      expect(kinds(warnings)).not.toContain('requirement_shortfall');
+    });
+
+    test('omitting requirements skips the check entirely', () => {
+      const warnings = validatePlan({
+        semesters: [bucket(2024, 1, electives[0])],
+        completedUnitCodes: [],
+        unitData: unitData(all),
+      });
+      expect(kinds(warnings)).not.toContain('requirement_shortfall');
+    });
+
+    // The mirror of the shortfall, read off the same total, so a category is
+    // short, exact or in excess and never two of those at once.
+    describe('requirement excess', () => {
+      const electiveOnly = [
+        { category: 'elective', creditPoints: 25, unitCount: 2, planCategories: ['elective', 'prescribed_elective'] },
+      ];
+      const extra = ['X1', 'X2'].map((c) => unit(c, { category: 'elective' }));
+      const check = (...placed: SchedulableUnit[]) =>
+        validatePlan({
+          semesters: [bucket(2024, 1, ...placed)],
+          completedUnitCodes: [],
+          unitData: unitData([...all, ...extra]),
+          requirements: electiveOnly,
+        });
+
+      test('one elective past the requirement is reported as excess', () => {
+        expect(check(...electives, extra[0])).toEqual([
+          { kind: 'requirement_excess', category: 'elective', have: 37.5, need: 25 },
+        ]);
+      });
+
+      test('two past the requirement reports the whole difference', () => {
+        expect(check(...electives, ...extra)).toEqual([
+          { kind: 'requirement_excess', category: 'elective', have: 50, need: 25 },
+        ]);
+      });
+
+      test('an exact total reports neither excess nor shortfall', () => {
+        expect(check(...electives)).toEqual([]);
+      });
+
+      test('a short total reports only the shortfall', () => {
+        const warnings = check(electives[0]);
+        expect(warnings).toEqual([
+          { kind: 'requirement_shortfall', category: 'elective', have: 12.5, need: 25 },
+        ]);
+        expect(kinds(warnings)).not.toContain('requirement_excess');
+      });
+
+      test('a category the planner never recorded is skipped for excess too', () => {
+        // The route leaves null requirements out, so nothing to compare against
+        const warnings = validatePlan({
+          semesters: [bucket(2024, 1, ...electives, ...extra)],
+          completedUnitCodes: [],
+          unitData: unitData([...all, ...extra]),
+          requirements: [requirements[0]],
+        });
+        expect(kinds(warnings)).not.toContain('requirement_excess');
+      });
+
+      test('completed units count toward the excess, as they do the shortfall', () => {
+        expect(validatePlan({
+          semesters: [bucket(2024, 1, ...electives)],
+          completedUnitCodes: ['X1'],
+          unitData: unitData([...all, ...extra]),
+          requirements: electiveOnly,
+        })).toEqual([
+          { kind: 'requirement_excess', category: 'elective', have: 37.5, need: 25 },
+        ]);
+      });
+    });
+  });
+
+  // BA-CS AI September 2023 after the prescribed-elective policy change. The
+  // blocked COS30015 is compulsory, so no recommendation replaces it and the
+  // plan really is one elective short.
+  describe('the test student, with a compulsory elective blocked', () => {
+    const passed = ['COS10003', 'COS30045'];
+    const placedElectives = ['COS10022', 'SWE30009', 'REC1', 'REC2', 'REC3'].map((c) =>
+      unit(c, { category: c.startsWith('REC') ? 'elective' : 'prescribed_elective' }),
+    );
+    const blockedCompulsory = unit('COS30015', { category: 'prescribed_elective' });
+    const completedElectives = passed.map((c) => unit(c, { category: 'elective' }));
+    const electiveRequirement = [
+      { category: 'elective', creditPoints: 100, unitCount: 8, planCategories: ['elective', 'prescribed_elective'] },
+    ];
+
+    test('seven electives against a requirement of eight is a shortfall, not an excess', () => {
+      const warnings = validatePlan({
+        // COS30015 is never placed, so it contributes nothing
+        semesters: [bucket(2026, 1, ...placedElectives)],
+        completedUnitCodes: passed,
+        unitData: unitData([...placedElectives, ...completedElectives, blockedCompulsory]),
+        requirements: electiveRequirement,
+      });
+
+      expect(warnings.filter((w) => w.kind === 'requirement_shortfall')).toEqual([
+        { kind: 'requirement_shortfall', category: 'elective', have: 87.5, need: 100 },
+      ]);
+      expect(kinds(warnings)).not.toContain('requirement_excess');
+    });
+
+    test('placing the blocked unit would close the gap, which is why it is not replaced', () => {
+      const warnings = validatePlan({
+        semesters: [bucket(2026, 1, ...placedElectives), bucket(2026, 2, blockedCompulsory)],
+        completedUnitCodes: passed,
+        unitData: unitData([...placedElectives, ...completedElectives, blockedCompulsory]),
+        requirements: electiveRequirement,
+      });
+
+      expect(kinds(warnings)).not.toContain('requirement_shortfall');
+      expect(kinds(warnings)).not.toContain('requirement_excess');
+    });
+  });
+
+  // A unit the advisor added from the catalogue is on no planner, so the page
+  // has to put it in unitData itself. These cover what that buys.
+  describe('units added from outside the planner', () => {
+    const outside = unit('SWE30009', {
+      category: 'elective',
+      outsidePlanner: true,
+      requisiteGroups: [[prereq('COS20007')]],
+    });
+    const gate = unit('COS20007');
+
+    test('its requisites are checked once it is in unitData', () => {
+      const warnings = validatePlan({
+        // Placed a semester before the prerequisite it depends on
+        semesters: [bucket(2024, 1, outside), bucket(2024, 2, gate)],
+        completedUnitCodes: [],
+        unitData: unitData([outside, gate]),
+      });
+
+      expect(warnings).toContainEqual({
+        kind: 'requisite_violation',
+        unitCode: 'SWE30009',
+        missing: ['COS20007'],
+      });
+    });
+
+    test('without it in unitData the requisite is never checked', () => {
+      const warnings = validatePlan({
+        semesters: [bucket(2024, 1, outside), bucket(2024, 2, gate)],
+        completedUnitCodes: [],
+        unitData: unitData([gate]),
+      });
+
+      expect(kinds(warnings)).not.toContain('requisite_violation');
+      expect(warnings).toContainEqual({ kind: 'no_offering_data', unitCode: 'SWE30009' });
+    });
+
+    test('it counts toward the elective requirement', () => {
+      const requirement = [
+        { category: 'elective', creditPoints: 25, unitCount: 2, planCategories: ['elective', 'prescribed_elective'] },
+      ];
+      const oneElective = unit('E1', { category: 'elective' });
+
+      const short = validatePlan({
+        semesters: [bucket(2024, 1, oneElective)],
+        completedUnitCodes: [],
+        unitData: unitData([oneElective]),
+        requirements: requirement,
+      });
+      expect(short).toContainEqual({ kind: 'requirement_shortfall', category: 'elective', have: 12.5, need: 25 });
+
+      const whole = validatePlan({
+        semesters: [bucket(2024, 1, oneElective), bucket(2024, 2, outside)],
+        completedUnitCodes: ['COS20007'],
+        unitData: unitData([oneElective, outside]),
+        requirements: requirement,
+      });
+      expect(kinds(whole)).not.toContain('requirement_shortfall');
+    });
+  });
+});
+
+describe('carryForwardWarnings', () => {
+  const shortTerm: PlanWarning = { kind: 'short_term_only', unitCode: 'MPU3212', offeringTerms: [3, 4] };
+  const budget: PlanWarning = { kind: 'budget_exhausted', unitCodes: ['A', 'B'] };
+  const placedBucket = (...codes: string[]): CustomSemesterBucket => ({
+    year: 2024,
+    semester: 1,
+    units: codes.map((code) => ({ code, name: `Unit ${code}`, category: 'core' })),
+  });
+
+  test('an unplaced short-term unit keeps its warning after an unrelated edit', () => {
+    expect(carryForwardWarnings([shortTerm], [placedBucket('OTHER')])).toEqual([shortTerm]);
+  });
+
+  test('a short-term unit the advisor has placed loses the carried warning', () => {
+    expect(carryForwardWarnings([shortTerm], [placedBucket('MPU3212')])).toEqual([]);
+  });
+
+  test('budget_exhausted keeps only the codes still unplaced', () => {
+    expect(carryForwardWarnings([budget], [placedBucket('A')])).toEqual([
+      { kind: 'budget_exhausted', unitCodes: ['B'] },
+    ]);
+  });
+
+  test('budget_exhausted disappears once every code is placed', () => {
+    expect(carryForwardWarnings([budget], [placedBucket('A', 'B')])).toEqual([]);
+  });
+
+  test('warnings about placed units are dropped, since validatePlan judges those', () => {
+    const placedWarnings: PlanWarning[] = [
+      { kind: 'requisite_violation', unitCode: 'X', missing: ['Y'] },
+      { kind: 'over_capacity', year: 2024, semester: 1, count: 5, limit: 4 },
+      { kind: 'no_offering_data', unitCode: 'Z' },
+    ];
+    expect(carryForwardWarnings(placedWarnings, [placedBucket('OTHER')])).toEqual([]);
+  });
+
+  test('is case insensitive about placement', () => {
+    expect(carryForwardWarnings([shortTerm], [placedBucket('mpu3212')])).toEqual([]);
   });
 });

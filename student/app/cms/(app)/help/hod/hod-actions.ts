@@ -1,5 +1,6 @@
 'use server'
 import { revalidatePath } from 'next/cache'
+import { revalidateStudentCache, STUDENT_CACHE } from '@/lib/catalog'
 import { prisma } from '@/lib/prisma'
 
 export async function saveHods(
@@ -17,4 +18,5 @@ export async function saveHods(
   })
   revalidatePath('/help/heads-of-department')
   revalidatePath('/cms/help/hod')
+  revalidateStudentCache(STUDENT_CACHE.help)
 }

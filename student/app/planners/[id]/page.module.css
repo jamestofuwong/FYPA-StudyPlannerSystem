@@ -115,24 +115,6 @@
   border-radius: 1px;
 }
 
-/* ── Footnote ───────────────────────────────────────────────────────────── */
-.footnote {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-secondary);
-  margin-top: calc(-1 * var(--space-3));
-  margin-bottom: var(--space-6);
-  line-height: 1.5;
-}
-
-.footnoteMark {
-  color: var(--color-accent);
-  font-weight: var(--font-weight-bold);
-  margin-right: 3px;
-  font-size: var(--font-size-xs);
-  vertical-align: super;
-  line-height: 0;
-}
-
 /* ── Elective pool ──────────────────────────────────────────────────────── */
 .poolSection {
   margin-top: var(--space-10);

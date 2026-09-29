@@ -1,10 +1,10 @@
-import { getUnits } from '@student/lib/units'
 import Nav from '@student/components/Nav/Nav'
 import UnitCatalog from '@student/components/UnitCatalog/UnitCatalog'
+import { getCachedUnits } from '@student/lib/catalog'
 import styles from './page.module.css'
 
 export default async function UnitsPage() {
-  const units = await getUnits()
+  const units = await getCachedUnits()
 
   return (
     <div className={styles.page}>

@@ -9,8 +9,17 @@ export async function POST(req: Request) {
   if (!config?.plannerId || typeof config.plannerId !== 'string') {
     return NextResponse.json({ error: 'config.plannerId is required' }, { status: 400 })
   }
-  if (!Array.isArray(input?.completedUnitCodes)) {
-    return NextResponse.json({ error: 'completedUnitCodes must be an array of unit codes' }, { status: 400 })
+  if (
+    !Array.isArray(input?.completedSemesters) ||
+    input.completedSemesters.some(
+      semester => !semester || !Array.isArray(semester.unitCodes) ||
+        semester.unitCodes.some(code => typeof code !== 'string'),
+    )
+  ) {
+    return NextResponse.json(
+      { error: 'completedSemesters must be an array of { unitCodes: string[] }' },
+      { status: 400 },
+    )
   }
   if (
     !Number.isInteger(config.intakeMonth) ||

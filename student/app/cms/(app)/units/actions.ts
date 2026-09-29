@@ -1,5 +1,6 @@
 'use server'
 import { revalidatePath } from 'next/cache'
+import { revalidateStudentCache, STUDENT_CACHE } from '@/lib/catalog'
 import { redirect } from 'next/navigation'
 import { prisma } from '@/lib/prisma'
 
@@ -42,6 +43,8 @@ export async function saveUnit(data: UnitFormData) {
       },
     })
     revalidatePath('/cms/units')
+    revalidateStudentCache(STUDENT_CACHE.units)
+    revalidateStudentCache(STUDENT_CACHE.planners)
     redirect(`/cms/units/${data.id}`)
   } else {
     const unit = await prisma.unit.create({
@@ -59,6 +62,8 @@ export async function saveUnit(data: UnitFormData) {
       },
     })
     revalidatePath('/cms/units')
+    revalidateStudentCache(STUDENT_CACHE.units)
+    revalidateStudentCache(STUDENT_CACHE.planners)
     redirect(`/cms/units/${unit.id}`)
   }
 }
