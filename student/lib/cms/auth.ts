@@ -7,6 +7,24 @@ export const REFRESH_COOKIE = 'cms_refresh'
 export const ACCESS_MAX_AGE = 15 * 60        // 15 minutes
 export const REFRESH_MAX_AGE = 7 * 24 * 60 * 60 // 7 days
 
+const IS_PRODUCTION = process.env.NODE_ENV === 'production'
+
+export const ACCESS_COOKIE_OPTIONS = {
+  httpOnly: true,
+  sameSite: 'lax' as const,
+  path: '/',
+  maxAge: ACCESS_MAX_AGE,
+  secure: IS_PRODUCTION,
+}
+
+export const REFRESH_COOKIE_OPTIONS = {
+  httpOnly: true,
+  sameSite: 'lax' as const,
+  path: '/',
+  maxAge: REFRESH_MAX_AGE,
+  secure: IS_PRODUCTION,
+}
+
 export interface JwtPayload {
   sub: string
   email: string
@@ -59,4 +77,19 @@ export async function hashPassword(password: string): Promise<string> {
 
 export async function verifyPassword(password: string, hash: string): Promise<boolean> {
   return bcrypt.compare(password, hash)
+}
+
+// Pre-computed bcrypt hash used when no account exists for the attempted email.
+// Always running bcrypt ensures response time is identical whether or not the
+// email is registered, preventing timing-based account enumeration.
+const DUMMY_HASH = '$2a$12$B3qRy2ttSH/g70rqp5pADOJoh9q8ryKUph8Xo59eCOHYix1vz/pea'
+
+export async function safeVerifyPassword(
+  password: string,
+  hash: string | null,
+): Promise<boolean> {
+  // Always run bcrypt — use the real hash if available, dummy hash otherwise
+  const result = await bcrypt.compare(password, hash ?? DUMMY_HASH)
+  // If we used the dummy hash, always return false regardless of bcrypt result
+  return hash !== null && result
 }

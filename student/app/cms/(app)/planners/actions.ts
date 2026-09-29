@@ -3,6 +3,8 @@ import { revalidatePath } from 'next/cache'
 import { revalidateStudentCache, STUDENT_CACHE } from '@/lib/catalog'
 import { redirect } from 'next/navigation'
 import { prisma } from '@/lib/prisma'
+import { PlannerSchema } from '@/lib/cms/schemas'
+import { getSession } from '@/lib/cms/session'
 
 interface SemesterUnitInput {
   unit_id: string | null
@@ -31,33 +33,40 @@ interface PlannerFormData {
 }
 
 export async function savePlanner(data: PlannerFormData) {
+  const parsed = PlannerSchema.safeParse(data)
+  if (!parsed.success) {
+    throw new Error(parsed.error.errors[0]?.message ?? 'Invalid planner data')
+  }
+  const d = parsed.data
+  const session = await getSession()
+
   // Resolve course — find existing by name, create if not found, then sync code
-  let course = await prisma.course.findFirst({ where: { name: data.course_name } })
+  let course = await prisma.course.findFirst({ where: { name: d.course_name } })
   if (!course) {
     course = await prisma.course.create({
-      data: { name: data.course_name, code: data.course_code ?? null },
+      data: { name: d.course_name, code: d.course_code ?? null },
     })
-  } else if (data.course_code !== undefined) {
+  } else if (d.course_code !== undefined) {
     // Update code only when the caller explicitly provided a value (even null to clear it)
     course = await prisma.course.update({
       where: { id: course.id },
-      data: { code: data.course_code },
+      data: { code: d.course_code },
     })
   }
 
   // Resolve major — find existing under this course or create
   let majorId: string | null = null
-  if (data.major_name) {
+  if (d.major_name) {
     let major = await prisma.major.findFirst({
-      where: { name: data.major_name, course_id: course.id },
+      where: { name: d.major_name, course_id: course.id },
     })
     if (!major) {
-      major = await prisma.major.create({ data: { name: data.major_name, course_id: course.id } })
+      major = await prisma.major.create({ data: { name: d.major_name, course_id: course.id } })
     }
     majorId = major.id
   }
 
-  let plannerId = data.id
+  let plannerId = d.id
 
   if (plannerId) {
     // Clear semesters (cascades to semester_units) and elective pool
@@ -69,9 +78,9 @@ export async function savePlanner(data: PlannerFormData) {
       data: {
         course_id: course.id,
         major_id: majorId,
-        intake_month: data.intake_month,
-        intake_year: data.intake_year,
-        duration_years: data.duration_years,
+        intake_month: d.intake_month,
+        intake_year: d.intake_year,
+        duration_years: d.duration_years,
       },
     })
   } else {
@@ -79,16 +88,16 @@ export async function savePlanner(data: PlannerFormData) {
       data: {
         course_id: course.id,
         major_id: majorId,
-        intake_month: data.intake_month,
-        intake_year: data.intake_year,
-        duration_years: data.duration_years,
+        intake_month: d.intake_month,
+        intake_year: d.intake_year,
+        duration_years: d.duration_years,
       },
     })
     plannerId = planner.id
   }
 
   // Recreate semesters
-  for (const sem of data.semesters) {
+  for (const sem of d.semesters) {
     const semester = await prisma.semester.create({
       data: { template_id: plannerId, year_number: sem.year_number, sem_number: sem.sem_number, label: sem.label },
     })
@@ -106,11 +115,14 @@ export async function savePlanner(data: PlannerFormData) {
   }
 
   // Recreate elective pool
-  if (data.elective_pool.length > 0) {
+  if (d.elective_pool.length > 0) {
     await prisma.electivePoolUnit.createMany({
-      data: data.elective_pool.map(unit_id => ({ template_id: plannerId!, unit_id })),
+      data: d.elective_pool.map(unit_id => ({ template_id: plannerId!, unit_id })),
     })
   }
+
+  const action = data.id ? 'updated' : 'created'
+  console.info(`[CMS] planner:${action} id=${plannerId} by=${session?.email ?? 'unknown'}`)
 
   revalidatePath('/cms/planners')
   revalidateStudentCache(STUDENT_CACHE.planners)
@@ -118,7 +130,9 @@ export async function savePlanner(data: PlannerFormData) {
 }
 
 export async function deletePlanner(id: string) {
+  const session = await getSession()
   await prisma.plannerTemplate.delete({ where: { id } })
+  console.info(`[CMS] planner:deleted id=${id} by=${session?.email ?? 'unknown'}`)
   revalidatePath('/cms/planners')
   revalidateStudentCache(STUDENT_CACHE.planners)
   redirect('/cms/planners')
