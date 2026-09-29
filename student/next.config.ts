@@ -26,6 +26,9 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   typescript: { ignoreBuildErrors: true },
   serverExternalPackages: ['pg', '@prisma/adapter-pg'],
+  experimental: {
+    outputFileTracingRoot: path.join(__dirname, '..'),
+  },
   turbopack: {
     root: path.join(__dirname, '..'),
   },
