@@ -244,3 +244,152 @@ describe('Graduation Check: per-category credit bars', () => {
     expect(screen.getByText('50/100 CP')).toBeTruthy();
   });
 });
+
+// A candidate offered through the planner's elective_groups, not a named row
+// in activePlanner.units. Shaped as /api/planners/[id] actually returns it:
+// elective_groups[].units[].unit.{unit_code, unit_name}.
+const electiveGroupCandidate = (code, name) => ({ unit: { unit_code: code, unit_name: name } });
+
+describe('Graduation Check: elective-group candidates', () => {
+  test('a passed elective-group-only unit (not named on the planner) is counted in the Elective bar', async () => {
+    const planner = {
+      ...FULL_PLANNER,
+      elective_groups: [{ id: 'g1', units: [electiveGroupCandidate('GROUP1', 'Group Elective')] }],
+    };
+    const courseList = [...COURSE_LIST, passedRow('GROUP1', 12.5)];
+    renderDashboard({ planner, courseList, creditsCompleted: 112.5 });
+    await openGraduation();
+
+    // 12.5 (ELEC1) + 12.5 (PRES1) + 12.5 (GROUP1) = 37.5
+    expect(barValue('Elective Credits')).toBe('37.5/25 CP');
+    // Core & Major and WIL are unaffected by the group candidate
+    expect(barValue('Core & Major Credits')).toBe('50/100 CP');
+    expect(barValue('WIL Credits')).toBe('25/25 CP');
+  });
+
+  test('a unit both named on the planner and offered as a group candidate is counted once', async () => {
+    const planner = {
+      ...FULL_PLANNER,
+      // ELEC1 is already named on the planner (see UNITS); also list it in a group
+      elective_groups: [{ id: 'g1', units: [electiveGroupCandidate('ELEC1', 'Plain Elective')] }],
+    };
+    renderDashboard({ planner });
+    await openGraduation();
+
+    // Still 25 (12.5 + 12.5), not 37.5: ELEC1's credits are not added twice
+    expect(barValue('Elective Credits')).toBe('25/25 CP');
+  });
+
+  test('the same candidate listed in two different groups is still counted once', async () => {
+    const planner = {
+      ...FULL_PLANNER,
+      elective_groups: [
+        { id: 'g1', units: [electiveGroupCandidate('GROUP1', 'Group Elective')] },
+        { id: 'g2', units: [electiveGroupCandidate('GROUP1', 'Group Elective')] },
+      ],
+    };
+    const courseList = [...COURSE_LIST, passedRow('GROUP1', 12.5)];
+    renderDashboard({ planner, courseList, creditsCompleted: 112.5 });
+    await openGraduation();
+
+    expect(barValue('Elective Credits')).toBe('37.5/25 CP');
+  });
+
+  test('an elective-group candidate the student has NOT passed contributes nothing', async () => {
+    const planner = {
+      ...FULL_PLANNER,
+      elective_groups: [{ id: 'g1', units: [electiveGroupCandidate('GROUP1', 'Group Elective')] }],
+    };
+    renderDashboard({ planner }); // COURSE_LIST has no GROUP1 row at all
+    await openGraduation();
+
+    expect(barValue('Elective Credits')).toBe('25/25 CP');
+  });
+
+  test('core, major and WIL do not draw from elective_groups', async () => {
+    // A group candidate that happens to share a code with nothing on the
+    // planner: it must never be picked up by the Core & Major or WIL bars.
+    const planner = {
+      ...FULL_PLANNER,
+      elective_groups: [{ id: 'g1', units: [electiveGroupCandidate('GROUP1', 'Group Elective')] }],
+    };
+    const courseList = [...COURSE_LIST, passedRow('GROUP1', 12.5)];
+    renderDashboard({ planner, courseList, creditsCompleted: 112.5 });
+    await openGraduation();
+
+    expect(barValue('Core & Major Credits')).toBe('50/100 CP');
+    expect(barValue('WIL Credits')).toBe('25/25 CP');
+  });
+
+  test('a planner with no elective_groups at all behaves exactly as before', async () => {
+    renderDashboard({ planner: FULL_PLANNER }); // no elective_groups key
+    await openGraduation();
+
+    expect(barValue('Elective Credits')).toBe('25/25 CP');
+  });
+});
+
+describe('Graduation Check: MPU completion line', () => {
+  test('shows X/Y Complete for a passed MPU unit, regardless of its grade code', async () => {
+    // MPU1 is on the planner (see UNITS); COMP is a completion marker, not on
+    // the HD/D/C/P scale, but status Complete still resolves it as done.
+    const courseList = [...COURSE_LIST, { ...passedRow('MPU1', 0), grade: 'COMP', status: 'Complete' }];
+    renderDashboard({ courseList, creditsCompleted: 100 });
+    await openGraduation();
+
+    expect(screen.getByText('MPU Units')).toBeTruthy();
+    const row = screen.getByText('MPU Units').parentElement;
+    expect(within(row).getByText('1/1 Complete')).toBeTruthy();
+    // No CP figure anywhere on this line
+    expect(within(row).queryByText(/CP/)).toBeNull();
+  });
+
+  test('an MPU unit not yet taken is not counted as complete', async () => {
+    renderDashboard(); // COURSE_LIST has no MPU1 row at all
+    await openGraduation();
+
+    const row = screen.getByText('MPU Units').parentElement;
+    expect(within(row).getByText('0/1 Complete')).toBeTruthy();
+  });
+
+  test('an MPU unit only in progress is not counted as complete', async () => {
+    const courseList = [...COURSE_LIST, { ...passedRow('MPU1', 0), grade: '', status: 'Current' }];
+    renderDashboard({ courseList });
+    await openGraduation();
+
+    const row = screen.getByText('MPU Units').parentElement;
+    expect(within(row).getByText('0/1 Complete')).toBeTruthy();
+  });
+
+  test('a planner with no MPU units shows no MPU completion line at all', async () => {
+    const planner = { ...FULL_PLANNER, units: UNITS.filter((u) => u.category !== 'mpu') };
+    renderDashboard({ planner });
+    await openGraduation();
+
+    expect(screen.queryByText('MPU Units')).toBeNull();
+  });
+
+  test('several MPU units complete some but not all', async () => {
+    const planner = {
+      ...FULL_PLANNER,
+      units: [...UNITS, unit('MPU2', 'MPU Unit Two', 'mpu'), unit('MPU3', 'MPU Unit Three', 'mpu')],
+    };
+    const courseList = [...COURSE_LIST, passedRow('MPU1', 0), passedRow('MPU2', 0)];
+    renderDashboard({ planner, courseList, creditsCompleted: 100 });
+    await openGraduation();
+
+    const row = screen.getByText('MPU Units').parentElement;
+    expect(within(row).getByText('2/3 Complete')).toBeTruthy();
+  });
+
+  test('the completion line appears even when all four _cp fields are null (fallback bar case)', async () => {
+    const planner = { ...BASE_PLANNER, core_cp: null, major_cp: null, elective_cp: null, wil_cp: null };
+    const courseList = [...COURSE_LIST, passedRow('MPU1', 0)];
+    renderDashboard({ planner, courseList, creditsCompleted: 100 });
+    await openGraduation();
+
+    expect(screen.getByText('Credits')).toBeTruthy(); // the fallback bar
+    const row = screen.getByText('MPU Units').parentElement;
+    expect(within(row).getByText('1/1 Complete')).toBeTruthy();
+  });
+});

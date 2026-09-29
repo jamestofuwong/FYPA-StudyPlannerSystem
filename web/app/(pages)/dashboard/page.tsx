@@ -23,6 +23,17 @@ import {
 } from '../../../../core/shared/constants/grades';
 import { Badge, InlineCode, ProgressBar, type BadgeClass } from '../../../components/common/Primitives';
 
+/**
+ * How many of a set of planner units (already filtered to one category, e.g.
+ * MPU) the transcript already shows done. Shared between the Not Yet Taken and
+ * Graduation Check cards so "what counts as complete" is one implementation,
+ * not a copy per card. `doneCodes` is whatever passed-code set the caller
+ * already built (resolveUnitStates -> 'passed'), normalised the same way.
+ */
+function countCategoryDone(units: { unit: { unit_code: string } | null }[], doneCodes: Set<string>): number {
+  return units.filter((u) => u.unit !== null && doneCodes.has(normaliseUnitCode(u.unit.unit_code))).length;
+}
+
 // Main component
 
 export default function DashboardPage() {
@@ -1458,21 +1469,55 @@ export default function DashboardPage() {
               // Independent of any custom-plan editing: this reads the real planner and
               // the real transcript, the same two sources coreMissing/prescribedMissing
               // above already use, not the pathway page's generated-plan totals.
-              const achievedFor = (categories: string[]) =>
-                (activePlanner?.units ?? [])
-                  .filter((u: any) => u.unit !== null && categories.includes(u.category))
-                  .reduce((sum: number, u: any) => {
-                    const code = normaliseUnitCode(u.unit.unit_code);
-                    return transcriptCodes.has(code) ? sum + (creditsEarnedByCode.get(code) ?? 0) : sum;
-                  }, 0);
+              //
+              // includeElectiveGroups additionally credits a passed unit that the
+              // planner offers only as an elective-group candidate, never as a named
+              // row in activePlanner.units, e.g. COS30045 taken from the group rather
+              // than named on the template. This is the same situation
+              // countElectiveSlotsNeeded and the custom-planner route's completedUnits
+              // handling already account for; a unit that is BOTH named and a group
+              // candidate is credited once, via the named pass, since seen starts
+              // pre-loaded with the named codes.
+              const achievedFor = (categories: string[], includeElectiveGroups = false) => {
+                const named = (activePlanner?.units ?? [])
+                  .filter((u: any) => u.unit !== null && categories.includes(u.category));
+                const seen = new Set<string>(named.map((u: any) => normaliseUnitCode(u.unit.unit_code)));
+
+                let sum = named.reduce((total: number, u: any) => {
+                  const code = normaliseUnitCode(u.unit.unit_code);
+                  return transcriptCodes.has(code) ? total + (creditsEarnedByCode.get(code) ?? 0) : total;
+                }, 0);
+
+                if (includeElectiveGroups) {
+                  const groupUnits = (activePlanner?.elective_groups ?? []).flatMap((g: any) => g.units ?? []);
+                  for (const gu of groupUnits) {
+                    const code = normaliseUnitCode(gu.unit?.unit_code);
+                    // Also skips a repeat of the same candidate across more than one group
+                    if (!code || seen.has(code)) continue;
+                    seen.add(code);
+                    if (transcriptCodes.has(code)) sum += creditsEarnedByCode.get(code) ?? 0;
+                  }
+                }
+                return sum;
+              };
+
+              // Named MPU units the transcript already shows complete, for the
+              // completion line below. Shares countCategoryDone with the Not Yet
+              // Taken card above so "what counts as MPU complete" has one
+              // implementation: both cards resolve completion via the same
+              // resolveUnitStates('passed') classification, just under different
+              // local names (doneCodes there, transcriptCodes here).
+              const mpuUnits = (activePlanner?.units ?? []).filter((u: any) => u.unit !== null && u.category === 'mpu');
+              const mpuComplete = countCategoryDone(mpuUnits, transcriptCodes);
 
               // core_cp/major_cp/elective_cp/wil_cp are each independently nullable: the
               // planner never recorded that requirement, not that it is zero. There is no
-              // mpu_cp column at all, so MPU gets no credit bar here (see the Not Yet
-              // Taken card for its unit count instead). Core and Major share one bar, as
-              // the Core & Major card below already treats them as one group; Elective
-              // combines elective_cp with prescribed_elective units, matching
-              // planCategories: ['elective', 'prescribed_elective'] in planValidator.ts.
+              // mpu_cp column at all: MPU units count zero credit points toward
+              // graduation by design, so MPU gets a completion count below, never a CP
+              // bar. Core and Major share one bar, as the Core & Major card below
+              // already treats them as one group; Elective combines elective_cp with
+              // prescribed_elective units, matching planCategories: ['elective',
+              // 'prescribed_elective'] in planValidator.ts.
               const creditBars: { key: string; label: string; achieved: number; required: number }[] = [];
               if (activePlanner?.core_cp != null || activePlanner?.major_cp != null) {
                 creditBars.push({
@@ -1486,7 +1531,7 @@ export default function DashboardPage() {
                 creditBars.push({
                   key: 'elective',
                   label: 'Elective Credits',
-                  achieved: achievedFor(['elective', 'prescribed_elective']),
+                  achieved: achievedFor(['elective', 'prescribed_elective'], true),
                   required: activePlanner.elective_cp,
                 });
               }
@@ -1548,6 +1593,18 @@ export default function DashboardPage() {
                         </div>
                         <div className={styles.gradBar}>
                           <ProgressBar pct={creditPct} color={creditsOk ? 'var(--accent-green)' : 'var(--accent-purple)'} />
+                        </div>
+                      </div>
+                    )}
+                    {mpuUnits.length > 0 && (
+                      // MPU units count zero credit points toward graduation, so this
+                      // is a plain completion count, never a CP bar.
+                      <div className={styles.gradReq}>
+                        <div className={styles.gradReqTop}>
+                          <span className={styles.gradReqLabel}>MPU Units</span>
+                          <span className={`${styles.gradReqValue} ${mpuComplete === mpuUnits.length ? styles.gradOk : styles.gradWarn}`}>
+                            {mpuComplete}/{mpuUnits.length} Complete
+                          </span>
                         </div>
                       </div>
                     )}
