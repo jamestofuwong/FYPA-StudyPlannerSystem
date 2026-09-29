@@ -1021,6 +1021,20 @@ export default function PathwayPage() {
               };
 
               const handleDirectPdfDownload = async () => {
+                // Check if any generic unselected elective slots exist in the pathway
+                const unselectedElectiveCount = semesters
+                  .flatMap((s) => s.units)
+                  .filter((u) => u.code === 'ELECTIVE').length;
+
+                if (unselectedElectiveCount > 0) {
+                  showToast(
+                    `Please select a unit for all elective slots (${unselectedElectiveCount} remaining) before downloading the PDF.`,
+                    'error'
+                  );
+                  return;
+                }
+
+
                 setIsExporting(true);
                 showToast('Generating official study plan PDF...', 'info');
 
