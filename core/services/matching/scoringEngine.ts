@@ -64,24 +64,40 @@ function scoreSinglePlanner(
     config.wilExemptionCount
   );
 
+  // Scoring works from the student's full completed set and lets THIS planner's own lists and pools decide
+  // what each unit satisfies. It deliberately does not use profile.completedCore and friends: those are built
+  // by profileBuilder.ts from the single global category unitMasterTableBuilder.ts resolves for a unit across
+  // every planner, where major_core beats prescribed_elective beats core. A unit that is core here but
+  // major_core in another major therefore never landed in completedCore, so this planner's core score was
+  // short by that unit and its missingCore listed a unit the student had passed. Nine of the 65 units in the
+  // loaded planners sit in more than one category, so several planners were scoring below their real match.
+  const completed = profile.completedUnits;
+
   // 3a – Core score (WIL does not affect core)
-  const coreResult = scoreCore(profile.completedCore, planner.requiredCore);
+  const coreResult = scoreCore(completed, planner.requiredCore);
 
   // 3b – Major core score (primary ranking signal)
-  const majorCoreResult = scoreMajorCore(
-    profile.completedMajorCore,
-    planner.requiredMajorCore
-  );
+  const majorCoreResult = scoreMajorCore(completed, planner.requiredMajorCore);
+
+  // A unit filling a slotted core or major core requirement must not also fill an elective slot in the same
+  // planner, so it comes out before the pools are scored. None of the 45 loaded planners has that overlap
+  // today; this keeps a later planner import from quietly inflating a score by counting one unit twice.
+  const slotted = new Set<string>([...planner.requiredCore, ...planner.requiredMajorCore]);
+  const completedForPools = without(completed, slotted);
 
   // 3c – Prescribed elective score
   const prescribedResult = scorePrescribed(
-    profile.completedPrescribed,
+    completedForPools,
     planner.prescribedElectiveCategories
   );
 
-  // 3d – Free elective score (uses WIL-adjusted slot count)
+  // 3d – Free elective score (uses WIL-adjusted slot count). Same reasoning as above one level down: a unit
+  // already counted against a prescribed pool does not count again as a free elective.
+  const prescribedPool = new Set<string>(
+    planner.prescribedElectiveCategories.flatMap((cat) => [...cat.pool])
+  );
   const freeResult = scoreFreeElectives(
-    profile.completedFreeElectives,
+    without(completedForPools, prescribedPool),
     planner.freeElectivePool,
     freeElectiveSlotsAdj
   );
@@ -99,13 +115,14 @@ function scoreSinglePlanner(
 
   const matchPct = parseFloat((matchScore * 100).toFixed(1));
 
-  // MM-06 – Missing unit lists
-  const missingCore = planner.requiredCore.filter(
-    (code) => !profile.completedCore.has(code)
-  );
+  // MM-06 – Missing unit lists. Against the full completed set for the same reason as the scores above: a
+  // unit the student has passed must never be reported as missing just because another major files it under
+  // a different category. core/services/classEstimation reads these lists to decide what to enrol a student
+  // in next semester, so a false entry there became a recommendation to retake a unit already passed.
+  const missingCore = planner.requiredCore.filter((code) => !completed.has(code));
 
   const missingMajorCore = [...planner.requiredMajorCore].filter(
-    (code) => !profile.completedMajorCore.has(code)
+    (code) => !completed.has(code)
   );
 
   const missingPrescribed = prescribedResult.perCategory.map(({ categoryCode, matched, slots }) => ({
@@ -144,6 +161,19 @@ function scoreSinglePlanner(
 
 // --- Sub-scorers ------------------------------------------------
 
+/**
+ * source minus exclude, without mutating either. Returns source itself when there is nothing to take out,
+ * which is the normal case, so the common path allocates nothing.
+ */
+function without(source: Set<string>, exclude: Set<string>): Set<string> {
+  if (exclude.size === 0) return source;
+  const out = new Set<string>();
+  for (const code of source) {
+    if (!exclude.has(code)) out.add(code);
+  }
+  return out;
+}
+
 interface ScoreResult {
   score: number;
   matched: number;
@@ -155,24 +185,25 @@ interface PrescribedCategoryResult {
   slots: number;
 }
 
-/** 3a – Core score [weight: 0.40] */
-function scoreCore(completedCore: Set<string>, requiredCore: string[]): ScoreResult {
+/** 3a – Core score [weight: 0.40]. `completed` is the student's whole completed set: what counts as core is
+ *  decided by this planner's requiredCore, not by any category attached to the unit itself. */
+function scoreCore(completed: Set<string>, requiredCore: string[]): ScoreResult {
   if (requiredCore.length === 0) {
     console.warn("[ScoringEngine] Planner has zero required core units. Core score = 0.");
     return { score: 0, matched: 0 };
   }
-  const matched = requiredCore.filter((code) => completedCore.has(code)).length;
+  const matched = requiredCore.filter((code) => completed.has(code)).length;
   return { score: matched / requiredCore.length, matched };
 }
 
 /** 3b – Major core score [weight: 0.30] */
-function scoreMajorCore(completedMajorCore: Set<string>, requiredMajorCore: Set<string>): ScoreResult {
+function scoreMajorCore(completed: Set<string>, requiredMajorCore: Set<string>): ScoreResult {
   if (requiredMajorCore.size === 0) {
     console.warn("[ScoringEngine] Planner has zero required major core units. Major core score = 0.");
     return { score: 0, matched: 0 };
   }
   const matched = [...requiredMajorCore].filter((code) =>
-    completedMajorCore.has(code)
+    completed.has(code)
   ).length;
   return { score: matched / requiredMajorCore.size, matched };
 }
@@ -182,7 +213,7 @@ function scoreMajorCore(completedMajorCore: Set<string>, requiredMajorCore: Set<
  *  has nothing to fulfill - full marks (1.0) are awarded automatically.
  */
 function scorePrescribed(
-  completedPrescribed: Set<string>,
+  completed: Set<string>,
   categories: PlannerTemplate["prescribedElectiveCategories"]
 ): ScoreResult & { possible: number; perCategory: PrescribedCategoryResult[] } {
   if (categories.length === 0) {
@@ -194,10 +225,10 @@ function scorePrescribed(
   const perCategory: PrescribedCategoryResult[] = [];
 
   for (const cat of categories) {
-    // Iterate pool (bounded by planner design) and check completedPrescribed O(1) per unit.
-    // Avoids spreading the student's full completedPrescribed set once per category.
+    // Iterate pool (bounded by planner design) and check the completed set O(1) per unit.
+    // Avoids spreading the student's full completed set once per category.
     const matchedInCat = Math.min(
-      [...cat.pool].filter((c) => completedPrescribed.has(c)).length,
+      [...cat.pool].filter((c) => completed.has(c)).length,
       cat.slots
     );
     totalMatched += matchedInCat;
@@ -224,7 +255,7 @@ function scorePrescribed(
  *  has nothing left to fulfill - full marks (1.0) are awarded automatically.
  */
 function scoreFreeElectives(
-  completedFreeElectives: Set<string>,
+  completed: Set<string>,
   freeElectivePool: Set<string>,
   slotsRequired: number  // already WIL-adjusted
 ): ScoreResult {
@@ -232,8 +263,8 @@ function scoreFreeElectives(
   if (slotsRequired === 0) {
     return { score: 1.0, matched: 0 };
   }
-  // Iterate pool (bounded by planner) and check completedFreeElectives O(1) per unit.
-  const inPool = [...freeElectivePool].filter((c) => completedFreeElectives.has(c)).length;
+  // Iterate pool (bounded by planner) and check the completed set O(1) per unit.
+  const inPool = [...freeElectivePool].filter((c) => completed.has(c)).length;
   const matched = Math.min(inPool, slotsRequired);
   return { score: matched / slotsRequired, matched };
 }

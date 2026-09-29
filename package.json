@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "node scripts/ensure-ollama.js && cross-env NODE_ENV=development NEXT_TELEMETRY_DISABLED=1 concurrently -k -n NEXT,ELECTRON_BUILD,ELECTRON -c cyan,yellow,magenta \"next dev web --webpack -p 3000\" \"tsup electron/main.ts electron/preload.ts --format cjs --platform node --out-dir dist/electron --sourcemap --external electron --watch\" \"wait-on dist/electron/main.js http://127.0.0.1:3000 && cross-env NEXT_DEV_SERVER_URL=http://127.0.0.1:3000 electron .\"",
     "prisma:generate": "prisma generate --schema core/db/prisma/schema",
+    "fixtures:dpa": "tsx scripts/generate-dpa-fixtures.ts",
     "build:app": "npm run prisma:generate && next build web --webpack",
     "build:electron": "tsup electron/main.ts electron/preload.ts --format cjs --platform node --out-dir dist/electron --sourcemap --external electron",
     "build": "npm run build:app && npm run build:electron",
@@ -19,7 +20,8 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "postinstall": "patch-package && prisma generate --schema core/db/prisma/schema"
+    "postinstall": "patch-package && prisma generate --schema core/db/prisma/schema",
+    "backtest": "cross-env DOTENV_CONFIG_QUIET=true tsx scripts/backtest.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.2",

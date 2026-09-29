@@ -36,8 +36,15 @@ export interface PlannerUnitsSource {
   elective_groups: Array<{ units: Array<{ unit: { unit_code: string } }> }>;
 }
 
+// A planner's intake month is stored, its intake semester is not. February and March intakes are semester 1,
+// September intakes are semester 2. Exported because the eligibility engine needs the same answer to convert
+// a planner's slot semesters into calendar terms, and two copies of this rule would eventually disagree.
+export function intakeSemesterFromMonth(intakeMonth: number | null | undefined): 1 | 2 {
+  return (intakeMonth ?? 1) >= 7 ? 2 : 1;
+}
+
 // The DB's unslotted elective pool (ElectiveGroup/ElectiveGroupUnit), which is what "prescribed" means in
-// the matching pipeline's own scoring, see the note above on category mapping.
+// the matching pipeline's own scoring.
 export function getPrescribedPoolCodes(planner: PlannerUnitsSource): string[] {
   return planner.elective_groups.flatMap((eg) => eg.units.map((egu) => egu.unit.unit_code));
 }
@@ -54,7 +61,7 @@ export function buildPlannerTemplatesForMatching(dbPlanners: DbPlannerWithUnits[
     plannerID: p.id,
     majorName: p.major?.name ?? '',
     intakeYear: p.intake_year,
-    intakeSemester: ((p.intake_month ?? 1) >= 7 ? 2 : 1) as 1 | 2,
+    intakeSemester: intakeSemesterFromMonth(p.intake_month),
     courseType: (p.course_type as CourseType) || 'degree',
     durationSemesters: p.duration_semesters || 8,
     requiredCore: p.units

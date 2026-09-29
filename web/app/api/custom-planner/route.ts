@@ -4,6 +4,7 @@ import { prisma } from '../../../../core/db/client';
 import {
   buildCustomPlan,
   validateSchedulerConfig,
+  type RequisiteCondition,
   resolveNextStudyTerm,
   calendarTermFor,
   normaliseCode,

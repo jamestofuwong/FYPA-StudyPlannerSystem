@@ -235,3 +235,65 @@ model SchemaMigration {
 
   @@map("schema_migrations")
 }
+
+// ======================================================================
+// Class estimation run history (Phase 8)
+//
+// A saved run is a snapshot, not a live view. It records the figures AND the inputs that produced them,
+// because an estimate read six months later is meaningless without knowing the retention rate, the load cap
+// and the new-intake figure behind it. Re-deriving those from current settings would misreport history.
+//
+// unit_code is stored as text rather than a foreign key to units on purpose. A run is a historical record,
+// and a unit being renamed or removed from the catalogue later must not rewrite or break a past estimate.
+// ======================================================================
+
+model EstimationRun {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  created_at DateTime @default(now()) @db.Timestamptz
+  /// Optional note from whoever ran it, e.g. "before the FTES change".
+  label      String?  @db.VarChar(200)
+
+  /// The semester estimated, as a calendar year and semester.
+  target_year     Int
+  target_semester Int @db.SmallInt
+
+  /// The inputs, kept so a past run can be read without guessing what produced it.
+  load_cap       Int
+  retention_rate Decimal @db.Decimal(4, 3)
+  new_intake     Int
+
+  /// Where the transcripts came from: portal, import, mock, or mixed.
+  source        String @db.VarChar(20)
+  student_count Int
+  /// Distinct situations the students collapsed into, so a run's batching is visible after the fact.
+  group_count   Int
+  /// Students estimated from the shared core because no major could be detected.
+  common_core_count Int @default(0)
+
+  units EstimationRunUnit[]
+
+  @@index([created_at])
+  @@map("estimation_runs")
+}
+
+model EstimationRunUnit {
+  run_id String        @db.Uuid
+  run    EstimationRun @relation(fields: [run_id], references: [id], onDelete: Cascade)
+
+  unit_code String @db.VarChar(20)
+
+  /// Whole students the planner said still owed the unit.
+  from_named_picks Decimal @db.Decimal(10, 4)
+  /// Fractional shares from students spread across an elective pool holding the unit.
+  from_electives   Decimal @db.Decimal(10, 4)
+  /// Students from the manual new-intake figure, which is not discounted by retention.
+  from_new_intake  Decimal @db.Decimal(10, 4)
+  /// The final fractional projection, kept alongside the rounded figure so the rounding stays inspectable.
+  projected        Decimal @db.Decimal(10, 4)
+  /// The whole-student figure to staff against.
+  headcount        Int
+
+  @@id([run_id, unit_code])
+  @@index([unit_code])
+  @@map("estimation_run_units")
+}
