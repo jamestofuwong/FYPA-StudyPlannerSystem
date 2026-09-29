@@ -1,10 +1,10 @@
-import { getPlanners } from '@student/lib/planners'
 import Nav from '@student/components/Nav/Nav'
 import PlannerGrid from '@student/components/PlannerGrid/PlannerGrid'
+import { getCachedPlanners } from '@student/lib/catalog'
 import styles from './page.module.css'
 
 export default async function BrowsePage() {
-  const planners = await getPlanners()
+  const planners = await getCachedPlanners()
 
   return (
     <div className={styles.page}>

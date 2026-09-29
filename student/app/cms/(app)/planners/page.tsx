@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { revalidatePath } from 'next/cache'
+import { revalidateStudentCache, STUDENT_CACHE } from '@/lib/catalog'
 import { redirect } from 'next/navigation'
 import { prisma } from '@/lib/prisma'
 import styles from './page.module.css'
@@ -8,6 +9,7 @@ async function deletePlanner(id: string) {
   'use server'
   await prisma.plannerTemplate.delete({ where: { id } })
   revalidatePath('/cms/planners')
+  revalidateStudentCache(STUDENT_CACHE.planners)
 }
 
 const MONTH_NAMES: Record<number, string> = {

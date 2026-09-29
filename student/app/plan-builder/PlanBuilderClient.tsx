@@ -1,13 +1,13 @@
 'use client'
 
 import { useState, useRef, useEffect, useMemo } from 'react'
-import { MOCK_UNITS } from '@student/lib/data/units-mock'
 import { generatePlan } from '@student/lib/plan-builder'
 import type { GenerationResult } from '@student/lib/plan-builder'
 import type { PlannerCourseOption } from '@student/lib/planners'
-import type { SemesterBlock } from '@student/lib/types'
+import type { SemesterBlock, UnitListing } from '@student/lib/types'
 import SemesterTable from '@student/components/SemesterTable/SemesterTable'
 import ElectivePool from '@student/components/ElectivePool/ElectivePool'
+import CategoryLegend, { categoriesInPlan } from '@student/components/CategoryLegend/CategoryLegend'
 import styles from './PlanBuilderClient.module.css'
 
 const YEAR_WORDS = ['One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight']
@@ -30,6 +30,25 @@ function matchesCourse(code: string, courseName: string): boolean {
   const prefixes = prefixesForCourse(courseName)
   if (prefixes.length === 0) return false
   return prefixes.some(p => code.startsWith(p))
+}
+
+function missingPrerequisites(prerequisites: string[] | undefined, completed: Set<string>): string[] {
+  return (prerequisites ?? [])
+    .map(code => code.trim().toUpperCase())
+    .filter(code => code && !completed.has(code))
+}
+
+/** Units listed in earlier semesters only. A prerequisite in this semester does not unlock another unit here. */
+function completedCodesBefore(
+  semesters: { unitCodes: string[] }[],
+  index: number,
+): Set<string> {
+  return new Set(
+    semesters
+      .slice(0, index)
+      .flatMap(semester => semester.unitCodes)
+      .map(code => code.trim().toUpperCase()),
+  )
 }
 
 const MONTH_OPTIONS = [
@@ -137,11 +156,13 @@ function groupByYear(semesters: SemesterBlock[]): Map<number, SemesterBlock[]> {
   return map
 }
 
-interface Props {
+export default function PlanBuilderClient({
+  plannerOptions,
+  units,
+}: {
   plannerOptions: PlannerCourseOption[]
-}
-
-export default function PlanBuilderClient({ plannerOptions }: Props) {
+  units: UnitListing[]
+}) {
   // ── Config ──
   const [selectedCourseId, setSelectedCourseId]   = useState('')
   const [selectedPlannerId, setSelectedPlannerId] = useState('')
@@ -219,9 +240,16 @@ export default function PlanBuilderClient({ plannerOptions }: Props) {
 
   // ── Unit management ──
   function addUnitToSem(semId: string, code: string) {
-    setCompletedSemesters(prev =>
-      prev.map(s => s.id === semId ? { ...s, unitCodes: [...s.unitCodes, code] } : s)
-    )
+    setCompletedSemesters(prev => {
+      const index = prev.findIndex(semester => semester.id === semId)
+      if (index < 0) return prev
+      const unit = units.find(item => item.code === code)
+      const missing = missingPrerequisites(unit?.prerequisites, completedCodesBefore(prev, index))
+      if (missing.length > 0) return prev
+      return prev.map(semester =>
+        semester.id === semId ? { ...semester, unitCodes: [...semester.unitCodes, code] } : semester,
+      )
+    })
   }
 
   function removeUnitFromSem(semId: string, code: string) {
@@ -240,14 +268,45 @@ export default function PlanBuilderClient({ plannerOptions }: Props) {
     setAddQuery('')
   }
 
+  function renderAddOption(unit: UnitListing, semesterId: string, semesterIndex: number) {
+    const missing = missingPrerequisites(
+      unit.prerequisites,
+      completedCodesBefore(completedSemesters, semesterIndex),
+    )
+    const blocked = missing.length > 0
+    return (
+      <li
+        key={unit.code}
+        className={blocked ? `${styles.addDropdownItem} ${styles.addDropdownItemBlocked}` : styles.addDropdownItem}
+        role="option"
+        aria-selected={false}
+        aria-disabled={blocked}
+        onMouseDown={event => {
+          event.preventDefault()
+          if (!blocked) addUnitToSem(semesterId, unit.code)
+        }}
+      >
+        <span className={styles.addDropdownCode}>{unit.code}</span>
+        <span className={styles.addDropdownName}>
+          <span className={styles.addDropdownNameText}>{unit.name}</span>
+        </span>
+        {blocked ? (
+          <span className={styles.addDropdownNeed}>Pre-requisites: {missing.join(', ')}</span>
+        ) : (
+          <span className={styles.addDropdownPlus} aria-hidden="true">+</span>
+        )}
+      </li>
+    )
+  }
+
   const filteredAddUnits = useMemo(() => {
     const q = addQuery.trim().toLowerCase()
-    return MOCK_UNITS.filter(u => {
+    return units.filter(u => {
       if (allCompletedCodes.includes(u.code)) return false
       if (q && !u.code.toLowerCase().includes(q) && !u.name.toLowerCase().includes(q)) return false
       return true
     })
-  }, [allCompletedCodes, addQuery])
+  }, [allCompletedCodes, addQuery, units])
 
   const courseName = selectedCourse?.courseName ?? ''
   const suggestedAddUnits = useMemo(
@@ -278,7 +337,7 @@ export default function PlanBuilderClient({ plannerOptions }: Props) {
     try {
       const res = await generatePlan({
         config: { plannerId: selectedPlannerId, intakeYear, intakeMonth },
-        completedUnitCodes: allCompletedCodes,
+        completedSemesters: completedSemesters.map(semester => ({ unitCodes: semester.unitCodes })),
       })
       if (!res) {
         setError('No plan template found for the selected configuration. Try a different course or major.')
@@ -425,7 +484,7 @@ export default function PlanBuilderClient({ plannerOptions }: Props) {
                 )}
 
                 {sem.unitCodes.map(code => {
-                  const unit = MOCK_UNITS.find(u => u.code === code)
+                  const unit = units.find(u => u.code === code)
                   return (
                     <div key={code} className={styles.completedRow}>
                       <span className={styles.completedRowCode}>{code}</span>
@@ -459,50 +518,17 @@ export default function PlanBuilderClient({ plannerOptions }: Props) {
                         {courseName && suggestedAddUnits.length > 0 && otherAddUnits.length > 0 && (
                           <li className={styles.addDropdownGroup} role="presentation">Suggested for your course</li>
                         )}
-                        {(courseName ? suggestedAddUnits : filteredAddUnits).map(u => (
-                          <li
-                            key={u.code}
-                            className={styles.addDropdownItem}
-                            role="option"
-                            aria-selected={false}
-                            onMouseDown={e => { e.preventDefault(); addUnitToSem(sem.id, u.code) }}
-                          >
-                            <span className={styles.addDropdownCode}>{u.code}</span>
-                            <span className={styles.addDropdownName}>{u.name}</span>
-                            <span className={styles.addDropdownPlus} aria-hidden="true">+</span>
-                          </li>
-                        ))}
+                        {(courseName ? suggestedAddUnits : filteredAddUnits).map(unit =>
+                          renderAddOption(unit, sem.id, idx),
+                        )}
                         {otherAddUnits.length > 0 && suggestedAddUnits.length > 0 && (
                           <>
                             <li className={styles.addDropdownGroup} role="presentation">Other units</li>
-                            {otherAddUnits.map(u => (
-                              <li
-                                key={u.code}
-                                className={styles.addDropdownItem}
-                                role="option"
-                                aria-selected={false}
-                                onMouseDown={e => { e.preventDefault(); addUnitToSem(sem.id, u.code) }}
-                              >
-                                <span className={styles.addDropdownCode}>{u.code}</span>
-                                <span className={styles.addDropdownName}>{u.name}</span>
-                                <span className={styles.addDropdownPlus} aria-hidden="true">+</span>
-                              </li>
-                            ))}
+                            {otherAddUnits.map(unit => renderAddOption(unit, sem.id, idx))}
                           </>
                         )}
-                        {otherAddUnits.length > 0 && suggestedAddUnits.length === 0 && otherAddUnits.map(u => (
-                          <li
-                            key={u.code}
-                            className={styles.addDropdownItem}
-                            role="option"
-                            aria-selected={false}
-                            onMouseDown={e => { e.preventDefault(); addUnitToSem(sem.id, u.code) }}
-                          >
-                            <span className={styles.addDropdownCode}>{u.code}</span>
-                            <span className={styles.addDropdownName}>{u.name}</span>
-                            <span className={styles.addDropdownPlus} aria-hidden="true">+</span>
-                          </li>
-                        ))}
+                        {otherAddUnits.length > 0 && suggestedAddUnits.length === 0 &&
+                          otherAddUnits.map(unit => renderAddOption(unit, sem.id, idx))}
                       </ul>
                     ) : (
                       <div className={styles.addDropdownEmpty}>
@@ -635,6 +661,9 @@ export default function PlanBuilderClient({ plannerOptions }: Props) {
                   This plan is based on the standard course template. Unit availability and sequencing
                   may vary. Consult your academic advisor before finalising your plan.
                 </p>
+              </div>
+              <div className={styles.sideCard}>
+                <CategoryLegend variant="sidebar" categories={categoriesInPlan(result.semesters)} />
               </div>
             </aside>
           </div>
