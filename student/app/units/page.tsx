@@ -14,7 +14,7 @@ export default async function UnitsPage() {
         <div className={styles.hero}>
           <h1 className={styles.heroTitle}>Units</h1>
           <p className={styles.heroSubtitle}>
-            TESTING Browse all available units. Search by code or name, or filter by year level.
+            TESTING 2 Browse all available units. Search by code or name, or filter by year level.
           </p>
         </div>
 
