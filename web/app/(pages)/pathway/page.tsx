@@ -678,8 +678,27 @@ export default function PathwayPage() {
                 (code: string) => !placedCodes.has(normaliseCode(code))
               );
 
+              // Synthesize a virtual container for active break milestones so validatePlan credits their credit points
+              const validationSemesters = breakMilestones.length > 0
+                ? [
+                    ...semesters,
+                    {
+                      year: 99,
+                      semester: 1 as const,
+                      units: breakMilestones.map((bm: any) => ({
+                        code: bm.unitCode,
+                        name: bm.unitName,
+                        category: 'wil',
+                        creditPoints: bm.creditPoints ?? 25,
+                        offeringSemesters: [1, 2] as (1 | 2)[],
+                        requisiteGroups: [],
+                      })),
+                    },
+                  ]
+                : semesters;
+
               const validation = validatePlan({
-                semesters,
+                semesters: validationSemesters,
                 completedUnitCodes: validatedCompletedCodes,
                 concededPassUnitCodes: validatedConcededPassCodes,
                 intakeSemester: planIntakeSemester,
@@ -745,6 +764,12 @@ export default function PathwayPage() {
                 }
 
                 if (w.kind === 'short_term_only') {
+                  continue;
+                }
+
+                // Suppress WIL shortfall if breakMilestones already fulfills the required credit points
+                const totalWilMilestoneCp = breakMilestones.reduce((sum: number, bm: any) => sum + (bm.creditPoints ?? 0), 0);
+                if (w.kind === 'requirement_shortfall' && w.category === 'wil' && totalWilMilestoneCp >= w.need) {
                   continue;
                 }
 
@@ -1022,7 +1047,7 @@ export default function PathwayPage() {
                             ],
                           ],
 
-                          headStyles: { fillColor: [224, 224, 224], textColor: [0, 0, 0], fontStyle: 'bold', fontSize: 9 },
+                          headStyles: { fillColor: [191, 191, 191], textColor: [0, 0, 0], fontSize: 9 },
                           bodyStyles: { fillColor: getCategoryColor('wil'), textColor: [0, 0, 0], fontSize: 9 },
                           theme: 'plain',
                           columnStyles: {
@@ -1502,6 +1527,20 @@ export default function PathwayPage() {
                 {warnings.length > 0 && (
                   <ul className={styles.warningList}>
                     {warnings.map((w, wIdx) => {
+                      // Suppress warnings for units already scheduled in break milestones
+                      const milestoneCodes = new Set(breakMilestones.map((bm: any) => normaliseCode(bm.unitCode)));
+                      if ('unitCode' in w && milestoneCodes.has(normaliseCode(w.unitCode))) return null;
+                      if ('unitCodes' in w && (w.unitCodes as string[]).some((c) => milestoneCodes.has(normaliseCode(c)))) return null;
+
+                      // Suppress short_term_only warnings (break milestones handle them)
+                      if (w.kind === 'short_term_only') return null;
+
+                      // Suppress WIL shortfall if break milestones provide the required credit points
+                      const totalWilMilestoneCp = breakMilestones.reduce((sum: number, bm: any) => sum + (bm.creditPoints ?? 0), 0);
+                      if (w.kind === 'requirement_shortfall' && w.category === 'wil' && totalWilMilestoneCp >= w.need) {
+                        return null;
+                      }
+
                       const message = describeWarning(w, DEFAULT_SCHEDULER_CONFIG.maxSemesters, planIntakeSemester);
                       if (!message || w.kind === 'over_capacity') return null;
 
@@ -1593,12 +1632,15 @@ export default function PathwayPage() {
                   );
 
                   // Filter out MPU units and optional break units (which are displayed in their own table below)
+                  const milestoneCodes = new Set(breakMilestones.map((bm: any) => normaliseCode(bm.unitCode)));
                   const nonMpuUnschedulable = (customPlan.unschedulableUnits ?? []).filter(
                     (u: any) =>
                       u.category !== 'mpu' &&
                       !u.code?.toUpperCase().startsWith('MPU') &&
-                      !breakTermCodes.has(normaliseCode(u.code))
+                      !breakTermCodes.has(normaliseCode(u.code)) &&
+                      !milestoneCodes.has(normaliseCode(u.code))
                   );
+
 
                   if (!isPlanEdited && messages.length === 0 && nonMpuUnschedulable.length > 0) {
                     return (
