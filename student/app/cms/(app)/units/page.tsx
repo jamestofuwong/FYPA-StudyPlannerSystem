@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { revalidatePath } from 'next/cache'
+import { revalidateStudentCache, STUDENT_CACHE } from '@/lib/catalog'
 import { notFound } from 'next/navigation'
 import { prisma } from '@/lib/prisma'
 import styles from './page.module.css'
@@ -8,6 +9,8 @@ async function deleteUnit(id: string) {
   'use server'
   await prisma.unit.delete({ where: { id } })
   revalidatePath('/cms/units')
+  revalidateStudentCache(STUDENT_CACHE.units)
+  revalidateStudentCache(STUDENT_CACHE.planners)
 }
 
 export default async function UnitsPage() {

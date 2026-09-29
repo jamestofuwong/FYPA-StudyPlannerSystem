@@ -1,10 +1,38 @@
 'use client';
 
+import { useState, useEffect, useCallback } from 'react';
 import styles from './TopBar.module.css';
-import { usePortalAuth } from '../providers/PortalAuthContext';
+
+type SessionStatus = 'idle' | 'login-pending' | 'logged-in' | 'login-error';
 
 export default function TopBar() {
-  const { isLoggedIn, isPortalLoading, openLoginModal, resetSession } = usePortalAuth();
+  const [sessionStatus, setSessionStatus] = useState<SessionStatus>('idle');
+
+  // Poll portal session status every 2s
+  const fetchStatus = useCallback(async () => {
+    try {
+      const res = await fetch('/api/scraper/status');
+      if (!res.ok) return;
+      const data = await res.json();
+      setSessionStatus(data.sessionStatus ?? 'idle');
+    } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => {
+    void fetchStatus();
+    const id = setInterval(fetchStatus, 2000);
+    return () => clearInterval(id);
+  }, [fetchStatus]);
+
+  const handleLogin = async () => {
+    await fetch('/api/scraper/login', { method: 'POST' });
+    setSessionStatus('login-pending');
+  };
+
+  const handleLogout = async () => {
+    await fetch('/api/scraper/logout', { method: 'POST' });
+    setSessionStatus('idle');
+  };
 
   return (
     <header className={styles.topbar}>
@@ -16,19 +44,19 @@ export default function TopBar() {
 
       <div className={styles.spacer} />
 
-      {/* User info */}
+      {/* Portal session */}
       <div className={styles.userInfo}>
-        {isPortalLoading ? (
+        {sessionStatus === 'login-pending' ? (
           <div className={styles.loadingBtn}>
             <div className={styles.spinner} />
             Logging in...
           </div>
-        ) : isLoggedIn ? (
-          <button className={styles.logoutBtn} onClick={resetSession}>
+        ) : sessionStatus === 'logged-in' ? (
+          <button className={styles.logoutBtn} onClick={handleLogout}>
             Log out
           </button>
         ) : (
-          <button className={styles.loginBtn} onClick={openLoginModal}>
+          <button className={styles.loginBtn} onClick={handleLogin}>
             Log in to Portal
           </button>
         )}

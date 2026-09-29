@@ -13,6 +13,7 @@ import UpdateBanner from '../../components/layout/UpdateBanner';
 import { ToastProvider } from '../../components/providers/ToastProvider';
 import { PortalAuthProvider } from '../../components/providers/PortalAuthContext';
 import { ScraperProvider } from '../../components/providers/ScraperContext';
+import { StudentSessionProvider } from '../../components/providers/StudentSessionContext';
 import { panelFromPathname, panelToPath, type PanelId } from '../../lib/navigation';
 
 export default function AppLayout({ children }: { children: ReactNode }) {
@@ -113,6 +114,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   return (
     <PortalAuthProvider>
       <ScraperProvider>
+      <StudentSessionProvider>
       <ToastProvider>
         <div className={styles.shell}>
           <TopBar />
@@ -201,6 +203,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           />
         )}
       </ToastProvider>
+      </StudentSessionProvider>
       </ScraperProvider>
     </PortalAuthProvider>
   );

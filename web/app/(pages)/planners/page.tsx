@@ -54,7 +54,7 @@ export default function PlannersPage() {
         category: tu.category,
         prerequisite: null,
         requisites: tu.unit?.requisite_groups || null,
-        offered_in: tu.unit?.offered_in,
+        offered_in: tu.unit?.offerings?.map((o: any) => o.offered_in) ?? [],
         year_level: tu.year_level,
         semester: tu.semester,
       });
@@ -91,7 +91,7 @@ export default function PlannersPage() {
         category: 'elective',
         prerequisite: null,
         requisites: egu.unit?.requisite_groups || null,
-        offered_in: egu.unit?.offered_in,
+        offered_in: egu.unit?.offerings?.map((o: any) => o.offered_in) ?? [],
         year_level: null,
         semester: null,
       }))
@@ -125,7 +125,7 @@ export default function PlannersPage() {
         category: 'elective',
         prerequisite: null,
         requisites: mu.unit?.requisite_groups || null,
-        offered_in: mu.unit?.offered_in,
+        offered_in: mu.unit?.offerings?.map((o: any) => o.offered_in) ?? [],
         year_level: null,
         semester: null,
         minor_name: minor.name,

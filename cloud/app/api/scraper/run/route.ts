@@ -243,7 +243,6 @@ export async function POST(req: NextRequest) {
               const filename = `${entry.unitCode}-${entry.year}-${(entry.intakeMonth ?? '').replace(/\s+/g, '-')}.pdf`;
               const form = new FormData();
               form.append('pdf', new Blob([pdfBuffer], { type: 'application/pdf' }), filename);
-              form.append('use_llm', 'false');
 
               const parseRes = await fetch(`${parserUrl}/parse`, { method: 'POST', body: form });
               if (!parseRes.ok) {

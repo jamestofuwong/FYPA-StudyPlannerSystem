@@ -26,57 +26,13 @@ type PlannerApiResponse = {
   report: PlannerImportReport;
 };
 
-function formatConfidenceScore(score: number | undefined): string {
-  if (typeof score !== 'number' || !Number.isFinite(score)) return '-';
-  return `${Math.round(score * 100)}%`;
-}
-
-function getConfidenceLevel(score: number | undefined): string {
-  if (typeof score !== 'number' || !Number.isFinite(score)) return 'Unknown';
-  if (score >= 0.9) return 'High';
-  if (score >= 0.75) return 'Medium';
-  return 'Low';
-}
-
-function getConfidenceTone(score: number | undefined): keyof typeof styles {
-  if (typeof score !== 'number' || !Number.isFinite(score)) return 'signalNeutral';
-  if (score >= 0.9) return 'signalStrong';
-  if (score >= 0.75) return 'signalModerate';
-  return 'signalCritical';
-}
-
-function getResultStatusLabels(score: number | undefined, hasValidationIssues: boolean) {
-  if (typeof score !== 'number' || !Number.isFinite(score)) {
-    return hasValidationIssues
-      ? {
-          importStatus: 'Extraction Completed with Issues',
-          validationStatus: 'Review Required',
-          reviewDecision: 'Manual Review Required',
-          tone: 'signalCritical' as keyof typeof styles,
-        }
-      : {
-          importStatus: 'Extraction Completed',
-          validationStatus: 'Passed',
-          reviewDecision: 'Ready',
-          tone: 'signalStrong' as keyof typeof styles,
-        };
-  }
-
-  if (typeof score === 'number' && Number.isFinite(score) && score < 0.75) {
+function getResultStatusLabels(hasValidationIssues: boolean) {
+  if (hasValidationIssues) {
     return {
       importStatus: 'Extraction Completed with Issues',
       validationStatus: 'Review Required',
       reviewDecision: 'Manual Review Required',
       tone: 'signalCritical' as keyof typeof styles,
-    };
-  }
-
-  if (score < 0.9) {
-    return {
-      importStatus: 'Extraction Completed',
-      validationStatus: 'Review Recommended',
-      reviewDecision: 'Check Before Saving',
-      tone: 'signalModerate' as keyof typeof styles,
     };
   }
 
@@ -92,23 +48,36 @@ function flattenUnits(planner: PlannerImportPlanner | null): PlannerImportUnit[]
   if (!planner) return [];
   const c = planner.categories ?? {};
   const eg = c.elective_groups ?? {};
+  
+  const toArray = (o: unknown): number[] => {
+    if (Array.isArray(o)) return o.map(Number).filter(Boolean);
+    if (typeof o === 'number') return [o];
+    return [];
+  };
+
+  const mapUnit = (u: PlannerImportUnit, cat?: string) => ({
+    ...u,
+    category: (cat ?? u.category ?? 'core') as any,
+    offered_in: toArray(u.offered_in),
+  });
+
   const minorUnits = (c.minor_groups ?? []).flatMap(minor => 
     minor.units.map(unit => ({ 
-      ...unit, 
-      category: 'elective',
+      ...mapUnit(unit, 'elective'), 
       minor_name: minor.minor_name,
       year_level: null, 
       semester: null 
     }))
   );
+
   return [
-    ...(c.core_units ?? []),
-    ...(c.major_units ?? []),
-    ...(c.mpu_group ?? []),
-    ...(eg.prescribed_elective ?? []),
-    ...(eg.elective ?? []),
+    ...(c.core_units ?? []).map(u => mapUnit(u, 'core')),
+    ...(c.major_units ?? []).map(u => mapUnit(u, 'major_core')),
+    ...(c.mpu_group ?? []).map(u => mapUnit(u, 'mpu')),
+    ...(eg.prescribed_elective ?? []).map(u => mapUnit(u, 'prescribed_elective')),
+    ...(eg.elective ?? []).map(u => mapUnit(u, 'elective')),
     ...minorUnits,
-    ...(c.wil_group ?? []),
+    ...(c.wil_group ?? []).map(u => mapUnit(u, 'wil')),
   ];
 }
 
@@ -117,13 +86,6 @@ function extractReqUnitCodes(prereq: string): string[] {
   const matches = prereq.match(/[A-Z]{2,4}\d{4,5}/g);
   return matches || [];
 }
-
-type OllamaStatus = {
-  ollama: 'unknown' | 'available' | 'unavailable';
-  model: 'unknown' | 'ready' | 'pulling' | 'unavailable';
-  pullProgress: number;
-  pullError: string | null;
-};
 
 export default function ImportPage() {
   const router = useRouter();
@@ -140,7 +102,6 @@ export default function ImportPage() {
   const [isResizing, setIsResizing] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isParsing, setIsParsing] = useState(false);
-  const [useLlm, setUseLlm] = useState(false);
   const [planner, setPlanner] = useState<PlannerImportPlanner | null>(null);
   
   const [plannerInfo, setPlannerInfo] = useState({course: '',major: '',intake: '',intakeYear: '',});
@@ -156,9 +117,6 @@ export default function ImportPage() {
   
   const [report, setReport] = useState<PlannerImportReport | null>(null);
   const [history, setHistory] = useState<ImportHistoryItem[]>([]);
-  const [ollamaStatus, setOllamaStatus] = useState<OllamaStatus>({
-    ollama: 'unknown', model: 'unknown', pullProgress: 0, pullError: null,
-  });
 
   // Revoke old object URL when file changes or component unmounts
   useEffect(() => {
@@ -167,42 +125,13 @@ export default function ImportPage() {
     };
   }, [pdfUrl]);
 
-  // Poll Ollama status on mount and while model is pulling
-  useEffect(() => {
-    let interval: ReturnType<typeof setInterval>;
-
-    const check = async () => {
-      const res = await fetch('/api/ollama/status').catch(() => null);
-      if (!res?.ok) return;
-      const data = await res.json() as OllamaStatus;
-      setOllamaStatus(data);
-      if (data.model === 'ready' || (data.ollama === 'unavailable' && data.model !== 'pulling')) {
-        clearInterval(interval);
-      }
-    };
-
-    check();
-    interval = setInterval(check, 3000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const modelReady = ollamaStatus.model === 'ready';
-  const effectiveUseLlm = useLlm && modelReady;
   const pdfViewerUrl = pdfUrl ? `${pdfUrl}#toolbar=0&navpanes=0` : '';
 
   const summary = useMemo(() => {
     if (!planner || !report) return null;
 
     const validationIssues = Array.from(new Set(report.validation_issues));
-    const confidenceScore = report.confidence?.overall_score;
-    const hasConfidenceScore = typeof confidenceScore === 'number' && Number.isFinite(confidenceScore);
-    const resultLabels = getResultStatusLabels(confidenceScore, validationIssues.length > 0);
-    const llmReviewLabel = !report.llm_used
-      ? 'Disabled'
-      : report.llm_applied
-        ? 'Enabled (Applied)'
-        : 'Enabled (No Changes)';
-
+    const resultLabels = getResultStatusLabels(validationIssues.length > 0);
     return {
       course: planner.course_information.course || 'Unknown course',
       major: planner.course_information.major || 'Unknown major',
@@ -214,16 +143,10 @@ export default function ImportPage() {
       wil: planner.course_information.requirements.wil,
       statusLabel: resultLabels.importStatus,
       statusTone: resultLabels.tone,
-      hasConfidenceScore,
-      confidenceScoreLabel: formatConfidenceScore(confidenceScore),
-      confidenceLevelLabel: getConfidenceLevel(confidenceScore),
-      confidenceTone: getConfidenceTone(confidenceScore),
       validationStatusLabel: resultLabels.validationStatus,
       validationStatusTone: resultLabels.tone,
       reviewDecisionLabel: resultLabels.reviewDecision,
       reviewDecisionTone: resultLabels.tone,
-      llmReviewLabel,
-      llmReviewTone: !report.llm_used ? 'signalNeutral' : report.llm_applied ? 'signalModerate' : 'signalStrong',
       missingCount: validationIssues.length,
       validationIssues,
     };
@@ -252,29 +175,54 @@ export default function ImportPage() {
   }
 }, [planner]);
 
-  // Parse intake month from string
-  function parseIntakeMonth(intake: string): number {
-    const lower = intake?.toLowerCase().trim() || '';
-    
-    const firstMonth = lower.split('/')[0].trim();
-    
-    const months: Record<string, number> = {
-      january: 1, jan: 1,
-      february: 2, feb: 2,
-      march: 3, mar: 3,
-      april: 4, apr: 4,
-      may: 5,
-      june: 6, jun: 6,
-      july: 7, jul: 7,
-      august: 8, aug: 8,
-      september: 9, sep: 9, sept: 9,
-      october: 10, oct: 10,
-      november: 11, nov: 11,
-      december: 12, dec: 12,
-    };
-    
-    return months[firstMonth] || 0;
+ // Parse intake month from string
+function parseIntakeMonth(intake: string): number {
+  const lower = intake?.toLowerCase().trim() || '';
+  if (!lower) return 2; // Default fallback to Feb/Mar (Semester 1)
+
+  // 1. Explicit keyword checks
+  if (lower.includes('feb') || lower.includes('mar')) {
+    return 2; // February/March intake = Sem 1
   }
+  if (lower.includes('aug') || lower.includes('sep')) {
+    return 8; // August/September intake = Sem 2
+  }
+  if (lower.includes('summer')) {
+    return 11; // November/Summer term
+  }
+  if (lower.includes('winter')) {
+    return 6; // June/Winter term
+  }
+
+  // 2. Check for semester keywords
+  const semMatch = lower.match(/semester\s*(\d)/i);
+  if (semMatch) {
+    const sem = parseInt(semMatch[1], 10);
+    return sem === 1 ? 2 : sem === 2 ? 8 : 2;
+  }
+
+  // 3. Fallback month dictionary search
+  const months: Array<[string, number]> = [
+    ['january', 1], ['jan', 1],
+    ['february', 2], ['feb', 2],
+    ['march', 3], ['mar', 3],
+    ['april', 4], ['apr', 4],
+    ['may', 5],
+    ['june', 6], ['jun', 6],
+    ['july', 7], ['jul', 7],
+    ['august', 8], ['aug', 8],
+    ['september', 9], ['sept', 9], ['sep', 9],
+    ['october', 10], ['oct', 10],
+    ['november', 11], ['nov', 11],
+    ['december', 12], ['dec', 12],
+  ];
+
+  for (const [key, val] of months) {
+    if (lower.includes(key)) return val;
+  }
+
+  return 0;
+}
 
   // Group units by year and semester
   const yearGroups = useMemo(() => {
@@ -373,7 +321,7 @@ export default function ImportPage() {
   const handleUnitEdit = (
     id: string, 
     field: keyof PlannerImportUnit, 
-    value: string | number | null
+    value: string | number | number[] | null
   ) => {
     setEditableUnits(prev => 
       prev.map(unit => 
@@ -389,7 +337,7 @@ export default function ImportPage() {
       unit_name: '',
       category: type === 'core' ? 'core' : 'elective',
       prerequisite: null,
-      offered_in: null,
+      offered_in: semester ? [semester] : [],
       year_level: year || null,
       semester: semester || null,
       minor_name: minorName || null,
@@ -462,17 +410,6 @@ export default function ImportPage() {
     window.addEventListener('pointerup', handlePointerUp, { once: true });
   };
 
-  const handleDownloadModel = async () => {
-    const res = await fetch('/api/ollama/pull', { method: 'POST' }).catch(() => null);
-    if (!res?.ok) {
-      showToast('Failed to start model download.', 'error');
-      return;
-    }
-    const data = await res.json();
-    showToast(data.message ?? 'Downloading AI model...', 'info');
-    setOllamaStatus((prev) => ({ ...prev, model: 'pulling', pullProgress: 0 }));
-  };
-
   const handleParse = async () => {
     if (!selectedFile) {
       showToast('Choose a PDF before parsing.', 'error');
@@ -483,7 +420,6 @@ export default function ImportPage() {
     try {
       const formData = new FormData();
       formData.append('file', selectedFile);
-      formData.append('useLlm', String(effectiveUseLlm));
 
       const response = await fetch('/api/planners', {
         method: 'POST',
@@ -497,12 +433,8 @@ export default function ImportPage() {
 
       const payload = data as PlannerApiResponse;
       const importStatus = getResultStatusLabels(
-        payload.report.confidence?.overall_score,
         payload.report.validation_issues.length > 0
       ).importStatus;
-      const scoreDetail = payload.report.confidence?.overall_score !== undefined
-        ? `${formatConfidenceScore(payload.report.confidence.overall_score)} score`
-        : 'AI review disabled';
 
       setPlanner(payload.planner);
       setReport(payload.report);
@@ -511,7 +443,7 @@ export default function ImportPage() {
           id: `${selectedFile.name}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           name: selectedFile.name,
           status: importStatus,
-          detail: `${payload.report.unit_counts.core_units ?? 0} core units | ${payload.report.unit_counts.major_units ?? 0} major units | ${scoreDetail}`,
+          detail: `${payload.report.unit_counts.core_units ?? 0} core units | ${payload.report.unit_counts.major_units ?? 0} major units | Deterministic extraction`,
           cls: payload.report.validation_issues.length ? 'badgeOrange' : 'badgeGreen',
         },
         ...prev.slice(0, 4),
@@ -845,18 +777,6 @@ export default function ImportPage() {
                   readOnly
                 />
               </div>
-              <div className={styles.formGroup}>
-                <label className={styles.formLabel}>AI Review</label>
-                <select
-                  className={styles.formSelect}
-                  value={useLlm ? 'enabled' : 'disabled'}
-                  onChange={(e) => setUseLlm(e.target.value === 'enabled')}
-                  disabled={!modelReady}
-                >
-                  <option value="enabled">Enabled</option>
-                  <option value="disabled">Disabled</option>
-                </select>
-              </div>
             </div>
 
             <div className={styles.btnGroup} style={{ marginBottom: 12 }}>
@@ -864,32 +784,6 @@ export default function ImportPage() {
                 {isParsing && !planner ? 'Uploading...' : 'Upload'}
               </button>
             </div>
-
-            {/* Ollama / model status notices */}
-            {ollamaStatus.ollama === 'unavailable' && (
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 10, padding: '6px 10px', background: 'rgba(244,135,113,0.08)', border: '1px solid rgba(244,135,113,0.25)', borderRadius: 4 }}>
-                AI model server is not running — AI Review is disabled.
-              </div>
-            )}
-            {ollamaStatus.ollama === 'available' && ollamaStatus.model === 'unavailable' && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, padding: '6px 10px', background: 'rgba(206,153,62,0.08)', border: '1px solid rgba(206,153,62,0.25)', borderRadius: 4 }}>
-                <span style={{ fontSize: 11, color: 'var(--text-muted)', flex: 1 }}>AI model not downloaded — required for LLM review (~1.1 GB).</span>
-                <button className={styles.btnSecondary} style={{ fontSize: 11, padding: '3px 10px' }} onClick={handleDownloadModel}>Download</button>
-              </div>
-            )}
-            {ollamaStatus.model === 'pulling' && (
-              <div style={{ marginBottom: 10, padding: '6px 10px', background: 'rgba(86,156,214,0.08)', border: '1px solid rgba(86,156,214,0.25)', borderRadius: 4 }}>
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Downloading AI model... {ollamaStatus.pullProgress}%</div>
-                <div style={{ height: 4, background: 'var(--surface-bg)', borderRadius: 2, overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: `${ollamaStatus.pullProgress}%`, background: 'var(--accent-blue)', transition: 'width 0.3s' }} />
-                </div>
-              </div>
-            )}
-            {ollamaStatus.pullError && (
-              <div style={{ fontSize: 11, color: 'var(--accent-red)', marginBottom: 10 }}>
-                Download failed: {ollamaStatus.pullError}
-              </div>
-            )}
           </div>
 
           {/* Parsing spinner */}
@@ -932,29 +826,6 @@ export default function ImportPage() {
                       <span className={styles.resultLabel}>Review Decision</span>
                       <span className={`${styles.badge} ${styles.pillBadge} ${styles[summary.reviewDecisionTone as keyof typeof styles]}`}>
                         {summary.reviewDecisionLabel}
-                      </span>
-                    </div>
-                  </div>
-
-                  {summary.hasConfidenceScore && (
-                    <div className={`${styles.confidencePanel} ${styles[summary.confidenceTone]}`}>
-                      <div className={styles.confidenceHeader}>
-                        <span className={styles.resultGroupTitle}>Confidence</span>
-                        <span className={`${styles.badge} ${styles.pillBadge} ${styles[summary.confidenceTone]}`}>
-                          {summary.confidenceLevelLabel}
-                        </span>
-                      </div>
-                      <div className={styles.confidenceScore}>{summary.confidenceScoreLabel}</div>
-                      <div className={styles.confidenceCaption}>Extraction Reliability</div>
-                    </div>
-                  )}
-
-                  <div className={styles.resultGroup}>
-                    <div className={styles.resultGroupTitle}>AI Review</div>
-                    <div className={styles.resultBadgeRow}>
-                      <span className={styles.resultLabel}>LLM Review</span>
-                      <span className={`${styles.badge} ${styles.pillBadge} ${styles[summary.llmReviewTone as keyof typeof styles]}`}>
-                        {summary.llmReviewLabel}
                       </span>
                     </div>
                   </div>

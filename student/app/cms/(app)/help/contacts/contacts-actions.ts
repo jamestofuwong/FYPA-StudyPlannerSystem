@@ -1,5 +1,6 @@
 'use server'
 import { revalidatePath } from 'next/cache'
+import { revalidateStudentCache, STUDENT_CACHE } from '@/lib/catalog'
 import { prisma } from '@/lib/prisma'
 import { GeneralEnquiriesSchema, ItHelpDeskSchema } from '@/lib/cms/schemas'
 import { getSession } from '@/lib/cms/session'
@@ -28,6 +29,7 @@ export async function saveGeneralEnquiries(formData: FormData) {
   console.info(`[CMS] contacts:general_enquiries saved by=${session?.email ?? 'unknown'}`)
   revalidatePath('/help')
   revalidatePath('/cms/help/contacts')
+  revalidateStudentCache(STUDENT_CACHE.help)
 }
 
 export async function saveItHelpDesk(formData: FormData) {
@@ -56,4 +58,5 @@ export async function saveItHelpDesk(formData: FormData) {
   console.info(`[CMS] contacts:it_help_desk saved by=${session?.email ?? 'unknown'}`)
   revalidatePath('/help')
   revalidatePath('/cms/help/contacts')
+  revalidateStudentCache(STUDENT_CACHE.help)
 }

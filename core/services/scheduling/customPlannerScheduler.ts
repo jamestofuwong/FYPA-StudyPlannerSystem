@@ -2,16 +2,34 @@
 // students who need more time than the standard template.
 //
 // Rules:
-//  - Max 4 standard units per semester
-//  - Max 1 MPU unit per semester
+//  - Standard and MPU units per semester are capped (SchedulerConfig)
 //  - Requisites must be satisfied before/alongside a unit
-//  - Units are only placed in semesters they are offered in
-//    (offered_in = 1 | 2; null = available any semester)
+//  - A Conceded Pass counts as taken and earns credit, but cannot satisfy a
+//    prerequisite or corequisite (Swinburne Conceded Pass form, May 2023)
+//  - Units are only placed in semesters they are offered in, per their
+//    unit_offerings rows (calendar terms). A unit with no rows is
+//    available in any semester.
+//  - Only semesters 1 and 2 are scheduled. A unit offered solely in summer
+//    or winter is reported, never placed in an ordinary semester.
+//
+// Pure function: no database, clock or globals. Anything it cannot place is
+// returned in unschedulableUnits with a warning saying why.
 
-const MAX_STANDARD_PER_SEM = 4;
-const MAX_MPU_PER_SEM = 1;
-const MAX_SEMESTERS = 20;
-const CREDIT_POINTS_PER_UNIT = 12.5;
+export interface SchedulerConfig {
+  maxStandardPerSemester: number;
+  maxMpuPerSemester: number;
+  maxSemesters: number;
+  creditPointsPerUnit: number;
+  /** Per-semester overrides of maxStandardPerSemester, keyed "year-semester", e.g. "3-1": 5 */
+  perSemesterOverrides?: Record<string, number>;
+}
+
+export const DEFAULT_SCHEDULER_CONFIG: SchedulerConfig = {
+  maxStandardPerSemester: 4,
+  maxMpuPerSemester: 1,
+  maxSemesters: 20,
+  creditPointsPerUnit: 12.5,
+};
 
 export interface RequisiteCondition {
   type: 'unit' | 'credit_points';
@@ -25,7 +43,30 @@ export interface SchedulableUnit {
   code: string;
   name: string;
   category: string;
+  /** The placeable subset of the unit's offering terms. Empty means no restriction. */
   offeringSemesters: (1 | 2)[];
+  /**
+   * Raw offering terms from unit_offerings, 1-4. Empty means no data recorded.
+   * Optional: where a caller omits it, offeringSemesters is the full list.
+   */
+  allOfferingTerms?: number[];
+  /**
+   * Only some schemas record credit points per unit. When absent, callers that
+   * need a value derive one from the planner's category requirement.
+   */
+  creditPoints?: number;
+  /**
+   * Set on units the planner never named, added to fill an empty elective slot.
+   * Carried through untouched, so the UI can mark the choice as a recommendation
+   * rather than a requirement.
+   */
+  recommended?: boolean;
+  /**
+   * Set on units an advisor added from the catalogue rather than the planner.
+   * Recorded as an elective, since the planner says nothing about a unit it
+   * never listed. Carried through so the UI can mark the row.
+   */
+  outsidePlanner?: boolean;
 
   requisiteGroups: RequisiteCondition[][];
 }
@@ -34,6 +75,10 @@ export interface ScheduledUnit {
   code: string;
   name: string;
   category: string;
+  /** Carried from the pool. See SchedulableUnit.recommended. */
+  recommended?: boolean;
+  /** Carried from the pool. See SchedulableUnit.outsidePlanner. */
+  outsidePlanner?: boolean;
 }
 
 export interface CustomSemesterBucket {
@@ -42,48 +87,342 @@ export interface CustomSemesterBucket {
   units: ScheduledUnit[];
 }
 
+export type PlanWarning =
+  | {
+      kind: 'requisite_violation';
+      unitCode: string;
+      /** Prerequisite or corequisite codes that were never satisfied. */
+      missing: string[];
+      /** The subset of missing held only as a Conceded Pass. */
+      concededPass?: string[];
+      /** Antirequisites already taken, which rule this unit out. */
+      conflictsWith?: string[];
+      /** Credit points required that the plan can never reach. */
+      creditPointsNeeded?: number;
+    }
+  /**
+   * placedIn is set only by validatePlan, for a unit an advisor put in a term it
+   * does not run. buildCustomPlan leaves it unset, because a unit it could not
+   * place sits in no slot at all. The two read very differently to an advisor.
+   */
+  | {
+      kind: 'not_offered';
+      unitCode: string;
+      offeringTerms: number[];
+      placedIn?: { year: number; semester: 1 | 2 };
+    }
+  | { kind: 'no_offering_data'; unitCode: string }
+  | { kind: 'short_term_only'; unitCode: string; offeringTerms: number[] }
+  | { kind: 'budget_exhausted'; unitCodes: string[] }
+  /** limit is the student's normal load: the configured cap, never above the standard full-time load. */
+  | { kind: 'over_capacity'; year: number; semester: 1 | 2; count: number; limit: number }
+  /** Required units absent from both the plan and the completed list. Validation only. */
+  | { kind: 'compulsory_missing'; unitCodes: string[] }
+  /** A category short of the credit points the planner requires. Validation only. */
+  | { kind: 'requirement_shortfall'; category: string; have: number; need: number }
+  /** A category past the credit points the planner requires. Validation only. */
+  | { kind: 'requirement_excess'; category: string; have: number; need: number }
+  /** The same unit sitting in more than one semester. Validation only. */
+  | { kind: 'duplicate_placement'; unitCode: string; positions: { year: number; semester: 1 | 2 }[] };
+
 export interface CustomPlanResult {
   semesters: CustomSemesterBucket[];
+  /** Kept for compatibility. warnings says why each one was not placed. */
   unschedulableUnits: ScheduledUnit[];
+  warnings: PlanWarning[];
+}
+
+type ConfigValidation =
+  | { ok: true; config: Partial<SchedulerConfig> }
+  | { ok: false; error: string };
+
+const CONFIG_KEYS: ReadonlySet<string> = new Set([
+  'maxStandardPerSemester',
+  'maxMpuPerSemester',
+  'maxSemesters',
+  'creditPointsPerUnit',
+  'perSemesterOverrides',
+]);
+
+const MAX_SEMESTERS_LIMIT = 40;
+const OVERRIDE_KEY = /^\d{1,4}-[12]$/;
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isPositiveInteger(value: unknown): value is number {
+  return Number.isInteger(value) && (value as number) >= 1;
+}
+
+/**
+ * Checks an untrusted config (e.g. from a request body). Unknown fields are
+ * rejected rather than ignored so a typo cannot silently fall back to a default.
+ */
+export function validateSchedulerConfig(input: unknown): ConfigValidation {
+  if (input === undefined || input === null) return { ok: true, config: {} };
+  if (!isPlainObject(input)) return { ok: false, error: 'config must be an object' };
+
+  for (const key of Object.keys(input)) {
+    if (!CONFIG_KEYS.has(key)) return { ok: false, error: `config.${key} is not a recognised field` };
+  }
+
+  const { maxStandardPerSemester, maxMpuPerSemester, maxSemesters, creditPointsPerUnit, perSemesterOverrides } = input;
+
+  if (maxStandardPerSemester !== undefined && !isPositiveInteger(maxStandardPerSemester)) {
+    return { ok: false, error: 'config.maxStandardPerSemester must be a positive integer' };
+  }
+  if (maxMpuPerSemester !== undefined && !isPositiveInteger(maxMpuPerSemester)) {
+    return { ok: false, error: 'config.maxMpuPerSemester must be a positive integer' };
+  }
+  if (
+    maxSemesters !== undefined &&
+    !(isPositiveInteger(maxSemesters) && maxSemesters <= MAX_SEMESTERS_LIMIT)
+  ) {
+    return { ok: false, error: `config.maxSemesters must be an integer from 1 to ${MAX_SEMESTERS_LIMIT}` };
+  }
+  if (
+    creditPointsPerUnit !== undefined &&
+    !(typeof creditPointsPerUnit === 'number' && Number.isFinite(creditPointsPerUnit) && creditPointsPerUnit > 0)
+  ) {
+    return { ok: false, error: 'config.creditPointsPerUnit must be a number greater than 0' };
+  }
+  if (perSemesterOverrides !== undefined) {
+    if (!isPlainObject(perSemesterOverrides)) {
+      return { ok: false, error: 'config.perSemesterOverrides must be an object' };
+    }
+    for (const [key, value] of Object.entries(perSemesterOverrides)) {
+      if (!OVERRIDE_KEY.test(key)) {
+        return { ok: false, error: `config.perSemesterOverrides key "${key}" must be "year-semester", e.g. "3-1"` };
+      }
+      if (!isPositiveInteger(value)) {
+        return { ok: false, error: `config.perSemesterOverrides["${key}"] must be a positive integer` };
+      }
+    }
+  }
+
+  return { ok: true, config: input as Partial<SchedulerConfig> };
+}
+
+export function normaliseCode(code: string): string {
+  return code.trim().toUpperCase();
+}
+
+export function offeringTermsOf(unit: SchedulableUnit): number[] {
+  const terms = unit.allOfferingTerms ?? unit.offeringSemesters;
+  return [...new Set(terms)].sort((a, b) => a - b);
+}
+
+/**
+ * Slot semesters count from the student's intake, offering terms are calendar
+ * terms. For a September intake the two are swapped. Terms 3 and 4 are never
+ * scheduled, so they never reach this.
+ */
+export function calendarTermFor(slotSemester: 1 | 2, intakeSemester: 1 | 2): 1 | 2 {
+  return intakeSemester === 1 ? slotSemester : (slotSemester === 1 ? 2 : 1);
+}
+
+export function resolveSchedulerConfig(config: Partial<SchedulerConfig> = {}): SchedulerConfig {
+  return { ...DEFAULT_SCHEDULER_CONFIG, ...config };
+}
+
+/** The student's normal load: the configured cap, never above the standard full-time load. */
+export function normalLoadFor(cfg: SchedulerConfig): number {
+  return Math.min(cfg.maxStandardPerSemester, DEFAULT_SCHEDULER_CONFIG.maxStandardPerSemester);
+}
+
+/** How many standard units may be placed in one slot, after any per-semester override. */
+export function standardLimitFor(cfg: SchedulerConfig, year: number, slotSemester: 1 | 2): number {
+  return cfg.perSemesterOverrides?.[`${year}-${slotSemester}`] ?? cfg.maxStandardPerSemester;
+}
+
+/** Empty offeringSemesters means unrestricted, so an unknown offering never blocks placement. */
+export function isOfferedIn(unit: SchedulableUnit, calendarTerm: 1 | 2): boolean {
+  return unit.offeringSemesters.length === 0 || unit.offeringSemesters.includes(calendarTerm);
+}
+
+// Raw shape of a unit as returned by Prisma's nested planner/minor includes
+// (see web/app/api/custom-planner/route.ts and plannerRepository.getPlannerById()),
+// covering only the fields mapUnitToSchedulable reads.
+export interface RawSchedulableUnitRow {
+  unit_code: string;
+  unit_name: string;
+  offerings: Array<{ offered_in: number }>;
+  requisite_groups: Array<{
+    conditions: Array<{
+      type: string;
+      requisite_type: string | null;
+      credit_points: unknown;
+      unit: { unit_code: string } | null;
+    }>;
+  }>;
+}
+
+// Converts a raw DB unit row into the SchedulableUnit shape canTake() understands. Extracted from what used
+// to be a private toSchedulable() inline in web/app/api/custom-planner/route.ts, so both that route and
+// core/services/classEstimation/eligibilityEngine.ts share one mapping instead of two copies drifting apart.
+export function mapUnitToSchedulable(unit: RawSchedulableUnitRow, category: string): SchedulableUnit {
+  const requisiteGroups: RequisiteCondition[][] = (unit.requisite_groups ?? [])
+    .map((group) =>
+      group.conditions
+        .map((c): RequisiteCondition | null => {
+          if (c.type === 'credit_points') {
+            return { type: 'credit_points', creditPoints: Number(c.credit_points) };
+          }
+          if (c.type === 'unit' && c.unit !== null) {
+            return {
+              type: 'unit',
+              requisiteType: (c.requisite_type ?? 'prerequisite') as 'prerequisite' | 'corequisite' | 'antirequisite',
+              unitCode: c.unit.unit_code.toUpperCase(),
+            };
+          }
+          return null;
+        })
+        .filter((c): c is RequisiteCondition => c !== null)
+    )
+    .filter((g) => g.length > 0);
+
+  const allOfferingTerms = [...new Set((unit.offerings ?? []).map((o) => o.offered_in))].sort((a, b) => a - b);
+  // Only semesters 1 and 2 are placeable. A unit offered solely in summer (3) or winter (4) keeps its raw
+  // terms here so callers can tell "offered, but not in a term we schedule" from "no offering data at all",
+  // which otherwise both arrive as an empty offeringSemesters and read as unrestricted.
+  const offeringSemesters = allOfferingTerms.filter((term): term is 1 | 2 => term === 1 || term === 2);
+
+  return { code: unit.unit_code, name: unit.unit_name, category, offeringSemesters, allOfferingTerms, requisiteGroups };
 }
 
 export function buildCustomPlan(
   remainingUnits: SchedulableUnit[],
   completedUnitCodes: string[],
   startYear: number,
-  startSemester: 1 | 2
+  startSemester: 1 | 2,
+  intakeSemester: 1 | 2 = 1,
+  concededPassUnitCodes: string[] = [],
+  config: Partial<SchedulerConfig> = DEFAULT_SCHEDULER_CONFIG
 ): CustomPlanResult {
-  const completed = new Set(completedUnitCodes.map((c) => c.trim().toUpperCase()));
-  const pool: SchedulableUnit[] = [...remainingUnits];
+  const cfg: SchedulerConfig = resolveSchedulerConfig(config);
+  const normalLoad = normalLoadFor(cfg);
+
+  const concededPass = new Set(concededPassUnitCodes.map(normaliseCode));
+  // A Conceded Pass is still a completed unit, even if the caller only listed it once
+  const completed = new Set([...completedUnitCodes.map(normaliseCode), ...concededPass]);
+
+  const warnings: PlanWarning[] = [];
+  const unplaceable = new Set<SchedulableUnit>();
+  const pool: SchedulableUnit[] = [];
+  for (const unit of remainingUnits) {
+    const terms = offeringTermsOf(unit);
+    if (terms.length > 0 && unit.offeringSemesters.length === 0) {
+      unplaceable.add(unit);
+      warnings.push({ kind: 'short_term_only', unitCode: unit.code, offeringTerms: terms });
+    } else {
+      pool.push(unit);
+    }
+  }
+
   const semesters: CustomSemesterBucket[] = [];
 
   let currentYear = startYear;
   let currentSem: 1 | 2 = startSemester;
   let consecutiveIdle = 0;
+  let blocked = false;
+  let previousSemesterPlacedPartA = false;
 
-  for (let i = 0; i < MAX_SEMESTERS && pool.length > 0; i++) {
-    const totalCredits = completed.size * CREDIT_POINTS_PER_UNIT;
-
+  for (let i = 0; i < cfg.maxSemesters && pool.length > 0; i++) {
+    const totalCredits = completed.size * cfg.creditPointsPerUnit;
+    const calendarTerm = calendarTermFor(currentSem, intakeSemester);
+    const standardLimit = standardLimitFor(cfg, currentYear, currentSem);
 
     const bucketCodes = new Set<string>();
     const toPlace: SchedulableUnit[] = [];
 
+    // Repeats so a corequisite placed later in the pass can unlock an earlier unit
     let changed = true;
     while (changed) {
       changed = false;
-      for (const unit of pool) {
-        if (bucketCodes.has(unit.code.toUpperCase())) continue;
+
+      // Calculate how many semesters of study remain based on remaining units
+      const remainingSemestersEstimate = Math.ceil(pool.length / normalLoad);
+      const isFinalYearStretch = remainingSemestersEstimate <= 2;
+
+      // Sort candidate units by academic priority:
+      // #0 FYP Consecutive Chain: Project B immediately after Project A
+      // #1 Bottleneck Depth: Units that unlock other units in the remaining pool
+      // #2 Offering Scarcity: Units offered in only 1 semester over both sem units
+      // #3 Category Urgency: Core / Major Core over electives
+      const prioritizedPool = [...pool].sort((a, b) => {
+        // Priority 0: If Project A was placed in the last semester, Project B gets Top priority
+        if (previousSemesterPlacedPartA) {
+          const aIsB = isProjectPartB(a) ? 1 : 0;
+          const bIsB = isProjectPartB(b) ? 1 : 0;
+          if (aIsB !== bIsB) return bIsB - aIsB;
+        }
+
+        // Priority 0.5: FYP Final Year Anchor
+        if (isFinalYearStretch) {
+          const aIsA = isProjectPartA(a) ? 1 : 0;
+          const bIsA = isProjectPartA(b) ? 1 : 0;
+          if (aIsA !== bIsA) return bIsA - aIsA;
+        }
+
+        // Priority 1: Does unit A unlock other units in the pool
+        const aIsPrereqFor = pool.filter((other) =>
+          other.requisiteGroups.some((g) => g.some((c) => c.unitCode === a.code))
+        ).length;
+        const bIsPrereqFor = pool.filter((other) =>
+          other.requisiteGroups.some((g) => g.some((c) => c.unitCode === b.code))
+        ).length;
+        if (bIsPrereqFor !== aIsPrereqFor) return bIsPrereqFor - aIsPrereqFor;
+
+        // Priority 2: Offering Scarcity (Offered in 1 semester > Offered in both)
+        const aScarcity = a.offeringSemesters.length === 1 ? 1 : 0;
+        const bScarcity = b.offeringSemesters.length === 1 ? 1 : 0;
+        if (bScarcity !== aScarcity) return bScarcity - aScarcity;
+
+        // Priority 3: Compulsory degree units over electives
+        const categoryWeight = (cat: string) =>
+          cat === 'core' || cat === 'major_core' ? 2 : cat === 'double_major' ? 1 : 0;
+        return categoryWeight(b.category) - categoryWeight(a.category);
+      });
+
+      for (const unit of prioritizedPool) {
+        if (bucketCodes.has(normaliseCode(unit.code))) continue;
+
+        // do not place Project A early unless there are literally no other placeable units
+        if (isProjectPartA(unit) && !isFinalYearStretch) {
+          const otherPlaceableExists = prioritizedPool.some(
+            (other) =>
+              other.code !== unit.code &&
+              !bucketCodes.has(normaliseCode(other.code)) &&
+              canTake(other, calendarTerm, completed, concededPass, bucketCodes, totalCredits)
+          );
+          if (otherPlaceableExists) {
+            continue;
+          }
+        }
+
+        if (isProjectPartA(unit)) {
+          const matchingB = findMatchingProjectB(unit, pool);
+          if (matchingB) {
+            const nextSem: 1 | 2 = currentSem === 1 ? 2 : 1;
+            const nextCalendarTerm = calendarTermFor(nextSem, intakeSemester);
+            // If Project B is not offered in next term, postpone Project A to prevent a broken sequence
+            if (!isOfferedIn(matchingB, nextCalendarTerm)) {
+              continue;
+            }
+          }
+        }
 
         const isMpu = unit.category === 'mpu';
         const standardCount = toPlace.filter((u) => u.category !== 'mpu').length;
         const mpuCount = toPlace.filter((u) => u.category === 'mpu').length;
 
-        if (isMpu && mpuCount >= MAX_MPU_PER_SEM) continue;
-        if (!isMpu && standardCount >= MAX_STANDARD_PER_SEM) continue;
+        if (isMpu && mpuCount >= cfg.maxMpuPerSemester) continue;
+        if (!isMpu && standardCount >= standardLimit) continue;
 
-        if (canTake(unit, currentSem, completed, bucketCodes, totalCredits)) {
+        if (canTake(unit, calendarTerm, completed, concededPass, bucketCodes, totalCredits)) {
           toPlace.push(unit);
-          bucketCodes.add(unit.code.toUpperCase());
+          bucketCodes.add(normaliseCode(unit.code));
           changed = true;
         }
       }
@@ -91,18 +430,86 @@ export function buildCustomPlan(
 
     if (toPlace.length === 0) {
       consecutiveIdle++;
-      if (consecutiveIdle >= 2) break;
+      previousSemesterPlacedPartA = false;
+      if (consecutiveIdle >= 2) {
+        blocked = true;
+        break;
+      }
     } else {
       consecutiveIdle = 0;
       for (const unit of toPlace) {
-        completed.add(unit.code.toUpperCase());
+        completed.add(normaliseCode(unit.code));
         pool.splice(pool.indexOf(unit), 1);
+        if (offeringTermsOf(unit).length === 0) {
+          warnings.push({ kind: 'no_offering_data', unitCode: unit.code });
+        }
       }
       semesters.push({
         year: currentYear,
         semester: currentSem,
-        units: toPlace.map((u) => ({ code: u.code, name: u.name, category: u.category })),
+        units: toPlace.map((u) => toScheduled(u)),
       });
+
+      previousSemesterPlacedPartA = toPlace.some((u) => isProjectPartA(u));
+
+      // Check: did this semester place Project B (the graduation capstone)
+      const placedProjectB = toPlace.some((u) => isProjectPartB(u));
+
+      if (placedProjectB) {
+        // Project B marks the final semester of the degree
+        // If this semester still has open slots, and the remaining pool has electives
+        // that couldn't run in this term, convert them into flexible placeholder slots
+        const standardPlaced = toPlace.filter((u) => u.category !== 'mpu').length;
+        const availableSlots = standardLimit - standardPlaced;
+
+        if (availableSlots > 0 && pool.length > 0) {
+          const electivesToConvert: SchedulableUnit[] = [];
+
+          // Find recommended electives in the pool that couldn't be scheduled
+          for (let pIdx = pool.length - 1; pIdx >= 0; pIdx--) {
+            const candidate = pool[pIdx];
+            if (candidate.category === 'elective' || candidate.category === 'prescribed_elective') {
+              electivesToConvert.push(candidate);
+              pool.splice(pIdx, 1);
+              if (electivesToConvert.length >= availableSlots) break;
+            }
+          }
+
+          // Backfill each into the Project B semester as an elective placeholder
+          const currentSemesterBucket = semesters[semesters.length - 1];
+          for (const _ of electivesToConvert) {
+            const placeholderUnit: ScheduledUnit = {
+              code: 'ELECTIVE',
+              name: 'Elective Slot (To be selected)',
+              category: 'elective',
+              recommended: false,
+            };
+            currentSemesterBucket.units.push(placeholderUnit);
+            completed.add('ELECTIVE');
+          }
+        }
+
+        // If only recommended electives remain in the pool, drop them so the plan ends at Project B
+        const remainingOnlyElectives = pool.every(
+          (u) => u.category === 'elective' || u.category === 'prescribed_elective'
+        );
+        if (remainingOnlyElectives) {
+          pool.length = 0;
+          break; // Conclude degree at Project B
+        }
+      }
+
+
+      const standardPlaced = toPlace.filter((u) => u.category !== 'mpu').length;
+      if (standardPlaced > normalLoad) {
+        warnings.push({
+          kind: 'over_capacity',
+          year: currentYear,
+          semester: currentSem,
+          count: standardPlaced,
+          limit: normalLoad,
+        });
+      }
     }
 
     if (currentSem === 1) {
@@ -113,48 +520,377 @@ export function buildCustomPlan(
     }
   }
 
+  if (pool.length > 0) {
+    const pooledCodes = new Set(pool.map((u) => normaliseCode(u.code)));
+    const outOfTime: string[] = [];
+    for (const unit of pool) {
+      unplaceable.add(unit);
+      const reason = explainUnplaced(unit, blocked, completed, concededPass, pooledCodes, cfg.creditPointsPerUnit);
+      if (reason) warnings.push(reason);
+      else outOfTime.push(unit.code);
+    }
+    if (outOfTime.length > 0) {
+      warnings.push({ kind: 'budget_exhausted', unitCodes: outOfTime });
+    }
+  }
+
   return {
     semesters,
-    unschedulableUnits: pool.map((u) => ({ code: u.code, name: u.name, category: u.category })),
+    unschedulableUnits: remainingUnits
+      .filter((u) => unplaceable.has(u))
+      .map((u) => toScheduled(u)),
+    warnings,
   };
 }
 
-function canTake(
+/** Keeps the optional flags out of the result unless they are set. */
+function toScheduled(unit: SchedulableUnit): ScheduledUnit {
+  return {
+    code: unit.code,
+    name: unit.name,
+    category: unit.category,
+    ...(unit.recommended ? { recommended: true } : {}),
+    ...(unit.outsidePlanner ? { outsidePlanner: true } : {}),
+  };
+}
+
+export function canTake(
   unit: SchedulableUnit,
-  sem: 1 | 2,
+  calendarTerm: 1 | 2,
   completed: Set<string>,
+  concededPass: Set<string>,
   bucketCodes: Set<string>,
   totalCredits: number
 ): boolean {
-  if (unit.offeringSemesters.length > 0 && !unit.offeringSemesters.includes(sem)) return false;
+  if (!isOfferedIn(unit, calendarTerm)) return false;
   if (unit.requisiteGroups.length === 0) return true;
   return unit.requisiteGroups.some((group) =>
-    group.every((condition) => isConditionSatisfied(condition, completed, bucketCodes, totalCredits))
+    group.every((condition) =>
+      isConditionSatisfied(condition, completed, concededPass, bucketCodes, totalCredits)
+    )
   );
 }
 
-function isConditionSatisfied(
+export function isConditionSatisfied(
   condition: RequisiteCondition,
   completed: Set<string>,
+  concededPass: Set<string>,
   bucketCodes: Set<string>,
   totalCredits: number
 ): boolean {
+  // External qualification text does not block scheduling
+  if ((condition as any).type === 'external') {
+    return true;
+  }
+
   if (condition.type === 'credit_points') {
     return totalCredits >= (condition.creditPoints ?? 0);
   }
 
   if (condition.type === 'unit' && condition.unitCode) {
-    const code = condition.unitCode.toUpperCase();
+    const code = normaliseCode(condition.unitCode);
+    const satisfiesRequisite = completed.has(code) && !concededPass.has(code);
     switch (condition.requisiteType) {
       case 'corequisite':
-        return completed.has(code) || bucketCodes.has(code);
+        return satisfiesRequisite || bucketCodes.has(code);
       case 'antirequisite':
+        // A Conceded Pass still counts as having taken the unit
         return !completed.has(code) && !bucketCodes.has(code);
       case 'prerequisite':
       default:
-        return completed.has(code);
+        return satisfiesRequisite;
     }
   }
 
   return false;
+}
+
+type GroupAssessment = {
+  impossible: boolean;
+  missing: string[];
+  concededPass: string[];
+  conflictsWith: string[];
+  creditPointsNeeded?: number;
+  /** Codes still in the unplaced pool that this group waits on. */
+  waitingOn: string[];
+};
+
+/**
+ * Why a unit was left in the pool. Returns null when nothing rules it out,
+ * meaning it only ran out of semesters. A condition counts as impossible when
+ * nothing left in the plan could ever satisfy it: the required unit is neither
+ * completed nor pooled, is held only as a Conceded Pass, an antirequisite is
+ * already taken, or the reachable credit total falls short.
+ */
+function explainUnplaced(
+  unit: SchedulableUnit,
+  blocked: boolean,
+  completed: Set<string>,
+  concededPass: Set<string>,
+  pooledCodes: Set<string>,
+  creditPointsPerUnit: number
+): PlanWarning | null {
+  const ownCode = normaliseCode(unit.code);
+  const reachableCredits = (completed.size + pooledCodes.size - (pooledCodes.has(ownCode) ? 1 : 0)) * creditPointsPerUnit;
+
+  const assessments: GroupAssessment[] = unit.requisiteGroups.map((group) => {
+    const a: GroupAssessment = { impossible: false, missing: [], concededPass: [], conflictsWith: [], waitingOn: [] };
+    for (const condition of group) {
+      if (condition.type === 'credit_points') {
+        const needed = condition.creditPoints ?? 0;
+        if (reachableCredits < needed) {
+          a.impossible = true;
+          a.creditPointsNeeded = needed;
+        }
+        continue;
+      }
+        // Skip external string conditions
+      if ((condition as any).type === 'external') {
+        continue;
+      }
+
+      if (condition.type !== 'unit' || !condition.unitCode) {
+        a.impossible = true;
+        continue;
+      }
+      const code = normaliseCode(condition.unitCode);
+      if (condition.requisiteType === 'antirequisite') {
+        if (completed.has(code)) {
+          a.impossible = true;
+          a.conflictsWith.push(code);
+        }
+        continue;
+      }
+      if (concededPass.has(code)) {
+        a.impossible = true;
+        a.missing.push(code);
+        a.concededPass.push(code);
+      } else if (completed.has(code)) {
+        continue;
+      } else if (pooledCodes.has(code)) {
+        a.waitingOn.push(code);
+      } else {
+        a.impossible = true;
+        a.missing.push(code);
+      }
+    }
+    return a;
+  });
+
+  const toWarning = (a: GroupAssessment, missing: string[]): PlanWarning => ({
+    kind: 'requisite_violation',
+    unitCode: unit.code,
+    missing,
+    ...(a.concededPass.length > 0 ? { concededPass: a.concededPass } : {}),
+    ...(a.conflictsWith.length > 0 ? { conflictsWith: a.conflictsWith } : {}),
+    ...(a.creditPointsNeeded !== undefined ? { creditPointsNeeded: a.creditPointsNeeded } : {}),
+  });
+
+  const problemSize = (a: GroupAssessment) =>
+    a.missing.length + a.conflictsWith.length + (a.creditPointsNeeded !== undefined ? 1 : 0);
+
+  if (assessments.length > 0 && assessments.every((a) => a.impossible)) {
+    // Report the alternative closest to being satisfiable
+    const best = [...assessments].sort((x, y) => problemSize(x) - problemSize(y))[0];
+    return toWarning(best, best.missing);
+  }
+
+  if (!blocked) return null;
+
+  // Stalled, but only behind other unplaced units: name the ones it waits on
+  const waiting = assessments
+    .filter((a) => !a.impossible && a.waitingOn.length > 0)
+    .sort((x, y) => x.waitingOn.length - y.waitingOn.length)[0];
+  if (waiting) return toWarning(waiting, waiting.waitingOn);
+
+  return { kind: 'not_offered', unitCode: unit.code, offeringTerms: offeringTermsOf(unit) };
+}
+
+export interface NextStudyTerm {
+  startYear: number;
+  startSemester: 1 | 2;
+  enrolledTermsCount: number;
+}
+
+export function resolveNextStudyTerm(courseList: Array<{ term?: string; studyPeriod?: string }>): NextStudyTerm {
+  // Collect all distinct regular study terms
+  const terms = new Set<string>();
+
+  for (const item of courseList ?? []) {
+    const rawTerm = (item.term || item.studyPeriod || '').trim().toUpperCase();
+    // Only count regular semesters (_S1 or _S2)
+    if (rawTerm.includes('_S1') || rawTerm.includes('_S2')) {
+      terms.add(rawTerm);
+    }
+  }
+
+  const termsCount = terms.size;
+
+  if (termsCount === 0) {
+    return { startYear: 1, startSemester: 1, enrolledTermsCount: 0 };
+  }
+
+  // Each academic year has 2 standard semesters
+  const startYear = Math.floor(termsCount / 2) + 1;
+  const startSemester: 1 | 2 = termsCount % 2 === 0 ? 1 : 2;
+
+  return { startYear, startSemester, enrolledTermsCount: termsCount };
+}
+
+// Detects if a unit is Part A of a two-part capstone/FYP sequence (e.g., Project A)
+export function isProjectPartA(unit: SchedulableUnit): boolean {
+  const name = unit.name.trim().toLowerCase();
+  const code = unit.code.trim().toUpperCase();
+  return (
+    name.endsWith(' project a') ||
+    name.endsWith(' capstone a') ||
+    code.endsWith('A') && name.includes('project')
+  );
+}
+
+
+// Detects if a unit is Part B of a two-part capstone/FYP sequence (e.g., Project B)
+export function isProjectPartB(unit: SchedulableUnit): boolean {
+  const name = unit.name.trim().toLowerCase();
+  const code = unit.code.trim().toUpperCase();
+  return (
+    name.endsWith(' project b') ||
+    name.endsWith(' capstone b') ||
+    code.endsWith('B') && name.includes('project')
+  );
+}
+
+
+// Finds the corresponding Project B unit for a given Project A unit in the pool
+export function findMatchingProjectB(
+  unitA: SchedulableUnit,
+  pool: SchedulableUnit[]
+): SchedulableUnit | undefined {
+  if (!isProjectPartA(unitA)) return undefined;
+
+  // Look for Project B whose prerequisites link back to unitA or share the same base title
+  const baseTitle = unitA.name.replace(/ project a$/i, '').trim().toLowerCase();
+
+  return pool.find((u) => {
+    if (!isProjectPartB(u)) return false;
+    const uBaseTitle = u.name.replace(/ project b$/i, '').trim().toLowerCase();
+    const hasRequisiteLink = u.requisiteGroups.some((g) =>
+      g.some((c) => c.unitCode && normaliseCode(c.unitCode) === normaliseCode(unitA.code))
+    );
+    return hasRequisiteLink || baseTitle === uBaseTitle;
+  });
+}
+
+export interface BreakOption {
+  slotKey: string;
+  year: number;
+  termType: 'summer' | 'winter';
+  label: string;
+}
+
+export interface BreakMilestone {
+  unitCode: string;
+  unitName: string;
+  creditPoints: number;
+  // True if this WIL unit replaces standard elective credit
+  isElectiveReplacement: boolean;
+  breakTermName: string;
+  // Key of the semester right before which this break term banner appears
+  insertBeforeSlotKey: string | null;
+  // All valid break slots the advisor can move this unit to
+  availableBreakSlots: BreakOption[];
+}
+
+export function resolveWilPlacementMilestone(input: {
+  unscheduledUnits: SchedulableUnit[];
+  semesters: CustomSemesterBucket[];
+  hasCurrentEnrolledUnits: boolean;
+  intakeSemester: 1 | 2;
+  plannerWilCp: number | null;
+}): BreakMilestone | null {
+  const { unscheduledUnits, semesters, hasCurrentEnrolledUnits, intakeSemester, plannerWilCp } = input;
+
+  // Identify any unit categorized as 'wil'
+  const wilUnit = unscheduledUnits.find((u) => u.category === 'wil');
+  if (!wilUnit || semesters.length === 0) return null;
+
+  const isComputingWil = normaliseCode(wilUnit.code).includes('ICT20016');
+  
+  let creditPoints = wilUnit.creditPoints != null ? Number(wilUnit.creditPoints) : null;
+  if (creditPoints == null || creditPoints === 0) {
+    if (isComputingWil) {
+      creditPoints = 25;
+    } else if (plannerWilCp != null) {
+      creditPoints = Number(plannerWilCp);
+    } else {
+      creditPoints = 0;
+    }
+  }
+
+  const isElectiveReplacement = isComputingWil || creditPoints >= 25;
+  // Generate all valid break positions between existing semesters
+  const availableBreakSlots: BreakOption[] = semesters.map((sem, idx) => {
+    const calTerm = calendarTermFor(sem.semester, intakeSemester);
+    const isSummer = calTerm === 1;
+    const termType: 'summer' | 'winter' = isSummer ? 'summer' : 'winter';
+    const breakYear = idx > 0 ? semesters[idx - 1].year : sem.year;
+    const label = isSummer
+      ? `Year ${breakYear} Summer Break (Dec - Feb) [before Y${sem.year} S${sem.semester}]`
+      : `Year ${breakYear} Winter Break (June - July) [before Y${sem.year} S${sem.semester}]`;
+
+    return {
+      slotKey: `${sem.year}-${sem.semester}`,
+      year: breakYear,
+      termType,
+      label,
+    };
+  });
+
+  // Locate FYP A to establish default recommended slot
+  let projectASlot: { year: number; semester: 1 | 2 } | null = null;
+  for (const s of semesters) {
+    if (
+      s.units.some(
+        (u) =>
+          u.name?.toLowerCase().endsWith('project a') ||
+          u.name?.toLowerCase().endsWith('capstone a') ||
+          normaliseCode(u.code).endsWith('A')
+      )
+    ) {
+      projectASlot = { year: s.year, semester: s.semester };
+      break;
+    }
+  }
+
+  const totalSems = semesters.length;
+  let targetSlot: { year: number; semester: 1 | 2 } | null = null;
+
+  if (projectASlot) {
+    targetSlot = projectASlot;
+  } else if (totalSems === 2) {
+    targetSlot = hasCurrentEnrolledUnits ? semesters[0] : semesters[1];
+  } else if (totalSems === 1) {
+    targetSlot = hasCurrentEnrolledUnits ? semesters[0] : null;
+  }
+
+  const defaultSlotKey = targetSlot
+    ? `${targetSlot.year}-${targetSlot.semester}`
+    : availableBreakSlots[0]?.slotKey ?? null;
+
+  const matchedBreak = availableBreakSlots.find((b) => b.slotKey === defaultSlotKey);
+  const breakTermName = matchedBreak
+    ? matchedBreak.termType === 'summer'
+      ? `YEAR ${matchedBreak.year} · SUMMER BREAK (Dec - Feb)`
+      : `YEAR ${matchedBreak.year} · WINTER BREAK (June - July)`
+    : `YEAR ${semesters[0].year} · BREAK TERM`;
+
+  return {
+    unitCode: wilUnit.code,
+    unitName: wilUnit.name,
+    creditPoints,
+    isElectiveReplacement,
+    breakTermName,
+    insertBeforeSlotKey: defaultSlotKey,
+    availableBreakSlots,
+  };
 }

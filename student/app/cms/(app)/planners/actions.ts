@@ -1,5 +1,6 @@
 'use server'
 import { revalidatePath } from 'next/cache'
+import { revalidateStudentCache, STUDENT_CACHE } from '@/lib/catalog'
 import { redirect } from 'next/navigation'
 import { prisma } from '@/lib/prisma'
 import { PlannerSchema } from '@/lib/cms/schemas'
@@ -124,6 +125,7 @@ export async function savePlanner(data: PlannerFormData) {
   console.info(`[CMS] planner:${action} id=${plannerId} by=${session?.email ?? 'unknown'}`)
 
   revalidatePath('/cms/planners')
+  revalidateStudentCache(STUDENT_CACHE.planners)
   redirect(`/cms/planners/${plannerId}`)
 }
 
@@ -132,5 +134,6 @@ export async function deletePlanner(id: string) {
   await prisma.plannerTemplate.delete({ where: { id } })
   console.info(`[CMS] planner:deleted id=${id} by=${session?.email ?? 'unknown'}`)
   revalidatePath('/cms/planners')
+  revalidateStudentCache(STUDENT_CACHE.planners)
   redirect('/cms/planners')
 }

@@ -121,7 +121,8 @@ export async function POST(request: Request) {
     });
 
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
     console.error("Matching API Error:", error);
-    return NextResponse.json({ success: false, error: "Failed to run matching pipeline" }, { status: 500 });
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }

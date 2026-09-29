@@ -4,10 +4,6 @@ import { ollamaStore, OLLAMA_URL, OLLAMA_MODEL } from '../store';
 export const runtime = 'nodejs';
 
 async function runPull(): Promise<void> {
-  ollamaStore.model = 'pulling';
-  ollamaStore.pullProgress = 0;
-  ollamaStore.pullError = null;
-
   try {
     const res = await fetch(`${OLLAMA_URL}/api/pull`, {
       method: 'POST',
@@ -64,8 +60,14 @@ export async function POST() {
     return NextResponse.json({ started: false, message: 'Model already ready' });
   }
 
+  // Set flag synchronously before the first await so concurrent requests
+  // see 'pulling' immediately and are rejected by the guard above.
+  ollamaStore.model = 'pulling';
+  ollamaStore.pullProgress = 0;
+  ollamaStore.pullError = null;
+
   // Fire-and-forget — progress tracked in ollamaStore
-  runPull().catch(console.error);
+  runPull().catch((err) => console.error('[Ollama] runPull threw unexpectedly:', err));
 
   return NextResponse.json({ started: true, message: `Pulling ${OLLAMA_MODEL}...` });
 }

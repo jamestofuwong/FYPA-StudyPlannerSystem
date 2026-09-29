@@ -9,7 +9,7 @@ service so that:
 
 API
 ---
-POST /parse          multipart/form-data: pdf (file), use_llm (bool, default false)
+POST /parse          multipart/form-data: pdf (file)
 GET  /health         liveness probe
 """
 
@@ -50,7 +50,6 @@ def health() -> dict:
 @app.post("/parse")
 async def parse(
     pdf: UploadFile = File(..., description="PDF file to parse"),
-    use_llm: bool = Form(False, description="Enable Ollama LLM review pass"),
 ) -> JSONResponse:
     """
     Parse a study planner PDF and return structured JSON.
@@ -69,7 +68,7 @@ async def parse(
             tmp.write(contents)
             tmp_path = tmp.name
         try:
-            return process_planner_pdf(tmp_path, use_llm=use_llm)
+            return process_planner_pdf(tmp_path)
         finally:
             try:
                 os.unlink(tmp_path)

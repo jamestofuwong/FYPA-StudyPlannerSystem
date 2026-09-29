@@ -1,3 +1,4 @@
+import 'server-only'
 import { prisma } from './prisma'
 import type { PlannerSummary, PlannerDetail, SemesterBlock, Unit, UnitCategory } from './types'
 
@@ -50,13 +51,13 @@ export async function getPlanners(): Promise<PlannerSummary[]> {
     include: {
       course: true,
       major: true,
-      semesters: { include: { units: true } },
+      semesters: { select: { _count: { select: { units: true } } } },
     },
     orderBy: [{ intake_year: 'desc' }, { intake_month: 'asc' }],
   })
 
   return templates.map(t => {
-    const totalUnits = t.semesters.reduce((sum, s) => sum + s.units.length, 0)
+    const totalUnits = t.semesters.reduce((sum, s) => sum + s._count.units, 0)
     return {
       id: t.id,
       courseName: t.course.name,

@@ -1,5 +1,6 @@
 'use server'
 import { revalidatePath } from 'next/cache'
+import { revalidateStudentCache, STUDENT_CACHE } from '@/lib/catalog'
 import { prisma } from '@/lib/prisma'
 import { HodListSchema } from '@/lib/cms/schemas'
 import { getSession } from '@/lib/cms/session'
@@ -27,4 +28,5 @@ export async function saveHods(
   console.info(`[CMS] hod:saved count=${data.length} by=${session?.email ?? 'unknown'}`)
   revalidatePath('/help/heads-of-department')
   revalidatePath('/cms/help/hod')
+  revalidateStudentCache(STUDENT_CACHE.help)
 }

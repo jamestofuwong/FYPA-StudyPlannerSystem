@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import { getPlannerById } from '@student/lib/planners'
+import { getCachedPlanner } from '@student/lib/catalog'
 import type { SemesterBlock } from '@student/lib/types'
 import Nav from '@student/components/Nav/Nav'
 import SemesterTable from '@student/components/SemesterTable/SemesterTable'
@@ -52,13 +52,12 @@ function groupByYear(semesters: SemesterBlock[]): Map<number, SemesterBlock[]> {
 
 export default async function PlannerDetailPage({ params }: Props) {
   const { id } = await params
-  const planner = await getPlannerById(id)
+  const planner = await getCachedPlanner(id)
   if (!planner) notFound()
 
   const byYear = groupByYear(planner.semesters)
   const allUnits = planner.semesters.flatMap(s => s.units)
   const mpuCount = allUnits.filter(u => u.category === 'mpu').length
-  const hasPrescribedElectives = allUnits.some(u => u.category === 'prescribed_elective')
   const totalCp = planner.totalUnits * 12.5
   const { core, major, elective, wil } = planner.requirements
 
@@ -117,14 +116,6 @@ export default async function PlannerDetailPage({ params }: Props) {
                 ))}
               </div>
             ))}
-
-            {/* Prescribed elective footnote */}
-            {hasPrescribedElectives && (
-              <p className={styles.footnote}>
-                <span className={styles.footnoteMark}>*</span>
-                Prescribed elective — compulsory for your course and cannot be substituted with a free elective.
-              </p>
-            )}
 
             {/* Elective pool */}
             {planner.electivePool.length > 0 && (

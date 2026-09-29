@@ -6,6 +6,8 @@ import DashboardPage from '@/app/(pages)/dashboard/page';
 import { PortalAuthProvider, usePortalAuth } from '@/components/providers/PortalAuthContext';
 import { ScraperProvider } from '@/components/providers/ScraperContext';
 import { ToastProvider } from '@/components/providers/ToastProvider';
+import { StudentSessionProvider } from '@/components/providers/StudentSessionContext';
+import PathwayPage from '@/app/(pages)/pathway/page';
 
 process.on('unhandledRejection', (reason) => {
   console.warn('Unhandled Rejection at:', reason);
@@ -115,7 +117,7 @@ describe('Dashboard Ultimate Coverage Booster', () => {
       <ToastProvider>
         <PortalAuthProvider>
           <ScraperProvider>
-            <DashboardPage />
+            <StudentSessionProvider><DashboardPage /></StudentSessionProvider>
           </ScraperProvider>
         </PortalAuthProvider>
       </ToastProvider>
@@ -132,6 +134,8 @@ describe('Dashboard Ultimate Coverage Booster', () => {
     await waitFor(() => {
       expect(screen.getByText('Test Student')).toBeInTheDocument();
     }, { timeout: 3000 });
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Unit Plan' }));
 
     // TEST UI INTERACTION (Toggle Year)
     const yearHeader = screen.getByText(/YEAR 1/i);
@@ -193,7 +197,7 @@ describe('Dashboard Ultimate Coverage Booster', () => {
 
     render(
       <ToastProvider><PortalAuthProvider><ScraperProvider>
-        <DashboardPage />
+        <StudentSessionProvider><DashboardPage /><PathwayPage /></StudentSessionProvider>
       </ScraperProvider></PortalAuthProvider></ToastProvider>
     );
 
@@ -204,6 +208,8 @@ describe('Dashboard Ultimate Coverage Booster', () => {
 
     await waitFor(() => expect(screen.getByText(/Ranked Planners/i)).toBeInTheDocument(), { timeout: 3000 });
 
+    fireEvent.click(screen.getByRole('tab', { name: 'Extended Plan' }));
+
     // TEST CUSTOM PATHWAY GENERATION (Targets lines 1381-1510)
     const generateBtn = screen.getByText(/Generate Custom Pathway/i);
 
@@ -212,6 +218,8 @@ describe('Dashboard Ultimate Coverage Booster', () => {
     });
 
     await screen.findByText(/Extended Study Plan/i, {}, { timeout: 5000 });
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Minors' }));
 
     // TEST MINOR INJECTION (Targets logic around line 1450)
     const includeMinorBtn = screen.getByText(/\+ Include in Custom Plan/i);
@@ -243,7 +251,7 @@ describe('Dashboard Ultimate Coverage Booster', () => {
           ok: true,
           json: () => Promise.resolve({ 
             status: 'done', 
-            result: { studentName: 'Grad Student', courseList: mockUnits, enrollmentDate: '01/01/2024' } 
+            result: { studentName: 'Grad Student', courseList: mockUnits, enrollmentDate: '01/01/2024', creditsCompleted: 300, creditsRequired: 300 } 
           })
         });
       }
@@ -271,20 +279,23 @@ describe('Dashboard Ultimate Coverage Booster', () => {
 
     render(
       <ToastProvider><PortalAuthProvider><ScraperProvider>
-        <DashboardPage />
+        <StudentSessionProvider><DashboardPage /></StudentSessionProvider>
       </ScraperProvider></PortalAuthProvider></ToastProvider>
     );
 
     fireEvent.change(screen.getByPlaceholderText(/Student ID/i), { target: { value: 'GRAD-OK' } });
     fireEvent.click(screen.getByText('Search'));
 
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Graduation' })).toBeInTheDocument(), { timeout: 4000 });
+    fireEvent.click(screen.getByRole('tab', { name: 'Graduation' }));
+
     // Use a specific matcher to avoid conflict with unit codes
     await waitFor(() => {
-      expect(screen.getByText(/✅ ELIGIBLE/)).toBeInTheDocument();
+      expect(screen.getByText('ELIGIBLE')).toBeInTheDocument();
     }, { timeout: 4000 });
     
     // Verify the green color is applied (Targets Line 1460)
-    const eligibleLabel = screen.getByText(/✅ ELIGIBLE/);
+    const eligibleLabel = screen.getByText('ELIGIBLE');
     expect(eligibleLabel).toHaveStyle('color: var(--accent-green)');
   });
 
@@ -310,7 +321,7 @@ describe('Dashboard Ultimate Coverage Booster', () => {
       return Promise.resolve({ ok: true, json: () => Promise.resolve({ status: 'idle' }) });
     });
 
-    render(<ToastProvider><PortalAuthProvider><ScraperProvider><DashboardPage /></ScraperProvider></PortalAuthProvider></ToastProvider>);
+    render(<ToastProvider><PortalAuthProvider><ScraperProvider><StudentSessionProvider><DashboardPage /></StudentSessionProvider></ScraperProvider></PortalAuthProvider></ToastProvider>);
     
     fireEvent.click(screen.getByRole('button', { name: /^Import$/i }));
     
@@ -327,7 +338,7 @@ describe('Dashboard Ultimate Coverage Booster', () => {
   }, 30000);
 
   test('Dashboard: handles import panel intake inputs (Line 360+)', async () => {
-    render(<ToastProvider><PortalAuthProvider><ScraperProvider><DashboardPage /></ScraperProvider></PortalAuthProvider></ToastProvider>);
+    render(<ToastProvider><PortalAuthProvider><ScraperProvider><StudentSessionProvider><DashboardPage /></StudentSessionProvider></ScraperProvider></PortalAuthProvider></ToastProvider>);
     
     fireEvent.click(screen.getByRole('button', { name: /^Import$/i }));
     
@@ -388,7 +399,7 @@ describe('Dashboard Ultimate Coverage Booster', () => {
 
     render(
       <ToastProvider><PortalAuthProvider><ScraperProvider>
-        <DashboardPage />
+        <StudentSessionProvider><DashboardPage /></StudentSessionProvider>
       </ScraperProvider></PortalAuthProvider></ToastProvider>,
     );
 
@@ -470,7 +481,7 @@ describe('Dashboard Ultimate Coverage Booster', () => {
 
     render(
       <ToastProvider><PortalAuthProvider><ScraperProvider>
-        <DashboardPage />
+        <StudentSessionProvider><DashboardPage /></StudentSessionProvider>
       </ScraperProvider></PortalAuthProvider></ToastProvider>,
     );
 
@@ -516,7 +527,7 @@ describe('Dashboard Ultimate Coverage Booster', () => {
         <ToastProvider>
           <PortalAuthProvider>
             <ScraperProvider>
-              <DashboardPage />
+              <StudentSessionProvider><DashboardPage /></StudentSessionProvider>
             </ScraperProvider>
           </PortalAuthProvider>
         </ToastProvider>
@@ -586,7 +597,7 @@ describe('Dashboard Ultimate Coverage Booster', () => {
         <ToastProvider>
           <PortalAuthProvider>
             <ScraperProvider>
-              <DashboardPage />
+              <StudentSessionProvider><DashboardPage /></StudentSessionProvider>
             </ScraperProvider>
           </PortalAuthProvider>
         </ToastProvider>
@@ -636,16 +647,19 @@ describe('Dashboard Ultimate Coverage Booster', () => {
       return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
     });
 
-    render(<ToastProvider><PortalAuthProvider><ScraperProvider><DashboardPage /></ScraperProvider></PortalAuthProvider></ToastProvider>);
+    render(<ToastProvider><PortalAuthProvider><ScraperProvider><StudentSessionProvider><DashboardPage /></StudentSessionProvider></ScraperProvider></PortalAuthProvider></ToastProvider>);
 
     fireEvent.change(screen.getByPlaceholderText(/Student ID or name/i), { target: { value: 'TEST-001' } });
     fireEvent.click(screen.getByText('Search'));
 
-    await waitFor(() => expect(screen.getByText(/❌ INELIGIBLE/i)).toBeInTheDocument(), { timeout: 5000 });
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Graduation' })).toBeInTheDocument(), { timeout: 5000 });
+    fireEvent.click(screen.getByRole('tab', { name: 'Graduation' }));
+
+    await waitFor(() => expect(screen.getByText('INELIGIBLE')).toBeInTheDocument(), { timeout: 5000 });
   });
 
   test('Dashboard Graduation: Ineligible due to low credits (< 300 CP)', async () => {
-    // Only 1 completed core unit = 12.5 CP < 300 → INELIGIBLE, shows credits
+    // Portal creditsCompleted is 12.5 CP < 300 → INELIGIBLE, shows credits
     (global.fetch as jest.Mock).mockImplementation((url: string, opts?: any) => {
       if (url.includes('/api/scraper/start'))
         return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true }) });
@@ -656,6 +670,8 @@ describe('Dashboard Ultimate Coverage Booster', () => {
             studentName: 'Test Student',
             courseList: [{ courseId: 'CORE1', status: 'Complete' }],
             enrollmentDate: '01/02/2024',
+            creditsCompleted: 12.5,
+            creditsRequired: 300,
           },
         })});
       if (url.includes('/api/match'))
@@ -677,13 +693,16 @@ describe('Dashboard Ultimate Coverage Booster', () => {
       return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
     });
 
-    render(<ToastProvider><PortalAuthProvider><ScraperProvider><DashboardPage /></ScraperProvider></PortalAuthProvider></ToastProvider>);
+    render(<ToastProvider><PortalAuthProvider><ScraperProvider><StudentSessionProvider><DashboardPage /></StudentSessionProvider></ScraperProvider></PortalAuthProvider></ToastProvider>);
 
     fireEvent.change(screen.getByPlaceholderText(/Student ID or name/i), { target: { value: 'TEST-002' } });
     fireEvent.click(screen.getByText('Search'));
 
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Graduation' })).toBeInTheDocument(), { timeout: 5000 });
+    fireEvent.click(screen.getByRole('tab', { name: 'Graduation' }));
+
     // Component renders: "Credits: 12.5/300 CP"
     await waitFor(() => expect(screen.getByText(/12\.5\/300 CP/i)).toBeInTheDocument(), { timeout: 5000 });
-    expect(screen.getByText(/❌ INELIGIBLE/i)).toBeInTheDocument();
+    expect(screen.getByText('INELIGIBLE')).toBeInTheDocument();
   });
 });

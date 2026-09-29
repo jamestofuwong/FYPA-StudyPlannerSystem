@@ -1,16 +1,55 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
-import { MOCK_UNITS } from '@student/lib/data/units-mock'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { generatePlan } from '@student/lib/plan-builder'
 import type { GenerationResult } from '@student/lib/plan-builder'
 import type { PlannerCourseOption } from '@student/lib/planners'
-import type { SemesterBlock } from '@student/lib/types'
+import type { SemesterBlock, UnitListing } from '@student/lib/types'
 import SemesterTable from '@student/components/SemesterTable/SemesterTable'
 import ElectivePool from '@student/components/ElectivePool/ElectivePool'
+import CategoryLegend, { categoriesInPlan } from '@student/components/CategoryLegend/CategoryLegend'
 import styles from './PlanBuilderClient.module.css'
 
 const YEAR_WORDS = ['One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight']
+
+function prefixesForCourse(courseName: string): string[] {
+  const n = courseName.toLowerCase()
+  if (n.includes('computer') || n.includes('computing') || n.includes('information technology')) {
+    return ['COS', 'SWE', 'INF', 'TNE', 'MTH', 'STA', 'FTE']
+  }
+  if (n.includes('business')) {
+    return ['BUS', 'ACC', 'ECO', 'MGT', 'FIN', 'HRM', 'STA', 'INF']
+  }
+  if (n.includes('engineer')) {
+    return ['MTH', 'COS', 'TNE']
+  }
+  return []
+}
+
+function matchesCourse(code: string, courseName: string): boolean {
+  const prefixes = prefixesForCourse(courseName)
+  if (prefixes.length === 0) return false
+  return prefixes.some(p => code.startsWith(p))
+}
+
+function missingPrerequisites(prerequisites: string[] | undefined, completed: Set<string>): string[] {
+  return (prerequisites ?? [])
+    .map(code => code.trim().toUpperCase())
+    .filter(code => code && !completed.has(code))
+}
+
+/** Units listed in earlier semesters only. A prerequisite in this semester does not unlock another unit here. */
+function completedCodesBefore(
+  semesters: { unitCodes: string[] }[],
+  index: number,
+): Set<string> {
+  return new Set(
+    semesters
+      .slice(0, index)
+      .flatMap(semester => semester.unitCodes)
+      .map(code => code.trim().toUpperCase()),
+  )
+}
 
 const MONTH_OPTIONS = [
   { value: 1,  label: 'January'   },
@@ -32,6 +71,81 @@ interface CompletedSemester {
   unitCodes: string[]
 }
 
+const DRAFT_KEY = 'plan-builder-draft'
+
+interface PlanBuilderDraft {
+  selectedCourseId: string
+  selectedPlannerId: string
+  intakeYear: number
+  intakeMonth: number
+  completedSemesters: CompletedSemester[]
+}
+
+function parseCompletedSemesters(raw: unknown): CompletedSemester[] {
+  if (!Array.isArray(raw)) return [{ id: 'sem-1', unitCodes: [] }]
+  const completedSemesters = raw
+    .filter((s): s is CompletedSemester =>
+      Boolean(s) && typeof s.id === 'string' && Array.isArray(s.unitCodes),
+    )
+    .map(s => ({
+      id: s.id,
+      unitCodes: s.unitCodes.filter((code): code is string => typeof code === 'string'),
+    }))
+  return completedSemesters.length > 0
+    ? completedSemesters
+    : [{ id: 'sem-1', unitCodes: [] }]
+}
+
+function readDraft(): PlanBuilderDraft | null {
+  try {
+    const raw = sessionStorage.getItem(DRAFT_KEY)
+    if (!raw) return null
+    const data = JSON.parse(raw) as Partial<PlanBuilderDraft> & {
+      completedSemesters?: unknown
+    }
+    const completedSemesters = parseCompletedSemesters(data.completedSemesters)
+    const currentYear = new Date().getFullYear()
+
+    if (typeof data.selectedCourseId === 'string') {
+      return {
+        selectedCourseId: data.selectedCourseId,
+        selectedPlannerId: typeof data.selectedPlannerId === 'string' ? data.selectedPlannerId : '',
+        intakeYear: typeof data.intakeYear === 'number' ? data.intakeYear : currentYear,
+        intakeMonth: typeof data.intakeMonth === 'number' ? data.intakeMonth : 3,
+        completedSemesters,
+      }
+    }
+
+    // Older drafts used a combined intake string and mock course ids — keep units only.
+    return {
+      selectedCourseId: '',
+      selectedPlannerId: '',
+      intakeYear: currentYear,
+      intakeMonth: 3,
+      completedSemesters,
+    }
+  } catch {
+    return null
+  }
+}
+
+function writeDraft(draft: PlanBuilderDraft) {
+  try {
+    sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft))
+  } catch {
+    // Ignore quota / private-mode failures
+  }
+}
+
+function nextSemCounter(semesters: CompletedSemester[]): number {
+  let max = 0
+  for (const s of semesters) {
+    const n = Number(s.id.replace(/^sem-/, ''))
+    if (Number.isFinite(n) && n > max) max = n
+  }
+  return Math.max(1, max)
+}
+
 function groupByYear(semesters: SemesterBlock[]): Map<number, SemesterBlock[]> {
   const map = new Map<number, SemesterBlock[]>()
   for (const block of semesters) {
@@ -42,11 +156,13 @@ function groupByYear(semesters: SemesterBlock[]): Map<number, SemesterBlock[]> {
   return map
 }
 
-interface Props {
+export default function PlanBuilderClient({
+  plannerOptions,
+  units,
+}: {
   plannerOptions: PlannerCourseOption[]
-}
-
-export default function PlanBuilderClient({ plannerOptions }: Props) {
+  units: UnitListing[]
+}) {
   // ── Config ──
   const [selectedCourseId, setSelectedCourseId]   = useState('')
   const [selectedPlannerId, setSelectedPlannerId] = useState('')
@@ -67,12 +183,39 @@ export default function PlanBuilderClient({ plannerOptions }: Props) {
   const [result, setResult]             = useState<GenerationResult | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
   const [error, setError]               = useState<string | null>(null)
+  const [draftReady, setDraftReady]     = useState(false)
 
   const selectedCourse  = plannerOptions.find(c => c.courseId === selectedCourseId)
   const majors          = selectedCourse?.majors ?? []
   const canGenerate     = Boolean(selectedPlannerId)
 
   const allCompletedCodes = completedSemesters.flatMap(s => s.unitCodes)
+
+  useEffect(() => {
+    const draft = readDraft()
+    if (draft) {
+      const course = plannerOptions.find(c => c.courseId === draft.selectedCourseId)
+      const plannerOk = course?.majors.some(m => m.plannerId === draft.selectedPlannerId)
+      setSelectedCourseId(course ? course.courseId : '')
+      setSelectedPlannerId(plannerOk ? draft.selectedPlannerId : '')
+      setIntakeYear(draft.intakeYear)
+      setIntakeMonth(draft.intakeMonth)
+      setCompletedSemesters(draft.completedSemesters)
+      semCounter.current = nextSemCounter(draft.completedSemesters)
+    }
+    setDraftReady(true)
+  }, [])
+
+  useEffect(() => {
+    if (!draftReady) return
+    writeDraft({
+      selectedCourseId,
+      selectedPlannerId,
+      intakeYear,
+      intakeMonth,
+      completedSemesters,
+    })
+  }, [draftReady, selectedCourseId, selectedPlannerId, intakeYear, intakeMonth, completedSemesters])
 
   function handleCourseChange(id: string) {
     setSelectedCourseId(id)
@@ -97,11 +240,16 @@ export default function PlanBuilderClient({ plannerOptions }: Props) {
 
   // ── Unit management ──
   function addUnitToSem(semId: string, code: string) {
-    setCompletedSemesters(prev =>
-      prev.map(s => s.id === semId ? { ...s, unitCodes: [...s.unitCodes, code] } : s)
-    )
-    setAddQuery('')
-    // Keep search open for rapid entry
+    setCompletedSemesters(prev => {
+      const index = prev.findIndex(semester => semester.id === semId)
+      if (index < 0) return prev
+      const unit = units.find(item => item.code === code)
+      const missing = missingPrerequisites(unit?.prerequisites, completedCodesBefore(prev, index))
+      if (missing.length > 0) return prev
+      return prev.map(semester =>
+        semester.id === semId ? { ...semester, unitCodes: [...semester.unitCodes, code] } : semester,
+      )
+    })
   }
 
   function removeUnitFromSem(semId: string, code: string) {
@@ -120,14 +268,55 @@ export default function PlanBuilderClient({ plannerOptions }: Props) {
     setAddQuery('')
   }
 
-  // Filter units for the active add row (exclude anything already added anywhere)
-  const filteredAddUnits = addQuery.trim().length >= 1
-    ? MOCK_UNITS.filter(u =>
-        !allCompletedCodes.includes(u.code) &&
-        (u.code.toLowerCase().includes(addQuery.toLowerCase()) ||
-         u.name.toLowerCase().includes(addQuery.toLowerCase()))
-      ).slice(0, 8)
-    : []
+  function renderAddOption(unit: UnitListing, semesterId: string, semesterIndex: number) {
+    const missing = missingPrerequisites(
+      unit.prerequisites,
+      completedCodesBefore(completedSemesters, semesterIndex),
+    )
+    const blocked = missing.length > 0
+    return (
+      <li
+        key={unit.code}
+        className={blocked ? `${styles.addDropdownItem} ${styles.addDropdownItemBlocked}` : styles.addDropdownItem}
+        role="option"
+        aria-selected={false}
+        aria-disabled={blocked}
+        onMouseDown={event => {
+          event.preventDefault()
+          if (!blocked) addUnitToSem(semesterId, unit.code)
+        }}
+      >
+        <span className={styles.addDropdownCode}>{unit.code}</span>
+        <span className={styles.addDropdownName}>
+          <span className={styles.addDropdownNameText}>{unit.name}</span>
+        </span>
+        {blocked ? (
+          <span className={styles.addDropdownNeed}>Pre-requisites: {missing.join(', ')}</span>
+        ) : (
+          <span className={styles.addDropdownPlus} aria-hidden="true">+</span>
+        )}
+      </li>
+    )
+  }
+
+  const filteredAddUnits = useMemo(() => {
+    const q = addQuery.trim().toLowerCase()
+    return units.filter(u => {
+      if (allCompletedCodes.includes(u.code)) return false
+      if (q && !u.code.toLowerCase().includes(q) && !u.name.toLowerCase().includes(q)) return false
+      return true
+    })
+  }, [allCompletedCodes, addQuery, units])
+
+  const courseName = selectedCourse?.courseName ?? ''
+  const suggestedAddUnits = useMemo(
+    () => courseName ? filteredAddUnits.filter(u => matchesCourse(u.code, courseName)) : filteredAddUnits,
+    [filteredAddUnits, courseName],
+  )
+  const otherAddUnits = useMemo(
+    () => courseName ? filteredAddUnits.filter(u => !matchesCourse(u.code, courseName)) : [],
+    [filteredAddUnits, courseName],
+  )
 
   // Close inline search on outside click
   useEffect(() => {
@@ -148,7 +337,7 @@ export default function PlanBuilderClient({ plannerOptions }: Props) {
     try {
       const res = await generatePlan({
         config: { plannerId: selectedPlannerId, intakeYear, intakeMonth },
-        completedUnitCodes: allCompletedCodes,
+        completedSemesters: completedSemesters.map(semester => ({ unitCodes: semester.unitCodes })),
       })
       if (!res) {
         setError('No plan template found for the selected configuration. Try a different course or major.')
@@ -194,10 +383,12 @@ export default function PlanBuilderClient({ plannerOptions }: Props) {
             </select>
           </div>
 
-          <div className={styles.field}>
+          <div
+            className={`${styles.field} ${!selectedCourseId ? styles.fieldHidden : ''}`}
+            aria-hidden={!selectedCourseId}
+          >
             <label className={styles.label} htmlFor="major">
               Major
-              {!selectedCourseId && <span className={styles.fieldHint}> — select a course first</span>}
             </label>
             <select
               id="major"
@@ -205,6 +396,7 @@ export default function PlanBuilderClient({ plannerOptions }: Props) {
               value={selectedPlannerId}
               onChange={e => { setSelectedPlannerId(e.target.value); setResult(null); setError(null) }}
               disabled={!selectedCourseId}
+              tabIndex={selectedCourseId ? 0 : -1}
             >
               <option value="">Select a major…</option>
               {majors.map(m => (
@@ -287,12 +479,12 @@ export default function PlanBuilderClient({ plannerOptions }: Props) {
                 {/* Unit rows */}
                 {sem.unitCodes.length === 0 && !isAddActive && (
                   <div className={styles.completedEmpty}>
-                    No units added. Click &ldquo;+ Add unit&rdquo; below.
+                    No units added. Click &ldquo;+ Add unit&rdquo; and pick from the list.
                   </div>
                 )}
 
                 {sem.unitCodes.map(code => {
-                  const unit = MOCK_UNITS.find(u => u.code === code)
+                  const unit = units.find(u => u.code === code)
                   return (
                     <div key={code} className={styles.completedRow}>
                       <span className={styles.completedRowCode}>{code}</span>
@@ -311,41 +503,39 @@ export default function PlanBuilderClient({ plannerOptions }: Props) {
                   <div className={styles.addUnitRow} ref={addRowRef}>
                     <input
                       autoFocus
-                      type="text"
+                      type="search"
                       className={styles.addUnitInput}
-                      placeholder="Search by unit code or name…"
+                      placeholder="Filter by code or name"
                       value={addQuery}
                       onChange={e => setAddQuery(e.target.value)}
                       autoComplete="off"
                       onKeyDown={e => { if (e.key === 'Escape') closeAddUnit() }}
-                      aria-label="Search units to add"
+                      aria-label="Filter units to add"
                     />
-                    <button
-                      className={styles.addUnitDone}
-                      onClick={closeAddUnit}
-                      aria-label="Close search"
-                    >Done</button>
 
-                    {filteredAddUnits.length > 0 && (
-                      <ul className={styles.addDropdown} role="listbox">
-                        {filteredAddUnits.map(u => (
-                          <li
-                            key={u.code}
-                            className={styles.addDropdownItem}
-                            role="option"
-                            aria-selected={false}
-                            onMouseDown={e => { e.preventDefault(); addUnitToSem(sem.id, u.code) }}
-                          >
-                            <span className={styles.addDropdownCode}>{u.code}</span>
-                            <span className={styles.addDropdownName}>{u.name}</span>
-                            <span className={styles.addDropdownPlus} aria-hidden="true">+</span>
-                          </li>
-                        ))}
+                    {filteredAddUnits.length > 0 ? (
+                      <ul className={styles.addDropdown} role="listbox" aria-label="Units you can add">
+                        {courseName && suggestedAddUnits.length > 0 && otherAddUnits.length > 0 && (
+                          <li className={styles.addDropdownGroup} role="presentation">Suggested for your course</li>
+                        )}
+                        {(courseName ? suggestedAddUnits : filteredAddUnits).map(unit =>
+                          renderAddOption(unit, sem.id, idx),
+                        )}
+                        {otherAddUnits.length > 0 && suggestedAddUnits.length > 0 && (
+                          <>
+                            <li className={styles.addDropdownGroup} role="presentation">Other units</li>
+                            {otherAddUnits.map(unit => renderAddOption(unit, sem.id, idx))}
+                          </>
+                        )}
+                        {otherAddUnits.length > 0 && suggestedAddUnits.length === 0 &&
+                          otherAddUnits.map(unit => renderAddOption(unit, sem.id, idx))}
                       </ul>
-                    )}
-
-                    {addQuery.trim().length >= 1 && filteredAddUnits.length === 0 && (
-                      <div className={styles.addDropdownEmpty}>No units found.</div>
+                    ) : (
+                      <div className={styles.addDropdownEmpty}>
+                        {addQuery.trim()
+                          ? 'No units match that search.'
+                          : 'All units have already been added.'}
+                      </div>
                     )}
                   </div>
                 ) : (
@@ -471,6 +661,9 @@ export default function PlanBuilderClient({ plannerOptions }: Props) {
                   This plan is based on the standard course template. Unit availability and sequencing
                   may vary. Consult your academic advisor before finalising your plan.
                 </p>
+              </div>
+              <div className={styles.sideCard}>
+                <CategoryLegend variant="sidebar" categories={categoriesInPlan(result.semesters)} />
               </div>
             </aside>
           </div>

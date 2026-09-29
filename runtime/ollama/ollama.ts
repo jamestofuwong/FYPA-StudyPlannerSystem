@@ -3,8 +3,9 @@ import { spawn, type ChildProcess } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 
-const OLLAMA_PORT = 11434;
-export const OLLAMA_URL = `http://127.0.0.1:${OLLAMA_PORT}`;
+// Keep the bundled runtime separate from any standalone Ollama installation.
+import { OLLAMA_PORT, OLLAMA_URL } from '../../core/config/ollama';
+export { OLLAMA_URL };
 
 let ollamaProcess: ChildProcess | null = null;
 let startedByUs = false;
