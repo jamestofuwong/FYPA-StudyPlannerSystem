@@ -42,13 +42,30 @@ function findPlaced(
 export function removeUnit(
   semesters: ReadonlyArray<CustomSemesterBucket>,
   unitCode: string,
+  at?: { year: number; semester: 1 | 2 },
 ): CustomSemesterBucket[] {
   const code = normaliseCode(unitCode);
-  // An emptied semester stays, since the advisor may be about to refill it
-  return semesters.map((bucket) => ({
-    ...bucket,
-    units: bucket.units.filter((unit) => normaliseCode(unit.code) !== code),
-  }));
+  return semesters.map((bucket) => {
+    // If a specific semester was targeted, ignore other semesters
+    if (at && (bucket.year !== at.year || bucket.semester !== at.semester)) {
+      return { ...bucket, units: [...bucket.units] };
+    }
+
+    // A generic placeholder like elective can exist multiple times; only remove one
+    if (code === 'ELECTIVE') {
+      const idx = bucket.units.findIndex((u) => normaliseCode(u.code) === code);
+      if (idx === -1) return { ...bucket, units: [...bucket.units] };
+      const units = [...bucket.units];
+      units.splice(idx, 1);
+      return { ...bucket, units };
+    }
+
+    // Standard units: remove wherever it sits
+    return {
+      ...bucket,
+      units: bucket.units.filter((unit) => normaliseCode(unit.code) !== code),
+    };
+  });
 }
 
 /**
@@ -66,7 +83,10 @@ export function addUnit(
   if (!targetExists) return copy(semesters);
 
   const code = normaliseCode(unit.code);
-  if (findPlaced(semesters, code)) return moveUnit(semesters, code, year, semester);
+  // Generic placeholders like 'ELECTIVE' can appear multiple times and should never trigger moveUnit
+  if (code !== 'ELECTIVE' && findPlaced(semesters, code)) {
+    return moveUnit(semesters, code, year, semester);
+  }
 
   const placed: ScheduledUnit = {
     code: unit.code,

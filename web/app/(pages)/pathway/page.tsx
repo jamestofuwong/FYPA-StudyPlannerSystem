@@ -662,12 +662,12 @@ export default function PathwayPage() {
               const unitData = new Map(
                 [...planElectiveCandidates, ...planUnits, ...planCompletedUnits, ...planExtraUnits].map((u) => [normaliseCode(u.code), u])
               );
-              const placedCodes = new Set(
-                semesters.flatMap((s) => s.units.map((u) => normaliseCode(u.code)))
-              );
-              const unplacedUnits = planUnits.filter(
-                (u) => u.category !== 'mpu' && !placedCodes.has(normaliseCode(u.code))
-              );
+              const milestoneCodes = new Set(breakMilestones.map((bm: any) => normaliseCode(bm.unitCode)));
+
+              const placedCodes = new Set([
+                ...semesters.flatMap((s) => s.units.map((u) => normaliseCode(u.code))),
+                ...milestoneCodes,
+              ]);
 
               // Exclude units placed in the custom plan from completed history to avoid double-counting retakes
               const validatedCompletedCodes = (dashboardData?.completedCodes ?? []).filter(
@@ -721,6 +721,37 @@ export default function PathwayPage() {
                 requirements: planRequirements,
               });
 
+              // Specific units that must be completed (Core, Major Core, Double Major, Minor)
+              const specificUnplacedUnits = planUnits.filter(
+                (u) =>
+                  u.category !== 'mpu' &&
+                  u.category !== 'elective' &&
+                  !u.recommended &&
+                  !placedCodes.has(normaliseCode(u.code))
+              );
+
+              // Check if the validator reports an elective shortfall
+              const hasElectiveShortfall = validation.some(
+                (w) => w.kind === 'requirement_shortfall' && w.category === 'elective'
+              );
+
+              // Unplaced units list for the dropdown: specific units + generic elective slot if needed
+              const unplacedUnits: SchedulableUnit[] = [
+                ...specificUnplacedUnits,
+                ...(hasElectiveShortfall
+                  ? [
+                      {
+                        code: 'ELECTIVE',
+                        name: 'Elective Slot (To be selected)',
+                        category: 'elective',
+                        creditPoints: 12.5,
+                        offeringSemesters: [1, 2] as (1 | 2)[],
+                        requisiteGroups: [],
+                      },
+                    ]
+                  : []),
+              ];
+
               // A freshly generated plan already carries the scheduler's own
               // warnings. Once edited, the arrangement is the advisor's, so it
               // has to be re-checked.
@@ -752,6 +783,11 @@ export default function PathwayPage() {
                 const unitCode = warningUnitCode(w);
                 const targetCode = unitCode ? normaliseCode(unitCode) : null;
                 const targetUnit = targetCode ? unitData.get(targetCode) : null;
+
+                // Suppress all warnings for generic placeholder slots (e.g. ELECTIVE)
+                if (targetCode === 'ELECTIVE' || ('unitCode' in w && normaliseCode(w.unitCode) === 'ELECTIVE')) {
+                  continue;
+                }
 
                 // Suppress all warnings for MPU units
                 if (
@@ -794,6 +830,20 @@ export default function PathwayPage() {
               }
 
               const addUnitToSemester = (code: string, bucket: CustomSemesterBucket) => {
+                // If adding a generic elective placeholder slot
+                if (code === 'ELECTIVE') {
+                  const electiveSlot: SchedulableUnit = {
+                    code: 'ELECTIVE',
+                    name: 'Elective (To be selected)',
+                    category: 'elective',
+                    creditPoints: 12.5,
+                    offeringSemesters: [1, 2],
+                    requisiteGroups: [],
+                  };
+                  applyEdit(addUnit(semesters, electiveSlot, bucket.year, bucket.semester));
+                  return;
+                }
+
                 const unit = planUnits.find((u) => normaliseCode(u.code) === normaliseCode(code));
                 if (unit) applyEdit(addUnit(semesters, unit, bucket.year, bucket.semester));
               };
@@ -802,6 +852,13 @@ export default function PathwayPage() {
                 (dashboardData?.completedCodes ?? []).map((code: string) => normaliseCode(code))
               );
               const isMpuCode = (code: string) => normaliseCode(code).startsWith('MPU');
+              const milestoneUnitCodes = new Set(breakMilestones.map((bm: any) => normaliseCode(bm.unitCode)));
+              const isWilUnit = (u: any) =>
+                u.category === 'wil' ||
+                milestoneUnitCodes.has(normaliseCode(u.code)) ||
+                normaliseCode(u.code).startsWith('ICT20016') ||
+                normaliseCode(u.code).startsWith('SWE40001');
+
               const poolCategory = new Map(planUnits.map((u) => [normaliseCode(u.code), u.category]));
               const candidateKeys = new Set(planElectiveCandidates.map((u) => normaliseCode(u.code)));
 
@@ -815,6 +872,7 @@ export default function PathwayPage() {
                   !placedCodes.has(key) &&
                   !completedKeys.has(key) &&
                   !isMpuCode(u.code) &&
+                  !isWilUnit(u) &&
                   (named === undefined || named === 'elective')
                 );
               });
@@ -831,7 +889,8 @@ export default function PathwayPage() {
                   !poolCategory.has(key) &&
                   !candidateKeys.has(key) &&
                   !completedKeys.has(key) &&
-                  !isMpuCode(u.code)
+                  !isMpuCode(u.code) &&
+                  !isWilUnit(u)
                 );
               });
 
@@ -858,6 +917,50 @@ export default function PathwayPage() {
                 ? pickerSlotKey
                 : defaultSlotKey;
               const activeSlot = pickerSlots.find((slot) => slot.key === activeSlotKey);
+
+              // Helper to check if a candidate unit's prerequisites are fulfilled prior to the target semester
+              const getUnmetPrereqReasonForSlot = (targetYear: number, targetSemester: 1 | 2) => {
+                // Collect all unit codes completed prior to this semester slot
+                const completedPrior = new Set<string>([
+                  ...(dashboardData?.completedCodes ?? []).map((c: string) => normaliseCode(c)),
+                ]);
+
+                // Add units from earlier planned semesters
+                for (const s of semesters) {
+                  if (s.year < targetYear || (s.year === targetYear && s.semester < targetSemester)) {
+                    for (const u of s.units) {
+                      if (u.code !== 'ELECTIVE') {
+                        completedPrior.add(normaliseCode(u.code));
+                      }
+                    }
+                  }
+                }
+
+                return (candidate: SchedulableUnit): string | null => {
+                  const meta = unitData.get(normaliseCode(candidate.code)) ?? candidate;
+                  const reqGroups = meta.requisiteGroups ?? [];
+                  if (reqGroups.length === 0) return null;
+
+                  for (const group of reqGroups) {
+                    const missingUnits: string[] = [];
+                    let groupSatisfied = false;
+
+                    for (const cond of group) {
+                      const reqCode = cond.unitCode ? normaliseCode(cond.unitCode) : null;
+                      if (reqCode && completedPrior.has(reqCode)) {
+                        groupSatisfied = true;
+                        break;
+                      }
+                      if (cond.unitCode) missingUnits.push(cond.unitCode);
+                    }
+
+                    if (!groupSatisfied && missingUnits.length > 0) {
+                      return `Needs ${missingUnits.join(' or ')}`;
+                    }
+                  }
+                  return null;
+                };
+              };
 
               const chooseElective = (
                 unit: SchedulableUnit,
@@ -1294,6 +1397,13 @@ export default function PathwayPage() {
                         >
                           <option value="">+ Add unit</option>
                           {unplacedUnits.map((u) => {
+                            if (u.code === 'ELECTIVE') {
+                              return (
+                                <option key="ELECTIVE" value="ELECTIVE">
+                                  + Elective Slot (To be selected)
+                                </option>
+                              );
+                            }
                             const hint = offeringHint(u, calendarTerm);
                             return (
                               <option key={u.code} value={u.code}>
@@ -1311,6 +1421,7 @@ export default function PathwayPage() {
                           prefixes={cataloguePrefixes}
                           loading={catalogueLoading}
                           term={calendarTerm}
+                          getUnmetPrereqReason={getUnmetPrereqReasonForSlot(sem.year, sem.semester)}
                           onChoose={(unit, source) => chooseElective(unit, source, sem.year, sem.semester)}
                           onClose={() => setPicker(null)}
                         />
@@ -1329,10 +1440,10 @@ export default function PathwayPage() {
                           <tbody>
                             {sem.units
                             .filter((u) => u.category !== 'mpu')
-                            .map((u) => {
+                            .map((u, uIdx) => {
                               const unitMessages = byUnit.get(normaliseCode(u.code)) ?? [];
                               return (
-                              <tr key={u.code} className={unitMessages.length > 0 ? styles.rowFlagged : undefined}>
+                              <tr key={`${u.code}-${uIdx}`} className={unitMessages.length > 0 ? styles.rowFlagged : undefined}>
                                 <td>
                                   <InlineCode red={u.category === 'core' || u.category === 'major_core'}>
                                     {u.code}
@@ -1382,8 +1493,8 @@ export default function PathwayPage() {
                                       OUTSIDE PLANNER
                                     </span>
                                   )}
-                                  {unitMessages.map((message) => (
-                                    <div key={message} className={styles.rowWarning} title={message}>
+                                  {unitMessages.map((message, mIdx) => (
+                                    <div key={`msg-${message}-${mIdx}`} className={styles.rowWarning} title={message}>
                                       <span aria-hidden="true">⚠</span> {message}.
                                     </div>
                                   ))}
@@ -1532,7 +1643,10 @@ export default function PathwayPage() {
                       if ('unitCode' in w && milestoneCodes.has(normaliseCode(w.unitCode))) return null;
                       if ('unitCodes' in w && (w.unitCodes as string[]).some((c) => milestoneCodes.has(normaliseCode(c)))) return null;
 
-                      // Suppress short_term_only warnings (break milestones handle them)
+                      // Suppress no_offering_data or requisite warnings for unselected 'ELECTIVE' placeholder slots
+                      if ('unitCode' in w && normaliseCode(w.unitCode) === 'ELECTIVE') return null;
+
+                      // Suppress short_term_only warnings since break milestones handle them
                       if (w.kind === 'short_term_only') return null;
 
                       // Suppress WIL shortfall if break milestones provide the required credit points
@@ -1604,24 +1718,27 @@ export default function PathwayPage() {
                   </ul>
                 )}
 
-                {picker?.mode === 'add' && activeSlot && (
-                  <ElectivePicker
-                    title="Choose an elective"
-                    plannerUnits={pickerPlannerUnits}
-                    catalogueUnits={pickerCatalogueUnits}
-                    prefixes={cataloguePrefixes}
-                    loading={catalogueLoading}
-                    term={activeSlot.term}
-                    slots={pickerSlots}
-                    slotKey={activeSlotKey}
-                    onSlotChange={setPickerSlotKey}
-                    onChoose={(unit, source) => {
-                      const [year, semester] = activeSlotKey.split('-').map(Number);
-                      chooseElective(unit, source, year, semester as 1 | 2);
-                    }}
-                    onClose={() => setPicker(null)}
-                  />
-                )}
+                {picker?.mode === 'add' && activeSlot && (() => {
+                  const [activeY, activeS] = activeSlotKey.split('-').map(Number);
+                  return (
+                    <ElectivePicker
+                      title="Choose an elective"
+                      plannerUnits={pickerPlannerUnits}
+                      catalogueUnits={pickerCatalogueUnits}
+                      prefixes={cataloguePrefixes}
+                      loading={catalogueLoading}
+                      term={activeSlot.term}
+                      slots={pickerSlots}
+                      slotKey={activeSlotKey}
+                      onSlotChange={setPickerSlotKey}
+                      getUnmetPrereqReason={getUnmetPrereqReasonForSlot(activeY, activeS as 1 | 2)}
+                      onChoose={(unit, source) => {
+                        chooseElective(unit, source, activeY, activeS as 1 | 2);
+                      }}
+                      onClose={() => setPicker(null)}
+                    />
+                  );
+                })()}
 
                 {(() => {
                   // Collect codes for optional break units (summer/winter only)
@@ -1813,7 +1930,14 @@ export default function PathwayPage() {
                       }));
                     }
 
-                    applyEdit(removeUnit(customPlan.semesters, code));
+                    applyEdit(
+                      removeUnit(
+                        customPlan.semesters,
+                        code,
+                        currentBucket ? { year: currentBucket.year, semester: currentBucket.semester } : undefined
+                      )
+                    );
+
                     setUnitToRemove(null);
                     showToast(`Removed ${code} from study pathway.`, 'info');
                   }}
