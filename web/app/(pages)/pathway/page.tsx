@@ -185,6 +185,116 @@ function getRemainingMpuUnits(activePlanner: any, dashboardData: any, takenCodes
     .map(([code, name]) => ({ code, name }));
 }
 
+// Excel export: a flat, one-row-per-unit sheet, separate from the PDF's
+// grouped/banner layout above. Deliberately duplicates the PDF's small glue
+// functions (category label, WIL slot detection) rather than sharing them,
+// so nothing here can affect handleDirectPdfDownload's output.
+
+export type ExcelPlanRow = {
+  year: number | string;
+  semester: number | string;
+  term: string;
+  code: string;
+  name: string;
+  category: string;
+  categoryLabel: string;
+};
+
+function excelCategoryLabel(category: string, code: string): string {
+  if (code === 'ELECTIVE') return 'Elective';
+  if (category === 'core') return 'Core';
+  if (category === 'major_core') return 'Major Core';
+  if (category === 'prescribed_elective') return 'Prescribed Elective';
+  if (category === 'double_major') return 'Double Major';
+  if (category === 'minor') return 'Minor Elective';
+  if (category === 'wil') return 'Work-Integrated Learning';
+  if (category === 'mpu') return 'MPU';
+  return 'Elective';
+}
+
+// The canonical mapping from web/components/planner/CourseListTable.tsx,
+// the same reference used for the on-screen badge fixes (not the PDF's
+// own separate pastel palette, getCategoryColor, untouched, above).
+// Hex values pulled directly from the rgba() triples in
+// web/components/common/Primitives.module.css's .badgeBlue/.badgeGreen/
+// .badgeYellow/.badgeRed rules, and Primitives.tsx's badgePurple inline
+// style (there is no .badgePurple CSS rule; that one colour only exists
+// as an inline style, so it has to come from the component, not the CSS file).
+export function excelCategoryFillHex(category: string): string {
+  if (category === 'core') return '569CD6'; // badgeBlue
+  if (category === 'major_core') return 'DCDCAA'; // badgeYellow
+  if (category === 'mpu') return 'F48771'; // badgeRed
+  if (category === 'wil') return 'C586C0'; // badgePurple
+  // prescribed_elective, elective, double_major, minor: canonical's default badgeGreen
+  return '4EC9B0';
+}
+
+/**
+ * One row per unit across every semester, plus the WIL break-milestone unit
+ * (Term: Winter/Summer) and the remaining/incomplete MPU list (Term: Any,
+ * Year/Semester blank since they have no fixed slot). MPU units are NOT
+ * filtered out of a regular semester's own units here, unlike the PDF and
+ * the on-screen table (which show MPU separately), so a flat, filterable
+ * sheet never silently drops a unit; an in-semester MPU unit just gets
+ * Term "Any" instead of the semester's normal Feb/Mar or Aug/Sept.
+ */
+export function buildExcelRows(
+  semesters: CustomSemesterBucket[],
+  planIntakeSemester: 1 | 2,
+  primaryMilestone: any,
+  activeWilSlot: string | null | undefined,
+  remainingMpus: { code: string; name: string }[],
+): ExcelPlanRow[] {
+  const rows: ExcelPlanRow[] = [];
+
+  for (const sem of semesters) {
+    const slotKey = `${sem.year}-${sem.semester}`;
+    const isWilSlot = !!primaryMilestone && activeWilSlot === slotKey;
+
+    if (isWilSlot) {
+      const currentBreakOption = primaryMilestone?.availableBreakSlots?.find((b: any) => b.slotKey === slotKey);
+      const breakTerm = currentBreakOption?.termType === 'winter' ? 'Winter' : 'Summer';
+      rows.push({
+        year: sem.year,
+        semester: sem.semester,
+        term: breakTerm,
+        code: primaryMilestone.unitCode,
+        name: primaryMilestone.unitName,
+        category: 'wil',
+        categoryLabel: 'Work-Integrated Learning',
+      });
+    }
+
+    const calTerm = calendarTermFor(sem.semester, planIntakeSemester);
+    const semTerm = calTerm === 1 ? 'Feb/Mar' : 'Aug/Sept';
+
+    for (const u of sem.units as any[]) {
+      rows.push({
+        year: sem.year,
+        semester: sem.semester,
+        term: u.category === 'mpu' ? 'Any' : semTerm,
+        code: u.code,
+        name: u.name,
+        category: u.category,
+        categoryLabel: excelCategoryLabel(u.category, u.code),
+      });
+    }
+  }
+
+  for (const mpu of remainingMpus) {
+    rows.push({
+      year: '',
+      semester: '',
+      term: 'Any',
+      code: mpu.code,
+      name: mpu.name,
+      category: 'mpu',
+      categoryLabel: 'MPU',
+    });
+  }
+
+  return rows;
+}
 
 export default function PathwayPage() {
   const { showToast } = useToast();
@@ -220,6 +330,7 @@ export default function PathwayPage() {
   const [customPlanLoading, setCustomPlanLoading] = useState(false);
   const [unitToRemove, setUnitToRemove] = useState<{ code: string; name: string; category: string } | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
 
   // Target semester for adding an extra unit beyond degree requirements
   const [extraUnitTargetSemester, setExtraUnitTargetSemester] = useState<{ year: number; semester: 1 | 2 } | null>(null);
@@ -1369,6 +1480,94 @@ export default function PathwayPage() {
                 }
               };
 
+              const handleExcelDownload = async () => {
+                // Same pre-flight check as the PDF export, same message pattern
+                const unselectedElectiveCount = semesters
+                  .flatMap((s) => s.units)
+                  .filter((u) => u.code === 'ELECTIVE').length;
+
+                if (unselectedElectiveCount > 0) {
+                  showToast(
+                    `Please select a unit for all elective slots (${unselectedElectiveCount} remaining) before downloading the Excel file.`,
+                    'info'
+                  );
+                  return;
+                }
+
+                setIsExportingExcel(true);
+                showToast('Generating Excel study plan...', 'info');
+
+                try {
+                  const XLSX = await import('xlsx-js-style');
+
+                  const primaryMilestone = breakMilestones?.[0];
+                  const activeWilSlot = customWilSlot ?? primaryMilestone?.insertBeforeSlotKey;
+                  const allTranscriptUnits = [
+                    ...(scrapedStudent?.student?.courseList ?? []),
+                    ...(dashboardData?.mpuCourseList ?? []),
+                  ];
+                  const transcriptStates = resolveUnitStates(allTranscriptUnits);
+                  const completeCodes = new Set(
+                    [...transcriptStates].filter(([, state]) => state === 'passed').map(([code]) => code)
+                  );
+                  const currentCodes = new Set(
+                    [...transcriptStates].filter(([, state]) => state === 'in_progress').map(([code]) => code)
+                  );
+                  const takenCodes = new Set([...completeCodes, ...currentCodes]);
+                  const activePlanner = selectedPlannerIdx === -1 ? manualPlanner : dashboardData?.planners?.[selectedPlannerIdx];
+                  const defaultRemainingMpus = getRemainingMpuUnits(activePlanner, dashboardData, takenCodes);
+                  const remainingMpus = customMpuList ?? defaultRemainingMpus;
+
+                  const rows = buildExcelRows(semesters, planIntakeSemester, primaryMilestone, activeWilSlot, remainingMpus);
+
+                  const header = ['Year', 'Semester', 'Term', 'Unit Code', 'Unit Name', 'Category'];
+                  const aoa: (string | number)[][] = [
+                    header,
+                    ...rows.map((r) => [r.year, r.semester, r.term, r.code, r.name, r.categoryLabel]),
+                  ];
+                  const ws = XLSX.utils.aoa_to_sheet(aoa);
+
+                  // Header row: bold, light grey
+                  for (let c = 0; c < header.length; c++) {
+                    const cellRef = XLSX.utils.encode_cell({ r: 0, c });
+                    const cell = (ws as any)[cellRef];
+                    if (!cell) continue;
+                    cell.s = {
+                      font: { bold: true },
+                      fill: { patternType: 'solid', fgColor: { rgb: 'D9D9D9' } },
+                    };
+                  }
+
+                  // Whole-row category colour fill, matching the canonical badge
+                  // mapping (not the PDF's own pastel palette)
+                  rows.forEach((row, i) => {
+                    const fill = { patternType: 'solid' as const, fgColor: { rgb: excelCategoryFillHex(row.category) } };
+                    for (let c = 0; c < header.length; c++) {
+                      const cellRef = XLSX.utils.encode_cell({ r: i + 1, c });
+                      const cell = (ws as any)[cellRef];
+                      if (!cell) continue;
+                      cell.s = { fill };
+                    }
+                  });
+
+                  (ws as any)['!cols'] = [
+                    { wch: 6 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 40 }, { wch: 22 },
+                  ];
+
+                  const wb = XLSX.utils.book_new();
+                  XLSX.utils.book_append_sheet(wb, ws, 'Study Plan');
+
+                  const fileName = `${(selectedPlanner?.course?.name ?? 'Course').replace(/[^a-zA-Z0-9]/g, '_')}_Study_Plan.xlsx`;
+                  XLSX.writeFile(wb, fileName);
+                  showToast('Please choose your save location in the dialog to save your Excel file.', 'info');
+                } catch (err) {
+                  console.error(err);
+                  showToast('Failed to generate Excel file.', 'error');
+                } finally {
+                  setIsExportingExcel(false);
+                }
+              };
+
               return (
               <div>
                 {semesters.length === 0 ? (
@@ -1737,10 +1936,19 @@ export default function PathwayPage() {
                     type="button"
                     className={styles.btnSecondary}
                     onClick={handleDirectPdfDownload}
-                    disabled={isExporting}
+                    disabled={isExporting || isExportingExcel}
                     title="Directly download official custom study planner as PDF"
                   >
                     {isExporting ? '⏳ Generating PDF...' : '💾 Download PDF'}
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.btnSecondary}
+                    onClick={handleExcelDownload}
+                    disabled={isExporting || isExportingExcel}
+                    title="Download the study plan as a flat, sortable Excel sheet"
+                  >
+                    {isExportingExcel ? '⏳ Generating Excel...' : '📊 Download Excel'}
                   </button>
                 </div>
 
