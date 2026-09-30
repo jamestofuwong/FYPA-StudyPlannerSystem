@@ -72,6 +72,8 @@ interface CompletedSemester {
 }
 
 const DRAFT_KEY = 'plan-builder-draft'
+const RESULT_CACHE_KEY = 'plan-builder-result-cache'
+const RESULT_CACHE_VERSION = 1
 
 interface PlanBuilderDraft {
   selectedCourseId: string
@@ -79,6 +81,86 @@ interface PlanBuilderDraft {
   intakeYear: number
   intakeMonth: number
   completedSemesters: CompletedSemester[]
+}
+
+interface CachedGenerationResult {
+  semesters: SemesterBlock[]
+  completedCodes: string[]
+  electivePool: GenerationResult['electivePool']
+}
+
+interface PlanResultCache {
+  version: number
+  key: string
+  result: CachedGenerationResult
+}
+
+function normalizeCompletedSemesters(semesters: CompletedSemester[]): string[][] {
+  return semesters.map(semester =>
+    semester.unitCodes
+      .map(code => code.trim().toUpperCase())
+      .filter(Boolean)
+      .sort(),
+  )
+}
+
+function resultCacheKey({
+  plannerId,
+  intakeYear,
+  intakeMonth,
+  completedSemesters,
+}: {
+  plannerId: string
+  intakeYear: number
+  intakeMonth: number
+  completedSemesters: CompletedSemester[]
+}): string {
+  return JSON.stringify({
+    plannerId,
+    intakeYear,
+    intakeMonth,
+    completedSemesters: normalizeCompletedSemesters(completedSemesters),
+  })
+}
+
+function serializeResult(result: GenerationResult): CachedGenerationResult {
+  return {
+    semesters: result.semesters,
+    electivePool: result.electivePool,
+    completedCodes: [...result.completedCodes],
+  }
+}
+
+function deserializeResult(result: CachedGenerationResult): GenerationResult {
+  return {
+    semesters: result.semesters,
+    electivePool: result.electivePool,
+    completedCodes: new Set(result.completedCodes),
+  }
+}
+
+function readCachedResult(key: string): GenerationResult | null {
+  try {
+    const raw = sessionStorage.getItem(RESULT_CACHE_KEY)
+    if (!raw) return null
+    const cache = JSON.parse(raw) as Partial<PlanResultCache>
+    if (cache.version !== RESULT_CACHE_VERSION || cache.key !== key || !cache.result) return null
+    return deserializeResult(cache.result)
+  } catch {
+    return null
+  }
+}
+
+function writeCachedResult(key: string, result: GenerationResult) {
+  try {
+    sessionStorage.setItem(RESULT_CACHE_KEY, JSON.stringify({
+      version: RESULT_CACHE_VERSION,
+      key,
+      result: serializeResult(result),
+    }))
+  } catch {
+    // Ignore quota / private-mode failures
+  }
 }
 
 function parseCompletedSemesters(raw: unknown): CompletedSemester[] {
@@ -202,6 +284,14 @@ export default function PlanBuilderClient({
       setIntakeMonth(draft.intakeMonth)
       setCompletedSemesters(draft.completedSemesters)
       semCounter.current = nextSemCounter(draft.completedSemesters)
+      if (plannerOk) {
+        setResult(readCachedResult(resultCacheKey({
+          plannerId: draft.selectedPlannerId,
+          intakeYear: draft.intakeYear,
+          intakeMonth: draft.intakeMonth,
+          completedSemesters: draft.completedSemesters,
+        })))
+      }
     }
     setDraftReady(true)
   }, [])
@@ -217,15 +307,20 @@ export default function PlanBuilderClient({
     })
   }, [draftReady, selectedCourseId, selectedPlannerId, intakeYear, intakeMonth, completedSemesters])
 
-  function handleCourseChange(id: string) {
-    setSelectedCourseId(id)
-    setSelectedPlannerId('')
+  function clearGeneratedPlan() {
     setResult(null)
     setError(null)
   }
 
+  function handleCourseChange(id: string) {
+    setSelectedCourseId(id)
+    setSelectedPlannerId('')
+    clearGeneratedPlan()
+  }
+
   // ── Semester management ──
   function addSemester() {
+    clearGeneratedPlan()
     semCounter.current++
     setCompletedSemesters(prev => [
       ...prev,
@@ -234,12 +329,14 @@ export default function PlanBuilderClient({
   }
 
   function removeSemester(id: string) {
+    clearGeneratedPlan()
     setCompletedSemesters(prev => prev.filter(s => s.id !== id))
     if (activeAddSem === id) closeAddUnit()
   }
 
   // ── Unit management ──
   function addUnitToSem(semId: string, code: string) {
+    clearGeneratedPlan()
     setCompletedSemesters(prev => {
       const index = prev.findIndex(semester => semester.id === semId)
       if (index < 0) return prev
@@ -253,6 +350,7 @@ export default function PlanBuilderClient({
   }
 
   function removeUnitFromSem(semId: string, code: string) {
+    clearGeneratedPlan()
     setCompletedSemesters(prev =>
       prev.map(s => s.id === semId ? { ...s, unitCodes: s.unitCodes.filter(c => c !== code) } : s)
     )
@@ -332,6 +430,22 @@ export default function PlanBuilderClient({
   // ── Generate ──
   async function handleGenerate() {
     if (!canGenerate) return
+    const cacheKey = resultCacheKey({
+      plannerId: selectedPlannerId,
+      intakeYear,
+      intakeMonth,
+      completedSemesters,
+    })
+    const cachedResult = readCachedResult(cacheKey)
+    if (cachedResult) {
+      setResult(cachedResult)
+      setError(null)
+      setTimeout(() => {
+        document.getElementById('generated-plan')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }, 100)
+      return
+    }
+
     setIsGenerating(true)
     setError(null)
     try {
@@ -343,6 +457,7 @@ export default function PlanBuilderClient({
         setError('No plan template found for the selected configuration. Try a different course or major.')
       } else {
         setResult(res)
+        writeCachedResult(cacheKey, res)
         setTimeout(() => {
           document.getElementById('generated-plan')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
         }, 100)
@@ -394,7 +509,7 @@ export default function PlanBuilderClient({
               id="major"
               className={styles.select}
               value={selectedPlannerId}
-              onChange={e => { setSelectedPlannerId(e.target.value); setResult(null); setError(null) }}
+              onChange={e => { setSelectedPlannerId(e.target.value); clearGeneratedPlan() }}
               disabled={!selectedCourseId}
               tabIndex={selectedCourseId ? 0 : -1}
             >
@@ -411,7 +526,7 @@ export default function PlanBuilderClient({
               id="intakeMonth"
               className={styles.select}
               value={intakeMonth}
-              onChange={e => setIntakeMonth(Number(e.target.value))}
+              onChange={e => { setIntakeMonth(Number(e.target.value)); clearGeneratedPlan() }}
             >
               {MONTH_OPTIONS.map(m => (
                 <option key={m.value} value={m.value}>{m.label}</option>
@@ -428,7 +543,7 @@ export default function PlanBuilderClient({
               value={intakeYear}
               min={2000}
               max={2099}
-              onChange={e => setIntakeYear(Number(e.target.value))}
+              onChange={e => { setIntakeYear(Number(e.target.value)); clearGeneratedPlan() }}
             />
           </div>
         </div>

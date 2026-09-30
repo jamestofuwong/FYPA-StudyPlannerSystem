@@ -1,6 +1,6 @@
 'use client'
 
-import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import type { SemesterBlock } from '@student/lib/types'
 import styles from './SemesterTable.module.css'
 
@@ -24,10 +24,8 @@ function rowClass(category: string, isSlot: boolean): string {
 }
 
 export default function SemesterTable({ block, periodLabel, completedCodes }: Props) {
-  const router = useRouter()
-
   const headerText = periodLabel
-    ? `${block.label}  ·  ${periodLabel}`
+    ? `${block.label} - ${periodLabel}`
     : block.label
 
   return (
@@ -46,7 +44,9 @@ export default function SemesterTable({ block, periodLabel, completedCodes }: Pr
         <tbody>
           {block.units.map(unit => {
             const clickable = !unit.isElectiveSlot
-            const completed = completedCodes != null && !unit.isElectiveSlot && completedCodes.has(unit.code)
+            const completed = completedCodes != null && clickable && completedCodes.has(unit.code)
+            const href = `/units/${unit.code}`
+
             return (
               <tr
                 key={unit.id}
@@ -56,30 +56,43 @@ export default function SemesterTable({ block, periodLabel, completedCodes }: Pr
                   clickable ? styles.clickable : '',
                   completed ? styles.rowCompleted : '',
                 ].filter(Boolean).join(' ')}
-                onClick={clickable ? () => router.push(`/units/${unit.code}`) : undefined}
-                tabIndex={clickable ? 0 : undefined}
-                onKeyDown={clickable ? e => { if (e.key === 'Enter' || e.key === ' ') router.push(`/units/${unit.code}`) } : undefined}
-                role={clickable ? 'link' : undefined}
-                aria-label={clickable ? `View ${unit.name}` : undefined}
               >
                 <td className={`${styles.cellCode} ${unit.isElectiveSlot ? styles.cellCodeSlot : ''}`}>
-                  {completed && <span className={styles.completedCheck} aria-hidden="true">✓</span>}
-                  {unit.isElectiveSlot ? '—' : unit.code}
+                  {clickable ? (
+                    <Link href={href} className={styles.unitLink} aria-label={`View ${unit.name}`}>
+                      {completed && <span className={styles.completedCheck} aria-hidden="true">Completed</span>}
+                      {unit.code}
+                    </Link>
+                  ) : (
+                    '-'
+                  )}
                 </td>
                 <td className={`${styles.cellName} ${unit.isElectiveSlot ? styles.cellNameSlot : ''}`}>
-                  {unit.isElectiveSlot ? 'Open Elective Slot' : unit.name}
-                  {unit.category === 'prescribed_elective' && (
-                    <span className={styles.asterisk}>*</span>
+                  {clickable ? (
+                    <Link href={href} className={styles.unitLink}>
+                      {unit.name}
+                      {unit.category === 'prescribed_elective' && (
+                        <span className={styles.asterisk}>*</span>
+                      )}
+                    </Link>
+                  ) : (
+                    'Open Elective Slot'
                   )}
                 </td>
                 <td className={styles.cellPrereq}>
-                  {unit.prerequisites && unit.prerequisites.length > 0
-                    ? unit.prerequisites.join(', ')
-                    : 'Nil'}
-                  {clickable && (
-                    <span className={styles.viewHint} aria-hidden="true">
-                      {completed ? 'Completed ✓' : 'View unit →'}
-                    </span>
+                  {clickable ? (
+                    <Link href={href} className={styles.unitLink}>
+                      {unit.prerequisites && unit.prerequisites.length > 0
+                        ? unit.prerequisites.join(', ')
+                        : 'Nil'}
+                      <span className={styles.viewHint} aria-hidden="true">
+                        {completed ? 'Completed' : 'View unit ->'}
+                      </span>
+                    </Link>
+                  ) : (
+                    unit.prerequisites && unit.prerequisites.length > 0
+                      ? unit.prerequisites.join(', ')
+                      : 'Nil'
                   )}
                 </td>
               </tr>
