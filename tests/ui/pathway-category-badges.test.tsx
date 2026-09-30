@@ -11,9 +11,9 @@ import type { SchedulableUnit } from '@core/services/scheduling/customPlannerSch
 // which the client named as the correct reference.
 const CANONICAL: Record<string, string> = {
   core: 'badgeBlue',
-  major_core: 'badgeOrange', // pathway's own value, out of this fix's stated scope; see report
-  double_major: 'badgeYellow',
-  minor: 'badgeYellow',
+  major_core: 'badgeYellow',
+  double_major: 'badgeGreen', // falls through to CourseListTable's default badgeGreen
+  minor: 'badgeGreen', // falls through to CourseListTable's default badgeGreen
   prescribed_elective: 'badgeGreen',
   elective: 'badgeGreen',
   wil: 'badgePurple', // falls through to pathway's default; matches canonical already
@@ -199,5 +199,77 @@ describe('pathway page category badges match the CourseListTable.tsx canonical m
     const electiveRow = screen.getByText('ELECTIVE', { selector: 'code' }).closest('tr') as HTMLElement;
     const electiveBadge = electiveRow.querySelector('[class*="badge"]') as HTMLElement;
     expect(electiveBadge.className.includes('badgeGreen')).toBe(false);
+  });
+
+  // This is a separate, static badge in the "Remaining MPU Units" table, not
+  // the per-row switch above (MPU rows never reach that switch, see the test
+  // above), so this is the only MPU badge actually visible on the page.
+  test('the Remaining MPU Units table badge renders badgeRed, matching canonical', async () => {
+    const CORE_UNIT = planUnit('CORE1', 'Core Unit', 'core');
+    const planWithMpu = () => ({
+      semesters: [{ year: 1, semester: 1 as const, units: [CORE_UNIT] }],
+      unschedulableUnits: [],
+      warnings: [],
+    });
+    global.fetch = jest.fn((url: string) => {
+      if (String(url).includes('/api/custom-planner')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            success: true,
+            data: planWithMpu(),
+            units: [CORE_UNIT],
+            intakeSemester: 1,
+            requirements: [],
+            completedUnits: [],
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    }) as unknown as typeof fetch;
+
+    function SeedWithMpu() {
+      const session = useStudentSession();
+      useEffect(() => {
+        session.setStudentLoaded(true);
+        session.setScrapedStudent({
+          studentId: 'S1',
+          student: { courseList: [], selectedEnrollment: 'BA-CS' } as never,
+        });
+        session.setDashboardData({
+          completedCodes: [],
+          mpuCourseList: [],
+          planners: [{
+            id: 'p1',
+            intake_month: 3,
+            major: { name: 'Software Development' },
+            course: { name: 'BA-CS' },
+            minors: [],
+            units: [
+              { category: 'core', year_level: 1, semester: 1, unit: { unit_code: 'CORE1', unit_name: 'Core Unit', requisite_groups: [] } },
+              { category: 'mpu', year_level: 1, semester: 1, unit: { unit_code: 'MPU101', unit_name: 'General Studies' } },
+            ],
+          }],
+        });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, []);
+      return null;
+    }
+
+    render(
+      <ToastProvider>
+        <StudentSessionProvider>
+          <SeedWithMpu />
+          <PathwayPage />
+        </StudentSessionProvider>
+      </ToastProvider>
+    );
+    await act(async () => { fireEvent.click(await screen.findByText(/Generate Custom Pathway/i)); });
+    await screen.findByText('CORE1');
+
+    const mpuRow = screen.getByText('MPU101', { selector: 'code' }).closest('tr') as HTMLElement;
+    const mpuBadge = mpuRow.querySelector('[class*="badge"]') as HTMLElement;
+    expect(mpuBadge.className.includes('badgeRed')).toBe(true);
+    expect(mpuBadge.className.includes('badgeBlue')).toBe(false);
   });
 });

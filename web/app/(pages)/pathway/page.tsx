@@ -1570,14 +1570,15 @@ export default function PathwayPage() {
                                     cls={
                                       (u as any).isExtraUnit ? 'badgeBlue' :
                                       u.code === 'ELECTIVE' ? 'badgePurple' :
-                                      // core/mpu/prescribed_elective/elective match the canonical
-                                      // mapping in CourseListTable.tsx, the Study Planners page's
-                                      // reference. major_core/double_major/minor/wil are unchanged.
+                                      // Matches the canonical mapping in CourseListTable.tsx,
+                                      // the Study Planners page's reference: major_core is
+                                      // badgeYellow there, and double_major/minor fall to its
+                                      // default badgeGreen (neither has its own explicit case).
                                       u.category === 'core' ? 'badgeBlue' :
-                                      u.category === 'major_core' ? 'badgeOrange' :
-                                      u.category === 'double_major' ? 'badgeYellow' :
+                                      u.category === 'major_core' ? 'badgeYellow' :
+                                      u.category === 'double_major' ? 'badgeGreen' :
                                       u.category === 'mpu' ? 'badgeRed' :
-                                      u.category === 'minor' ? 'badgeYellow' :
+                                      u.category === 'minor' ? 'badgeGreen' :
                                       u.category === 'prescribed_elective' ? 'badgeGreen' :
                                       u.category === 'elective' ? 'badgeGreen' :
                                       'badgePurple'
@@ -1963,7 +1964,7 @@ export default function PathwayPage() {
                                   </td>
                                   <td style={{ whiteSpace: 'normal' }}>{mpu.name}</td>
                                   <td>
-                                    <Badge label="MPU" cls="badgeBlue" />
+                                    <Badge label="MPU" cls="badgeRed" />
                                   </td>
                                   <td style={{ textAlign: 'center' }}>
                                     <button
