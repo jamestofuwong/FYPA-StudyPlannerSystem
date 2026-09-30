@@ -25,7 +25,7 @@ export async function PUT(
   const { id } = await params;
   try {
     const body = await req.json();
-    const updatedPlanner = await plannerRepository.updatePlanner(id, body);
+    const updatedPlanner = await plannerRepository.updatePlannerDetails(id, body);
     return NextResponse.json(updatedPlanner, { status: 200 });
   } catch {
     return NextResponse.json({ error: "Failed to update planner" }, { status: 500 });
