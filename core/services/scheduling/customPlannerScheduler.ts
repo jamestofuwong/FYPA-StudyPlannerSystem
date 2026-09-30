@@ -465,10 +465,14 @@ export function buildCustomPlan(
         if (availableSlots > 0 && pool.length > 0) {
           const electivesToConvert: SchedulableUnit[] = [];
 
-          // Find recommended electives in the pool that couldn't be scheduled
+          // Only a plain elective can stand in for another; a prescribed_elective is
+          // compulsory and cannot be substituted, so it is left in the pool. If it is
+          // genuinely unplaceable (e.g. a requisite it can never satisfy), the normal
+          // end-of-loop unplaced reporting names it and says why, rather than this
+          // silently disguising it as an anonymous, substitutable elective slot.
           for (let pIdx = pool.length - 1; pIdx >= 0; pIdx--) {
             const candidate = pool[pIdx];
-            if (candidate.category === 'elective' || candidate.category === 'prescribed_elective') {
+            if (candidate.category === 'elective') {
               electivesToConvert.push(candidate);
               pool.splice(pIdx, 1);
               if (electivesToConvert.length >= availableSlots) break;
@@ -489,10 +493,12 @@ export function buildCustomPlan(
           }
         }
 
-        // If only recommended electives remain in the pool, drop them so the plan ends at Project B
-        const remainingOnlyElectives = pool.every(
-          (u) => u.category === 'elective' || u.category === 'prescribed_elective'
-        );
+        // If only plain electives remain in the pool, drop them so the plan ends at
+        // Project B. A prescribed_elective is deliberately excluded from this check
+        // for the same reason as the backfill above: dropping it here would silently
+        // discard a compulsory unit with no warning at all, not even the ones the
+        // post-loop reporting would otherwise give it.
+        const remainingOnlyElectives = pool.every((u) => u.category === 'elective');
         if (remainingOnlyElectives) {
           pool.length = 0;
           break; // Conclude degree at Project B

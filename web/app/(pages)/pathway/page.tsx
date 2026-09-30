@@ -774,8 +774,17 @@ export default function PathwayPage() {
                     // The scheduler places what it is given and never counts the
                     // total, so a plan short of a category's credit points comes
                     // out clean. That shortfall is worth saying before any edit.
+                    // compulsory_missing is the same: the scheduler places a unit
+                    // or reports why it could not (requisite_violation, already in
+                    // customPlan.warnings above), but never checks the finished
+                    // plan against the full required-unit list the way validatePlan
+                    // does, so a compulsory unit silently absent from a fresh plan
+                    // needs this to be said before any edit too.
                     ...validation.filter(
-                      (w) => w.kind === 'requirement_shortfall' || w.kind === 'requirement_excess',
+                      (w) =>
+                        w.kind === 'requirement_shortfall' ||
+                        w.kind === 'requirement_excess' ||
+                        w.kind === 'compulsory_missing',
                     ),
                   ];
 
