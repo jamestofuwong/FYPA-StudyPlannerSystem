@@ -11,6 +11,11 @@
 /* ── Header ─────────────────────────────────────────────────────────────────── */
 
 .header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
   margin-bottom: 4px;
 }
 
@@ -355,9 +360,35 @@
   border-color: var(--accent-blue);
 }
 
-.termSelect {
-  width: auto;
-  font-family: var(--font-sans);
+/* The target semester is derived from the date and displayed, not chosen, so this states it and why. */
+.targetRow {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  background: var(--surface-bg);
+}
+
+.targetLabel {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.targetValue {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.targetReason {
+  font-size: 11px;
+  color: var(--text-muted);
 }
 
 .previewNotes {
@@ -411,4 +442,242 @@
   font-size: 11px;
   color: var(--text-muted);
   overflow-x: auto;
+}
+
+/* -- Source picker ------------------------------------------------------------ */
+
+.sourceRow {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.sourceOption {
+  flex: 1 1 140px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  background: var(--panel-bg, transparent);
+  border: 1px solid var(--panel-border);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-primary);
+  text-align: left;
+}
+
+.sourceOption:hover:not(:disabled) {
+  border-color: var(--accent-blue);
+}
+
+.sourceOptionActive {
+  border-color: var(--accent-blue);
+  box-shadow: inset 0 0 0 1px var(--accent-blue);
+}
+
+.sourceOption:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.sourceOptionHint {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+/* -- Import panel ------------------------------------------------------------- */
+
+.dropZone {
+  border: 1px dashed var(--panel-border);
+  border-radius: 4px;
+  padding: 20px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.dropZoneActive {
+  border-color: var(--accent-blue);
+  background: rgba(88, 166, 255, 0.06);
+  color: var(--text-primary);
+}
+
+.fileList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 10px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.fileRow {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 11px;
+  font-family: var(--font-mono, monospace);
+  padding: 4px 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.fileRowOk { color: var(--accent-green); }
+.fileRowFail { color: var(--accent-red); }
+
+.fileName {
+  flex: 1;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.fileNote {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.storedBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 8px;
+}
+
+/* Phase 6. Expected elective enrolment, shown as its own table because the figures are fractional shares
+   of a seat rather than named picks, and putting them beside the certain ones would misread. */
+.electiveBlock {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--panel-border);
+}
+
+.electiveHeading {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+
+.electiveTable {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.electiveRow {
+  display: grid;
+  grid-template-columns: minmax(80px, 1fr) 90px 70px 80px;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.electiveRow:nth-child(even) {
+  background: var(--row-alt);
+}
+
+.electiveHead {
+  background: var(--surface-bg);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.electiveHead:nth-child(even) {
+  background: var(--surface-bg);
+}
+
+.electiveCode {
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+}
+
+.electiveNote {
+  font-size: 11px;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text-muted);
+}
+
+.electiveSeats {
+  font-family: var(--font-mono);
+  text-align: right;
+  color: var(--accent-blue);
+}
+
+/* The projected table carries a new-intake column the elective one does not. */
+.projectedRow {
+  grid-template-columns: minmax(80px, 1fr) 80px 80px 60px 90px;
+}
+
+/* A saved run's timestamp, which opens its per-unit figures. */
+.runLink {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--accent-blue);
+  cursor: pointer;
+  text-align: left;
+}
+
+.runLink:hover {
+  text-decoration: underline;
+}
+
+.runDelete {
+  /* The row is a flex container, so this takes up the slack and pins the button to the far right. */
+  margin-left: auto;
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  padding: 0 0 0 12px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.runDelete:hover {
+  color: var(--accent-red);
+}
+
+/* Through to the Head of Department view, which reads a saved run rather than the live cohort. */
+.reportLink {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 8px 14px;
+  border: 1px solid var(--accent-blue);
+  border-radius: 6px;
+  background: var(--active-bg);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent-blue);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+
+.reportLink:hover {
+  background: var(--accent-blue);
+  color: #fff;
 }

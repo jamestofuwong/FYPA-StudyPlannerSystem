@@ -134,11 +134,10 @@ describe("Matching Engine Phase 2 & 3 (Jest)", () => {
       });
 
       // Provide a student who has matched every string exactly
+      // completedUnits is what scorePlanners reads; the planner's own lists sort each code into core,
+       // major core, the GRP_A pool and the free elective pool.
       const fullProfile = makeProfile({
-        completedCore: new Set(["C1"]),
-        completedMajorCore: new Set(["M1"]),
-        completedPrescribed: new Set(["UNIT_A"]), // Matches GRP_A pool
-        completedFreeElectives: new Set(["UNIT_FREE"]), // Matches 1 required slot
+        completedUnits: new Set(["C1", "M1", "UNIT_A", "UNIT_FREE"]),
         hasWIL: true, // Adds final 5%
       });
 
@@ -156,8 +155,7 @@ describe("Matching Engine Phase 2 & 3 (Jest)", () => {
       });
 
       const edgeProfile = makeProfile({
-        completedCore: new Set(["C1"]),
-        completedMajorCore: new Set(["MC1"]),
+        completedUnits: new Set(["C1", "MC1"]),
         hasWIL: true, // Gives 2 exemptions, so 2 - 2 = 0 slots required
       });
 
@@ -176,7 +174,7 @@ describe("Matching Engine Phase 2 & 3 (Jest)", () => {
       });
 
       const profile = makeProfile({
-        completedPrescribed: new Set(["PA1", "PB1", "PB2"]),
+        completedUnits: new Set(["PA1", "PB1", "PB2"]),
       });
 
       const [result] = scorePlanners(profile, [planner], DEFAULT_CONFIG);

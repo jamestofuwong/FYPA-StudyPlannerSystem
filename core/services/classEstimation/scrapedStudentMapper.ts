@@ -10,6 +10,7 @@
 import type { CourseType, RawStudentInput } from '../../shared/types/matching';
 import type { ScrapedStudent } from '../../shared/types/student';
 import { getCompletedUnitCodes } from '../../shared/constants/grades';
+import { earliestSemesterTerm } from './termCode';
 import { DEFAULT_CLASS_ESTIMATION_CONFIG, type ClassEstimationConfig } from '../../shared/types/classEstimation';
 
 export interface MappedRawStudentInput {
@@ -58,17 +59,33 @@ export function mapScrapedStudentToRawInput(
 
   const completedUnitCodes = getCompletedUnitCodes(scraped.courseList);
 
-  const enrollment = parseEnrollmentYearMonth(scraped.enrollmentDate);
+  // Intake is read from the Term column first. A code like "2024_FEB_S1" states the year and teaching
+  // period outright, while enrollmentDate arrives as an ambiguous DD/MM/YYYY that has already needed one
+  // round of parsing fixes, and can also reflect a re-enrolment rather than the original intake.
+  // earliestSemesterTerm ignores an earlier short term, so a winter unit taken before a student's first
+  // semester doesn't read as a "winter intake", which no planner has.
+  const firstTerm = earliestSemesterTerm((scraped.courseList ?? []).map((row) => row?.term));
 
   let intakeYear: number;
   let intakeSemester: 1 | 2;
-  if (enrollment) {
-    intakeYear = enrollment.year;
-    intakeSemester = deriveSemesterFromMonth(enrollment.month);
+  if (firstTerm) {
+    intakeYear = firstTerm.year;
+    // A short term only reaches here when the transcript has nothing else, in which case the month it
+    // starts in is still the best available guide.
+    intakeSemester = firstTerm.kind === 'semester'
+      ? (firstTerm.term === 2 ? 2 : 1)
+      : deriveSemesterFromMonth(firstTerm.month);
   } else {
-    intakeYear = new Date().getUTCFullYear();
-    intakeSemester = 1;
-    warnings.push('intakeYear/intakeSemester defaulted to the current year and semester 1: enrollmentDate was missing or unparseable');
+    const enrollment = parseEnrollmentYearMonth(scraped.enrollmentDate);
+    if (enrollment) {
+      intakeYear = enrollment.year;
+      intakeSemester = deriveSemesterFromMonth(enrollment.month);
+      warnings.push('intakeYear/intakeSemester fell back to enrollmentDate: no readable term code on the transcript');
+    } else {
+      intakeYear = new Date().getUTCFullYear();
+      intakeSemester = 1;
+      warnings.push('intakeYear/intakeSemester defaulted to the current year and semester 1: no readable term code, and enrollmentDate was missing or unparseable');
+    }
   }
 
   // courseType does not affect which planners are considered (confirmed by

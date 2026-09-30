@@ -896,7 +896,7 @@ export default function DashboardPage() {
       )}
 
       {/* Loading states */}
-      {!isLoggedIn && portalSessionStatus !== 'login-pending' && (
+      {!isLoggedIn && portalSessionStatus !== 'login-pending' && !studentLoaded && (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '60px 20px', textAlign: 'center' }}>
           <div style={{ fontSize: 48, opacity: 0.25 }}>🔒</div>
           <div style={{ fontSize: 14, fontWeight: 600, marginTop: 12 }}>Log in to proceed</div>

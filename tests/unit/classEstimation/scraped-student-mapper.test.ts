@@ -26,9 +26,30 @@ describe('deriveSemesterFromMonth', () => {
 });
 
 describe('mapScrapedStudentToRawInput', () => {
-  test('derives intakeYear/intakeSemester from a valid enrollmentDate, no warning for that field', () => {
+  // The transcript's Term column is the primary signal now, so these fixtures, which carry no readable
+  // term codes, exercise the enrollmentDate fallback. Falling back is itself worth a warning: the date can
+  // reflect a re-enrolment rather than the original intake, so a run should be able to show where the
+  // number came from. Term-code derivation is covered in estimation-record-builder.test.ts.
+  test('falls back to a valid enrollmentDate when the transcript has no term codes', () => {
     const { rawInput, warnings } = mapScrapedStudentToRawInput(scrapedStudent({ enrollmentDate: '2023-08-01' }), 'S1');
     expect(rawInput.intakeYear).toBe(2023);
+    expect(rawInput.intakeSemester).toBe(2);
+    expect(warnings.some((w) => w.includes('fell back to enrollmentDate'))).toBe(true);
+  });
+
+  // A transcript with term codes should not consult enrollmentDate at all.
+  test('prefers the transcript term code over enrollmentDate when both are present', () => {
+    const { rawInput, warnings } = mapScrapedStudentToRawInput(
+      scrapedStudent({
+        enrollmentDate: '15/02/2024',
+        courseList: [
+          { courseId: 'COS10009', courseTitle: 'X', level: '1', credits: 12.5, creditsEarned: 12.5, status: 'Complete', grade: 'HD', term: '2022_SEP_S2' },
+        ],
+      }),
+      'S1',
+    );
+
+    expect(rawInput.intakeYear).toBe(2022);
     expect(rawInput.intakeSemester).toBe(2);
     expect(warnings.some((w) => w.includes('enrollmentDate'))).toBe(false);
   });
@@ -41,11 +62,10 @@ describe('mapScrapedStudentToRawInput', () => {
     ['01/09/2023', 2023, 2],
     ['08/07/2024', 2024, 2],
     ['1/8/2022', 2022, 2],
-  ])('reads DD/MM/YYYY enrollmentDate %s as year %i, semester %i, with no warning', (enrollmentDate, year, semester) => {
-    const { rawInput, warnings } = mapScrapedStudentToRawInput(scrapedStudent({ enrollmentDate }), 'S1');
+  ])('reads DD/MM/YYYY enrollmentDate %s as year %i, semester %i', (enrollmentDate, year, semester) => {
+    const { rawInput } = mapScrapedStudentToRawInput(scrapedStudent({ enrollmentDate }), 'S1');
     expect(rawInput.intakeYear).toBe(year);
     expect(rawInput.intakeSemester).toBe(semester);
-    expect(warnings.some((w) => w.includes('enrollmentDate'))).toBe(false);
   });
 
   // A datetime string without a zone is parsed in local time by new Date(), so a boundary date like 1 July shifts to 30 June in UTC.
