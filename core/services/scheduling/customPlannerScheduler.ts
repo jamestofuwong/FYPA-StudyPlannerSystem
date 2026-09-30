@@ -123,7 +123,15 @@ export type PlanWarning =
   /** A category past the credit points the planner requires. Validation only. */
   | { kind: 'requirement_excess'; category: string; have: number; need: number }
   /** The same unit sitting in more than one semester. Validation only. */
-  | { kind: 'duplicate_placement'; unitCode: string; positions: { year: number; semester: 1 | 2 }[] };
+  | { kind: 'duplicate_placement'; unitCode: string; positions: { year: number; semester: 1 | 2 }[] }
+  /**
+   * A Conceded Pass earns credit but cannot satisfy a prerequisite, so when
+   * something still unpassed needs unitCode as one, a fresh retake is
+   * substituted instead of leaving that unit permanently blocked. Client-side
+   * only (web/app/(pages)/pathway/page.tsx). The scheduler itself is never
+   * told the retake was a Conceded Pass, only that the unit is unplaced.
+   */
+  | { kind: 'conceded_pass_retake'; unitCode: string; blockedUnitCodes: string[] };
 
 export interface CustomPlanResult {
   semesters: CustomSemesterBucket[];

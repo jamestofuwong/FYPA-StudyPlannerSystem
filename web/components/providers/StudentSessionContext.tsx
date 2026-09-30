@@ -7,6 +7,7 @@ import {
 import type { ScrapedStudent } from '../../../core/shared/types/student';
 import type {
   CustomSemesterBucket,
+  PlanWarning,
   SchedulableUnit,
 } from '../../../core/services/scheduling/customPlannerScheduler';
 import type { CategoryRequirement } from '../../../core/shared/scheduling/planValidator';
@@ -36,6 +37,8 @@ export type StudentSessionState = {
   setCustomPlanStart: Dispatch<SetStateAction<CustomPlanStart | null>>;
   retakeUnitCodes: Set<string>;
   setRetakeUnitCodes: Dispatch<SetStateAction<Set<string>>>;
+  concededPassRetakeWarnings: PlanWarning[];
+  setConcededPassRetakeWarnings: Dispatch<SetStateAction<PlanWarning[]>>;
   injectedMinors: Set<string>;
   setInjectedMinors: Dispatch<SetStateAction<Set<string>>>;
   /** Offering and requisite data for every unit the plan could contain. */
@@ -104,6 +107,9 @@ export function StudentSessionProvider({ children }: { children: ReactNode }) {
   const [customPlanStart, setCustomPlanStart] = useState<CustomPlanStart | null>(null);
   // Units in the generated pathway that are repeat attempts after a failed grade
   const [retakeUnitCodes, setRetakeUnitCodes] = useState<Set<string>>(new Set());
+  // Why a retake was substituted for a Conceded Pass that blocked a prerequisite,
+  // set once at generation time, alongside retakeUnitCodes; see generateCustomPlan.
+  const [concededPassRetakeWarnings, setConcededPassRetakeWarnings] = useState<PlanWarning[]>([]);
   const [injectedMinors, setInjectedMinors] = useState<Set<string>>(new Set());
   const [planUnits, setPlanUnits] = useState<SchedulableUnit[]>([]);
   const [planIntakeSemester, setPlanIntakeSemester] = useState<1 | 2>(1);
@@ -132,6 +138,7 @@ export function StudentSessionProvider({ children }: { children: ReactNode }) {
     setCustomPlan(null);
     setCustomPlanStart(null);
     setRetakeUnitCodes(new Set());
+    setConcededPassRetakeWarnings([]);
     setInjectedMinors(new Set());
     setPlanUnits([]);
     setPlanIntakeSemester(1);
@@ -159,6 +166,7 @@ export function StudentSessionProvider({ children }: { children: ReactNode }) {
         customPlan, setCustomPlan,
         customPlanStart, setCustomPlanStart,
         retakeUnitCodes, setRetakeUnitCodes,
+        concededPassRetakeWarnings, setConcededPassRetakeWarnings,
         injectedMinors, setInjectedMinors,
         planUnits, setPlanUnits,
         planIntakeSemester, setPlanIntakeSemester,

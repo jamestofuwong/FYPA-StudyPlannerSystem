@@ -97,6 +97,8 @@ function describeWarning(w: PlanWarning, maxSemesters: number, intakeSemester: 1
       return `${w.unitCode} appears in ${w.positions.length} semesters: ${w.positions.map((p) => `Y${p.year} S${p.semester}`).join(', ')}`;
     case 'compulsory_missing':
       return `${listCodes(w.unitCodes)} ${w.unitCodes.length === 1 ? 'is' : 'are'} required to graduate but ${w.unitCodes.length === 1 ? 'is' : 'are'} not in this plan`;
+    case 'conceded_pass_retake':
+      return `${w.unitCode} was passed as a Conceded Pass, which cannot satisfy the prerequisite for ${listCodes(w.blockedUnitCodes)}. A retake has been scheduled instead`;
     case 'requirement_shortfall':
       return `${CATEGORY_NAMES[w.category] ?? w.category} total ${w.have} credit points, but ${w.need} are required to graduate`;
     case 'requirement_excess':
@@ -193,6 +195,7 @@ export default function PathwayPage() {
     customPlan, setCustomPlan,
     setCustomPlanStart,
     retakeUnitCodes, setRetakeUnitCodes,
+    concededPassRetakeWarnings, setConcededPassRetakeWarnings,
     injectedMinors, setInjectedMinors,
     planUnits, setPlanUnits,
     planIntakeSemester, setPlanIntakeSemester,
@@ -308,13 +311,21 @@ export default function PathwayPage() {
 
     // Collect all unit codes that act as prerequisites for those remaining units
     const activePrereqCodes = new Set<string>();
+    // Which specific unpassed unit(s) each prerequisite code is needed by,
+    // purely for the conceded_pass_retake warning below, so the advisor sees
+    // which unit(s) forced a retake rather than just "something needed it".
+    // Does not affect activePrereqCodes or anything the scheduler decides.
+    const prereqBlockedBy = new Map<string, Set<string>>();
     for (const tu of unpassedPlannerUnits) {
       for (const group of tu.unit.requisite_groups ?? []) {
         for (const cond of group.conditions ?? []) {
           if (cond.type === 'unit' && cond.unit?.unit_code) {
             const reqType = cond.requisite_type ?? 'prerequisite';
             if (reqType === 'prerequisite' || reqType === 'corequisite') {
-              activePrereqCodes.add(cond.unit.unit_code.trim().toUpperCase());
+              const reqCode = cond.unit.unit_code.trim().toUpperCase();
+              activePrereqCodes.add(reqCode);
+              if (!prereqBlockedBy.has(reqCode)) prereqBlockedBy.set(reqCode, new Set());
+              prereqBlockedBy.get(reqCode)!.add(tu.unit.unit_code.trim().toUpperCase());
             }
           }
         }
@@ -325,6 +336,16 @@ export default function PathwayPage() {
     const blockingConcededPasses = new Set(
       concededPassCodes.filter((cpCode) => activePrereqCodes.has(normaliseCode(cpCode)))
     );
+
+    // Visibility only: name which unit(s) forced each retake, so the advisor
+    // can tell "genuinely failed" apart from "passed with a Conceded Pass,
+    // but a prerequisite chain forces a clean retake anyway". Does not change
+    // which units get retaken (see completedForScheduler/effectiveConcededPasses).
+    const newConcededPassRetakeWarnings: PlanWarning[] = [...blockingConcededPasses].map((code) => ({
+      kind: 'conceded_pass_retake',
+      unitCode: code,
+      blockedUnitCodes: [...(prereqBlockedBy.get(normaliseCode(code)) ?? [])].sort(),
+    }));
 
     // Completed for scheduler: Keep non-blocking CP as completed; only retake blocking CP
     const completedForScheduler = rawCompletedCodes.filter(
@@ -364,6 +385,7 @@ export default function PathwayPage() {
         setCustomWilSlot(null);
         setCustomPlanStart({ year: data.startYear, semester: data.startSemester });
         setRetakeUnitCodes(retakeCodes);
+        setConcededPassRetakeWarnings(newConcededPassRetakeWarnings);
         setPlanUnits([...(data.units ?? []), ...(data.mpuUnits ?? [])]);
         setPlanIntakeSemester(data.intakeSemester === 2 ? 2 : 1);
         setPlanCompletedUnits(data.completedUnits ?? []);
@@ -762,31 +784,36 @@ export default function PathwayPage() {
               // A freshly generated plan already carries the scheduler's own
               // warnings. Once edited, the arrangement is the advisor's, so it
               // has to be re-checked.
-              const warnings: PlanWarning[] = isPlanEdited
-                ? [
-                    ...validation,
-                    // The generator's findings about units it never placed stay
-                    // true until the advisor places them
-                    ...carryForwardWarnings(customPlan.warnings ?? [], semesters),
-                  ]
-                : [
-                    ...(customPlan.warnings ?? []),
-                    // The scheduler places what it is given and never counts the
-                    // total, so a plan short of a category's credit points comes
-                    // out clean. That shortfall is worth saying before any edit.
-                    // compulsory_missing is the same: the scheduler places a unit
-                    // or reports why it could not (requisite_violation, already in
-                    // customPlan.warnings above), but never checks the finished
-                    // plan against the full required-unit list the way validatePlan
-                    // does, so a compulsory unit silently absent from a fresh plan
-                    // needs this to be said before any edit too.
-                    ...validation.filter(
-                      (w) =>
-                        w.kind === 'requirement_shortfall' ||
-                        w.kind === 'requirement_excess' ||
-                        w.kind === 'compulsory_missing',
-                    ),
-                  ];
+              const warnings: PlanWarning[] = [
+                ...(isPlanEdited
+                  ? [
+                      ...validation,
+                      // The generator's findings about units it never placed stay
+                      // true until the advisor places them
+                      ...carryForwardWarnings(customPlan.warnings ?? [], semesters),
+                    ]
+                  : [
+                      ...(customPlan.warnings ?? []),
+                      // The scheduler places what it is given and never counts the
+                      // total, so a plan short of a category's credit points comes
+                      // out clean. That shortfall is worth saying before any edit.
+                      // compulsory_missing is the same: the scheduler places a unit
+                      // or reports why it could not (requisite_violation, already in
+                      // customPlan.warnings above), but never checks the finished
+                      // plan against the full required-unit list the way validatePlan
+                      // does, so a compulsory unit silently absent from a fresh plan
+                      // needs this to be said before any edit too.
+                      ...validation.filter(
+                        (w) =>
+                          w.kind === 'requirement_shortfall' ||
+                          w.kind === 'requirement_excess' ||
+                          w.kind === 'compulsory_missing',
+                      ),
+                    ]),
+                // Set once at generation time, same as retakeUnitCodes/the RETAKE
+                // badge. The substitution decision stays true regardless of edits.
+                ...concededPassRetakeWarnings,
+              ];
 
               const overCapacity = new Map<string, Extract<PlanWarning, { kind: 'over_capacity' }>>();
               const byUnit = new Map<string, string[]>();
