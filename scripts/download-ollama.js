@@ -97,6 +97,19 @@ function findBinary(dir, name) {
   return null;
 }
 
+function copyDirRecursive(src, dest) {
+  fs.mkdirSync(dest, { recursive: true });
+  for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+    const srcPath  = path.join(src,  entry.name);
+    const destPath = path.join(dest, entry.name);
+    if (entry.isDirectory()) {
+      copyDirRecursive(srcPath, destPath);
+    } else {
+      fs.copyFileSync(srcPath, destPath);
+    }
+  }
+}
+
 async function main() {
   const platform = process.platform;
   const assetName = ASSET_MAP[platform];
@@ -141,15 +154,20 @@ async function main() {
       process.exit(1);
     }
 
-    const dest = path.join(OUT_DIR, BINARY_NAME);
-    fs.copyFileSync(binary, dest);
-
-    if (platform !== 'win32') {
+    if (platform === 'win32') {
+      // On Windows the zip contains ollama.exe + lib/ollama/llama-server.exe + DLLs.
+      // Copy the entire directory tree so Ollama can locate llama-server at runtime.
+      const binaryDir = path.dirname(binary);
+      copyDirRecursive(binaryDir, OUT_DIR);
+      console.log(`\n[download-ollama] Ollama runtime ready: ${OUT_DIR}`);
+    } else {
+      // On macOS/Linux the archive contains only the single binary.
+      const dest = path.join(OUT_DIR, BINARY_NAME);
+      fs.copyFileSync(binary, dest);
       fs.chmodSync(dest, 0o755);
+      const sizeMb = (fs.statSync(dest).size / 1024 / 1024).toFixed(1);
+      console.log(`\n[download-ollama] Ollama binary ready: ${dest} (${sizeMb} MB)`);
     }
-
-    const sizeMb = (fs.statSync(dest).size / 1024 / 1024).toFixed(1);
-    console.log(`\n[download-ollama] Ollama binary ready: ${dest} (${sizeMb} MB)`);
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }

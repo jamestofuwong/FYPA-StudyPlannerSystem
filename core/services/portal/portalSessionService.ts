@@ -14,6 +14,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import type { ScrapedStudent, ScrapedCourseListItem } from '../../shared/types/student';
 import { captureLoginSession } from './captureLoginSession';
 import {
@@ -123,15 +124,17 @@ const store   = globalThis.__portalStore;
 
 // ─── Session file persistence ─────────────────────────────────────────────────
 
-function getSessionFilePath(): string | null {
-  const dir = process.env.APP_DATA_DIR;
-  if (!dir) return null;
+function getSessionFilePath(): string {
+  // Prefer the Electron userData path (set by main.ts in both dev and prod).
+  // Fall back to ~/.fypa-study-planner so session persistence works even when
+  // APP_DATA_DIR is not in the environment (e.g. the Next.js dev server process).
+  const dir = process.env.APP_DATA_DIR ?? path.join(os.homedir(), '.fypa-study-planner');
+  fs.mkdirSync(dir, { recursive: true });
   return path.join(dir, 'portal-session.json');
 }
 
 function loadSession(): boolean {
   const filePath = getSessionFilePath();
-  if (!filePath) return false;
   try {
     const raw = fs.readFileSync(filePath, 'utf-8');
     const data = JSON.parse(raw) as { cookies?: string; portalToken?: string };
@@ -149,7 +152,6 @@ function loadSession(): boolean {
 
 function saveSession(): void {
   const filePath = getSessionFilePath();
-  if (!filePath) return;
   try {
     fs.writeFileSync(
       filePath,
@@ -163,9 +165,7 @@ function saveSession(): void {
 
 function clearSession(): void {
   const filePath = getSessionFilePath();
-  if (filePath) {
-    try { fs.unlinkSync(filePath); } catch { /* already gone */ }
-  }
+  try { fs.unlinkSync(filePath); } catch { /* already gone */ }
   session.cookies = null;
   session.portalToken = null;
   session.sessionStatus = 'idle';
@@ -413,4 +413,14 @@ export async function fetchDegreeAudit(
 export { PortalAuthError };
 
 // ─── Auto-load persisted session on module init ───────────────────────────────
-loadSession();
+if (loadSession()) {
+  // Session was restored from disk — fetch the student list in the background
+  // so the dashboard spinner resolves instead of spinning indefinitely.
+  fetchAndStoreStudents({ cookies: session.cookies!, portalToken: session.portalToken! })
+    .then(() => console.log(`[Portal] Session restored, student list loaded: ${store.students.length}`))
+    .catch((err) => {
+      console.error('[Portal] Student list fetch after session restore failed:', err);
+      // If the saved session has expired, clear it so the user is prompted to log in again.
+      clearSession();
+    });
+}
