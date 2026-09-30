@@ -22,7 +22,8 @@
     "jose": "^5.9.6",
     "next": "16.1.6",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@prisma/client": "^7.10.0",
