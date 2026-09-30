@@ -80,7 +80,10 @@ async function callOllama(prompt: string): Promise<string> {
       options: { temperature: 0, num_predict: 40 },
     }),
   });
-  if (!response.ok) throw new Error(`Ollama returned ${response.status}`);
+  if (!response.ok) {
+    const errBody = await response.text().catch(() => '');
+    throw new Error(`Ollama returned ${response.status}: ${errBody}`);
+  }
   const body = await response.json() as { response: string };
   return body.response.trim();
 }
