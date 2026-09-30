@@ -22,6 +22,8 @@ import {
   resolveUnitStates,
 } from '../../../../core/shared/constants/grades';
 import { Badge, InlineCode, ProgressBar, type BadgeClass } from '../../../components/common/Primitives';
+import MinorProgressCard from '../../../components/common/MinorProgressCard';
+
 
 // Main component
 

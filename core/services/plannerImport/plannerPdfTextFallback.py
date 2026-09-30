@@ -1,32 +1,25 @@
-﻿import argparse
-import copy
+﻿import copy
 import ctypes
-import json
 import math
 import re
-import time
 from collections import Counter, defaultdict
 from pathlib import Path
-
 import pypdfium2 as pdfium
 import pypdfium2.raw as pdfium_raw
 from pdftext.extraction import dictionary_output
-
-from plannerPdfExtractor import (
-    UNIT_MARKER_RE,
+from plannerPdfEvidence import UNIT_MARKER_RE, _normalise_semester_number
+from plannerPdfRequirements import extract_metadata, extract_requirements
+from plannerPdfTextRules import (
     _canonical_minor_section_name,
+    clean_text,
     _clean_candidate_name,
     _clean_candidate_prereq,
     _looks_like_minor_section_header,
     _looks_like_sidebar_footer_noise,
     _looks_like_wil_text,
     _name_quality_score,
-    _normalise_semester_number,
     _split_prereq_and_offered,
     _strip_unit_markers,
-    clean_text,
-    extract_metadata,
-    extract_requirements,
 )
 from plannerStructureAssembler import (
     CATEGORY_GROUPS,
@@ -38,6 +31,9 @@ from plannerStructureAssembler import (
 )
 from plannerExtractionQuality import _is_bad_unit_name, _looks_corrupted_existing_name
 
+# ============================================================
+# STEP 1: Prepare PDFText evidence primitives
+# ============================================================
 # PDFText fallback recovers row and column evidence when the primary extractor leaves gaps.
 # Candidate values are matched to unit codes and accepted only when they improve current data.
 CODE_ROW_RE = re.compile(
@@ -62,12 +58,12 @@ SECTION_STOP_RE = re.compile(
     re.IGNORECASE,
 )
 
-
+# Normalize text returned by PDFText.
 def _normalise_source_text(text):
     text = str(text or "").replace("\ufffd", "-")
     return re.sub(r"\s+", " ", text).strip()
 
-
+# Return one box covering all supplied boxes.
 def _bbox_union(boxes):
     return (
         min(box[0] for box in boxes),
@@ -76,17 +72,17 @@ def _bbox_union(boxes):
         max(box[3] for box in boxes),
     )
 
-
+# Measure the intersection area of two boxes.
 def _overlap_area(a, b):
     width = max(0.0, min(a[2], b[2]) - max(a[0], b[0]))
     height = max(0.0, min(a[3], b[3]) - max(a[1], b[1]))
     return width * height
 
-
+# Measure the distance between two fill colours.
 def _colour_distance(left, right):
     return math.sqrt(sum((a - b) ** 2 for a, b in zip(left, right)))
 
-
+# Extract filled PDFium paths for layout evidence.
 def _pdfium_fills(pdf_path):
     pages = []
     document = pdfium.PdfDocument(str(pdf_path))
@@ -116,9 +112,8 @@ def _pdfium_fills(pdf_path):
         document.close()
     return pages
 
-
+# Build the neutral page/block/line/span representation from PDFText.
 def extract_intermediate(pdf_path, sort=False, keep_chars=False):
-    """Build the neutral page/block/line/span representation from PDFText."""
     raw_pages = dictionary_output(
         str(pdf_path), sort=sort, page_range=None, keep_chars=keep_chars
     )
@@ -185,7 +180,10 @@ def extract_intermediate(pdf_path, sort=False, keep_chars=False):
         })
     return pages
 
-
+# ============================================================
+# STEP 2: Read layout, fills, and legend evidence
+# ============================================================
+# Map a legend line to its category label.
 def _category_label(text):
     lowered = text.lower()
     if "work-integrated" in lowered or "work integrated" in lowered or "industry placement" in lowered:
@@ -198,7 +196,7 @@ def _category_label(text):
         return "core"
     return None
 
-
+# Find the fill with the greatest overlap with a box.
 def _fill_for_bbox(bbox, fills):
     candidates = []
     for fill in fills:
@@ -208,7 +206,7 @@ def _fill_for_bbox(bbox, fills):
     coloured = [item for item in candidates if item[2] != (1.0, 1.0, 1.0)]
     return max(coloured or candidates, default=(0, 0, None))[2]
 
-
+# Learn category fills from PDFText legend lines.
 def _discover_colour_legend(pages):
     legend = {}
     for page in pages:
@@ -222,7 +220,7 @@ def _discover_colour_legend(pages):
                     legend.setdefault(fill, category)
     return legend
 
-
+# Match a row fill to the learned category legend.
 def _category_from_fill(bbox, fills, legend):
     fill = _fill_for_bbox(bbox, fills)
     if fill is None or not legend:
@@ -231,7 +229,7 @@ def _category_from_fill(bbox, fills, legend):
     distance = _colour_distance(fill, known)
     return (category if distance <= 0.14 else None), fill
 
-
+# Find the boundary before a right-hand information sidebar.
 def _content_right(page):
     candidates = []
     for block in page["blocks"]:
@@ -242,7 +240,7 @@ def _content_right(page):
                 candidates.append(left)
     return min(candidates) if candidates else None
 
-
+# Parse a year header from a line of text.
 def _parse_year(text):
     match = YEAR_RE.search(text)
     if not match:
@@ -250,7 +248,7 @@ def _parse_year(text):
     value = match.group(1).lower()
     return int(value) if value.isdigit() else YEAR_WORDS.get(value)
 
-
+# Parse a semester or special-term header.
 def _parse_semester(text):
     match = SEMESTER_RE.search(text)
     if match:
@@ -261,7 +259,7 @@ def _parse_semester(text):
         return 4, None
     return None, None
 
-
+# Parse a PDFText row into name, prerequisite, and offered-in fields.
 def _parse_row(code, body):
     body = _normalise_source_text(body)
     prescribed = bool(re.search(r"\bPrescribed\s+Elective\^?", body, re.IGNORECASE))
@@ -285,7 +283,7 @@ def _parse_row(code, body):
         prescribed,
     )
 
-
+# Check whether a line can continue the current row.
 def _is_continuation(line):
     text = line["text"].strip()
     return bool(
@@ -295,9 +293,8 @@ def _is_continuation(line):
         and not _looks_like_sidebar_footer_noise(text)
     )
 
-
+# Parse PDFText geometry into planner rows, headers, and category evidence.
 def extract_layout(pdf_path, sort=False, keep_chars=False):
-    """Parse PDFText geometry into planner rows, headers, and category evidence."""
     pages = extract_intermediate(pdf_path, sort=sort, keep_chars=keep_chars)
     legend = _discover_colour_legend(pages)
     source_lines = [line["text"] for page in pages for block in page["blocks"] for line in block["lines"]]
@@ -448,9 +445,8 @@ def extract_layout(pdf_path, sort=False, keep_chars=False):
         "debug_rows": debug_rows,
     }
 
-
+# Return the PDFText-derived planner structure used by fallback recovery.
 def extract_planner(pdf_path, sort=False):
-    """Return the PDFText-derived planner structure used by fallback recovery."""
     layout = extract_layout(pdf_path, sort=sort)
     return assemble_json(
         Path(pdf_path).stem,
@@ -459,58 +455,6 @@ def extract_planner(pdf_path, sort=False):
         layout["units"],
         layout["elective_sections"],
     )
-
-
-def _display_groups(data):
-    categories = data.get("categories", {})
-    groups = [
-        ("CORE", categories.get("core_units", [])),
-        ("MAJOR", categories.get("major_units", [])),
-        ("MPU", categories.get("mpu_group", [])),
-        ("PRESCRIBED ELECTIVE", categories.get("elective_groups", {}).get("prescribed_elective", [])),
-        ("ELECTIVE", categories.get("elective_groups", {}).get("elective", [])),
-        ("WIL", categories.get("wil_group", [])),
-    ]
-    for minor in categories.get("minor_groups", []) or []:
-        groups.append(("MINOR: " + str(minor.get("minor_name") or ""), minor.get("units", [])))
-    return groups
-
-
-def print_result_table(data):
-    """Display final data without mutating or re-running extraction."""
-    info = data.get("course_information", {})
-    print("Course: " + str(info.get("course") or ""))
-    print("Major: " + str(info.get("major") or ""))
-    print("Intake: " + str(info.get("intake") or "") + " " + str(info.get("intake_year") or ""))
-    headers = ("Year", "Semester", "Category", "Unit Code", "Unit Name", "Prerequisite", "Offered In")
-    for group_name, units in _display_groups(data):
-        if not units:
-            continue
-        rows = []
-        for unit in units:
-            rows.append(tuple(str(unit.get(key) if unit.get(key) is not None else "") for key in (
-                "year_level", "semester", "category", "unit_code", "unit_name", "prerequisite", "offered_in"
-            )))
-        widths = [max(len(headers[i]), *(len(row[i]) for row in rows)) for i in range(len(headers))]
-        print("\n=== " + group_name + " ===")
-        print(" | ".join(headers[i].ljust(widths[i]) for i in range(len(headers))))
-        print("-+-".join("-" * width for width in widths))
-        for row in rows:
-            print(" | ".join(row[i].ljust(widths[i]) for i in range(len(headers))))
-
-
-def print_debug(layout, code):
-    evidence = layout["debug_rows"].get(code.upper())
-    if not evidence:
-        print("No PDFText row evidence found for " + code)
-        return
-    print(json.dumps(evidence, indent=2, ensure_ascii=False))
-
-
-
-# Targeted fallback application
-
-
 CATEGORY_GROUPS = {
     "core": ("core_units",),
     "major_core": ("major_units",),
@@ -525,7 +469,11 @@ NOISE_RE = re.compile(
     re.IGNORECASE,
 )
 
-
+# ============================================================
+# STEP 3: Build planner candidates from the evidence
+# ============================================================
+# Yield main planner units with their category names.
+# STEP 4: Check candidate quality and deficits
 def _iter_unit_refs(data):
     categories = data.get("categories", {})
     for category, path in CATEGORY_GROUPS.items():
@@ -536,7 +484,7 @@ def _iter_unit_refs(data):
             if isinstance(unit, dict):
                 yield category, unit
 
-
+# Index current planner units by code.
 def _unit_index(data):
     return {
         str(unit.get("unit_code") or "").strip().upper(): (category, unit)
@@ -544,7 +492,7 @@ def _unit_index(data):
         if unit.get("unit_code")
     }
 
-
+# Collect unit codes already owned by minor groups.
 def _minor_codes(data):
     groups = data.get("categories", {}).get("minor_groups", [])
     return {
@@ -553,13 +501,13 @@ def _minor_codes(data):
         for unit in group.get("units", []) if isinstance(unit, dict) and unit.get("unit_code")
     }
 
-
+# Normalize a fill colour for comparison.
 def _fill_key(value):
     if not isinstance(value, (tuple, list)) or len(value) < 3:
         return None
     return tuple(round(float(channel), 3) for channel in value[:3])
 
-
+# Index PDFText units and record duplicate anchors.
 def _p1_units(layout):
     result = {}
     duplicates = set()
@@ -572,7 +520,7 @@ def _p1_units(layout):
         result[code] = unit
     return result, duplicates
 
-
+# Learn category mappings from fills shared with existing units.
 def _learn_fill_categories(base_index, p1_index):
     evidence = defaultdict(Counter)
     for code, (category, _) in base_index.items():
@@ -584,7 +532,7 @@ def _learn_fill_categories(base_index, p1_index):
             evidence[fill][category] += 1
     return evidence
 
-
+# Check whether a missing PDFText row is safe to consider.
 def _reliable_missing_candidate(code, candidate, base_index, minor_codes, duplicates):
     name = candidate.get("name")
     return (
@@ -596,9 +544,8 @@ def _reliable_missing_candidate(code, candidate, base_index, minor_codes, duplic
         len(str(name or "").split()) >= 2
     )
 
-
+# Map an unmapped fill only when its whole cohort closes one count deficit.
 def _learn_missing_fill_categories(base_index, p1_index, minor_codes, duplicates, data):
-    """Map an unmapped fill only when its whole cohort closes one count deficit."""
     cohorts = defaultdict(list)
     for code, candidate in p1_index.items():
         if not _reliable_missing_candidate(
@@ -621,7 +568,7 @@ def _learn_missing_fill_categories(base_index, p1_index, minor_codes, duplicates
             inferred[fill] = matches[0]
     return inferred
 
-
+# Measure the remaining count deficit for one category.
 def _requirement_deficit(data, category):
     requirement_key = {
         "core": "core", "major_core": "major", "elective": "elective", "wil": "wil"
@@ -635,7 +582,7 @@ def _requirement_deficit(data, category):
     current = sum(1 for current_category, _ in _iter_unit_refs(data) if current_category == category)
     return max(0, expected - current)
 
-
+# Propose a category only from fill and requirement evidence.
 def _category_proposal(candidate, fill_categories, missing_fill_categories, data):
     fill = _fill_key(candidate.get("_provenance", {}).get("category", {}).get("fill"))
     votes = fill_categories.get(fill, Counter())
@@ -651,7 +598,7 @@ def _category_proposal(candidate, fill_categories, missing_fill_categories, data
         return None, "no_requirement_count_deficit"
     return category, "unanimous_fill_mapping_and_requirement_deficit"
 
-
+# Validate a PDFText name replacement against the current name.
 def _clean_name_candidate(old_name, new_name, candidate):
     old = re.sub(r"\s+", " ", str(old_name or "")).strip()
     new = re.sub(r"\s+", " ", str(new_name or "")).strip()
@@ -685,7 +632,10 @@ def _clean_name_candidate(old_name, new_name, candidate):
     )
     return True, reason
 
-
+# ============================================================
+# STEP 5: Apply safe fallback proposals
+# ============================================================
+# Append a validated missing unit to its category group.
 def _append_unit(data, category, candidate):
     target = data["categories"]
     for key in CATEGORY_GROUPS[category]:
@@ -700,10 +650,8 @@ def _append_unit(data, category, candidate):
         "offered_in": None,
     })
 
-
+# Recover missing or suspicious fields from PDFText without replacing valid data.
 def apply_pdftext_fallback(base_data, pdf_path, sort=False):
-    """Recover missing or suspicious fields from PDFText without replacing valid data."""
-    """Return the fallback result and diagnostics without mutating the baseline."""
     result = copy.deepcopy(base_data)
     layout = extract_layout(pdf_path, sort=sort)
     base_index = _unit_index(result)
