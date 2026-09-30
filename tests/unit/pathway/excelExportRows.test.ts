@@ -1,4 +1,4 @@
-import { buildExcelRows, excelCategoryFillHex, computeExcelMergeRanges, type ExcelPlanRow } from '@/app/(pages)/pathway/page';
+import { buildExcelRows, excelCategoryFillHex, excelCellFillHex, EXCEL_NEUTRAL_FILL_HEX, computeExcelMergeRanges, type ExcelPlanRow } from '@/app/(pages)/pathway/page';
 import type { CustomSemesterBucket } from '@core/services/scheduling/customPlannerScheduler';
 
 // Pure data-construction tests: check the row array the code builds,
@@ -92,6 +92,24 @@ describe('excelCategoryFillHex — matches Primitives.module.css / Primitives.ts
     ['minor', '4EC9B0'],
   ])('%s -> %s', (category, hex) => {
     expect(excelCategoryFillHex(category)).toBe(hex);
+  });
+});
+
+describe('excelCellFillHex — Year/Semester/Term are neutral, Unit Code/Name/Category are category-coloured', () => {
+  test.each([0, 1, 2])('column %i (Year/Semester/Term) is neutral grey regardless of category', (col) => {
+    for (const category of ['core', 'major_core', 'mpu', 'wil', 'prescribed_elective', 'elective']) {
+      expect(excelCellFillHex(category, col)).toBe(EXCEL_NEUTRAL_FILL_HEX);
+    }
+  });
+
+  test.each([3, 4, 5])('column %i (Unit Code/Name/Category) still gets the category colour, unchanged', (col) => {
+    expect(excelCellFillHex('core', col)).toBe('569CD6');
+    expect(excelCellFillHex('wil', col)).toBe('C586C0');
+    expect(excelCellFillHex('mpu', col)).toBe('F48771');
+  });
+
+  test('EXCEL_NEUTRAL_FILL_HEX matches the header row\'s own fill colour', () => {
+    expect(EXCEL_NEUTRAL_FILL_HEX).toBe('D9D9D9');
   });
 });
 

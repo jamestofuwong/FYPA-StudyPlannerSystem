@@ -230,6 +230,21 @@ export function excelCategoryFillHex(category: string): string {
   return '4EC9B0';
 }
 
+// Light grey, matching the header row's own fill. Used for Year/Semester/
+// Term (see excelCellFillHex) instead of a category colour, since those
+// columns get merged and would otherwise show whichever row's category
+// happened to land first in the merged range.
+export const EXCEL_NEUTRAL_FILL_HEX = 'D9D9D9';
+
+/**
+ * The fill colour for one data cell: neutral for Year/Semester/Term (the
+ * unit's slot, not the unit itself), the category colour for Unit Code/
+ * Name/Category (columns >= EXCEL_FIRST_UNIT_DETAIL_COL).
+ */
+export function excelCellFillHex(category: string, col: number): string {
+  return col < EXCEL_FIRST_UNIT_DETAIL_COL ? EXCEL_NEUTRAL_FILL_HEX : excelCategoryFillHex(category);
+}
+
 /**
  * One row per unit across every semester, plus the WIL break-milestone unit
  * (Term: Winter/Summer) and the remaining/incomplete MPU list (Term: Any,
@@ -305,6 +320,10 @@ export type ExcelMergeRange = { s: { r: number; c: number }; e: { r: number; c: 
 const EXCEL_YEAR_COL = 0;
 const EXCEL_SEMESTER_COL = 1;
 const EXCEL_TERM_COL = 2;
+// First column that describes the unit itself (Unit Code) rather than its
+// slot (Year/Semester/Term): columns before this get a neutral fill in
+// handleExcelDownload, not the category colour.
+const EXCEL_FIRST_UNIT_DETAIL_COL = 3;
 
 function mergeRangesForColumn(values: (string | number)[], col: number): ExcelMergeRange[] {
   const ranges: ExcelMergeRange[] = [];
@@ -1608,15 +1627,20 @@ export default function PathwayPage() {
                     };
                   }
 
-                  // Whole-row category colour fill, matching the canonical badge
-                  // mapping (not the PDF's own pastel palette) — plus a border on
-                  // every cell so the grid still reads clearly once cells merge.
+                  // Category colour fill on Unit Code/Name/Category only (columns
+                  // 3-5): that colour describes the UNIT, matching the canonical
+                  // badge mapping (not the PDF's own pastel palette). Year/Semester/
+                  // Term (columns 0-2) get a neutral grey instead: once consecutive
+                  // cells there are merged, Excel renders only the merged block's
+                  // top-left cell, so colouring them by category would show
+                  // whichever row happened to be first (arbitrary, not a grouping
+                  // colour). Every cell still gets the border, category-coloured or not.
                   rows.forEach((row, i) => {
-                    const fill = { patternType: 'solid' as const, fgColor: { rgb: excelCategoryFillHex(row.category) } };
                     for (let c = 0; c < header.length; c++) {
                       const cellRef = XLSX.utils.encode_cell({ r: i + 1, c });
                       const cell = (ws as any)[cellRef];
                       if (!cell) continue;
+                      const fill = { patternType: 'solid' as const, fgColor: { rgb: excelCellFillHex(row.category, c) } };
                       cell.s = { fill, border: thinBorder };
                     }
                   });
