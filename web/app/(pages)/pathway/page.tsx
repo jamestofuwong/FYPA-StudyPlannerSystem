@@ -1561,11 +1561,16 @@ export default function PathwayPage() {
                                     cls={
                                       (u as any).isExtraUnit ? 'badgeBlue' :
                                       u.code === 'ELECTIVE' ? 'badgePurple' :
-                                      u.category === 'core' ? 'badgeRed' :
+                                      // core/mpu/prescribed_elective/elective match the canonical
+                                      // mapping in CourseListTable.tsx, the Study Planners page's
+                                      // reference. major_core/double_major/minor/wil are unchanged.
+                                      u.category === 'core' ? 'badgeBlue' :
                                       u.category === 'major_core' ? 'badgeOrange' :
                                       u.category === 'double_major' ? 'badgeYellow' :
-                                      u.category === 'mpu' ? 'badgeBlue' :
+                                      u.category === 'mpu' ? 'badgeRed' :
                                       u.category === 'minor' ? 'badgeYellow' :
+                                      u.category === 'prescribed_elective' ? 'badgeGreen' :
+                                      u.category === 'elective' ? 'badgeGreen' :
                                       'badgePurple'
                                     }
                                   />
