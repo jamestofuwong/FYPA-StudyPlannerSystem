@@ -98,7 +98,10 @@ function describeWarning(w: PlanWarning, maxSemesters: number, intakeSemester: 1
     case 'compulsory_missing':
       return `${listCodes(w.unitCodes)} ${w.unitCodes.length === 1 ? 'is' : 'are'} required to graduate but ${w.unitCodes.length === 1 ? 'is' : 'are'} not in this plan`;
     case 'conceded_pass_retake':
-      return `${w.unitCode} was passed as a Conceded Pass, which cannot satisfy the prerequisite for ${listCodes(w.blockedUnitCodes)}. A retake has been scheduled instead`;
+      // Routine, not an error: the RETAKE badge's own "(CP)" suffix and
+      // shortened tooltip say this already. A full sentence duplicated on
+      // the same row would overstate ordinary, correctly-handled behaviour.
+      return null;
     case 'requirement_shortfall':
       return `${CATEGORY_NAMES[w.category] ?? w.category} total ${w.have} credit points, but ${w.need} are required to graduate`;
     case 'requirement_excess':
@@ -814,6 +817,15 @@ export default function PathwayPage() {
                 // badge. The substitution decision stays true regardless of edits.
                 ...concededPassRetakeWarnings,
               ];
+
+              // Which retaken units are a Conceded Pass substitution rather than a
+              // genuine fail, so the RETAKE badge's own tooltip can say which one
+              // this is instead of always assuming a fail.
+              const concededPassRetakeCodes = new Set(
+                concededPassRetakeWarnings
+                  .filter((w): w is Extract<PlanWarning, { kind: 'conceded_pass_retake' }> => w.kind === 'conceded_pass_retake')
+                  .map((w) => normaliseCode(w.unitCode))
+              );
 
               const overCapacity = new Map<string, Extract<PlanWarning, { kind: 'over_capacity' }>>();
               const byUnit = new Map<string, string[]>();
@@ -1538,7 +1550,11 @@ export default function PathwayPage() {
                                   {u.name}
                                   {retakeUnitCodes.has(normaliseUnitCode(u.code)) && (
                                     <span
-                                      title="Previously attempted and failed — this is a repeat attempt."
+                                      title={
+                                        concededPassRetakeCodes.has(normaliseCode(u.code))
+                                          ? 'Retaken: was a Conceded Pass'
+                                          : 'Previously attempted and failed — this is a repeat attempt.'
+                                      }
                                       style={{
                                         marginLeft: 6,
                                         fontSize: 9,
@@ -1547,7 +1563,7 @@ export default function PathwayPage() {
                                         letterSpacing: '0.05em',
                                       }}
                                     >
-                                      RETAKE
+                                      {concededPassRetakeCodes.has(normaliseCode(u.code)) ? 'RETAKE (CP)' : 'RETAKE'}
                                     </span>
                                   )}
                                   {u.recommended && u.code !== 'ELECTIVE' && (

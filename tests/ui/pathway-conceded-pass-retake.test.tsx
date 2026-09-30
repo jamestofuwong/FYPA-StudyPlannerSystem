@@ -75,7 +75,7 @@ async function generate(anchorText: string) {
 }
 
 describe('conceded_pass_retake warning visibility', () => {
-  test('a CP-held unit blocking one prerequisite: warning names both the CP unit and the blocked unit, RETAKE badge still shows', async () => {
+  test('a CP-held unit blocking one prerequisite: compact "RETAKE (CP)" tag shows, no full-sentence warning', async () => {
     const plannerUnits = [
       { category: 'core', year_level: 1, semester: 1, unit: { unit_code: 'CORE1', unit_name: 'Core Unit', requisite_groups: [] } },
       {
@@ -118,13 +118,13 @@ describe('conceded_pass_retake warning visibility', () => {
     );
     await generate('CORE1');
 
-    const message = 'CPUNIT was passed as a Conceded Pass, which cannot satisfy the prerequisite for PE1. A retake has been scheduled instead.';
-
-    // Both signals sit on CPUNIT's own row, not just a bottom-of-page list
+    // One compact signal on CPUNIT's own row, not a full sentence
     const cpRow = screen.getByText('CPUNIT', { selector: 'code' }).closest('tr') as HTMLElement;
     expect(cpRow).not.toBeNull();
-    expect(cpRow.textContent).toContain('RETAKE');
-    expect(cpRow.textContent).toContain(message);
+    expect(cpRow.textContent).toContain('RETAKE (CP)');
+
+    // The old long describeWarning sentence must not render anywhere at all
+    expect(screen.queryByText(/was passed as a Conceded Pass, which cannot satisfy/i)).toBeNull();
   });
 
   test('a CP-held unit that is NOT a prerequisite for anything remaining: no retake, no warning', async () => {
@@ -168,7 +168,7 @@ describe('conceded_pass_retake warning visibility', () => {
     expect(screen.queryByText('CPUNIT2', { selector: 'code' })).toBeNull();
   });
 
-  test('two unpassed units both needing the same CP unit as a prerequisite: the warning names both, not just the first', async () => {
+  test('two unpassed units both needing the same CP unit as a prerequisite: the compact tag still ties to the one retaken unit', async () => {
     const plannerUnits = [
       { category: 'core', year_level: 1, semester: 1, unit: { unit_code: 'CORE1', unit_name: 'Core Unit', requisite_groups: [] } },
       {
@@ -226,8 +226,84 @@ describe('conceded_pass_retake warning visibility', () => {
     );
     await generate('CORE1');
 
-    const message = 'CPUNIT was passed as a Conceded Pass, which cannot satisfy the prerequisite for PE1 and PE2. A retake has been scheduled instead.';
+    // The tag sits on CPUNIT's row (the retaken unit) even though two
+    // separate units needed it, not duplicated onto PE1's or PE2's rows,
+    // and no full sentence anywhere naming them.
     const cpRow = screen.getByText('CPUNIT', { selector: 'code' }).closest('tr') as HTMLElement;
-    expect(cpRow.textContent).toContain(message);
+    expect(cpRow.textContent).toContain('RETAKE (CP)');
+    const pe1Row = screen.getByText('PE1', { selector: 'code' }).closest('tr') as HTMLElement;
+    const pe2Row = screen.getByText('PE2', { selector: 'code' }).closest('tr') as HTMLElement;
+    expect(pe1Row.textContent).not.toContain('RETAKE');
+    expect(pe2Row.textContent).not.toContain('RETAKE');
+    expect(screen.queryByText(/was passed as a Conceded Pass, which cannot satisfy/i)).toBeNull();
+  });
+
+  test('the RETAKE badge tooltip distinguishes a Conceded-Pass substitution from a genuine fail', async () => {
+    const plannerUnits = [
+      { category: 'core', year_level: 1, semester: 1, unit: { unit_code: 'CORE1', unit_name: 'Core Unit', requisite_groups: [] } },
+      {
+        category: 'prescribed_elective',
+        year_level: 1,
+        semester: 2,
+        unit: {
+          unit_code: 'PE1',
+          unit_name: 'Prescribed Elective 1',
+          requisite_groups: [{ conditions: [{ type: 'unit', requisite_type: 'prerequisite', unit: { unit_code: 'CPUNIT' } }] }],
+        },
+      },
+      { category: 'core', year_level: 1, semester: 1, unit: { unit_code: 'CPUNIT', unit_name: 'CP Unit', requisite_groups: [] } },
+      { category: 'core', year_level: 1, semester: 1, unit: { unit_code: 'FAILUNIT', unit_name: 'Failed Unit', requisite_groups: [] } },
+    ];
+    // CPUNIT: Conceded Pass, blocking PE1's prerequisite -> retaken for that reason.
+    // FAILUNIT: a genuine fail (N), unrelated to any prerequisite -> retaken because it failed.
+    const courseList = [courseRow('CPUNIT', 'CP'), courseRow('FAILUNIT', 'N')];
+
+    mockGenerate(() => ({
+      success: true,
+      data: {
+        semesters: [
+          {
+            year: 1, semester: 1,
+            units: [
+              schedulableUnit('CORE1', 'Core Unit', 'core'),
+              schedulableUnit('CPUNIT', 'CP Unit', 'core'),
+              schedulableUnit('FAILUNIT', 'Failed Unit', 'core'),
+            ],
+          },
+          { year: 1, semester: 2, units: [schedulableUnit('PE1', 'Prescribed Elective 1', 'prescribed_elective')] },
+        ],
+        unschedulableUnits: [],
+        warnings: [],
+      },
+      units: [
+        schedulableUnit('CORE1', 'Core Unit', 'core'),
+        schedulableUnit('PE1', 'Prescribed Elective 1', 'prescribed_elective'),
+        schedulableUnit('CPUNIT', 'CP Unit', 'core'),
+        schedulableUnit('FAILUNIT', 'Failed Unit', 'core'),
+      ],
+      intakeSemester: 1,
+      requirements: [],
+      completedUnits: [],
+    }));
+
+    render(
+      <ToastProvider>
+        <StudentSessionProvider>
+          <Seed courseList={courseList} plannerUnits={plannerUnits} />
+          <PathwayPage />
+        </StudentSessionProvider>
+      </ToastProvider>
+    );
+    await generate('CORE1');
+
+    const cpRow = screen.getByText('CPUNIT', { selector: 'code' }).closest('tr') as HTMLElement;
+    const cpRetakeBadge = Array.from(cpRow.querySelectorAll('span')).find((el) => el.textContent === 'RETAKE (CP)') as HTMLElement;
+    expect(cpRetakeBadge).toBeTruthy();
+    expect(cpRetakeBadge.title).toBe('Retaken: was a Conceded Pass');
+
+    const failRow = screen.getByText('FAILUNIT', { selector: 'code' }).closest('tr') as HTMLElement;
+    const failRetakeBadge = Array.from(failRow.querySelectorAll('span')).find((el) => el.textContent === 'RETAKE') as HTMLElement;
+    expect(failRetakeBadge).toBeTruthy();
+    expect(failRetakeBadge.title).toBe('Previously attempted and failed — this is a repeat attempt.');
   });
 });
