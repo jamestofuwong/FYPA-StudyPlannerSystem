@@ -296,6 +296,52 @@ export function buildExcelRows(
   return rows;
 }
 
+export type ExcelMergeRange = { s: { r: number; c: number }; e: { r: number; c: number } };
+
+// Excel sheet column indices for buildExcelRows's output, in the order
+// handleExcelDownload writes them: Year, Semester, Term, Unit Code, Unit
+// Name, Category. Only the first three are ever merged.
+const EXCEL_YEAR_COL = 0;
+const EXCEL_SEMESTER_COL = 1;
+const EXCEL_TERM_COL = 2;
+
+function mergeRangesForColumn(values: (string | number)[], col: number): ExcelMergeRange[] {
+  const ranges: ExcelMergeRange[] = [];
+  let runStart = 0;
+  for (let i = 1; i <= values.length; i++) {
+    const continuesRun = i < values.length && values[i] === values[runStart];
+    if (continuesRun) continue;
+    const runLength = i - runStart;
+    // A blank run (the Year/Semester columns on trailing "remaining MPU"
+    // rows, which have no fixed slot) is never merged: a merged block of
+    // nothing but blanks reads wrong and helps no one.
+    if (runLength >= 2 && values[runStart] !== '') {
+      // +1 on both ends: row 0 is the header, data starts at row 1.
+      ranges.push({ s: { r: runStart + 1, c: col }, e: { r: i - 1 + 1, c: col } });
+    }
+    runStart = i;
+  }
+  return ranges;
+}
+
+/**
+ * Merge ranges for consecutive identical Year/Semester/Term cells, each
+ * column considered independently. A Year/Semester pair can span rows with
+ * two different Term values (a WIL break-milestone row sits in the same
+ * Year/Semester as the regular-term rows around it, but with its own
+ * "Winter"/"Summer" Term, see buildExcelRows above), so Year and Semester
+ * can merge across that span while Term does not, or vice versa. Unit Code,
+ * Unit Name and Category are never merged; they are inherently unique per
+ * row (or, for Category, not meant to be grouped visually here).
+ */
+export function computeExcelMergeRanges(rows: ExcelPlanRow[]): ExcelMergeRange[] {
+  return [
+    ...mergeRangesForColumn(rows.map((r) => r.year), EXCEL_YEAR_COL),
+    ...mergeRangesForColumn(rows.map((r) => r.semester), EXCEL_SEMESTER_COL),
+    ...mergeRangesForColumn(rows.map((r) => r.term), EXCEL_TERM_COL),
+  ];
+}
+
 export default function PathwayPage() {
   const { showToast } = useToast();
   const router = useRouter();
@@ -1527,7 +1573,14 @@ export default function PathwayPage() {
                   ];
                   const ws = XLSX.utils.aoa_to_sheet(aoa);
 
-                  // Header row: bold, light grey
+                  const thinBorder = {
+                    top: { style: 'thin', color: { rgb: '999999' } },
+                    bottom: { style: 'thin', color: { rgb: '999999' } },
+                    left: { style: 'thin', color: { rgb: '999999' } },
+                    right: { style: 'thin', color: { rgb: '999999' } },
+                  };
+
+                  // Header row: bold, light grey, bordered
                   for (let c = 0; c < header.length; c++) {
                     const cellRef = XLSX.utils.encode_cell({ r: 0, c });
                     const cell = (ws as any)[cellRef];
@@ -1535,20 +1588,35 @@ export default function PathwayPage() {
                     cell.s = {
                       font: { bold: true },
                       fill: { patternType: 'solid', fgColor: { rgb: 'D9D9D9' } },
+                      border: thinBorder,
                     };
                   }
 
                   // Whole-row category colour fill, matching the canonical badge
-                  // mapping (not the PDF's own pastel palette)
+                  // mapping (not the PDF's own pastel palette) — plus a border on
+                  // every cell so the grid still reads clearly once cells merge.
                   rows.forEach((row, i) => {
                     const fill = { patternType: 'solid' as const, fgColor: { rgb: excelCategoryFillHex(row.category) } };
                     for (let c = 0; c < header.length; c++) {
                       const cellRef = XLSX.utils.encode_cell({ r: i + 1, c });
                       const cell = (ws as any)[cellRef];
                       if (!cell) continue;
-                      cell.s = { fill };
+                      cell.s = { fill, border: thinBorder };
                     }
                   });
+
+                  // Merge consecutive identical Year/Semester/Term cells (each
+                  // column independently, see computeExcelMergeRanges) and
+                  // centre the merged block's content, without losing the fill/
+                  // border already set on the top-left cell above.
+                  const merges = computeExcelMergeRanges(rows);
+                  (ws as any)['!merges'] = merges;
+                  for (const range of merges) {
+                    const cellRef = XLSX.utils.encode_cell(range.s);
+                    const cell = (ws as any)[cellRef];
+                    if (!cell) continue;
+                    cell.s = { ...cell.s, alignment: { vertical: 'center', horizontal: 'center' } };
+                  }
 
                   (ws as any)['!cols'] = [
                     { wch: 6 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 40 }, { wch: 22 },

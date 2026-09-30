@@ -1,4 +1,4 @@
-import { buildExcelRows, excelCategoryFillHex } from '@/app/(pages)/pathway/page';
+import { buildExcelRows, excelCategoryFillHex, computeExcelMergeRanges, type ExcelPlanRow } from '@/app/(pages)/pathway/page';
 import type { CustomSemesterBucket } from '@core/services/scheduling/customPlannerScheduler';
 
 // Pure data-construction tests: check the row array the code builds,
@@ -92,5 +92,79 @@ describe('excelCategoryFillHex — matches Primitives.module.css / Primitives.ts
     ['minor', '4EC9B0'],
   ])('%s -> %s', (category, hex) => {
     expect(excelCategoryFillHex(category)).toBe(hex);
+  });
+});
+
+describe('computeExcelMergeRanges — per-column, independent runs, header at row 0', () => {
+  const row = (over: Partial<ExcelPlanRow>): ExcelPlanRow => ({
+    year: 1, semester: 1, term: 'Feb/Mar', code: 'X', name: 'X', category: 'core', categoryLabel: 'Core', ...over,
+  });
+
+  test('three consecutive rows with the same Year merge into one range spanning them, in the Year column', () => {
+    const rows = [row({ code: 'A' }), row({ code: 'B' }), row({ code: 'C' })];
+    const ranges = computeExcelMergeRanges(rows);
+    expect(ranges).toContainEqual({ s: { r: 1, c: 0 }, e: { r: 3, c: 0 } });
+  });
+
+  test('a WIL row shares Year/Semester with the regular-term rows around it but a different Term: Year and Semester merge across the whole span, Term does not', () => {
+    const semesters: CustomSemesterBucket[] = [
+      { year: 2, semester: 1, units: [{ code: 'CORE1', name: 'Core Unit', category: 'core', offeringSemesters: [1, 2], requisiteGroups: [] } as any] },
+    ];
+    const primaryMilestone = {
+      unitCode: 'WIL01', unitName: 'WIL Placement', insertBeforeSlotKey: '2-1',
+      availableBreakSlots: [{ slotKey: '2-1', termType: 'winter' }],
+    };
+    const rows = buildExcelRows(semesters, 1, primaryMilestone, '2-1', []);
+
+    // Sanity-check the exact situation this test relies on: same Year/Semester,
+    // different Term (buildExcelRows pushes the WIL row before the regular one).
+    expect(rows.map((r) => [r.year, r.semester, r.term])).toEqual([
+      [2, 1, 'Winter'],
+      [2, 1, 'Feb/Mar'],
+    ]);
+
+    const ranges = computeExcelMergeRanges(rows);
+    // Year (col 0) and Semester (col 1) merge across both rows...
+    expect(ranges).toContainEqual({ s: { r: 1, c: 0 }, e: { r: 2, c: 0 } });
+    expect(ranges).toContainEqual({ s: { r: 1, c: 1 }, e: { r: 2, c: 1 } });
+    // ...but Term (col 2) never does, since "Winter" and "Feb/Mar" each only
+    // occur once in their own run.
+    expect(ranges.some((r) => r.s.c === 2)).toBe(false);
+  });
+
+  test('a single row with a unique value in a column produces no merge entry for that column', () => {
+    const rows = [row({ code: 'A', year: 1 }), row({ code: 'B', year: 2 }), row({ code: 'C', year: 3 })];
+    const ranges = computeExcelMergeRanges(rows);
+    expect(ranges.filter((r) => r.s.c === 0)).toEqual([]);
+  });
+
+  test('consecutive blank-Year rows (the remaining MPU rows) produce no merge entry', () => {
+    const semesters: CustomSemesterBucket[] = [
+      { year: 1, semester: 1, units: [{ code: 'CORE1', name: 'Core Unit', category: 'core', offeringSemesters: [1, 2], requisiteGroups: [] } as any] },
+    ];
+    const remainingMpus = [
+      { code: 'MPU201', name: 'Ethics and Civilisation' },
+      { code: 'MPU301', name: 'Philosophy' },
+    ];
+    const rows = buildExcelRows(semesters, 1, null, null, remainingMpus);
+    expect(rows[1].year).toBe('');
+    expect(rows[2].year).toBe('');
+
+    const ranges = computeExcelMergeRanges(rows);
+    expect(ranges.filter((r) => r.s.c === 0)).toEqual([]);
+    expect(ranges.filter((r) => r.s.c === 1)).toEqual([]);
+  });
+
+  test('Unit Code, Unit Name and Category never appear in any merge range, even when their values repeat', () => {
+    const rows = [
+      row({ code: 'SAME', name: 'Same Name', category: 'core' }),
+      row({ code: 'SAME', name: 'Same Name', category: 'core' }),
+      row({ code: 'SAME', name: 'Same Name', category: 'core' }),
+    ];
+    const ranges = computeExcelMergeRanges(rows);
+    const mergedCols = new Set(ranges.map((r) => r.s.c));
+    expect(mergedCols.has(3)).toBe(false); // Unit Code
+    expect(mergedCols.has(4)).toBe(false); // Unit Name
+    expect(mergedCols.has(5)).toBe(false); // Category
   });
 });
