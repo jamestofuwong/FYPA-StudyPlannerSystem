@@ -74,6 +74,7 @@ export async function POST(req: Request) {
           3000,
         );
 
+        const routeStart = Date.now();
         let route;
         try {
           route = await routeAndExtract(messages, allWorkflows);
@@ -85,6 +86,7 @@ export async function POST(req: Request) {
           return;
         }
         clearTimeout(coldStartTimer);
+        emit({ type: 'routed', ms: Date.now() - routeStart });
 
         if (!route.canHandle) {
           emit({ type: 'reply', content: CANNOT_HANDLE });

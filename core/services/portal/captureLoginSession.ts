@@ -33,7 +33,7 @@ const FALLBACK_STUDENT_LOGIN_URL =
 const FALLBACK_DEGREE1_URL =
   'https://sisportal-100380.campusnexus.cloud/CMCPortal/secure/links/Degree1.aspx';
 
-const MICROSOFT_LOGIN_HOST = 'login.microsoftonline.com';
+const PORTAL_HOST = 'sisportal-100380.campusnexus.cloud';
 
 const SSO_TIMEOUT_MS  = 10 * 60 * 1000; // 10 minutes for user to complete SSO
 const NAV_TIMEOUT_MS  = 60 * 1000;      // 60s per navigation step
@@ -44,11 +44,14 @@ export interface CaptureResult {
   portalToken: string;
 }
 
-function isMicrosoftLoginUrl(url: string): boolean {
+function isSsoInProgress(url: string): boolean {
   try {
-    return new URL(url).hostname === MICROSOFT_LOGIN_HOST;
+    const { hostname, pathname } = new URL(url);
+    const onPortal = hostname.includes(PORTAL_HOST);
+    const onLoginPage = pathname.toLowerCase().includes('login');
+    return !onPortal || onLoginPage;
   } catch {
-    return false;
+    return true;
   }
 }
 
@@ -128,14 +131,16 @@ export async function captureLoginSession(
       log('Navigating to portal…');
       await page.goto(PORTAL_LOGIN_URL, { waitUntil: 'domcontentloaded' });
 
-      if (isMicrosoftLoginUrl(page.url())) {
-        log('Microsoft SSO detected — waiting for you to log in…');
+      if (isSsoInProgress(page.url())) {
+        log('Waiting for login to complete…');
         await page.waitForFunction(
-          (msHost: string) => !window.location.hostname.includes(msHost),
+          (portalHost: string) =>
+            window.location.hostname.includes(portalHost) &&
+            !window.location.pathname.toLowerCase().includes('login'),
           { timeout: SSO_TIMEOUT_MS },
-          MICROSOFT_LOGIN_HOST,
+          PORTAL_HOST,
         );
-        log('SSO complete.');
+        log('Login complete.');
       }
 
       await runPortalNavigation(page, log, (token) => { capturedToken = token; });
@@ -177,14 +182,16 @@ export async function captureLoginSession(
     log('Navigating to portal…');
     await page.goto(PORTAL_LOGIN_URL, { waitUntil: 'domcontentloaded' });
 
-    if (isMicrosoftLoginUrl(page.url())) {
-      log('Microsoft SSO detected — waiting for you to log in…');
+    if (isSsoInProgress(page.url())) {
+      log('Waiting for login to complete…');
       await page.waitForFunction(
-        (msHost: string) => !window.location.hostname.includes(msHost),
+        (portalHost: string) =>
+          window.location.hostname.includes(portalHost) &&
+          !window.location.pathname.toLowerCase().includes('login'),
         { timeout: SSO_TIMEOUT_MS },
-        MICROSOFT_LOGIN_HOST,
+        PORTAL_HOST,
       );
-      log('SSO complete.');
+      log('Login complete.');
     }
 
     // Capture SSO cookies before closing the visible browser
