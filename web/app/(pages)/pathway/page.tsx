@@ -31,6 +31,7 @@ import {
   addSemester,
   addUnit,
   moveUnit,
+  removeSemester,
   removeUnit,
   replaceUnit,
 } from '../../../../core/shared/scheduling/planEdits';
@@ -375,6 +376,7 @@ export default function PathwayPage() {
   } = useStudentSession();
   const [customPlanLoading, setCustomPlanLoading] = useState(false);
   const [unitToRemove, setUnitToRemove] = useState<{ code: string; name: string; category: string } | null>(null);
+  const [semesterToDelete, setSemesterToDelete] = useState<{ year: number; semester: 1 | 2 } | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [isExportingExcel, setIsExportingExcel] = useState(false);
 
@@ -404,6 +406,20 @@ export default function PathwayPage() {
   const applyEdit = (next: CustomSemesterBucket[]) => {
     setCustomPlan({ ...customPlan, semesters: next });
     setIsPlanEdited(true);
+  };
+
+  // Planned units that name `code` as a prerequisite: the "Broken Prerequisite
+  // Chain" check, shared by the unit-removal and semester-deletion modals so
+  // neither reimplements it.
+  const findDependentUnits = (code: string) => {
+    const allPlannedUnits = (customPlan?.semesters ?? []).flatMap((s: any) => s.units);
+    return allPlannedUnits.filter((other: any) => {
+      if (other.code === code) return false;
+      const meta = planUnits.find((pu: any) => normaliseCode(pu.code) === normaliseCode(other.code));
+      return meta?.requisiteGroups?.some((g: any) =>
+        g.some((c: any) => c.unitCode && normaliseCode(c.unitCode) === normaliseCode(code))
+      );
+    });
   };
 
   // Fetched the first time any picker opens, not with the plan, which is
@@ -1762,6 +1778,22 @@ export default function PathwayPage() {
                             + Add Extra Unit (From Catalogue)
                           </option>
                         </select>
+                        <button
+                          type="button"
+                          className={styles.removeBtn}
+                          onClick={() => {
+                            if (sem.units.length === 0) {
+                              applyEdit(removeSemester(semesters, sem.year, sem.semester));
+                              showToast(`Removed Year ${sem.year} Semester ${sem.semester}.`, 'success');
+                              return;
+                            }
+                            setSemesterToDelete({ year: sem.year, semester: sem.semester });
+                          }}
+                          title="Delete this semester and return its units to the pool"
+                          aria-label={`Delete Year ${sem.year} Semester ${sem.semester}`}
+                        >
+                          ✕
+                        </button>
                       </div>
                       {picker && picker.mode !== 'add' && picker.year === sem.year && picker.semester === sem.semester && (
                         <ElectivePicker
@@ -2315,16 +2347,7 @@ export default function PathwayPage() {
       {unitToRemove && (() => {
         const isCore = unitToRemove.category === 'core' || unitToRemove.category === 'major_core';
         const isElective = unitToRemove.category === 'elective' || unitToRemove.category === 'prescribed_elective';
-        
-        // Check if any other planned unit depends on this one as a prerequisite
-        const allPlannedUnits = (customPlan?.semesters ?? []).flatMap((s: any) => s.units);
-        const dependentUnits = allPlannedUnits.filter((other: any) => {
-          if (other.code === unitToRemove.code) return false;
-          const meta = planUnits.find((pu: any) => normaliseCode(pu.code) === normaliseCode(other.code));
-          return meta?.requisiteGroups?.some((g: any) =>
-            g.some((c: any) => c.unitCode && normaliseCode(c.unitCode) === normaliseCode(unitToRemove.code))
-          );
-        });
+        const dependentUnits = findDependentUnits(unitToRemove.code);
 
         return (
           <div className={styles.modalOverlay} onClick={() => setUnitToRemove(null)}>
@@ -2410,6 +2433,103 @@ export default function PathwayPage() {
                   }}
                 >
                   Remove Unit
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+      {/* Semester Deletion Confirmation Modal: same shell as the unit-removal
+          modal above, reused rather than a second differently-styled dialog. */}
+      {semesterToDelete && (() => {
+        const targetBucket = (customPlan?.semesters ?? []).find(
+          (s: any) => s.year === semesterToDelete.year && s.semester === semesterToDelete.semester
+        );
+        const semesterUnits = targetBucket?.units ?? [];
+        const unitCount = semesterUnits.length;
+        const coreUnits = semesterUnits.filter((u: any) => u.category === 'core' || u.category === 'major_core');
+        const electiveUnits = semesterUnits.filter((u: any) => u.category === 'elective' || u.category === 'prescribed_elective');
+
+        // Same check as the unit-removal modal, once per unit in this semester,
+        // excluding dependents that are themselves being deleted along with it
+        const semesterCodes = new Set(semesterUnits.map((u: any) => normaliseCode(u.code)));
+        const dependentsByUnit = semesterUnits
+          .map((u: any) => ({
+            unit: u,
+            dependents: findDependentUnits(u.code).filter((d: any) => !semesterCodes.has(normaliseCode(d.code))),
+          }))
+          .filter((entry: any) => entry.dependents.length > 0);
+
+        return (
+          <div className={styles.modalOverlay} onClick={() => setSemesterToDelete(null)}>
+            <div className={styles.modalCard} onClick={(e) => e.stopPropagation()}>
+              <div className={styles.modalHeader}>
+                <span className={styles.modalTitle}>
+                  <span aria-hidden="true">⚠</span> Delete this semester?
+                </span>
+                <button
+                  type="button"
+                  className={styles.removeBtn}
+                  onClick={() => setSemesterToDelete(null)}
+                  style={{ background: 'transparent', border: 'none', fontSize: 13 }}
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className={styles.modalBody}>
+                <div>
+                  Are you sure you want to delete Year {semesterToDelete.year} Semester {semesterToDelete.semester}?
+                </div>
+
+                {unitCount > 0 && (
+                  <div className={styles.modalWarningBox}>
+                    <strong>Consequences of Deletion:</strong>
+                    <ul>
+                      {coreUnits.length > 0 && (
+                        <li>
+                          <strong>Compulsory Core Unit{coreUnits.length !== 1 ? 's' : ''}:</strong> {coreUnits.map((u: any) => u.code).join(', ')} required to satisfy degree requirements. Deleting this semester will block graduation until completed.
+                        </li>
+                      )}
+                      {electiveUnits.length > 0 && (
+                        <li>
+                          <strong>Credit Shortfall:</strong> Removing {electiveUnits.length} elective{electiveUnits.length !== 1 ? 's' : ''} reduces total earned credits and may leave the plan short of the graduation requirement.
+                        </li>
+                      )}
+                      {dependentsByUnit.map((entry: any) => (
+                        <li key={entry.unit.code}>
+                          <strong>Broken Prerequisite Chain:</strong> {entry.dependents.length} other planned unit{entry.dependents.length !== 1 ? 's' : ''} ({entry.dependents.map((d: any) => d.code).join(', ')}) depend on {entry.unit.code}!
+                        </li>
+                      ))}
+                      <li>
+                        {unitCount} unit{unitCount !== 1 ? 's' : ''} will be returned to the unplaced pool and can be re-added later.
+                      </li>
+                    </ul>
+                  </div>
+                )}
+              </div>
+
+              <div className={styles.modalActions}>
+                <button
+                  type="button"
+                  className={styles.btnSecondary}
+                  onClick={() => setSemesterToDelete(null)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className={styles.btnDanger}
+                  onClick={() => {
+                    applyEdit(removeSemester(customPlan.semesters, semesterToDelete.year, semesterToDelete.semester));
+                    showToast(
+                      `Removed Year ${semesterToDelete.year} Semester ${semesterToDelete.semester}. ${unitCount} unit${unitCount !== 1 ? 's' : ''} returned to the unplaced pool.`,
+                      'success'
+                    );
+                    setSemesterToDelete(null);
+                  }}
+                >
+                  Delete Semester
                 </button>
               </div>
             </div>

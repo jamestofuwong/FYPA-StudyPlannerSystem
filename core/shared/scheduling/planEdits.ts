@@ -173,6 +173,20 @@ export function replaceUnit(
 }
 
 /**
+ * Removes the { year, semester } bucket entirely, units and all. An unknown
+ * slot leaves the plan as it was. This function does not concern itself with
+ * where those units end up; same separation as removeUnit, which only ever
+ * touches the semesters array. The page decides what else needs updating.
+ */
+export function removeSemester(
+  semesters: ReadonlyArray<CustomSemesterBucket>,
+  year: number,
+  semester: 1 | 2,
+): CustomSemesterBucket[] {
+  return copy(semesters.filter((bucket) => !(bucket.year === year && bucket.semester === semester)));
+}
+
+/**
  * Appends an empty slot after the last one. Semester 1 is followed by semester 2
  * of the same year, semester 2 by semester 1 of the next. These are slot numbers
  * counted from the intake, not calendar terms.
