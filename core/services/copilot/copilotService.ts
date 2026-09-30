@@ -77,6 +77,7 @@ async function callOllama(prompt: string): Promise<string> {
       model: COPILOT_MODEL,
       prompt,
       stream: false,
+      keep_alive: -1,
       options: { temperature: 0, num_predict: 40 },
     }),
   });
