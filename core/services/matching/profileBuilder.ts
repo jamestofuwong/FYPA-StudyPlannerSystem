@@ -17,8 +17,16 @@ import {
  * Looks up each normalised unit code in the master table and
  * classifies it into the correct category set.
  * Also populates electivesByTag for minor detection (Phase 7).
- * Units not found in the master table are logged as unclassified
- * and excluded from all scoring sets.
+ * Units not found in the master table are logged as unclassified.
+ *
+ * IMPORTANT, and the reason this note exists: completedCore, completedMajorCore, completedPrescribed and
+ * completedFreeElectives below are split using the ONE global category unitMasterTableBuilder.ts resolves for
+ * a unit across every planner, where major_core beats prescribed_elective beats core. That makes them wrong
+ * for any question asked about a particular planner, because a unit can be core in one major and major core
+ * in another. Nine of the 65 units in the loaded planners are in that position. scoringEngine.ts used to
+ * score against these sets and undercounted every such student; it now works from completedUnits and lets
+ * each planner's own lists decide what a unit satisfies. Do not wire these four back into scoring. They are
+ * kept for diagnostics and for minor detection, which is planner-independent and reads electivesByTag.
  */
 export function buildStudentProfile(
   raw: RawStudentInput,

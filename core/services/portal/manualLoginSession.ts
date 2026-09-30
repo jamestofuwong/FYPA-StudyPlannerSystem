@@ -32,6 +32,7 @@ const FALLBACK_DEGREE1_URL =
   'https://sisportal-100380.campusnexus.cloud/CMCPortal/secure/links/Degree1.aspx';
 
 
+const PORTAL_HOST     = 'sisportal-100380.campusnexus.cloud';
 const NAV_TIMEOUT_MS  = 60_000;
 const IDLE_TIMEOUT_MS = 30_000;
 
@@ -81,7 +82,9 @@ export async function step1_launch(onStatus?: (msg: string) => void): Promise<vo
     defaultViewport: null,
   });
 
-  page = await browser.newPage();
+  // Reuse the default about:blank tab instead of opening a second one
+  const existingPages = await browser.pages();
+  page = existingPages[0] ?? await browser.newPage();
   page.setDefaultNavigationTimeout(NAV_TIMEOUT_MS);
 
   // Intercept all requests to capture the `token` header when Angular fires
@@ -105,6 +108,13 @@ export async function step1_launch(onStatus?: (msg: string) => void): Promise<vo
 export async function step2_navigateDegree1(onStatus?: (msg: string) => void): Promise<void> {
   if (!page) throw new Error('No browser session — run Step 1 first.');
   const log = (msg: string) => { onStatus?.(msg); console.log('[ManualLogin]', msg); };
+
+  const currentUrl = page.url();
+  const onPortal = currentUrl.includes(PORTAL_HOST);
+  const onLoginPage = currentUrl.toLowerCase().includes('login');
+  if (!onPortal || onLoginPage) {
+    throw new Error('Login does not appear to be complete — finish signing in before proceeding to Step 2.');
+  }
 
   log('Navigating to Degree1…');
   await page.goto(DEGREE1_URL, { waitUntil: 'domcontentloaded' });

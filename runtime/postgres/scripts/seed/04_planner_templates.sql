@@ -8,6 +8,272 @@
 -- 4 = Winter Term
 
 -- ======================================================================================================================
+-- 2026 - Semester 2 Intake
+-- ======================================================================================================================
+-- BA-CS, Artificial Intelligence — September 2026
+DO $$
+DECLARE
+    v_template_id UUID;
+BEGIN
+    v_template_id := create_planner_template('BA-CS', 'Artificial Intelligence', 2026::SMALLINT, 9::SMALLINT);
+
+    PERFORM add_template_units(v_template_id, ARRAY[
+        -- code, category, year, sem
+        'COS10009', 'core', '1', '1',
+        'COS10026', 'core', '1', '1',
+        'COS10025', 'core', '1', '1',
+        'COS10003', 'prescribed_elective', '1', '1',
+        'MPU3312', 'mpu', '1', '1',
+
+        'MPU3212', 'mpu', '1', '3', --summer term
+
+        'COS20007', 'core', '1', '2',
+        'TNE10006', 'core', '1', '2',
+        'COS10022', 'elective', '1', '2',
+        'STA10003', 'elective', '1', '2',
+        'MPU3172', 'mpu', '1', '2',
+        'MPU3142', 'mpu', '1', '2',
+
+        'COS20031', 'major_core', '2', '1',
+        'COS30019', 'major_core', '2', '1',
+        'COS20019', 'major_core', '2', '1',
+        'COS30015', 'elective', '2', '1',
+        'MPU3222', 'mpu', '2', '1',
+
+        'COS10004', 'core', '2', '2',
+        'COS30049', 'major_core', '2', '2',
+        'COS30018', 'major_core', '2', '2',
+        'MGT10010', 'elective', '2', '2',
+        'MPU3112', 'mpu', '2', '2',
+
+        'ICT20016', 'wil', '2', '4', --winter term
+
+        'COS40005', 'core', '3', '1',
+        'COS30082', 'major_core', '3', '1',
+        'COS30008', 'elective', '3', '1',
+        'MPU3122', 'mpu', '3', '1',
+        'MPU3152', 'mpu', '3', '1',
+
+        'COS40006', 'core', '3', '2',
+        'COS40007', 'major_core', '3', '2',
+        'SWE30003', 'major_core', '3', '2',
+        'MPU3412', 'mpu', '3', '2'
+    ]);
+END;
+$$;
+
+-- BA-CS, Cybersecurity — September 2026
+DO $$
+DECLARE
+    v_template_id UUID;
+BEGIN
+    v_template_id := create_planner_template('BA-CS', 'Cybersecurity', 2026::SMALLINT, 9::SMALLINT);
+
+    PERFORM add_template_units(v_template_id, ARRAY[
+        -- code, category, year, sem
+        'COS10009', 'core', '1', '1',
+        'COS10026', 'core', '1', '1',
+        'COS10025', 'core', '1', '1',
+        'COS10003', 'prescribed_elective', '1', '1',
+        'MPU3312', 'mpu', '1', '1',
+
+        'MPU3212', 'mpu', '1', '3', --summer term
+
+        'COS20007', 'core', '1', '2',
+        'TNE10006', 'core', '1', '2',
+        'TNE20003', 'major_core', '1', '2',
+        'INF10024', 'elective', '1', '2',
+        'MPU3172', 'mpu', '1', '2',
+        'MPU3142', 'mpu', '1', '2',
+
+        'COS20030', 'major_core', '2', '1',
+        'COS20031', 'major_core', '2', '1',
+        'COS30015', 'major_core', '2', '1',
+        'COS30019', 'prescribed_elective', '2', '1',
+        'MPU3222', 'mpu', '2', '1',
+
+        'COS10004', 'core', '2', '2',
+        'COS30049', 'major_core', '2', '2',
+        'COS20019', 'major_core', '2', '2',
+        'COS10022', 'elective', '2', '2',
+        'MPU3112', 'mpu', '2', '2',
+
+        'ICT20016', 'wil', '2', '4', --winter term
+
+        'COS40005', 'core', '3', '1',
+        'TNE30009', 'major_core', '3', '1',
+        'SWE30003', 'major_core', '3', '1',
+        'MPU3122', 'mpu', '3', '1',
+        'MPU3152', 'mpu', '3', '1',
+
+        'COS40006', 'core', '3', '2',
+        'MGT10010', 'elective', '3', '2',
+        'COS30047', 'elective', '3', '2',
+        'MPU3412', 'mpu', '3', '2'
+    ]);
+END;
+$$;
+
+-- BA-CS, Data Science — September 2026
+DO $$
+DECLARE
+    v_template_id UUID;
+BEGIN
+    v_template_id := create_planner_template('BA-CS', 'Data Science', 2026::SMALLINT, 9::SMALLINT);
+
+    PERFORM add_template_units(v_template_id, ARRAY[
+        -- code, category, year, sem
+        'COS10009', 'core', '1', '1',
+        'COS10026', 'core', '1', '1',
+        'COS10025', 'core', '1', '1',
+        'COS10003', 'prescribed_elective', '1', '1',
+        'MPU3312', 'mpu', '1', '1',
+
+        'MPU3212', 'mpu', '1', '3', --summer term
+
+        'COS20007', 'core', '1', '2',
+        'TNE10006', 'core', '1', '2',
+        'STA10003', 'elective', '1', '2',
+        'COS10022', 'major_core', '1', '2',
+        'MPU3172', 'mpu', '1', '2',
+        'MPU3142', 'mpu', '1', '2',
+
+        'COS20031', 'major_core', '2', '1',
+        'COS30045', 'major_core', '2', '1',
+        -- E1
+        'COS30015', 'elective', '2', '1',
+        'MPU3222', 'mpu', '2', '1',
+
+        'COS10004', 'core', '2', '2',
+        'COS30049', 'major_core', '2', '2',
+        'COS20019', 'major_core', '2', '2',
+        'COS30019', 'prescribed_elective', '2', '2',
+        'MPU3112', 'mpu', '2', '2',
+
+        'ICT20016', 'wil', '2', '4', --winter term
+
+        'COS40005', 'core', '3', '1',
+        'COS20028', 'major_core', '3', '1',
+        'SWE30003', 'major_core', '3', '1',
+        'MPU3122', 'mpu', '3', '1',
+        'MPU3152', 'mpu', '3', '1',
+
+        'COS40006', 'core', '3', '2',
+        'SWE40006', 'major_core', '3', '2',
+        'MGT10010', 'elective', '3', '2',
+        'MPU3412', 'mpu', '3', '2'
+    ]);
+    PERFORM add_elective_slots(v_template_id, ARRAY[
+        2, 1    -- elective 1 (Y2 S1)
+    ]::SMALLINT[]);
+END;
+$$;
+
+-- BA-CS, Internet of Things — September 2026
+DO $$
+DECLARE
+    v_template_id UUID;
+BEGIN
+    v_template_id := create_planner_template('BA-CS', 'Internet of Things', 2026::SMALLINT, 9::SMALLINT);
+
+    PERFORM add_template_units(v_template_id, ARRAY[
+        -- code, category, year, sem
+        'COS10009', 'core', '1', '1',
+        'COS10026', 'core', '1', '1',
+        'COS10025', 'core', '1', '1',
+        'COS10003', 'prescribed_elective', '1', '1',
+        'MPU3312', 'mpu', '1', '1',
+
+        'MPU3212', 'mpu', '1', '3', --summer term
+
+        'COS20007', 'core', '1', '2',
+        'TNE10006', 'core', '1', '2',
+        'TNE10005', 'major_core', '1', '2',
+        'STA10003', 'elective', '1', '2',
+        'MPU3172', 'mpu', '1', '2',
+        'MPU3142', 'mpu', '1', '2',
+
+        'COS30020', 'major_core', '2', '1',
+        'COS20031', 'major_core', '2', '1',
+        'COS30019', 'prescribed_elective', '2', '1',
+        'COS10022', 'elective', '2', '1',
+        'MPU3222', 'mpu', '2', '1',
+
+        'COS10004', 'core', '2', '2',
+        'COS30017', 'major_core', '2', '2',
+        'COS20019', 'major_core', '2', '2',
+        'SWE30011', 'major_core', '2', '2',
+        'MPU3112', 'mpu', '2', '2',
+
+        'ICT20016', 'wil', '2', '4', --winter term
+
+        'COS40005', 'core', '3', '1',
+        'COS30049', 'major_core', '3', '1',
+        'SWE30003', 'major_core', '3', '1',
+        'MPU3122', 'mpu', '3', '1',
+        'MPU3152', 'mpu', '3', '1',
+
+        'COS40006', 'core', '3', '2',
+        'COS30015', 'elective', '3', '2',
+        'MGT10010', 'elective', '3', '2',
+        'MPU3412', 'mpu', '3', '2'
+    ]);
+END;
+$$;
+
+-- BA-CS, Software Development — September 2026
+DO $$
+DECLARE
+    v_template_id UUID;
+BEGIN
+    v_template_id := create_planner_template('BA-CS', 'Software Development', 2026::SMALLINT, 9::SMALLINT);
+
+    PERFORM add_template_units(v_template_id, ARRAY[
+        -- code, category, year, sem
+        'COS10009', 'core', '1', '1',
+        'COS10026', 'core', '1', '1',
+        'COS10025', 'core', '1', '1',
+        'COS10003', 'prescribed_elective', '1', '1',
+        'MPU3312', 'mpu', '1', '1',
+
+        'MPU3212', 'mpu', '1', '3', --summer term
+
+        'COS20007', 'core', '1', '2',
+        'TNE10006', 'core', '1', '2',
+        'COS20019', 'major_core', '1', '2',
+        'COS10022', 'elective', '1', '2',
+        'MPU3172', 'mpu', '1', '2',
+        'MPU3142', 'mpu', '1', '2',
+
+        'COS20031', 'major_core', '2', '1',
+        'SWE30009', 'major_core', '2', '1',
+        'COS30019', 'prescribed_elective', '2', '1',
+        'COS30015', 'elective', '2', '1',
+        'MPU3222', 'mpu', '2', '1',
+
+        'COS10004', 'core', '2', '2',
+        'COS30043', 'major_core', '2', '2',
+        'COS30049', 'major_core', '2', '2',
+        'SWE30011', 'elective', '2', '2',
+        'MPU3112', 'mpu', '2', '2',
+
+        'ICT20016', 'wil', '2', '4', --winter term
+
+        'COS40005', 'core', '3', '1',
+        'COS40003', 'major_core', '3', '1',
+        'COS30008', 'major_core', '3', '1',
+        'MPU3122', 'mpu', '3', '1',
+        'MPU3152', 'mpu', '3', '1',
+
+        'COS40006', 'core', '3', '2',
+        'SWE30003', 'major_core', '3', '2',
+        'SWE40006', 'elective', '3', '2',
+        'MPU3412', 'mpu', '3', '2'
+    ]);
+END;
+$$;
+
+-- ======================================================================================================================
 -- 2026 - Semester 1 Intake
 -- ======================================================================================================================
 -- BA-CS, Artificial Intelligence — March 2026
@@ -48,7 +314,7 @@ BEGIN
 
         'ICT20016', 'wil', '2', '3', --summer term
 
-        'COS40005 ', 'core', '3', '1',
+        'COS40005', 'core', '3', '1',
         'COS20019', 'major_core', '3', '1',
         'COS40007', 'major_core', '3', '1',
 

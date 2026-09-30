@@ -2,6 +2,11 @@ import type { Workflow, WorkflowContext, WorkflowResult } from '../types';
 import { searchStudents, fetchEnrollments, fetchDegreeAudit } from '../../portal/portalSessionService';
 import { selectEnrollment } from './enrollmentSelector';
 
+// Units with an empty grade and no active-enrollment status are portal planning
+// artefacts (e.g. future units scaffolded in the degree audit). Exclude them so
+// the LLM never sees empty-grade entries that it might hallucinate values for.
+const IN_PROGRESS_STATUSES = new Set(['enrolled', 'in progress', 'current', 'registered']);
+
 interface Input {
   studentId: string;
   enrollMode?: string;
@@ -64,14 +69,20 @@ export const getStudentUnitsWorkflow: Workflow<Input, Output> = {
 
       const scraped = await fetchDegreeAudit(student.db_id, enrollment.EnrollId, params.studentId);
 
-      const units: UnitEntry[] = scraped.courseList.map((item) => ({
-        code: item.courseId,
-        title: item.courseTitle,
-        credits: item.credits,
-        grade: item.grade,
-        status: item.status,
-        term: item.term,
-      }));
+      const units: UnitEntry[] = scraped.courseList
+        .filter((item) => {
+          const grade = (item.grade ?? '').trim();
+          const status = (item.status ?? '').trim().toLowerCase();
+          return grade !== '' || IN_PROGRESS_STATUSES.has(status);
+        })
+        .map((item) => ({
+          code: item.courseId,
+          title: item.courseTitle,
+          credits: item.credits,
+          grade: item.grade,
+          status: item.status,
+          term: item.term,
+        }));
 
       return {
         ok: true,

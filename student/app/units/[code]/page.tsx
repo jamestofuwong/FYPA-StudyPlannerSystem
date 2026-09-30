@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import Nav from '@student/components/Nav/Nav'
-import { getUnit } from '@student/lib/units'
+import { getCachedUnit } from '@student/lib/catalog'
 import styles from './page.module.css'
 
 interface Props {
@@ -15,7 +15,7 @@ function unitYear(code: string): number {
 
 export default async function UnitDetailPage({ params }: Props) {
   const { code } = await params
-  const unit = await getUnit(code)
+  const unit = await getCachedUnit(code)
 
   if (!unit) notFound()
 

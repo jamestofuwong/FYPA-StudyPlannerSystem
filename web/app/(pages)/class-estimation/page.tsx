@@ -1,10 +1,86 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import Link from 'next/link';
+import { useScrollToTopOnMount } from '../../../lib/scrollToTop';
 import styles from './page.module.css';
+import type { EstimationPreview } from '../../../../core/services/classEstimation/estimationPreview';
+import { describeAcademicNow } from '../../../../core/services/classEstimation/academicCalendar';
+import {
+  parseStoredRetentionRate,
+  parseTypedRetentionPercent,
+  retentionRateToPercent,
+} from '../../../../core/services/classEstimation/retention';
+
+/** What /api/class-estimation/preview returns: the preview itself plus the semester it was run for. */
+type PreviewResponse = EstimationPreview & {
+  target: { year: number | null; semester: 1 | 2; label: string; reason: string; overridden: boolean };
+};
 
 type SessionStatus = 'idle' | 'login-pending' | 'logged-in' | 'login-error';
 type RunStatus = 'idle' | 'running' | 'done' | 'error';
+
+/**
+ * Where transcripts come from. Portal and mock both run the scrape flow, mock without a login. Imported
+ * reads DPA files instead, which is the path demonstrated to the panel, since scraping is not shown there.
+ */
+type SourceId = 'portal' | 'mock' | 'import';
+
+type SourceOption = { id: SourceId; label: string; requiresLogin: boolean; hint: string };
+
+type ImportedStudent = {
+  studentId: string;
+  unitCount: number;
+  intakeYear: number;
+  intakeSemester: 1 | 2;
+  warnings: string[];
+};
+
+type ImportedFile = {
+  filename: string;
+  ok: boolean;
+  students: ImportedStudent[];
+  rowWarnings: string[];
+  error?: string;
+};
+
+type ImportResult = {
+  preview: boolean;
+  files: ImportedFile[];
+  totalFiles: number;
+  filesFailed: number;
+  totalStudents: number;
+  storedStudents: number;
+};
+
+/** A saved estimation run, as /api/class-estimation/runs returns it. */
+type SavedRun = {
+  id: string;
+  createdAt: string;
+  label: string | null;
+  targetYear: number;
+  targetSemester: number;
+  loadCap: number;
+  retentionRate: number;
+  newIntake: number;
+  source: string;
+  studentCount: number;
+  groupCount: number;
+  commonCoreCount: number;
+  unitCount: number;
+  totalHeadcount: number;
+};
+
+type SavedRunDetail = SavedRun & {
+  units: Array<{
+    unitCode: string;
+    fromNamedPicks: number;
+    fromElectives: number;
+    fromNewIntake: number;
+    projected: number;
+    headcount: number;
+  }>;
+};
 
 type ProgressState = {
   current: number;
@@ -31,21 +107,129 @@ const PHASE_LABEL: Record<string, string> = {
   audit:       'Fetching degree audit…',
 };
 
+/** Where the HoD's retention figure is kept, allowlisted in web/app/api/config/route.ts. */
+const RETENTION_KEY = 'class_estimation_retention_rate';
+const NEW_INTAKE_KEY = 'class_estimation_new_intake';
+
 let _logKey = 0;
 
+/**
+ * What the page was showing, kept so leaving for the Head of Department view and coming back does not throw
+ * the last run away. Next.js unmounts a page on navigation, and every useState below goes with it.
+ *
+ * Module-level on purpose rather than sessionStorage. The preview holds student IDs and names, and
+ * REQ-SEC-101 keeps student data in RAM only, the same rule the dashboard follows. A module variable is RAM:
+ * it survives moving between pages and is gone on reload or when the app closes, which is what the
+ * lifetime the server-side estimation store already has.
+ */
+type EstimatorMemory = {
+  runStatus: RunStatus;
+  progress: ProgressState | null;
+  summary: Summary | null;
+  log: LogEntry[];
+  errorMsg: string | null;
+  minId: string;
+  maxId: string;
+  retention: string;
+  newIntake: string;
+  openRun: SavedRunDetail | null;
+  runLabel: string;
+  runStatusMsg: string | null;
+  previewStatus: 'idle' | 'loading' | 'done' | 'error';
+  preview: PreviewResponse | null;
+  previewError: string | null;
+  source: SourceId;
+  files: File[];
+  importStatus: 'idle' | 'working' | 'done' | 'error';
+  importResult: ImportResult | null;
+  importError: string | null;
+};
+
+let estimatorMemory: EstimatorMemory | null = null;
+
+/**
+ * The remembered state, with anything that was still in flight settled. Leaving the page closes the scrape's
+ * EventSource, which cancels it on the server, and drops any pending fetch, so none of them can be resumed.
+ * Restoring them as still running would leave a spinner that never finishes.
+ */
+function recallEstimator(): EstimatorMemory | null {
+  if (!estimatorMemory) return null;
+  const memory = { ...estimatorMemory };
+
+  if (memory.runStatus === 'running') {
+    memory.runStatus = 'idle';
+    memory.errorMsg = 'Stopped when you left the page. Students fetched before then are still loaded.';
+  }
+  if (memory.previewStatus === 'loading') memory.previewStatus = memory.preview ? 'done' : 'idle';
+  if (memory.importStatus === 'working') memory.importStatus = memory.importResult ? 'done' : 'idle';
+
+  return memory;
+}
+
 export default function ClassEstimationPage() {
+  // Read once per visit, so the initial values below are stable for the life of this mount.
+  const [remembered] = useState(recallEstimator);
+
   const [sessionStatus, setSessionStatus] = useState<SessionStatus>('idle');
   const [studentCount, setStudentCount] = useState(0);
-  const [runStatus, setRunStatus] = useState<RunStatus>('idle');
-  const [progress, setProgress] = useState<ProgressState | null>(null);
-  const [summary, setSummary] = useState<Summary | null>(null);
-  const [log, setLog] = useState<LogEntry[]>([]);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [minId, setMinId] = useState('');
-  const [maxId, setMaxId] = useState('');
+  const [runStatus, setRunStatus] = useState<RunStatus>(remembered?.runStatus ?? 'idle');
+  const [progress, setProgress] = useState<ProgressState | null>(remembered?.progress ?? null);
+  const [summary, setSummary] = useState<Summary | null>(remembered?.summary ?? null);
+  const [log, setLog] = useState<LogEntry[]>(remembered?.log ?? []);
+  const [errorMsg, setErrorMsg] = useState<string | null>(remembered?.errorMsg ?? null);
+  const [minId, setMinId] = useState(remembered?.minId ?? '');
+  const [maxId, setMaxId] = useState(remembered?.maxId ?? '');
+
+  // The target semester is not a choice. It is derived from today's date, since an estimate is always for the
+  // next teaching semester, and the derivation lives in academicCalendar.ts so the server and page agree.
+  const academicNow = describeAcademicNow();
+  // The HoD's own figure for how many students come back next semester. There is no visa or graduation
+  // status in the portal to derive it from, so it is an input rather than something inferred. Loaded from
+  // and saved to SystemConfig, so a figure they worked out themselves is not retyped every session.
+  const [retention, setRetention] = useState(remembered?.retention ?? '85');
+  const [retentionSaved, setRetentionSaved] = useState(false);
+  // Brand-new students the HoD expects. They are not in the portal, so there is nothing to derive it from.
+  const [newIntake, setNewIntake] = useState(remembered?.newIntake ?? '0');
+  const [runs, setRuns] = useState<SavedRun[]>([]);
+  const [openRun, setOpenRun] = useState<SavedRunDetail | null>(remembered?.openRun ?? null);
+  const [runLabel, setRunLabel] = useState(remembered?.runLabel ?? '');
+  const [runStatusMsg, setRunStatusMsg] = useState<string | null>(remembered?.runStatusMsg ?? null);
+  const [savingRun, setSavingRun] = useState(false);
+  const [previewStatus, setPreviewStatus] = useState<'idle' | 'loading' | 'done' | 'error'>(
+    remembered?.previewStatus ?? 'idle',
+  );
+  const [preview, setPreview] = useState<PreviewResponse | null>(remembered?.preview ?? null);
+  const [previewError, setPreviewError] = useState<string | null>(remembered?.previewError ?? null);
+  const [copied, setCopied] = useState(false);
+
+  const [source, setSource] = useState<SourceId>(remembered?.source ?? 'portal');
+  const [mockAvailable, setMockAvailable] = useState(false);
+  const [files, setFiles] = useState<File[]>(remembered?.files ?? []);
+  const [dragging, setDragging] = useState(false);
+  const [importStatus, setImportStatus] = useState<'idle' | 'working' | 'done' | 'error'>(
+    remembered?.importStatus ?? 'idle',
+  );
+  const [importResult, setImportResult] = useState<ImportResult | null>(remembered?.importResult ?? null);
+  const [importError, setImportError] = useState<string | null>(remembered?.importError ?? null);
+  const [stored, setStored] = useState<{ storedStudents: number; bySource: Record<string, number> } | null>(null);
+
+  // Kept current after every render rather than on unmount. An unmount handler would need every value in its
+  // dependency list to see the latest ones, and missing one would restore a stale screen without complaint.
+  useEffect(() => {
+    estimatorMemory = {
+      runStatus, progress, summary, log, errorMsg, minId, maxId, retention, newIntake,
+      openRun, runLabel, runStatusMsg, previewStatus, preview, previewError,
+      source, files, importStatus, importResult, importError,
+    };
+  });
 
   const esRef = useRef<EventSource | null>(null);
-  const logEndRef = useRef<HTMLDivElement | null>(null);
+  const logWrapRef = useRef<HTMLDivElement | null>(null);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+
+  // Start at the top on arrival rather than wherever the previous page was scrolled to. See scrollToTop.ts.
+  useScrollToTopOnMount(rootRef);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Poll session status every 3s
   useEffect(() => {
@@ -61,9 +245,109 @@ export default function ClassEstimationPage() {
     return () => clearInterval(id);
   }, []);
 
-  // Auto-scroll log to bottom as new entries arrive
+  // Which sources this build offers. Mock is hidden in a production build, so the picker has to ask rather
+  // than assume it is available.
   useEffect(() => {
-    logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    fetch('/api/class-estimation/run', { method: 'OPTIONS' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!data?.sources) return;
+        setMockAvailable(data.sources.some((s: { id: string }) => s.id === 'mock'));
+        // Only a first visit takes the environment's default; a returning one keeps the source it was on.
+        if (data.default === 'mock' && !remembered) setSource('mock');
+      })
+      .catch(() => { /* leave the picker on portal only */ });
+  }, []);
+
+  useEffect(() => {
+    // Coming back to the page, the fields already hold what was last typed, which may be newer than what
+    // was saved: saving only happens on a run. Loading the saved figures over them would undo that typing.
+    if (remembered) return;
+
+    fetch(`/api/config?key=${RETENTION_KEY}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        // parseStoredRetentionRate rejects the unset case, where the route returns null and Number(null)
+        // would be 0, which is how this field once got silently set to zero retention. See retention.ts.
+        const stored = parseStoredRetentionRate(data?.value);
+        if (stored !== null) setRetention(retentionRateToPercent(stored));
+      })
+      .catch(() => { /* never set, so the built-in default stands */ });
+
+    fetch(`/api/config?key=${NEW_INTAKE_KEY}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (typeof data?.value !== 'string' || data.value.trim() === '') return;
+        const stored = Number(data.value);
+        if (Number.isInteger(stored) && stored >= 0) setNewIntake(String(stored));
+      })
+      .catch(() => { /* never set, so zero stands */ });
+  }, []);
+
+  const refreshRuns = useCallback(() => {
+    fetch('/api/class-estimation/runs')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => { if (Array.isArray(data?.runs)) setRuns(data.runs); })
+      .catch(() => { /* the history panel just stays empty */ });
+  }, []);
+
+  useEffect(() => { refreshRuns(); }, [refreshRuns]);
+
+  /**
+   * The server re-runs the estimate and saves that, rather than storing whatever is on screen. A saved run
+   * has to be a record of what the system predicted, not of what a browser happened to be showing.
+   */
+  const saveRun = async () => {
+    setSavingRun(true);
+    setRunStatusMsg(null);
+    try {
+      const res = await fetch('/api/class-estimation/runs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: runLabel.trim() || undefined }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error ?? `Save failed (${res.status})`);
+
+      setRunStatusMsg(`Saved, ${data.units} unit(s) recorded.`);
+      setRunLabel('');
+      refreshRuns();
+    } catch (err) {
+      setRunStatusMsg(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSavingRun(false);
+    }
+  };
+
+  const viewRun = async (id: string) => {
+    if (openRun?.id === id) { setOpenRun(null); return; }   // clicking the open one closes it
+    const res = await fetch(`/api/class-estimation/runs/${id}`).catch(() => null);
+    if (!res?.ok) { setRunStatusMsg('Could not load that run.'); return; }
+    setOpenRun(await res.json());
+  };
+
+  const deleteRun = async (id: string) => {
+    const res = await fetch(`/api/class-estimation/runs/${id}`, { method: 'DELETE' }).catch(() => null);
+    if (!res?.ok) { setRunStatusMsg('Could not delete that run.'); return; }
+    if (openRun?.id === id) setOpenRun(null);
+    refreshRuns();
+  };
+
+  const refreshStored = useCallback(() => {
+    fetch('/api/class-estimation/import')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => data && setStored(data))
+      .catch(() => { /* not fatal, the badge just stays hidden */ });
+  }, []);
+
+  useEffect(() => { refreshStored(); }, [refreshStored]);
+
+  // Keep the newest log line in view by scrolling the log box itself. scrollIntoView was used here before, and
+  // it scrolls every scrollable ancestor too, so with the log now restored on return to this page it dragged
+  // the whole page down to the log on arrival, and during a scrape it made the page jump with every student.
+  useEffect(() => {
+    const box = logWrapRef.current;
+    if (box) box.scrollTop = box.scrollHeight;
   }, [log]);
 
   // Close EventSource on unmount
@@ -83,6 +367,60 @@ export default function ClassEstimationPage() {
     setRunStatus('idle');
   };
 
+  const addFiles = (incoming: FileList | null) => {
+    if (!incoming || incoming.length === 0) return;
+    const accepted = Array.from(incoming).filter((f) => /\.(xlsx|xls|csv)$/i.test(f.name));
+    const rejected = Array.from(incoming).length - accepted.length;
+
+    setImportError(rejected > 0 ? `Ignored ${rejected} file(s) that are not .xlsx, .xls or .csv.` : null);
+    setImportResult(null);
+    setImportStatus('idle');
+    // Replace rather than append, so what is listed is exactly what will be sent.
+    setFiles(accepted);
+  };
+
+  /**
+   * preview parses and reports without storing, so a batch can be checked before it replaces whatever the
+   * previous run left in the store.
+   */
+  const runImport = async (preview: boolean) => {
+    if (files.length === 0) return;
+    setImportStatus('working');
+    setImportError(null);
+
+    try {
+      const body = new FormData();
+      for (const file of files) body.append('files', file);
+      if (preview) body.append('preview', '1');
+
+      const res = await fetch('/api/class-estimation/import', { method: 'POST', body });
+      const data = await res.json().catch(() => null);
+
+      if (!data) {
+        setImportStatus('error');
+        setImportError('The import endpoint returned nothing readable.');
+        return;
+      }
+      if (data.error) {
+        setImportStatus('error');
+        setImportError(data.error);
+        return;
+      }
+
+      setImportResult(data as ImportResult);
+      setImportStatus(data.totalStudents > 0 ? 'done' : 'error');
+      if (!preview) {
+        refreshStored();
+        // A fresh cohort invalidates whatever the last preview showed.
+        setPreview(null);
+        setPreviewStatus('idle');
+      }
+    } catch (err) {
+      setImportStatus('error');
+      setImportError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
   const startEstimation = useCallback(() => {
     esRef.current?.close();
 
@@ -96,6 +434,8 @@ export default function ClassEstimationPage() {
     const params = new URLSearchParams();
     if (minId.trim()) params.set('minId', minId.trim());
     if (maxId.trim()) params.set('maxId', maxId.trim());
+    // Only portal and mock run a scrape. Imported records are already in the store.
+    if (source === 'mock') params.set('source', 'mock');
     const qs = params.toString();
     const es = new EventSource(`/api/class-estimation/run${qs ? `?${qs}` : ''}`);
     esRef.current = es;
@@ -138,6 +478,7 @@ export default function ClassEstimationPage() {
               total:     data.total     as number,
             });
             setRunStatus('done');
+            refreshStored();
             es.close();
             esRef.current = null;
             break;
@@ -152,10 +493,92 @@ export default function ClassEstimationPage() {
       es.close();
       esRef.current = null;
     };
-  }, [minId, maxId]);
+  }, [minId, maxId, source, refreshStored]);
+
+  const runPreview = async () => {
+    setPreviewStatus('loading');
+    setPreviewError(null);
+    setCopied(false);
+    try {
+      // No term is sent: the route derives it from the date. ?term= exists only as a manual override.
+      //
+      // An empty box is not 0%, so this refuses to run rather than quietly estimating at zero retention
+      // and then saving it as the HoD's figure.
+      const rate = parseTypedRetentionPercent(retention);
+      if (rate === null) {
+        setPreviewStatus('error');
+        setPreviewError('Enter the percentage of students expected back, from 1 to 100.');
+        return;
+      }
+
+      // Running with a rate is as good a statement of intent as any, so it is saved then rather than on
+      // every keystroke. A failure here is not worth interrupting the estimate for.
+      fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: RETENTION_KEY, value: String(rate) }),
+      })
+        .then((res) => setRetentionSaved(res.ok))
+        .catch(() => setRetentionSaved(false));
+
+      const intake = Number(newIntake);
+      if (!Number.isInteger(intake) || intake < 0) {
+        setPreviewStatus('error');
+        setPreviewError('New students must be a whole number, 0 or more.');
+        return;
+      }
+
+      fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: NEW_INTAKE_KEY, value: String(intake) }),
+      }).catch(() => { /* not worth interrupting the estimate for */ });
+
+      const res = await fetch(`/api/class-estimation/preview?retentionRate=${rate}&newIntake=${intake}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? `Request failed (${res.status})`);
+      setPreview(data as PreviewResponse);
+      setPreviewStatus('done');
+    } catch (err) {
+      setPreview(null);
+      setPreviewError(err instanceof Error ? err.message : 'Preview failed');
+      setPreviewStatus('error');
+    }
+  };
+
+  const copyPreview = async () => {
+    if (!preview) return;
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(preview, null, 2));
+      setCopied(true);
+    } catch {
+      setPreviewError('Could not copy to the clipboard');
+    }
+  };
 
   const isLoggedIn = sessionStatus === 'logged-in';
   const isRunning  = runStatus === 'running';
+
+  // Mock is only listed when the build actually offers it, so a production panel can never be pointed at
+  // generated students. Only the portal option needs a login, which is the whole reason the other two exist.
+  const sourceOptions: SourceOption[] = [
+    {
+      id: 'portal', label: 'Portal', requiresLogin: true,
+      hint: 'Reads live transcripts from the student portal. Needs a portal login.',
+    },
+    ...(mockAvailable
+      ? [{
+          id: 'mock' as const, label: 'Mock Portal', requiresLogin: false,
+          hint: 'Generated students built from the planners in this system. No login needed.',
+        }]
+      : []),
+    {
+      id: 'import', label: 'Imported DPA', requiresLogin: false,
+      hint: 'Reads DPA files exported from the portal, a folder at a time.',
+    },
+  ];
+
+  const canStartScrape = !isRunning && (source !== 'portal' || isLoggedIn);
   const pct = (progress && progress.total > 0)
     ? Math.round((progress.current / progress.total) * 100)
     : 0;
@@ -177,36 +600,180 @@ export default function ClassEstimationPage() {
     runStatus === 'done' ? 'Completed' : 'Stopped';
 
   return (
-    <div className={styles.panel}>
+    <div className={styles.panel} ref={rootRef}>
 
       {/* ── Page header ─────────────────────────────────────────────────────── */}
       <div className={styles.header}>
-        <h1 className={styles.title}>Class Estimation</h1>
-        <p className={styles.subtitle}>
-          Estimate next-semester enrollment headcount for each unit
-        </p>
+        <div>
+          <h1 className={styles.title}>Class Estimation</h1>
+          <p className={styles.subtitle}>
+            Estimate next-semester enrollment headcount for each unit
+          </p>
+        </div>
+        {/* The read-only view of a saved run, without the scrape controls or the per-student diagnostics.
+            A button rather than a text link, since it is the page most people will actually want. */}
+        <Link href="/class-estimation/report" className={styles.reportLink}>
+          Head of Department view →
+        </Link>
       </div>
 
-      {/* ── Configuration + start ────────────────────────────────────────────── */}
+      {/* ── Where transcripts come from ──────────────────────────────────────── */}
       <div className={styles.card}>
-        <div className={styles.sectionTitle}>Portal Session</div>
+        <div className={styles.sectionTitle}>Student Data Source</div>
 
-        <div className={styles.statusRow}>
-          <span
-            className={styles.statusDot}
-            style={{ background: isLoggedIn ? 'var(--accent-green)' : 'var(--text-muted)' }}
-          />
-          <span style={{ fontSize: 12, color: isLoggedIn ? 'var(--accent-green)' : 'var(--text-muted)' }}>
-            {isLoggedIn
-              ? `Connected · ${studentCount.toLocaleString()} students loaded`
-              : 'Not connected'}
-          </span>
+        <div className={styles.sourceRow}>
+          {sourceOptions.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              className={`${styles.sourceOption} ${source === option.id ? styles.sourceOptionActive : ''}`}
+              onClick={() => setSource(option.id)}
+              disabled={isRunning || importStatus === 'working'}
+            >
+              <span>{option.label}</span>
+              <span className={styles.sourceOptionHint}>{option.hint}</span>
+            </button>
+          ))}
         </div>
 
-        {!isLoggedIn && (
-          <p className={styles.hintText}>
-            Log in to the portal via the top-bar button before running estimation.
-          </p>
+        {stored && stored.storedStudents > 0 && (
+          <div className={styles.storedBadge}>
+            <span className={styles.statusDot} style={{ background: 'var(--accent-green)' }} />
+            {stored.storedStudents.toLocaleString()} student(s) loaded
+            {Object.keys(stored.bySource).length > 0 && ` · from ${Object.entries(stored.bySource).map(([k, n]) => `${k} (${n})`).join(', ')}`}
+          </div>
+        )}
+      </div>
+
+      {/* ── Imported files ───────────────────────────────────────────────────── */}
+      {source === 'import' && (
+        <div className={styles.card}>
+          <div className={styles.sectionTitle}>Import Student DPA Files</div>
+
+          <div
+            className={`${styles.dropZone} ${dragging ? styles.dropZoneActive : ''}`}
+            onClick={() => fileInputRef.current?.click()}
+            onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={(e) => { e.preventDefault(); setDragging(false); addFiles(e.dataTransfer.files); }}
+          >
+            {files.length === 0
+              ? 'Drag DPA files here, or click to choose. One file per student, or one sheet holding many.'
+              : `${files.length} file(s) ready. Drop more to replace this selection.`}
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept=".xlsx,.xls,.csv"
+              style={{ display: 'none' }}
+              onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }}
+            />
+          </div>
+
+          {files.length > 0 && !importResult && (
+            <div className={styles.fileList}>
+              {files.map((file) => (
+                <div key={file.name} className={styles.fileRow}>
+                  <span className={styles.fileName}>{file.name}</span>
+                  <span className={styles.fileNote}>{(file.size / 1024).toFixed(0)} KB</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Per-file outcome, so one unreadable file is visible rather than lost in a total. */}
+          {importResult && (
+            <div className={styles.fileList}>
+              {importResult.files.map((file) => (
+                <div
+                  key={file.filename}
+                  className={`${styles.fileRow} ${file.ok ? styles.fileRowOk : styles.fileRowFail}`}
+                >
+                  <span>{file.ok ? '✓' : '✗'}</span>
+                  <span className={styles.fileName}>{file.filename}</span>
+                  <span className={styles.fileNote}>
+                    {file.ok
+                      ? `${file.students.length} student(s)${file.rowWarnings.length > 0 ? ` · ${file.rowWarnings.length} row warning(s)` : ''}`
+                      : file.error}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {importResult && (
+            <p className={styles.hintText} style={{ marginTop: 8 }}>
+              {importResult.preview
+                ? `Preview only, nothing stored yet: ${importResult.totalStudents} student(s) across ${importResult.totalFiles} file(s)`
+                : `Stored ${importResult.storedStudents} student(s), replacing any previous batch`}
+              {importResult.filesFailed > 0 && ` · ${importResult.filesFailed} file(s) failed`}
+            </p>
+          )}
+
+          {importError && <div className={styles.errorBox}>{importError}</div>}
+
+          <div className={styles.actionRow}>
+            <button
+              className={styles.btnSecondary}
+              disabled={files.length === 0 || importStatus === 'working'}
+              onClick={() => runImport(true)}
+            >
+              {importStatus === 'working' ? 'Reading…' : 'Preview'}
+            </button>
+            <button
+              className={styles.btnPrimary}
+              disabled={files.length === 0 || importStatus === 'working'}
+              onClick={() => runImport(false)}
+            >
+              Import {files.length > 0 ? `${files.length} file(s)` : ''}
+            </button>
+            {files.length > 0 && (
+              <button
+                className={styles.btnSecondary}
+                disabled={importStatus === 'working'}
+                onClick={() => { setFiles([]); setImportResult(null); setImportError(null); setImportStatus('idle'); }}
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Scrape configuration + start ─────────────────────────────────────── */}
+      {source !== 'import' && (
+      <div className={styles.card}>
+        <div className={styles.sectionTitle}>
+          {source === 'mock' ? 'Mock Data' : 'Portal Session'}
+        </div>
+
+        {source === 'mock' ? (
+          <div className={styles.statusRow}>
+            <span className={styles.statusDot} style={{ background: 'var(--accent-green)' }} />
+            <span style={{ fontSize: 12, color: 'var(--accent-green)' }}>
+              Ready · generated from the planners loaded in this system, no login needed
+            </span>
+          </div>
+        ) : (
+          <>
+            <div className={styles.statusRow}>
+              <span
+                className={styles.statusDot}
+                style={{ background: isLoggedIn ? 'var(--accent-green)' : 'var(--text-muted)' }}
+              />
+              <span style={{ fontSize: 12, color: isLoggedIn ? 'var(--accent-green)' : 'var(--text-muted)' }}>
+                {isLoggedIn
+                  ? `Connected · ${studentCount.toLocaleString()} students loaded`
+                  : 'Not connected'}
+              </span>
+            </div>
+
+            {!isLoggedIn && (
+              <p className={styles.hintText}>
+                Log in to the portal via the top-bar button before running estimation.
+              </p>
+            )}
+          </>
         )}
 
         {/* ID range filter */}
@@ -242,7 +809,7 @@ export default function ClassEstimationPage() {
         <div className={styles.actionRow}>
           <button
             className={styles.btnPrimary}
-            disabled={!isLoggedIn || isRunning}
+            disabled={!canStartScrape}
             onClick={startEstimation}
           >
             {runStatus === 'done' ? 'Run Again' : 'Start Estimation'}
@@ -254,6 +821,7 @@ export default function ClassEstimationPage() {
           )}
         </div>
       </div>
+      )}
 
       {/* ── Progress card ────────────────────────────────────────────────────── */}
       {progress && (
@@ -322,6 +890,313 @@ export default function ClassEstimationPage() {
         </div>
       )}
 
+      {/* ── Pipeline preview (Phases 0-3, diagnostic) ────────────────────────── */}
+      <div className={styles.card}>
+        <div className={styles.sectionTitle}>Pipeline Preview</div>
+        <p className={styles.hintText}>
+          Runs matching, candidate resolution, eligibility and ranking over whichever students are currently
+          loaded, scraped or imported. Nothing is saved. Try it on a small batch first.
+        </p>
+
+        {/* The target semester is derived, not picked, so it is stated with the reason rather than offered. */}
+        <div className={styles.targetRow}>
+          <span className={styles.targetLabel}>Estimating for</span>
+          <span className={styles.targetValue}>{preview?.target?.label ?? academicNow.label}</span>
+          <span className={styles.targetReason}>{preview?.target?.reason ?? academicNow.reason}</span>
+        </div>
+
+        <div className={styles.actionRow}>
+          <div className={styles.rangeField}>
+            <label className={styles.rangeLabel}>
+              Students returning (%){retentionSaved ? ' · saved' : ''}
+            </label>
+            <input
+              className={styles.rangeInput}
+              type="number"
+              min={1}
+              max={100}
+              value={retention}
+              onChange={(e) => setRetention(e.target.value)}
+              disabled={previewStatus === 'loading' || isRunning}
+            />
+          </div>
+          <div className={styles.rangeField}>
+            <label className={styles.rangeLabel}>New students expected</label>
+            <input
+              className={styles.rangeInput}
+              type="number"
+              min={0}
+              value={newIntake}
+              onChange={(e) => setNewIntake(e.target.value)}
+              disabled={previewStatus === 'loading' || isRunning}
+            />
+          </div>
+          <button
+            className={styles.btnPrimary}
+            disabled={previewStatus === 'loading' || isRunning}
+            onClick={runPreview}
+          >
+            {previewStatus === 'loading' ? 'Running…' : 'Run Preview'}
+          </button>
+          {preview && (
+            <button className={styles.btnSecondary} onClick={copyPreview}>
+              {copied ? 'Copied' : 'Copy JSON'}
+            </button>
+          )}
+        </div>
+
+        {previewError && <div className={styles.errorBox} style={{ marginTop: 12 }}>{previewError}</div>}
+
+        {preview && (
+          <>
+            <div className={styles.summaryGrid} style={{ marginTop: 16 }}>
+              {([
+                ['Students', preview.summary.students],
+                ['With planner', preview.summary.withPlanner],
+                ['Shared core', preview.summary.commonCoreOnly],
+                ['Not estimated', preview.summary.noMajorOrPlanner],
+                ['Errors', preview.summary.errors],
+                ['Candidates', preview.summary.totalCandidates],
+                ['Eligible', preview.summary.totalEligible],
+                ['Picked', preview.summary.totalPicked],
+              ] as const).map(([label, value]) => (
+                <div className={styles.summaryItem} key={label}>
+                  <span className={styles.summaryValue} style={{ color: 'var(--text-primary)' }}>
+                    {value.toLocaleString()}
+                  </span>
+                  <span className={styles.summaryLabel}>{label}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className={styles.previewNotes}>
+              <div>
+                Not eligible: {preview.summary.ineligibleByReason['not-offered-in-term']} not offered this semester,{' '}
+                {preview.summary.ineligibleByReason['requisites-unmet']} requisites unmet,{' '}
+                {preview.summary.ineligibleByReason['not-in-planner']} not in planner
+              </div>
+              <div>
+                Eligible only because the unit has no offering data: {preview.summary.eligibleWithoutOfferingData}
+              </div>
+              {preview.summary.outsideRecommendedTerm > 0 && (
+                <div>
+                  Predicted outside the semester their planner recommends: {preview.summary.outsideRecommendedTerm}{' '}
+                  (normal for retakes, worth a look if a whole cohort appears here)
+                </div>
+              )}
+              {preview.summary.plannerCounts.map((p) => (
+                <div key={p.plannerId}>
+                  {p.students} × {p.majorName} ({p.intakeYear} S{p.intakeSemester})
+                </div>
+              ))}
+              {Object.entries(preview.summary.mappingWarningCounts).map(([warning, n]) => (
+                <div key={warning}>⚠ {n} × {warning}</div>
+              ))}
+            </div>
+
+            {/* The actual answer. Everything below this is the workings behind it. */}
+            {preview.summary.projectedByUnit.length > 0 && (
+              <div className={styles.electiveBlock}>
+                <div className={styles.electiveHeading}>
+                  Projected enrolment
+                  <span className={styles.electiveNote}>
+                    {(preview.summary.retentionRate * 100).toFixed(0)}% of students assumed returning
+                    {preview.summary.grouping.workSaved > 0 &&
+                      ` · ${preview.summary.grouping.groups} distinct situations across ${preview.summary.grouping.students} students`}
+                  </span>
+                </div>
+
+                <div className={styles.electiveTable}>
+                  <div className={`${styles.electiveRow} ${styles.projectedRow} ${styles.electiveHead}`}>
+                    <span>Unit</span>
+                    <span>Required</span>
+                    <span>Elective</span>
+                    <span>New</span>
+                    <span>Headcount</span>
+                  </div>
+                  {preview.summary.projectedByUnit.slice(0, 60).map((u) => (
+                    <div key={u.code} className={`${styles.electiveRow} ${styles.projectedRow}`}>
+                      <span className={styles.electiveCode}>{u.code}</span>
+                      <span className={styles.electiveNote}>{u.fromNamedPicks || '-'}</span>
+                      <span className={styles.electiveNote}>
+                        {u.fromElectives > 0 ? u.fromElectives.toFixed(1) : '-'}
+                      </span>
+                      <span className={styles.electiveNote}>{u.fromNewIntake || '-'}</span>
+                      <span className={styles.electiveSeats}>{u.headcount}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <p className={styles.hintText} style={{ marginTop: 8 }}>
+                  Required counts whole students the planner says still owe the unit. Elective counts shares
+                  of a student spread over the options they could pick. New is the intake figure, which is not
+                  discounted because it is already what you expect to arrive. Headcount is the lot, rounded
+                  once at the end, so the column need not add up to the total below.
+                </p>
+
+                <div className={styles.previewNotes} style={{ marginTop: 8 }}>
+                  <div>
+                    {preview.summary.totals.units} units · {preview.summary.totals.headcount.toLocaleString()} enrolments
+                    {preview.summary.totals.unitsWithNoStudents > 0 &&
+                      ` · ${preview.summary.totals.unitsWithNoStudents} predicted not to run`}
+                  </div>
+                  {preview.summary.newIntakeCount > 0 && (
+                    <div>
+                      {preview.summary.newIntakeCount} new students placed on{' '}
+                      {preview.summary.newIntake.units.join(', ') || 'no units'}
+                    </div>
+                  )}
+                  {preview.summary.newIntake.warnings.map((warning) => (
+                    <div key={warning}>⚠ {warning}</div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Electives are predicted as shares of a seat, never as named picks, so they get their own
+                table rather than sitting in the picked list and looking like certainties. */}
+            {preview.summary.electiveSeatsByUnit.length > 0 && (
+              <div className={styles.electiveBlock}>
+                <div className={styles.electiveHeading}>
+                  Expected elective enrolment
+                  <span className={styles.electiveNote}>
+                    fractional on purpose, each student is spread over the electives they could take
+                  </span>
+                </div>
+
+                <div className={styles.electiveTable}>
+                  <div className={`${styles.electiveRow} ${styles.electiveHead}`}>
+                    <span>Unit</span>
+                    <span>Type</span>
+                    <span>Taken by</span>
+                    <span>Expected</span>
+                  </div>
+                  {preview.summary.electiveSeatsByUnit.slice(0, 30).map((u) => (
+                    <div key={u.code} className={styles.electiveRow}>
+                      <span className={styles.electiveCode}>{u.code}</span>
+                      <span className={styles.electiveNote}>
+                        {u.category === 'mixed' ? 'both' : u.category === 'prescribed' ? 'prescribed' : 'free'}
+                      </span>
+                      <span className={styles.electiveNote}>{u.popularity}</span>
+                      <span className={styles.electiveSeats}>{u.expectedSeats.toFixed(1)}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {preview.summary.electiveSeatsUnplaced > 0 && (
+                  <p className={styles.hintText} style={{ marginTop: 8 }}>
+                    {preview.summary.electiveSeatsUnplaced.toFixed(1)} elective seat(s) could not be placed:
+                    those students owe a slot but every unit in their pool is either not running next
+                    semester or has requisites they have not met.
+                  </p>
+                )}
+              </div>
+            )}
+
+            <div className={styles.previewList}>
+              {preview.students.slice(0, 200).map((s) => (
+                <details key={s.studentId} className={styles.previewRow}>
+                  <summary>
+                    <span>{s.name} ({s.studentId})</span>
+                    <span className={styles.previewMeta}>
+                      {s.error
+                        ? `error: ${s.error}`
+                        : s.planner
+                          ? `${s.planner.majorName} ${s.planner.matchPct.toFixed(0)}% · ${s.candidateCount} candidates → ${s.eligibleCount} eligible → ${s.picked.length} picked`
+                          : s.basis === 'commonCore'
+                            ? `shared core, major not detectable yet · ${s.candidateCount} candidates → ${s.eligibleCount} eligible → ${s.picked.length} picked`
+                            : `not estimated (${s.matchStatus ?? 'n/a'})`}
+                    </span>
+                  </summary>
+                  <pre className={styles.previewPre}>{JSON.stringify(s, null, 2)}</pre>
+                </details>
+              ))}
+              {preview.students.length > 200 && (
+                <p className={styles.hintText}>
+                  Showing the first 200 of {preview.students.length.toLocaleString()} students. Copy JSON includes all of them.
+                </p>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* ── Saved runs ───────────────────────────────────────────────────────── */}
+      <div className={styles.card}>
+        <div className={styles.sectionTitle}>Saved Runs</div>
+        <p className={styles.hintText}>
+          Saving recalculates on the server, so re-scrape or re-import before saving and the
+            run will record the new cohort, not the one shown previously.
+        </p>
+
+        <div className={styles.actionRow}>
+          <div className={styles.rangeField} style={{ flex: 1, minWidth: 180 }}>
+            <label className={styles.rangeLabel}>Label (optional)</label>
+            <input
+              className={styles.rangeInput}
+              type="text"
+              placeholder="e.g. before the FTES change"
+              value={runLabel}
+              onChange={(e) => setRunLabel(e.target.value)}
+              disabled={savingRun}
+            />
+          </div>
+          <button className={styles.btnPrimary} disabled={savingRun} onClick={saveRun}>
+            {savingRun ? 'Saving…' : 'Save This Run'}
+          </button>
+        </div>
+
+        {runStatusMsg && <p className={styles.hintText} style={{ marginTop: 8 }}>{runStatusMsg}</p>}
+
+        {runs.length === 0 ? (
+          <p className={styles.hintText} style={{ marginTop: 12 }}>No runs saved yet.</p>
+        ) : (
+          <div className={styles.fileList} style={{ marginTop: 12 }}>
+            {runs.map((run) => (
+              <div key={run.id}>
+                <div className={styles.fileRow}>
+                  <button className={styles.runLink} onClick={() => viewRun(run.id)}>
+                    {new Date(run.createdAt).toLocaleString()}
+                    {run.label ? ` · ${run.label}` : ''}
+                  </button>
+                  <span className={styles.fileNote}>
+                    S{run.targetSemester} {run.targetYear} · {run.studentCount.toLocaleString()} students
+                    {run.newIntake > 0 && ` + ${run.newIntake} new`}
+                    {' · '}{(run.retentionRate * 100).toFixed(0)}% returning
+                    {' · '}{run.totalHeadcount.toLocaleString()} enrolments over {run.unitCount} units
+                    {' · '}{run.source}
+                  </span>
+                  <button className={styles.runDelete} onClick={() => deleteRun(run.id)}>Remove</button>
+                </div>
+
+                {openRun?.id === run.id && (
+                  <div className={styles.electiveTable} style={{ margin: '6px 0 12px' }}>
+                    <div className={`${styles.electiveRow} ${styles.projectedRow} ${styles.electiveHead}`}>
+                      <span>Unit</span>
+                      <span>Required</span>
+                      <span>Elective</span>
+                      <span>New</span>
+                      <span>Headcount</span>
+                    </div>
+                    {openRun.units.map((unit) => (
+                      <div key={unit.unitCode} className={`${styles.electiveRow} ${styles.projectedRow}`}>
+                        <span className={styles.electiveCode}>{unit.unitCode}</span>
+                        <span className={styles.electiveNote}>{unit.fromNamedPicks || '-'}</span>
+                        <span className={styles.electiveNote}>
+                          {unit.fromElectives > 0 ? unit.fromElectives.toFixed(1) : '-'}
+                        </span>
+                        <span className={styles.electiveNote}>{unit.fromNewIntake || '-'}</span>
+                        <span className={styles.electiveSeats}>{unit.headcount}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* ── Log ──────────────────────────────────────────────────────────────── */}
       {log.length > 0 && (
         <div className={styles.card}>
@@ -331,7 +1206,7 @@ export default function ClassEstimationPage() {
               ({log.length.toLocaleString()} entries)
             </span>
           </div>
-          <div className={styles.logWrap}>
+          <div className={styles.logWrap} ref={logWrapRef}>
             {log.map((entry) => (
               <div
                 key={entry.key}
@@ -341,7 +1216,6 @@ export default function ClassEstimationPage() {
                 {entry.text}
               </div>
             ))}
-            <div ref={logEndRef} />
           </div>
         </div>
       )}

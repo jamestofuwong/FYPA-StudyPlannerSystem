@@ -1,9 +1,14 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import styles from './page.module.css';
 import { useToast } from '../../../components/providers/ToastProvider';
 import { useStudentSession } from '../../../components/providers/StudentSessionContext';
+import { panelToPath } from '../../../lib/navigation';
+import { calendarTermFor } from '../../../../core/services/scheduling/customPlannerScheduler';
+import { deriveSemesterFromMonth } from '../../../../core/services/classEstimation/scrapedStudentMapper';
+import { monthsOf } from '../pathway/terms';
 import type { ScrapedStudent, ScrapedCourseListItem } from '../../../../core/shared/types/student';
 
 type Enrollment = { EnrollId: number; EnrollmentDesc: string };
@@ -40,12 +45,22 @@ export default function DashboardPage() {
     customPlanStart, setCustomPlanStart,
     setRetakeUnitCodes,
     setInjectedMinors,
+    setPlanUnits,
+    setPlanIntakeSemester,
+    setPlanCompletedUnits,
+    setPlanExtraUnits,
+    setPlanElectiveCandidates,
+    setPlanRequirements,
+    setGeneratedSemesters,
+    setIsPlanEdited,
   } = useStudentSession();
+  const router = useRouter();
   const [openYears, setOpenYears] = useState<Set<string>>(new Set());
   const [internalLoading, setInternalLoading] = useState(false);
   const [scraperApiStatus, setScraperApiStatus] = useState<string>('idle');
   const [showExportModal, setShowExportModal] = useState(false);
   const [enrollmentMode, setEnrollmentMode] = useState<'latest' | 'earliest' | 'mpu'>('latest');
+  const [resultTab, setResultTab] = useState<'analytics' | 'graduation' | 'units' | 'pathway'>('analytics');
   const [showPlannerPicker, setShowPlannerPicker] = useState(false);
   const [plannerPickerSearch, setPlannerPickerSearch] = useState('');
   const [allPlanners, setAllPlanners] = useState<any[] | null>(null);
@@ -68,6 +83,7 @@ export default function DashboardPage() {
   const [scraperError, setScraperError] = useState<string | null>(null);
 
   // REQ-SEC-101: no sessionStorage restore. Student data must live in RAM only
+  const [studentCount, setStudentCount] = useState(0);
 
   // Poll scraper status on mount to reflect portal session state.
   useEffect(() => {
@@ -76,6 +92,7 @@ export default function DashboardPage() {
       if (!res?.ok) return;
       const data = await res.json();
       setPortalSessionStatus(data.sessionStatus ?? 'idle');
+      setStudentCount(data.studentCount ?? 0);
       setScraperApiStatus((prev) => (prev === 'scraping' || prev === 'pending' ? prev : data.status));
     };
     poll();
@@ -84,6 +101,7 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
+    setResultTab('analytics');
     const planner = selectedPlannerIdx === -1 ? manualPlanner : dashboardData?.planners?.[selectedPlannerIdx];
     if (!planner?.units) return;
     const keys = new Set<string>(planner.units.map((u: any) => `${u.year_level}-${u.semester}`));
@@ -95,7 +113,8 @@ export default function DashboardPage() {
   const isScraping = scraperApiStatus === 'scraping';
   const isWaitingForList = false;
   const isLoggedIn = portalSessionStatus === 'logged-in';
-  const isDisabled = !isLoggedIn || loading;
+  const isLoadingStudentList = isLoggedIn && studentCount === 0;
+  const isDisabled = !isLoggedIn || isLoadingStudentList || loading;
 
   // Fetches degree audit via the portal API pipeline for a given enrollment.
   const fetchViaPortal = async (dbId: number, studentNumber: string, enrollID: number): Promise<ScrapedStudent | null> => {
@@ -105,7 +124,10 @@ export default function DashboardPage() {
       body: JSON.stringify({ dbId, enrollID, studentNumber }),
     }).catch(() => null);
     if (!res?.ok) {
-      showToast('Failed to reach portal API.', 'error');
+      const errBody = await res?.json().catch(() => null);
+      const msg = errBody?.error ?? 'Failed to reach portal API.';
+      showToast(msg, 'error');
+      setScraperError(msg);
       return null;
     }
     const data = await res.json();
@@ -271,6 +293,20 @@ export default function DashboardPage() {
     return mpuStudent?.courseList ?? [];
   };
 
+  // Portal degree-audit records have no display name or enrolment list.
+  // Those come from the student search and enrollment endpoints.
+  const annotateScrapedStudent = (
+    student: ScrapedStudent,
+    enrollments: Enrollment[],
+    selected: Enrollment,
+    name: string,
+  ): ScrapedStudent => ({
+    ...student,
+    studentName: student.studentName || name || undefined,
+    enrollmentOptions: enrollments.map((e) => ({ text: e.EnrollmentDesc })),
+    selectedEnrollment: selected.EnrollmentDesc,
+  });
+
   const handleSwitchEnrollment = async (enrollmentText: string) => {
     const id = studentIdInput.trim();
     if (!id || !selectedStudentDbId) return;
@@ -290,10 +326,11 @@ export default function DashboardPage() {
       if (!target) { showToast('Enrollment not found.', 'error'); return; }
       const scraped = await fetchViaPortal(selectedStudentDbId, id, target.EnrollId);
       if (!scraped) return;
-      setScrapedStudent({ student: scraped, studentId: id });
       const isMpuTarget = target.EnrollmentDesc.toLowerCase().includes('mata pelajaran umum');
       const mpuCourseList = isMpuTarget ? [] : await fetchMpuCourseList(selectedStudentDbId, id, enrollmentsList, target.EnrollId);
-      await fetchDashboardData(id, scraped, mpuCourseList);
+      const annotated = annotateScrapedStudent(scraped, enrollmentsList, target, selectedStudentName);
+      setScrapedStudent({ student: annotated, studentId: id });
+      await fetchDashboardData(id, annotated, mpuCourseList);
     } finally {
       setInternalLoading(false);
     }
@@ -527,7 +564,6 @@ export default function DashboardPage() {
   const handleSearch = async () => {
     const id = studentIdInput.trim();
     if (!id) { showToast('Enter a Student ID.', 'error'); return; }
-    if (!selectedStudentDbId) { showToast('Select a student from the suggestions.', 'error'); return; }
     setSuggestions([]);
     setShowSuggestions(false);
     setStudentLoaded(false);
@@ -543,36 +579,89 @@ export default function DashboardPage() {
     setCustomPlanStart(null);
     setRetakeUnitCodes(new Set());
     setInjectedMinors(new Set());
+    setPlanUnits([]);
+    setPlanIntakeSemester(1);
+    setPlanCompletedUnits([]);
+    setPlanExtraUnits([]);
+    setPlanElectiveCandidates([]);
+    setPlanRequirements([]);
+    setGeneratedSemesters([]);
+    setIsPlanEdited(false);
     setScraperError(null);
     setInternalLoading(true);
     try {
+      // Portal fetches need the CampusNexus database id, not just the student number.
+      // A picked suggestion already has it; a typed id is resolved from the loaded list.
+      let dbId = selectedStudentDbId;
+      let studentName = selectedStudentName;
+      if (!dbId) {
+        const searchRes = await fetch(`/api/scraper/portal-students/search?q=${encodeURIComponent(id)}`).catch(() => null);
+        if (!searchRes?.ok) {
+          const errBody = await searchRes?.json().catch(() => null);
+          const msg = errBody?.error ?? 'Could not look up that student. Log in on the Scraper page and wait for the student list to load.';
+          showToast(msg, 'error');
+          setScraperError(msg);
+          return;
+        }
+        const searchData = await searchRes.json();
+        const results: { student_id: string; name: string; db_id: number }[] = searchData.results ?? [];
+        const match = results.find((r) => r.student_id === id) ?? (results.length === 1 ? results[0] : null);
+        if (!match?.db_id) {
+          const msg = 'Select a student from the suggestions.';
+          showToast(msg, 'error');
+          setScraperError(msg);
+          return;
+        }
+        dbId = match.db_id;
+        studentName = match.name ?? '';
+        setSelectedStudentDbId(dbId);
+        setSelectedStudentName(studentName);
+      }
+
       // 1. Fetch enrollment list for this student
       const enrollRes = await fetch('/api/scraper/portal-enrollments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dbId: selectedStudentDbId }),
+        body: JSON.stringify({ dbId }),
       }).catch(() => null);
-      if (!enrollRes?.ok) { showToast('Failed to fetch enrollments.', 'error'); return; }
+      if (!enrollRes?.ok) {
+        const errBody = await enrollRes?.json().catch(() => null);
+        const msg = errBody?.error ?? 'Failed to fetch enrollments.';
+        showToast(msg, 'error');
+        setScraperError(msg);
+        return;
+      }
       const enrollData = await enrollRes.json();
       const enrollments: Enrollment[] = enrollData.enrollments ?? [];
-      if (enrollments.length === 0) { showToast('No enrollments found for this student.', 'error'); return; }
+      if (enrollments.length === 0) {
+        const msg = enrollData.error ?? 'No enrollments found for this student.';
+        showToast(msg, 'error');
+        setScraperError(msg);
+        return;
+      }
       setEnrollmentsList(enrollments);
 
       // 2. Auto-select primary enrollment based on mode
       const selected = getPrimaryEnrollment(enrollments, enrollmentMode);
-      if (!selected) { showToast(`No ${enrollmentMode} enrollment found.`, 'error'); return; }
+      if (!selected) {
+        const msg = `No ${enrollmentMode} enrollment found.`;
+        showToast(msg, 'error');
+        setScraperError(msg);
+        return;
+      }
 
       // 3. Fetch degree audit for primary enrollment
-      const student = await fetchViaPortal(selectedStudentDbId, id, selected.EnrollId);
+      const student = await fetchViaPortal(dbId, id, selected.EnrollId);
       if (!student) return;
 
       // 4. For latest/earliest, also fetch and merge MPU courseList
       const mpuCourseList = enrollmentMode !== 'mpu'
-        ? await fetchMpuCourseList(selectedStudentDbId, id, enrollments, selected.EnrollId)
+        ? await fetchMpuCourseList(dbId, id, enrollments, selected.EnrollId)
         : [];
 
-      setScrapedStudent({ student, studentId: id });
-      await fetchDashboardData(id, student, mpuCourseList);
+      const annotated = annotateScrapedStudent(student, enrollments, selected, studentName);
+      setScrapedStudent({ student: annotated, studentId: id });
+      await fetchDashboardData(id, annotated, mpuCourseList);
     } finally {
       setInternalLoading(false);
     }
@@ -597,6 +686,14 @@ export default function DashboardPage() {
     setCustomPlanStart(null);
     setRetakeUnitCodes(new Set());
     setInjectedMinors(new Set());
+    setPlanUnits([]);
+    setPlanIntakeSemester(1);
+    setPlanCompletedUnits([]);
+    setPlanExtraUnits([]);
+    setPlanElectiveCandidates([]);
+    setPlanRequirements([]);
+    setGeneratedSemesters([]);
+    setIsPlanEdited(false);
     setScraperError(null);
     // REQ-SEC-101: no sessionStorage to remove, data was never persisted
     showToast('Student data cleared.', 'info');
@@ -622,6 +719,7 @@ export default function DashboardPage() {
               portalSessionStatus === 'idle'          ? 'Log in to portal via Scraper page' :
               portalSessionStatus === 'login-pending' ? 'Logging in to portal…' :
               portalSessionStatus === 'login-error'   ? 'Portal login failed — retry in Scraper page' :
+              isLoadingStudentList                    ? 'Loading student list…' :
               'Student ID or name'
             }
             disabled={isDisabled}
@@ -644,6 +742,12 @@ export default function DashboardPage() {
             </div>
           )}
         </div>
+        {isLoadingStudentList && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+            <div className={styles.spinner} style={{ width: 14, height: 14, borderWidth: 2 }} />
+            Loading student list…
+          </div>
+        )}
         <select
           className={styles.enrollSelect}
           value={enrollmentMode}
@@ -804,7 +908,7 @@ export default function DashboardPage() {
       )}
 
       {/* Loading states */}
-      {!isLoggedIn && portalSessionStatus !== 'login-pending' && (
+      {!isLoggedIn && portalSessionStatus !== 'login-pending' && !studentLoaded && (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '60px 20px', textAlign: 'center' }}>
           <div style={{ fontSize: 48, opacity: 0.25 }}>🔒</div>
           <div style={{ fontSize: 14, fontWeight: 600, marginTop: 12 }}>Log in to proceed</div>
@@ -1023,78 +1127,71 @@ export default function DashboardPage() {
             );
           })()}
 
-          {/* Ranked Planners selector */}
+          {/* Ranked Planners as tabs */}
           <div className={styles.sectionTitle}>Ranked Planners</div>
-          {dashboardData.match.rankedPlanners.slice(0, 3).map((ranked: any, idx: number) => {
-            const planner = dashboardData.planners[idx];
-            const isSelected = selectedPlannerIdx === idx;
-            const rankColor = idx === 0 ? 'var(--accent-blue)' : idx === 1 ? 'var(--accent-yellow)' : 'var(--accent-orange)';
-            return (
-              <div
-                key={ranked.plannerID}
-                onClick={() => setSelectedPlannerIdx(idx)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 12,
-                  padding: '10px 14px',
-                  background: isSelected ? 'var(--active-bg)' : 'var(--card-bg)',
-                  border: `1px solid ${isSelected ? 'var(--active-highlight)' : 'var(--panel-border)'}`,
-                  borderRadius: 4, marginBottom: 6, cursor: 'pointer', transition: 'all 0.1s',
-                }}
-              >
-                <div style={{ fontSize: 11, fontWeight: 700, color: rankColor, fontFamily: 'var(--font-mono)', width: 20, flexShrink: 0 }}>#{idx + 1}</div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600 }}>{ranked.majorName || '—'}</div>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                    {[
-                      planner?.course?.name,
-                      planner?.intake_year,
-                      planner?.intake_month != null
-                        ? new Date(2000, planner.intake_month - 1).toLocaleString('default', { month: 'long' })
-                        : null,
-                    ].filter(Boolean).join(' · ')}
-                  </div>
-                </div>
-                <div style={{ width: 120, flexShrink: 0 }}>
-                  <ProgressBar pct={ranked.matchPct} color={rankColor} />
-                </div>
-                <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: rankColor, width: 38, textAlign: 'right', flexShrink: 0 }}>
-                  {ranked.matchPct}%
-                </div>
-              </div>
-            );
-          })}
-
-          {/* Manual planner row */}
-          {manualPlanner && (() => {
-            const isSelected = selectedPlannerIdx === -1;
-            const label = [manualPlanner.major?.name, manualPlanner.course?.name, manualPlanner.intake_year,
-              manualPlanner.intake_month != null
-                ? new Date(2000, manualPlanner.intake_month - 1).toLocaleString('default', { month: 'long' })
-                : null,
-            ].filter(Boolean).join(' · ');
-            return (
-              <div
-                onClick={() => setSelectedPlannerIdx(-1)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px',
-                  background: isSelected ? 'var(--active-bg)' : 'var(--card-bg)',
-                  border: `1px solid ${isSelected ? 'var(--active-highlight)' : 'var(--panel-border)'}`,
-                  borderRadius: 4, marginBottom: 6, cursor: 'pointer', transition: 'all 0.1s',
-                }}
-              >
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--accent-purple)', fontFamily: 'var(--font-mono)', width: 20, flexShrink: 0 }}>M</div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600 }}>{manualPlanner.major?.name ?? manualPlanner.course?.name ?? '—'}</div>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{label}</div>
-                </div>
+          <div className={styles.plannerTabBar} role="tablist" aria-label="Ranked majors">
+            {dashboardData.match.rankedPlanners.slice(0, 3).map((ranked: any, idx: number) => {
+              const planner = dashboardData.planners[idx];
+              const isSelected = selectedPlannerIdx === idx;
+              const rankColor = idx === 0 ? 'var(--accent-blue)' : idx === 1 ? 'var(--accent-yellow)' : 'var(--accent-orange)';
+              const meta = [
+                planner?.course?.name,
+                planner?.intake_year,
+                planner?.intake_month != null
+                  ? new Date(2000, planner.intake_month - 1).toLocaleString('default', { month: 'long' })
+                  : null,
+              ].filter(Boolean).join(' · ');
+              return (
                 <button
-                  className={styles.btnDanger}
-                  style={{ fontSize: 11, padding: '2px 8px' }}
-                  onClick={(e) => { e.stopPropagation(); setManualPlanner(null); if (selectedPlannerIdx === -1) setSelectedPlannerIdx(0); }}
-                >✕</button>
-              </div>
-            );
-          })()}
+                  key={ranked.plannerID}
+                  type="button"
+                  role="tab"
+                  aria-selected={isSelected}
+                  className={`${styles.plannerTab} ${isSelected ? styles.plannerTabActive : ''}`}
+                  onClick={() => setSelectedPlannerIdx(idx)}
+                >
+                  <div className={styles.plannerTabTop}>
+                    <span className={styles.plannerTabRank} style={{ color: rankColor }}>#{idx + 1}</span>
+                    <span className={styles.plannerTabPct} style={{ color: rankColor }}>{ranked.matchPct}%</span>
+                  </div>
+                  <div className={styles.plannerTabName}>{ranked.majorName || '—'}</div>
+                  {meta && <div className={styles.plannerTabMeta}>{meta}</div>}
+                  <ProgressBar pct={ranked.matchPct} color={rankColor} />
+                </button>
+              );
+            })}
+
+            {manualPlanner && (() => {
+              const isSelected = selectedPlannerIdx === -1;
+              const meta = [
+                manualPlanner.course?.name,
+                manualPlanner.intake_year,
+                manualPlanner.intake_month != null
+                  ? new Date(2000, manualPlanner.intake_month - 1).toLocaleString('default', { month: 'long' })
+                  : null,
+              ].filter(Boolean).join(' · ');
+              return (
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={isSelected}
+                  className={`${styles.plannerTab} ${isSelected ? styles.plannerTabActive : ''}`}
+                  onClick={() => setSelectedPlannerIdx(-1)}
+                >
+                  <div className={styles.plannerTabTop}>
+                    <span className={styles.plannerTabRank} style={{ color: 'var(--accent-purple)' }}>M</span>
+                    <span
+                      className={styles.btnDanger}
+                      style={{ fontSize: 11, padding: '2px 8px' }}
+                      onClick={(e) => { e.stopPropagation(); setManualPlanner(null); if (selectedPlannerIdx === -1) setSelectedPlannerIdx(0); }}
+                    >✕</span>
+                  </div>
+                  <div className={styles.plannerTabName}>{manualPlanner.major?.name ?? manualPlanner.course?.name ?? '—'}</div>
+                  {meta && <div className={styles.plannerTabMeta}>{meta}</div>}
+                </button>
+              );
+            })()}
+          </div>
 
           {/* Planner picker */}
           <div style={{ marginBottom: 12 }}>
@@ -1160,9 +1257,49 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {/* Fast Analytics */}
-          <div className={styles.sectionTitle}>Analytics & Graduation Check</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 12 }}>
+          <div className={styles.resultTabBar} role="tablist" aria-label="Match result views">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={resultTab === 'analytics'}
+              className={`${styles.resultTab} ${resultTab === 'analytics' ? styles.resultTabActive : ''}`}
+              onClick={() => setResultTab('analytics')}
+            >
+              Analytics
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={resultTab === 'graduation'}
+              className={`${styles.resultTab} ${resultTab === 'graduation' ? styles.resultTabActive : ''}`}
+              onClick={() => setResultTab('graduation')}
+            >
+              Graduation
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={resultTab === 'units'}
+              className={`${styles.resultTab} ${resultTab === 'units' ? styles.resultTabActive : ''}`}
+              onClick={() => setResultTab('units')}
+            >
+              Unit Plan
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={resultTab === 'pathway'}
+              className={`${styles.resultTab} ${resultTab === 'pathway' ? styles.resultTabActive : ''}`}
+              onClick={() => setResultTab('pathway')}
+            >
+              Student Pathway
+            </button>
+          </div>
+
+          {resultTab === 'analytics' && (
+          <div className={styles.resultTabPanel}>
+          <div className={styles.sectionTitle}>Analytics</div>
+          <div className={styles.analyticsGrid}>
 
             {/* Not Yet Taken */}
             {(() => {
@@ -1195,28 +1332,48 @@ export default function DashboardPage() {
                 offering: u.semester 
               }));
 
-            const coreCount = notTaken.filter((u: any) => u.category === 'core').length;
-            const electiveCount = notTaken.filter((u: any) => u.category !== 'core').length;
+            const coreCount = notTaken.filter((u: any) => u.category === 'core' || u.category === 'major_core').length;
+            const electiveCount = notTaken.filter((u: any) => u.category === 'elective' || u.category === 'prescribed_elective').length;
+            const mpuCount = notTaken.filter((u: any) => u.category === 'mpu').length;
+            const wilCount = notTaken.filter((u: any) => u.category === 'wil').length;
+
+            // A planner slot counts from the student's intake, so for a September
+            // intake slot 1 is Aug/Sep. Slots 3 and 4 are summer and winter already,
+            // and calendarTermFor only converts the two semester slots.
+            const intakeSemester = deriveSemesterFromMonth(activePlanner?.intake_month ?? 1);
+            const termLabel = (slot: number) =>
+              monthsOf(slot === 1 || slot === 2 ? calendarTermFor(slot, intakeSemester) : slot);
 
             return (
-              <div style={{ background: 'var(--card-bg)', border: '1px solid var(--panel-border)', borderRadius: 4, padding: '12px 14px' }}>
-                <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Not Yet Taken</div>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 8 }}>
-                  <span style={{ fontSize: 20, fontWeight: 700 }}>{notTaken.length}</span>
-                  <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Core: {coreCount} · Elective: {electiveCount}</span>
-                </div>
-                <div style={{ maxHeight: 120, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 3 }}>
-                  {notTaken.length === 0 ? (
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>All planner units taken.</div>
-                  ) : notTaken.map((u: any) => (
-                    <div key={u.code} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
-                      <InlineCode red={u.category === 'core'}>{u.code}</InlineCode>
-                      <span style={{ color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
-                        {u.name} <span style={{ fontSize: '9px', opacity: 0.6 }}>[Sem {u.offering}]</span>
-                      </span>
+              <div className={`${styles.insightCard} ${styles.insightOrange}`}>
+                <div className={styles.insightHead}>
+                  <div>
+                    <div className={styles.statLabel}>Not Yet Taken</div>
+                    <div className={styles.insightValueRow}>
+                      <span className={styles.statValue}>{notTaken.length}</span>
+                      <span className={styles.statSub}>unit{notTaken.length !== 1 ? 's' : ''} remaining</span>
                     </div>
-                  ))}
+                  </div>
+                  <div className={styles.insightPills}>
+                    <span className={`${styles.pill} ${styles.pillRed}`}>Core {coreCount}</span>
+                    <span className={`${styles.pill} ${styles.pillMuted}`}>Elective {electiveCount}</span>
+                    <span className={`${styles.pill} ${styles.pillBlue}`}>MPU {mpuCount}</span>
+                    <span className={`${styles.pill} ${styles.suAlt}`}>WIL {wilCount}</span>
+                  </div>
                 </div>
+                {notTaken.length === 0 ? (
+                  <div className={styles.insightEmpty}>All planner units taken.</div>
+                ) : (
+                  <div className={styles.insightList}>
+                    {notTaken.map((u: any) => (
+                      <div key={u.code} className={styles.insightRow}>
+                        <InlineCode red={u.category === 'core' || u.category === 'major_core'}>{u.code}</InlineCode>
+                        <span className={styles.insightRowName}>{u.name}</span>
+                        <span className={styles.insightRowMeta}>{termLabel(u.offering)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             );
           })()}
@@ -1233,30 +1390,46 @@ export default function DashboardPage() {
               });
               const totalCredits = currentlyEnrolled.reduce((sum: number, c: any) => sum + (c.credits || 0), 0);
               return (
-                <div style={{ background: 'var(--card-bg)', border: '1px solid var(--panel-border)', borderRadius: 4, padding: '12px 14px' }}>
-                  <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Currently Enrolled</div>
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 8 }}>
-                    <span style={{ fontSize: 20, fontWeight: 700 }}>{currentlyEnrolled.length}</span>
-                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{totalCredits} credits this term</span>
-                  </div>
-                  <div style={{ maxHeight: 120, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 3 }}>
-                    {currentlyEnrolled.length === 0 ? (
-                      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>No units currently enrolled.</div>
-                    ) : currentlyEnrolled.map((c: any) => (
-                      <div key={c.courseId} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
-                        <InlineCode>{c.courseId}</InlineCode>
-                        <span style={{ color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{c.courseTitle}</span>
+                <div className={`${styles.insightCard} ${styles.insightBlue}`}>
+                  <div className={styles.insightHead}>
+                    <div>
+                      <div className={styles.statLabel}>Currently Enrolled</div>
+                      <div className={styles.insightValueRow}>
+                        <span className={styles.statValue}>{currentlyEnrolled.length}</span>
+                        <span className={styles.statSub}>{totalCredits} credits this term</span>
                       </div>
-                    ))}
+                    </div>
+                    <div className={styles.insightPills}>
+                      <span className={`${styles.pill} ${styles.pillBlue}`}>In progress</span>
+                    </div>
                   </div>
+                  {currentlyEnrolled.length === 0 ? (
+                    <div className={styles.insightEmpty}>No units currently enrolled.</div>
+                  ) : (
+                    <div className={styles.insightList}>
+                      {currentlyEnrolled.map((c: any) => (
+                        <div key={c.courseId} className={styles.insightRow}>
+                          <InlineCode>{c.courseId}</InlineCode>
+                          <span className={styles.insightRowName}>{c.courseTitle}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             })()}
+          </div>
+          </div>
+          )}
 
-            {/* Graduation Status */}
-            {(() => {
+          {resultTab === 'graduation' && (
+          <div className={styles.resultTabPanel}>
+          <div className={styles.sectionTitle}>Graduation Check</div>
+          {(() => {
               const activePlanner = selectedPlannerIdx === -1 ? manualPlanner : dashboardData?.planners?.[selectedPlannerIdx];
-              if (!activePlanner) return null;
+              if (!activePlanner) return (
+                <div className={styles.gradMuted}>Select a planner to run the graduation check.</div>
+              );
 
               const transcriptStates = resolveUnitStates(
                   [...(scrapedStudent?.student?.courseList ?? []), ...(dashboardData?.mpuCourseList ?? [])]
@@ -1275,55 +1448,99 @@ export default function DashboardPage() {
               const prescribedMissing = (activePlanner?.units ?? [])
                 .filter((u: any) => u.unit !== null && u.category === 'prescribed_elective' && !transcriptCodes.has(u.unit.unit_code?.toUpperCase()));
 
-              const isEligible = (coreMissing.length + prescribedMissing.length === 0) && creditsCompleted >= creditsRequired;
+              const creditsOk = creditsCompleted >= creditsRequired;
+              const isEligible = (coreMissing.length + prescribedMissing.length === 0) && creditsOk;
+              const creditPct = Math.min((creditsCompleted / creditsRequired) * 100, 100);
               
               return (
-                <div style={{ background: 'var(--card-bg)', border: `1px solid ${isEligible ? 'var(--accent-green)' : 'var(--accent-purple)'}`, borderRadius: 4, padding: '12px 14px' }}>
-                  <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Graduation Check</div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: isEligible ? 'var(--accent-green)' : 'var(--accent-red)', marginBottom: 8 }}>
-                    {isEligible ? '✅ ELIGIBLE' : '❌ INELIGIBLE'}
-                  </div>
-                  
-                  <div style={{ fontSize: '10px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      <div>
-                          <div style={{ color: coreMissing.length === 0 ? 'var(--accent-green)' : 'inherit' }}>
-                              {coreMissing.length === 0 ? '●' : '○'} Core & Major: {coreMissing.length === 0 ? 'Fulfilled' : <span style={{ fontWeight: 600 }}>{coreMissing.length} Remaining</span>}
-                          </div>
-                          {coreMissing.length > 0 && (
-                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4, marginLeft: 12 }}>
-                                  {coreMissing.map((u: any) => (
-                                      <InlineCode key={u.unit?.unit_code} red={true}>{u.unit?.unit_code}</InlineCode>
-                                  ))}
-                              </div>
-                          )}
-                      </div>
-
-                      <div>
-                          <div style={{ color: prescribedMissing.length === 0 ? 'var(--accent-green)' : 'inherit' }}>
-                              {prescribedMissing.length === 0 ? '●' : '○'} Prescribed Electives: {prescribedMissing.length === 0 ? 'Fulfilled' : <span style={{ fontWeight: 600 }}>{prescribedMissing.length} Remaining</span>}
-                          </div>
-                          {prescribedMissing.length > 0 && (
-                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4, marginLeft: 12 }}>
-                                  {prescribedMissing.map((u: any) => (
-                                      <InlineCode key={u.unit?.unit_code} red={false}>{u.unit?.unit_code}</InlineCode>
-                                  ))}
-                              </div>
-                          )}
-                      </div>
-
-                      <div style={{ fontSize:'12px', color: creditsCompleted >= creditsRequired ? 'var(--accent-green)' : 'var(--text-muted)' }}>
-                          {creditsCompleted >= creditsRequired ? '●' : '○'} Credits: {creditsCompleted}/{creditsRequired} CP
-                      </div>
+                <div className={styles.gradStack}>
+                <div className={`${styles.gradCard} ${isEligible ? styles.gradCardOk : ''}`}>
+                  <div className={styles.gradHead}>
+                    <div
+                      className={styles.gradTitle}
+                      style={{ color: isEligible ? 'var(--accent-green)' : 'var(--accent-red)' }}
+                    >
+                      {isEligible ? 'ELIGIBLE' : 'INELIGIBLE'}
+                    </div>
+                    <p className={styles.gradLead}>
+                      {isEligible
+                        ? 'Core, prescribed electives, and credit requirements are met for this planner.'
+                        : 'One or more graduation requirements are still outstanding against this planner.'}
+                    </p>
                   </div>
 
-                  <div style={{ marginTop: 10 }}>
-                    <ProgressBar pct={Math.min((creditsCompleted / creditsRequired) * 100, 100)} color="var(--accent-purple)" />
+                  <div className={styles.gradBody}>
+                    <div className={styles.gradReq}>
+                      <div className={styles.gradReqTop}>
+                        <span className={styles.gradReqLabel}>Credits</span>
+                        <span className={`${styles.gradReqValue} ${creditsOk ? styles.gradOk : styles.gradWarn}`}>
+                          {creditsCompleted}/{creditsRequired} CP
+                        </span>
+                      </div>
+                      <div className={styles.gradBar}>
+                        <ProgressBar pct={creditPct} color={creditsOk ? 'var(--accent-green)' : 'var(--accent-purple)'} />
+                      </div>
+                    </div>
                   </div>
+                </div>
+
+                    <div className={styles.gradReqRow}>
+                    <div className={`${styles.insightCard} ${coreMissing.length === 0 ? styles.insightGreen : styles.insightRed}`}>
+                      <div className={styles.gradReqTop}>
+                        <span className={styles.gradReqLabel}>Core & Major</span>
+                        <span className={`${styles.gradReqValue} ${coreMissing.length === 0 ? styles.gradOk : styles.gradBad}`}>
+                          {coreMissing.length === 0 ? 'Fulfilled' : `${coreMissing.length} Remaining`}
+                        </span>
+                      </div>
+                      {coreMissing.length === 0 ? (
+                        <div className={styles.insightEmpty}>All core and major units completed.</div>
+                      ) : (
+                        <div className={styles.insightList}>
+                          {coreMissing.map((u: any) => (
+                            <div key={u.unit?.unit_code} className={styles.insightRow}>
+                              <InlineCode red={true}>{u.unit?.unit_code}</InlineCode>
+                              <span className={styles.insightRowName}>{u.unit?.unit_name || '—'}</span>
+                              {u.semester != null && (
+                                <span className={styles.insightRowMeta}>Sem {u.semester}</span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className={`${styles.insightCard} ${prescribedMissing.length === 0 ? styles.insightGreen : styles.insightYellow}`}>
+                      <div className={styles.gradReqTop}>
+                        <span className={styles.gradReqLabel}>Prescribed Electives</span>
+                        <span className={`${styles.gradReqValue} ${prescribedMissing.length === 0 ? styles.gradOk : styles.gradWarn}`}>
+                          {prescribedMissing.length === 0 ? 'Fulfilled' : `${prescribedMissing.length} Remaining`}
+                        </span>
+                      </div>
+                      {prescribedMissing.length === 0 ? (
+                        <div className={styles.insightEmpty}>All prescribed electives completed.</div>
+                      ) : (
+                        <div className={styles.insightList}>
+                          {prescribedMissing.map((u: any) => (
+                            <div key={u.unit?.unit_code} className={styles.insightRow}>
+                              <InlineCode red={false}>{u.unit?.unit_code}</InlineCode>
+                              <span className={styles.insightRowName}>{u.unit?.unit_name || '—'}</span>
+                              {u.semester != null && (
+                                <span className={styles.insightRowMeta}>Sem {u.semester}</span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    </div>
                 </div>
               );
           })()}
           </div>
+          )}
 
+          {resultTab === 'units' && (
+          <div className={styles.resultTabPanel}>
           {/* Units Outside Planner */}
           {(() => {
             const activePlanner = selectedPlannerIdx === -1 ? manualPlanner : dashboardData?.planners?.[selectedPlannerIdx];
@@ -1491,28 +1708,42 @@ export default function DashboardPage() {
               </div>
             );
           })}
+          </div>
+          )}
 
-          {/* Minors & Specializations */}
+          {resultTab === 'pathway' && (
+          <div className={styles.resultTabPanel}>
+          {/* Student Pathway link */}
           {(() => {
             const activePlanner = selectedPlannerIdx === -1 ? manualPlanner : dashboardData?.planners?.[selectedPlannerIdx];
-            const minors: any[] = activePlanner?.minors ?? [];
-            if (minors.length === 0) return null;
-
-            const doneCodes = new Set(
-              getCompletedUnitCodes(
-                [...(scrapedStudent?.student?.courseList ?? []), ...(dashboardData?.mpuCourseList ?? [])]
-              )
-            );
+            const canOpen = Boolean(dashboardData && activePlanner);
 
             return (
               <div>
-                <div className={styles.sectionTitle} style={{ marginTop: 20 }}>Minors & Specializations</div>
-                {minors.map((minor: any) => (
-                  <MinorProgressCard key={minor.id} minor={minor} doneCodes={doneCodes} />
-                ))}
+                <div className={styles.sectionTitle} style={{ marginTop: 20 }}>Student Pathway</div>
+
+                <div style={{ background: 'var(--card-bg)', border: '1px solid rgba(244,135,113,0.35)', borderRadius: 4, padding: '12px 14px' }}>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>
+                    {canOpen
+                      ? customPlan
+                        ? 'A pathway has been generated for this student.'
+                        : 'Generate and edit a custom pathway for this student on the Student Pathway page.'
+                      : 'Load a student first to open their pathway.'}
+                  </div>
+                  <button
+                    className={styles.btnPrimary}
+                    style={{ fontSize: 12 }}
+                    onClick={() => router.push(panelToPath('pathway'))}
+                    disabled={!canOpen}
+                  >
+                    Open Student Pathway
+                  </button>
+                </div>
               </div>
             );
           })()}
+          </div>
+          )}
 
           </div>
         );

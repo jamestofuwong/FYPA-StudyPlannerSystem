@@ -1,8 +1,9 @@
 export type ParsedCondition = {
-  type: 'unit' | 'credit_points';
-  unit_code?: string;
-  credit_points?: number;
-  requisite_type?: 'prerequisite' | 'corequisite' | 'antirequisite' | null;
+    type: 'unit' | 'credit_points' | 'external';
+    unit_code?: string;
+    credit_points?: number;
+    external_requisite?: string;
+    requisite_type?: 'prerequisite' | 'corequisite' | 'antirequisite' | null;
 };
 
 export type ParsedGroup = {
@@ -19,8 +20,25 @@ export function parseRequisiteString(input: string | null): ParsedGroup[] {
     // Return empty input
     if (!input || input.trim() === '') return [];
 
+    let raw = input.trim();
+
+    // Strip out informational boilerplate notes (e.g., "Please refer to Elective List")
+    raw = raw.replace(/\b(?:please\s+)?refer\s+to\s+(?:the\s+)?elective\s+list\b/gi, '').trim();
+ 
+
+    let externalClause: string | null = null;
+    const anyOfMatch = raw.match(/,\s*(?:and\s+)?(any of these|one of(?: these)?):\s*([^;\n]+)/i);
+    if (anyOfMatch) {
+        externalClause = `${anyOfMatch[1]}: ${anyOfMatch[2].trim()}`;
+        // Remove the extracted clause from the core string so units parse cleanly
+        raw = raw.replace(anyOfMatch[0], '').trim();
+    }
+
+    // Protect "or equivalent" / "and equivalent" from being split by OR logic
+    raw = raw.replace(/\b(or|and)\s+equivalent\b/gi, '__EQUIV_TOKEN__');
+
     // Normalize: uppercase, replace operators, normalize prefixes
-    const normalized = input
+    const normalized = raw
         .toUpperCase()
 
         .replace(/\b(CO-REQUISITES?|CO-REQS?|COREQUISITES?|CO)\s*:\s*/g, 'corequisite ')
@@ -30,14 +48,16 @@ export function parseRequisiteString(input: string | null): ParsedGroup[] {
         .replace(/\b(CO-REQUISITES?|CO-REQS?|COREQUISITES?)\b/g, 'corequisite')
         .replace(/\b(ANTI-REQUISITES?|ANTI-REQS?|ANTIREQUISITES?)\b/g, 'antirequisite')
         .replace(/\b(PRE-REQUISITES?|PRE-REQS?|PREREQUISITES?)\b/g, 'prerequisite')
-        
+
         .replace(/CREDIT\s+POINTS?/g, 'cp') 
         .replace(/:/g, '')
         .replace(/[()]/g, '') 
         .replace(/\s+OR\s+/g, ' / ')
         .replace(/\s+AND\s+/g, ' & ')
         .replace(/,/g, ' & ')
-        .replace(/\n/g, ' ');
+        .replace(/\n/g, ' ')
+        .replace(/__EQUIV_TOKEN__/g, 'or equivalent');
+
 
     // Skip "Nil" or "NIL"
     if (normalized === 'NIL' || normalized.startsWith('NIL ')) {
@@ -109,13 +129,33 @@ export function parseRequisiteString(input: string | null): ParsedGroup[] {
                     type: 'credit_points',
                     credit_points: parseFloat(cpMatch[1]),
                 });
-            } else {
+            } else if (/^[A-Z]{3,4}\d{4,5}[A-Z]?$/i.test(pieceRemaining.trim())) {
+                // Matches standard university unit code format (e.g. MTH00007, COS10009, SWE20001)
                 conditions.push({
                     type: 'unit',
-                    unit_code: pieceRemaining,
+                    unit_code: pieceRemaining.trim().toUpperCase(),
                     requisite_type: pieceRequisiteType,
                 });
+            } else {
+                // Non-code qualifications (e.g. "VCE Maths or equivalent")
+                const text = pieceRemaining.trim();
+                if (text && text !== '-' && text !== 'NIL') {
+                    conditions.push({
+                        type: 'external',
+                        external_requisite: text,
+                        requisite_type: pieceRequisiteType,
+                    });
+                }
             }
+        }
+        
+        // Append external clause if one was extracted at the top
+        if (externalClause) {
+            conditions.push({
+                type: 'external',
+                external_requisite: externalClause,
+                requisite_type: 'prerequisite',
+            });
         }
 
         // Only add group if it has conditions
