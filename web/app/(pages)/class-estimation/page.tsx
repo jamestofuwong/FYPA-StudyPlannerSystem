@@ -1125,9 +1125,8 @@ export default function ClassEstimationPage() {
       <div className={styles.card}>
         <div className={styles.sectionTitle}>Saved Runs</div>
         <p className={styles.hintText}>
-          A saved run keeps the figures and the inputs behind them, so an estimate read months later still
-          says which retention rate, load cap and new-intake figure produced it. Saving re-runs the estimate
-          on the server, so what is stored is what the system predicts, not what is on screen.
+          Saving recalculates on the server, so re-scrape or re-import before saving and the
+            run will record the new cohort, not the one shown previously.
         </p>
 
         <div className={styles.actionRow}>
