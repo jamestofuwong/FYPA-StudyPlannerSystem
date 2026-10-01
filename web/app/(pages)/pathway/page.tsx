@@ -1679,9 +1679,33 @@ export default function PathwayPage() {
                 }
               };
 
+              const breakTermCodes = new Set(
+                (customPlan.warnings ?? [])
+                  .filter((w: any) => w.kind === 'short_term_only')
+                  .map((w: any) => normaliseCode(w.unitCode))
+              );
+              const nonMpuUnschedulable = (customPlan.unschedulableUnits ?? []).filter(
+                (u: any) =>
+                  u.category !== 'mpu' &&
+                  !u.code?.toUpperCase().startsWith('MPU') &&
+                  !breakTermCodes.has(normaliseCode(u.code)) &&
+                  !milestoneCodes.has(normaliseCode(u.code))
+              );
+              // Ready to graduate: nothing left to schedule in the required
+              // categories, and no genuine failure reason either, just MPU
+              // and/or short-term items, tracked separately below.
+              const readyToGraduate = semesters.length === 0 && totalUnplanned === 0 && nonMpuUnschedulable.length === 0;
+              const remainingMpus = customMpuList ?? getRemainingMpuUnits(activePlanner, dashboardData, takenCodes);
+
               return (
               <div>
-                {semesters.length === 0 ? (
+                {readyToGraduate ? (
+                  <div className={styles.mpuEmptyAlert}>
+                    {remainingMpus.length > 0
+                      ? '✓ No further core units required. Complete the remaining MPU units below to finish this degree.'
+                      : '✓ This student has completed all requirements for this planner.'}
+                  </div>
+                ) : semesters.length === 0 ? (
                   <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '10px 0' }}>
                     No semesters could be generated. The reasons are listed below.
                   </div>
