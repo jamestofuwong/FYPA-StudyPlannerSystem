@@ -836,8 +836,11 @@ export default function PathwayPage() {
             return sum + missingFromMinor;
           }, 0);
 
+        // Never hides this section on totalUnplanned === 0: a near-graduation
+        // student can still have MPU or WIL units outstanding (excluded from
+        // isReqUnit above), and the advisor needs Add semester/Download/the
+        // summary box regardless of how little (or nothing) remains to place.
         const totalUnplanned = unplannedUnits.length + injectedMinorMissingCount;
-        if (totalUnplanned === 0) return null;
 
         return (
           <div>
