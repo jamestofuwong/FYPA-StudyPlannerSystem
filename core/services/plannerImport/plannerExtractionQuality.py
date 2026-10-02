@@ -1,17 +1,17 @@
 ﻿from __future__ import annotations
-
 import re
 import statistics
 from collections import Counter
-
 from plannerStructureAssembler import CODE_TOKEN_RE, iter_units
 
 VALID_CATEGORIES = {"core", "major_core", "elective", "prescribed_elective", "mpu", "wil"}
 PLANNED_CATEGORIES = {"core", "major_core", "mpu", "wil"}
 PLACEHOLDER_CODES = {"-", "ELECTIVE", "INDUSTRY_TRAINING"}
 
-# Runtime quality checks support deterministic fallback planning; they do not evaluate against gold data.
-
+# ============================================================
+# STEP 1: Prepare quality predicates
+# ============================================================
+# Check for obvious unit-name quality problems.
 def _is_bad_unit_name(text):
     if not text:
         return False
@@ -29,6 +29,7 @@ def _is_bad_unit_name(text):
         return True
     return False
 
+# Check for merged or oddly cased unit-name text.
 def _looks_corrupted_existing_name(text):
     if not text:
         return False
@@ -56,6 +57,7 @@ PREREQ_NOISE_RE = re.compile(
 CONNECTOR_END_RE = re.compile(r"(?:\b(?:and|or)\b|[&,/])\s*$", re.IGNORECASE)
 SIGNIFICANT_STOPWORDS = {"and", "or", "of", "the", "in", "to", "for", "a", "an", "with"}
 
+# Build one runtime quality issue record.
 def _issue(code, issue_type, severity, reason, **context):
     return {
         "code": code,
@@ -65,18 +67,25 @@ def _issue(code, issue_type, severity, reason, **context):
         **{key: value for key, value in context.items() if value is not None},
     }
 
+# Normalize a unit-code value for comparisons.
 def _code(value):
     return str(value or "").strip().upper()
 
+# Check whether a value is a supported unit code or placeholder.
 def _valid_code(value):
     value = _code(value)
     return value in PLACEHOLDER_CODES or CODE_TOKEN_RE.fullmatch(value) is not None
 
+# Detect repeated meaningful words in a value.
 def _repeated_significant_word(value):
     words = [word for word in re.findall(r"[a-z]+", str(value or "").lower())
              if word not in SIGNIFICANT_STOPWORDS and len(word) > 3]
     return any(count > 1 for count in Counter(words).values())
 
+# ============================================================
+# STEP 2: Detect weak planner information
+# ============================================================
+# Classify generic problems in a unit name.
 def _name_problem(name, median_words):
     text = re.sub(r"\s+", " ", str(name or "")).strip()
     if not text:
@@ -90,6 +99,7 @@ def _name_problem(name, median_words):
         return "suspicious"
     return None
 
+# Classify generic problems in prerequisite text.
 def _prerequisite_problem(value):
     text = re.sub(r"\s+", " ", str(value or "")).strip()
     if not text:
@@ -103,6 +113,7 @@ def _prerequisite_problem(value):
         return "unrelated section text"
     return None
 
+# Find categories whose declared count exceeds extracted units.
 def _requirement_deficits(data):
     requirements = data.get("course_information", {}).get("requirements", {})
     counts = Counter(category for category, _ in iter_units(data))
@@ -115,9 +126,11 @@ def _requirement_deficits(data):
             deficits.append((category, expected, counts[category]))
     return deficits
 
+# ============================================================
+# STEP 3: Validate planner quality
+# ============================================================
 # Validate structure for deterministic fallback and refinement decisions without mutating it.
 def validate_planner(data):
-    """Return deterministic quality issues without changing planner data."""
     issues = []
     units = list(iter_units(data))
     names = [len(str(unit.get("unit_name") or "").split()) for _, unit in units if unit.get("unit_name")]
@@ -214,9 +227,11 @@ FALLBACK_ENGINE = {
     "E24": "docling",
 }
 
-# Map quality issues to deterministic fallback engines; these plans control extraction stages.
+# ============================================================
+# STEP 4: Decide fallback requirements
+# ============================================================
+# Map runtime quality issues to the fallback engines that can address them.
 def select_fallbacks(validation):
-    """Map each detected issue to one responsible engine; confidence alone never triggers."""
     return [
         {
             "engine": FALLBACK_ENGINE[issue["code"]],

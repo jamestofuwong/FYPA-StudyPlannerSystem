@@ -1,7 +1,7 @@
 // Copilot benchmark — measures routing and generation times for the AI copilot.
 //
 // Usage:
-//   node scripts/bench-copilot.mjs [--url http://localhost:3000] [--runs 5]
+//   node tests/performance/bench-copilot.mjs [--url http://localhost:3000] [--runs 5]
 //
 // The web app must be running at the target URL before running this script.
 // Ollama must also be running with the model already loaded for accurate results

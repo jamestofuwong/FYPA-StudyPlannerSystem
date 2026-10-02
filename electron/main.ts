@@ -146,9 +146,6 @@ function getNextProjectDir(): string {
 }
 
 async function startNextServer(): Promise<NextServerHandle> {
-  // Expose userData path so Next.js API routes can locate portal-session.json
-  process.env.APP_DATA_DIR = app.getPath('userData');
-
   const nextApp = next({
     dev: false,
     dir: getNextProjectDir()
@@ -341,6 +338,8 @@ nativeTheme.on("updated", () => {
 app.whenReady().then(async () => {
   // Set DATABASE_URL immediately so Prisma has the connection string
   process.env.DATABASE_URL = getDatabaseUrl();
+  // Set APP_DATA_DIR unconditionally (dev and prod) so portal session persistence works
+  process.env.APP_DATA_DIR = app.getPath('userData');
 
   // Start Ollama (non-blocking — app opens even if Ollama isn't ready yet)
   startOllama().catch((err) => console.error('[Ollama] Startup error:', err));

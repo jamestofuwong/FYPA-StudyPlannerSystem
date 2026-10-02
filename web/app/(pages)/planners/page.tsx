@@ -30,6 +30,15 @@ export default function PlannersPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedCourses, setExpandedCourses] = useState<Set<string>>(new Set());
   const [expandedYears, setExpandedYears] = useState<Set<string>>(new Set());
+  const [editMode, setEditMode] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [saveMessage, setSaveMessage] = useState('');
+  const [showSavedDialog, setShowSavedDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [dirtyUnits, setDirtyUnits] = useState<Record<string, Record<string, unknown>>>({});
+  const [dirtyPlanner, setDirtyPlanner] = useState<Record<string, unknown>>({});
+  const [editSnapshot, setEditSnapshot] = useState<any | null>(null);
 
   // ==================================================================================================================
   // useMemo (derived data)
@@ -49,10 +58,11 @@ export default function PlannersPage() {
       if (!yearMap.has(sem)) yearMap.set(sem, []);
       
       yearMap.get(sem)!.push({
+        _id: tu.id,
         unit_code: tu.unit?.unit_code || '-',
         unit_name: tu.unit?.unit_name || (tu.category === 'elective' ? 'Elective Slot' : 'Unknown Unit'),
         category: tu.category,
-        prerequisite: null,
+        prerequisite: formatRequisitesForEdit(tu.unit?.requisite_groups),
         requisites: tu.unit?.requisite_groups || null,
         offered_in: tu.unit?.offerings?.map((o: any) => o.offered_in) ?? [],
         year_level: tu.year_level,
@@ -80,6 +90,154 @@ export default function PlannersPage() {
     }
     return result;
   }, [selectedPlanner]);
+
+  const handleUnitEdit = (unitId: string, field: string, value: string | number | number[] | null) => {
+    if (!unitId) return;
+    setDirtyUnits((previous) => ({
+      ...previous,
+      [unitId]: { ...previous[unitId], [field]: value },
+    }));
+    setSelectedPlanner((previous: any) => {
+      if (!previous) return previous;
+      return {
+        ...previous,
+        units: (previous.units || []).map((templateUnit: any) => {
+          if (templateUnit.id !== unitId) return templateUnit;
+          return {
+            ...templateUnit,
+            ...(field === 'category' ? { category: value } : {}),
+            unit: templateUnit.unit ? {
+              ...templateUnit.unit,
+              ...(field === 'unit_code' ? { unit_code: value } : {}),
+              ...(field === 'unit_name' ? { unit_name: value } : {}),
+              ...(field === 'offered_in' ? { offerings: (value as number[]).map((offered_in) => ({ offered_in })) } : {}),
+            } : templateUnit.unit,
+          };
+        }),
+      };
+    });
+  };
+
+  const handlePlannerEdit = (field: string, subField?: string, value?: string | number | null) => {
+    const requirementFields: Record<string, { count: string; cp: string }> = {
+      core: { count: 'core_count', cp: 'core_cp' },
+      majorReq: { count: 'major_count', cp: 'major_cp' },
+      elective: { count: 'elective_count', cp: 'elective_cp' },
+      wil: { count: 'wil_count', cp: 'wil_cp' },
+    };
+    const monthLabels: Record<string, number> = {
+      Jan: 1, Feb: 2, Mar: 3, Apr: 4, May: 5, Jun: 6,
+      Jul: 7, Aug: 8, Sep: 9, Oct: 10, Nov: 11, Dec: 12,
+    };
+
+    let key = field;
+    let nextValue: string | number | null = value ?? null;
+    if (requirementFields[field] && subField) {
+      key = requirementFields[field][subField as 'count' | 'cp'];
+    } else if (field === 'course') {
+      key = 'course_name';
+    } else if (field === 'major') {
+      key = 'major_name';
+    } else if (field === 'intake') {
+      key = 'intake_month';
+      nextValue = value ? monthLabels[String(value)] ?? null : null;
+    } else if (field === 'intakeYear') {
+      key = 'intake_year';
+    } else {
+      return;
+    }
+
+    setDirtyPlanner((previous) => ({ ...previous, [key]: nextValue }));
+    setSelectedPlanner((previous: any) => {
+      if (!previous) return previous;
+      if (key === 'course_name') return { ...previous, course: { ...previous.course, name: nextValue } };
+      if (key === 'major_name') return { ...previous, major: { ...previous.major, name: nextValue } };
+      return { ...previous, [key]: nextValue };
+    });
+  };
+
+  const saveUnitEdits = async () => {
+    if (!selectedPlannerId || (Object.keys(dirtyUnits).length === 0 && Object.keys(dirtyPlanner).length === 0)) {
+      setEditMode(false);
+      return;
+    }
+    setIsSaving(true);
+    setSaveMessage('');
+    try {
+      const requests = Object.entries(dirtyUnits).map(async ([templateUnitId, changes]) => {
+        const response = await fetch(`/api/planners/${selectedPlannerId}/template-units`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ template_unit_id: templateUnitId, ...changes }),
+        });
+        if (!response.ok) {
+          const result = await response.json().catch(() => ({}));
+          throw new Error(result.error || 'Failed to save planner unit');
+        }
+      });
+      if (Object.keys(dirtyPlanner).length > 0) {
+        requests.push((async () => {
+          const response = await fetch(`/api/planners/${selectedPlannerId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(dirtyPlanner),
+          });
+          if (!response.ok) {
+            const result = await response.json().catch(() => ({}));
+            throw new Error(result.error || 'Failed to save planner details');
+          }
+        })());
+      }
+      await Promise.all(requests);
+      setDirtyUnits({});
+      setDirtyPlanner({});
+      setEditSnapshot(null);
+      setEditMode(false);
+      setSaveMessage('');
+      setShowSavedDialog(true);
+    } catch (error) {
+      setSaveMessage(error instanceof Error ? error.message : 'Failed to save changes.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const cancelPlannerEdit = () => {
+    if (editSnapshot) setSelectedPlanner(editSnapshot);
+    setDirtyUnits({});
+    setDirtyPlanner({});
+    setEditSnapshot(null);
+    setEditMode(false);
+    setSaveMessage('');
+  };
+
+  const deleteSelectedPlanner = async () => {
+    if (!selectedPlannerId) return;
+    setIsDeleting(true);
+    setSaveMessage('');
+
+    try {
+      const response = await fetch(`/api/planners/${selectedPlannerId}`, { method: 'DELETE' });
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({}));
+        throw new Error(result.error || 'Failed to delete planner.');
+      }
+
+      const remaining = planners.filter((planner) => planner.id !== selectedPlannerId);
+      setPlanners(remaining);
+      setSelectedPlannerId(remaining[0]?.id || null);
+      setSelectedPlanner(null);
+      setDirtyUnits({});
+      setDirtyPlanner({});
+      setEditSnapshot(null);
+      setEditMode(false);
+      setShowDeleteDialog(false);
+    } catch (error) {
+      setSaveMessage(error instanceof Error ? error.message : 'Failed to delete planner.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   // Extract the elective groups
   const unplacedElectives = useMemo(() => {
@@ -190,6 +348,11 @@ export default function PlannersPage() {
   // Load selected planner details
   useEffect(() => {
     const fetchPlannerDetails = async () => {
+      setEditMode(false);
+      setDirtyUnits({});
+      setDirtyPlanner({});
+      setEditSnapshot(null);
+      setSaveMessage('');
       if (!selectedPlannerId) {
         setSelectedPlanner(null);
         return;
@@ -343,6 +506,26 @@ export default function PlannersPage() {
       <div className={styles.detailPanel}>
         {selectedPlanner ? (
           <div>
+            <div className={styles.editActions}>
+              {!editMode ? (
+                <button className={styles.btnPrimary} onClick={() => { setEditSnapshot(JSON.parse(JSON.stringify(selectedPlanner))); setEditMode(true); setSaveMessage(''); setShowSavedDialog(false); }}>
+                  Edit Planner
+                </button>
+              ) : (
+                <>
+                  <button className={styles.btnPrimary} onClick={saveUnitEdits} disabled={isSaving}>
+                    {isSaving ? 'Saving...' : 'Save Changes'}
+                  </button>
+                  <button className={styles.btnPrimary} onClick={cancelPlannerEdit} disabled={isSaving}>
+                    Cancel
+                  </button>
+                </>
+              )}
+              <button className={styles.btnDanger} onClick={() => { setShowDeleteDialog(true); setSaveMessage(''); }} disabled={isDeleting || isSaving}>
+                Delete Planner
+              </button>
+              {saveMessage && <span>{saveMessage}</span>}
+            </div>
             <PlannerHeader
               course={selectedPlanner.course?.name || ''}
               major={selectedPlanner.major?.name || ''}
@@ -354,10 +537,13 @@ export default function PlannersPage() {
                 elective: { count: selectedPlanner.elective_count, cp: selectedPlanner.elective_cp },
                 wil: { count: selectedPlanner.wil_count, cp: selectedPlanner.wil_cp },
               }}
+              editable={editMode}
+              onEdit={handlePlannerEdit}
             />
             <CourseListTable
               yearGroups={yearGroups}
-              editable={false}
+              editable={editMode}
+              onUnitEdit={handleUnitEdit}
               unplacedElectives={unplacedElectives}
               minorUnits={minorUnits}
               emptyMessage="No units attached to this planner template."
@@ -367,7 +553,60 @@ export default function PlannersPage() {
           <div className={styles.emptyState}>Select a planner from the sidebar to view details.</div>
         )}
       </div>
+      {showSavedDialog && (
+        <div className={styles.dialogOverlay} role="presentation">
+          <div className={styles.savedDialog} role="dialog" aria-modal="true" aria-labelledby="planner-save-title">
+            <h2 id="planner-save-title">Changes saved</h2>
+            <p>Your planner changes have been saved successfully.</p>
+            <button className={styles.btnPrimary} onClick={() => setShowSavedDialog(false)} autoFocus>
+              OK
+            </button>
+          </div>
+        </div>
+      )}
+      {showDeleteDialog && (
+        <div
+          className={styles.dialogOverlay}
+          role="presentation"
+          onClick={() => { if (!isDeleting) setShowDeleteDialog(false); }}
+        >
+          <div
+            className={styles.savedDialog}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="planner-delete-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2 id="planner-delete-title">Delete planner?</h2>
+            <p>This will permanently remove the selected planner and its planner-specific unit placements.</p>
+            <div className={styles.dialogActions}>
+              <button className={styles.btnSecondary} onClick={() => setShowDeleteDialog(false)} disabled={isDeleting}>
+                Cancel
+              </button>
+              <button className={styles.btnDanger} onClick={deleteSelectedPlanner} disabled={isDeleting}>
+                {isDeleting ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
   
+}
+
+function formatRequisitesForEdit(groups: any): string {
+  if (!Array.isArray(groups)) return '';
+  return groups
+    .map((group: any) => (group.conditions || []).map((condition: any) => {
+      if (condition.type === 'credit_points') return `${condition.credit_points}cp`;
+      const prefix = condition.requisite_type === 'corequisite'
+        ? 'Co: '
+        : condition.requisite_type === 'antirequisite'
+          ? 'Anti: '
+          : '';
+      return `${prefix}${condition.unit?.unit_code || ''}`;
+    }).filter(Boolean).join(' & '))
+    .filter(Boolean)
+    .join(' / ');
 }

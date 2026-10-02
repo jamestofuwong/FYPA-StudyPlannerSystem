@@ -1,26 +1,21 @@
-﻿import argparse
-import copy
+﻿import copy
 import hashlib
-import json
 import os
 import re
 import statistics
 import time
 from collections import Counter, defaultdict
 from pathlib import Path
-
-from plannerPdfExtractor import (
-    UNIT_MARKER_RE,
+from plannerPdfEvidence import UNIT_MARKER_RE, _normalise_semester_number
+from plannerPdfRequirements import extract_metadata, extract_requirements
+from plannerPdfTextRules import (
     _canonical_minor_section_name,
+    clean_text,
     _clean_candidate_name,
     _clean_candidate_prereq,
     _looks_like_minor_section_header,
     _looks_like_wil_text,
-    _normalise_semester_number,
     _strip_unit_markers,
-    clean_text,
-    extract_metadata,
-    extract_requirements,
 )
 from plannerStructureAssembler import (
     CATEGORY_GROUPS,
@@ -32,9 +27,10 @@ from plannerStructureAssembler import (
 )
 from plannerExtractionQuality import _is_bad_unit_name, _looks_corrupted_existing_name
 
+# ============================================================
+# STEP 1: Prepare offline Docling conversion
+# ============================================================
 # Docling helpers recover table structure after deterministic extraction and PDFText checks.
-# The configured pipeline uses cached models and keeps OCR/VLM features disabled.
-from plannerPdfTextFallback import print_result_table
 from plannerPdfTextFallback import (
     _fill_key,
     _learn_fill_categories,
@@ -56,8 +52,8 @@ _CONVERTER = None
 _MODEL_LOAD_SECONDS = 0.0
 _CACHE_WORKAROUND = False
 
+# Prevent Hugging Face model resolution from contacting the network.
 def _enable_offline_model_resolution():
-    """Prevent Hugging Face model resolution from contacting the network."""
     os.environ["HF_HUB_OFFLINE"] = "1"
     try:
         from huggingface_hub import constants as hf_constants
@@ -66,8 +62,8 @@ def _enable_offline_model_resolution():
         # Docling will provide the relevant import or model-loading error.
         pass
 
+# Build the installed Docling pipeline with every OCR/VLM feature disabled.
 def build_pipeline_options():
-    """Build the installed Docling pipeline with every OCR/VLM feature disabled."""
     os.environ.setdefault("USE_TF", "0")
     from docling.datamodel.pipeline_options import PdfPipelineOptions, TableFormerMode
 
@@ -81,8 +77,8 @@ def build_pipeline_options():
     options.do_formula_enrichment = False
     return options
 
+# Create the shared Docling converter once so model loading is not repeated.
 def _get_converter():
-    """Create the shared Docling converter once so model loading is not repeated."""
     global _CACHE_WORKAROUND, _CONVERTER, _MODEL_LOAD_SECONDS
     if _CONVERTER is not None:
         return _CONVERTER
@@ -112,9 +108,11 @@ def _get_converter():
     _MODEL_LOAD_SECONDS = time.perf_counter() - started
     return _CONVERTER
 
+# Return the time spent loading the cached Docling models.
 def get_model_load_seconds():
     return _MODEL_LOAD_SECONDS
 
+# Convert a Docling box object into a numeric bounding box.
 def _bbox(value):
     if value is None:
         return None
@@ -130,6 +128,7 @@ def _bbox(value):
         return min(xs), min(ys), max(xs), max(ys)
     return None
 
+# Convert one Docling element into diagnostic layout data.
 def _element_record(element):
     cluster = getattr(element, "cluster", None)
     box = _bbox(getattr(cluster, "bbox", None))
@@ -142,6 +141,7 @@ def _element_record(element):
         "element_id": getattr(element, "id", None),
     }
 
+# Read a table bounding box in top-left page coordinates.
 def _document_table_bbox(item, page_height):
     provenance = (getattr(item, "prov", None) or [None])[0]
     box = getattr(provenance, "bbox", None)
@@ -152,6 +152,7 @@ def _document_table_bbox(item, page_height):
         box = box.to_top_left_origin(page_height)
     return _bbox(box)
 
+# Match a document table item to its assembled table evidence.
 def _match_assembled_table(item, assembled_tables, conversion_pages, used_ids):
     provenance = (getattr(item, "prov", None) or [None])[0]
     page = getattr(provenance, "page_no", None)
@@ -172,6 +173,7 @@ def _match_assembled_table(item, assembled_tables, conversion_pages, used_ids):
     used_ids.add(id(table))
     return table
 
+# Extract native text cells and their layout metadata.
 def _native_cells(table):
     cells = []
     for cell in getattr(getattr(table, "cluster", None), "cells", []) or []:
@@ -189,6 +191,7 @@ def _native_cells(table):
         })
     return cells
 
+# Find stable horizontal anchors for table columns.
 def _column_anchors(table):
     positions = defaultdict(list)
     for cell in getattr(table, "table_cells", []) or []:
@@ -198,6 +201,7 @@ def _column_anchors(table):
             positions[column].append(box[0])
     return [statistics.median(positions[index]) for index in sorted(positions)]
 
+# Group native cells into visually aligned table rows.
 def _visual_rows(table):
     cells = _native_cells(table)
     if not cells:
@@ -239,6 +243,7 @@ def _visual_rows(table):
         })
     return rows
 
+# Parse a year header from Docling text.
 def _parse_year(text):
     match = YEAR_RE.search(text or "")
     if not match:
@@ -246,6 +251,7 @@ def _parse_year(text):
     value = match.group(1).lower()
     return int(value) if value.isdigit() else YEAR_WORDS.get(value)
 
+# Parse a semester or special term from Docling text.
 def _parse_semester(text):
     match = SEMESTER_RE.search(text or "")
     if match:
@@ -256,6 +262,7 @@ def _parse_semester(text):
         return 4
     return None
 
+# Classify a Docling row using generic textual evidence.
 def _category(code, name, prerequisite, listing=False, prescribed=False):
     combined = " ".join(value for value in (name, prerequisite) if value)
     if code.startswith("MPU"):
@@ -268,6 +275,7 @@ def _category(code, name, prerequisite, listing=False, prescribed=False):
         return "elective", "listing_section"
     return "elective", "unresolved_colour"
 
+# Convert one Docling table into unit rows and section entries.
 def _table_units(table, page, year, listing, units, sections, seen, debug_rows):
     semester = None
     active_minor = None
@@ -350,8 +358,11 @@ def _table_units(table, page, year, listing, units, sections, seen, debug_rows):
             last_unit = unit if code_index == len(codes) - 1 and len(codes) == 1 else None
     return rows
 
+# ============================================================
+# STEP 2: Read document layout and table evidence
+# ============================================================
+# Convert a PDF into Docling layout data used to recover structural fields.
 def extract_layout(pdf_path):
-    """Convert a PDF into Docling layout data used to recover structural fields."""
     converter = _get_converter()
     started = time.perf_counter()
     conversion = converter.convert(str(pdf_path))
@@ -427,8 +438,8 @@ def extract_layout(pdf_path):
         "diagnostics": diagnostics,
     }
 
+# Return Docling planner candidates together with conversion diagnostics.
 def extract_planner_with_diagnostics(pdf_path):
-    """Return Docling planner candidates together with conversion diagnostics."""
     layout = extract_layout(pdf_path)
     result = assemble_json(
         Path(pdf_path).stem,
@@ -439,23 +450,32 @@ def extract_planner_with_diagnostics(pdf_path):
     )
     return result, layout["diagnostics"], layout
 
+# Return only Docling planner candidates for compatibility callers.
 def extract_planner(pdf_path):
-    """Return only Docling planner candidates for compatibility callers."""
     return extract_planner_with_diagnostics(pdf_path)[0]
 
+# ============================================================
+# STEP 3: Build structural proposals
+# ============================================================
 # Targeted structural fallback application
+# Check whether a value is a supported unit code.
+# STEP 4: Check proposal quality and deficits
 def _valid_code(value):
     return CODE_TOKEN_RE.fullmatch(str(value or "").strip().upper()) is not None
 
+# Check whether a year value is in the supported range.
 def _valid_year(value):
     return isinstance(value, int) and 1 <= value <= 6
 
+# Check whether a semester value is in the supported range.
 def _valid_semester(value):
     return isinstance(value, int) and 1 <= value <= 8
 
+# Check whether a category is expected to have schedule fields.
 def _planned_category(category):
     return category in {"core", "major_core", "mpu", "wil"}
 
+# Check whether a Docling row has strong table provenance.
 def _strong_docling_row(provenance):
     confidence = provenance.get("confidence")
     return (
@@ -464,9 +484,11 @@ def _strong_docling_row(provenance):
         isinstance(confidence, (int, float)) and confidence >= 0.9
     )
 
+# Count units in one canonical category.
 def _category_count(data, category):
     return sum(current == category for current, _ in _iter_unit_refs(data))
 
+# Find categories whose declared counts are not yet met.
 def _deficit_categories(data):
     requirements = data.get("course_information", {}).get("requirements", {})
     deficits = set()
@@ -478,9 +500,8 @@ def _deficit_categories(data):
             deficits.add(category)
     return deficits
 
+# Identify unresolved structural gaps that justify invoking Docling.
 def structural_fallback_reasons(data, pdftext_diagnostics=()):
-    """Identify unresolved structural gaps that justify invoking Docling."""
-    """Return observable reasons for loading Docling; an empty list skips P3."""
     reasons = []
     for category, unit in _iter_unit_refs(data):
         code = str(unit.get("unit_code") or "").strip().upper()
@@ -498,6 +519,7 @@ def structural_fallback_reasons(data, pdftext_diagnostics=()):
 
     return list(dict.fromkeys(reasons))
 
+# Index valid Docling units by normalized code.
 def _docling_units(layout):
     return {
         str(unit.get("code") or "").strip().upper(): unit
@@ -505,11 +527,12 @@ def _docling_units(layout):
         if _valid_code(unit.get("code"))
     }
 
+# Read table provenance from a Docling unit.
 def _docling_provenance(unit):
     return unit.get("_provenance", {}).get("unit_code", {})
 
+# Learn category by colour cohort; never use Docling's category guess.
 def _pdftext_category_evidence(data, pdf_path):
-    """Learn category by colour cohort; never use Docling's category guess."""
     base_index = _unit_index(data)
     p1_index, duplicates = _p1_units(extract_pdftext_layout(pdf_path))
     fill_categories = _learn_fill_categories(base_index, p1_index)
@@ -531,6 +554,7 @@ def _pdftext_category_evidence(data, pdf_path):
             }
     return evidence
 
+# Count existing rows sharing a Docling table.
 def _table_neighbour_count(code, layout, existing_codes):
     candidate = layout.get("debug_rows", {}).get(code, {})
     table_id = candidate.get("table_id")
@@ -540,6 +564,7 @@ def _table_neighbour_count(code, layout, existing_codes):
         if other_code != code
     )
 
+# Build one Docling proposal or diagnostic record.
 def _proposal(field, code, current, candidate, status, confidence, reason, provenance):
     return {
         "field": field,
@@ -553,9 +578,8 @@ def _proposal(field, code, current, candidate, status, confidence, reason, prove
         **provenance,
     }
 
+# Build conservative replacements from Docling table evidence and current data.
 def build_docling_proposals(data, layout, category_evidence):
-    """Build conservative replacements from Docling table evidence and current data."""
-    """Build deterministic proposals without mutating P2."""
     base_index = _unit_index(data)
     existing_codes = set(base_index)
     minor_codes = _minor_codes(data)
@@ -639,6 +663,8 @@ def build_docling_proposals(data, layout, category_evidence):
         proposals.append(proposal)
     return proposals
 
+# Append one accepted missing unit from structural evidence.
+# STEP 5: Apply safe fallback proposals
 def _append_missing_unit(data, proposal):
     category = proposal["category_evidence"]
     target = data["categories"]
@@ -655,9 +681,8 @@ def _append_missing_unit(data, proposal):
         "offered_in": None,
     })
 
+# Apply accepted Docling proposals without overwriting stronger existing values.
 def apply_docling_proposals(base_data, layout, category_evidence):
-    """Apply accepted Docling proposals without overwriting stronger existing values."""
-    """Apply only permitted structural changes and return a fresh result."""
     result = copy.deepcopy(base_data)
     original = copy.deepcopy(base_data)
     proposals = build_docling_proposals(result, layout, category_evidence)
@@ -684,9 +709,8 @@ def apply_docling_proposals(base_data, layout, category_evidence):
             assert new_unit.get(field) == unit.get(field)
     return result, proposals
 
+# Run Docling for unresolved structure and return data, proposals, and diagnostics.
 def apply_docling_structural_fallback(base_data, pdf_path, pdftext_diagnostics=()):
-    """Run Docling for unresolved structure and return data, proposals, and diagnostics."""
-    """Lazy entry point; Docling is loaded only after a structural trigger."""
     triggers = structural_fallback_reasons(base_data, pdftext_diagnostics)
     category_evidence = None
     if not triggers:

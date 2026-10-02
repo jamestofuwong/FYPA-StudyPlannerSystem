@@ -217,6 +217,43 @@ export async function updatePlanner(id: string, data: any) {
   });
 }
 
+// Update planner metadata and its related course/major names in one transaction.
+export async function updatePlannerDetails(id: string, data: any) {
+  return prisma.$transaction(async (tx) => {
+    const planner = await tx.plannerTemplate.findUnique({
+      where: { id },
+      select: { course_id: true, major_id: true },
+    });
+    if (!planner) throw new Error("Planner not found");
+
+    const {
+      course_name,
+      major_name,
+      ...plannerFields
+    } = data;
+
+    if (course_name !== undefined) {
+      await tx.course.update({
+        where: { id: planner.course_id },
+        data: { name: String(course_name).trim() },
+      });
+    }
+
+    if (major_name !== undefined && planner.major_id) {
+      await tx.major.update({
+        where: { id: planner.major_id },
+        data: { name: String(major_name).trim() },
+      });
+    }
+
+    return tx.plannerTemplate.update({
+      where: { id },
+      data: plannerFields,
+      include: { course: true, major: true },
+    });
+  });
+}
+
 export async function deletePlanner(id: string) {
   return await prisma.plannerTemplate.delete({
     where: { id }
