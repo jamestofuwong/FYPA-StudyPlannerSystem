@@ -85,7 +85,7 @@ function applyAliases(
 }
 
 /**
- * Credit points actually earned, from the transcript's own Earned column.
+ * Credit points actually earned from the transcript's own Earned column.
  *
  * A count of completed units times 12.5 is wrong in both directions on a real transcript: the academic
  * integrity module carries 0 credits but counts as passed, and a WIL placement carries 25. Credit-point

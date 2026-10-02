@@ -1,16 +1,14 @@
 // ============================================================
-// Writes a saved estimation run to an Excel workbook, which is the form the figures actually leave the
-// system in. A headcount is only useful once it reaches whoever allocates rooms and staff, and that handover
-// happens in a spreadsheet, not by reading a dashboard aloud.
+// Writes a saved estimation run to an Excel workbook, which is the form the figures leave the
+// system in. 
 //
-// Two sheets, and the second is not optional padding. A projection means nothing months later without the
-// retention rate, the load cap and the new-intake figure behind it, so every workbook carries its own
-// assumptions. Anyone opening the file can see what it was built from without going back to the system.
+// A projection means nothing months later without the retention rate, the load cap and the new-intake figure behind it, 
+// so every workbook carries its own assumptions. Anyone opening the file can see what it was built 
+// from without going back to the system.
 //
 // The style palette is a small deliberate copy of core/services/export/exportService.ts rather than an
 // import. That module drives the student report other features depend on, and exporting its private
-// helpers to save ten lines of constants is not worth the chance of disturbing it. Worth unifying if a
-// third exporter ever appears.
+// helpers to save ten lines of constants is not worth the chance of disturbing it. 
 // ============================================================
 
 import * as XLSX from 'xlsx-js-style';
