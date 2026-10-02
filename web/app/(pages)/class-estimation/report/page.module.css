@@ -7,10 +7,12 @@
 }
 
 .header {
+  /* Title, subtitle, then the button to the other view, stacked. Both class estimation pages lay their
+     header out the same way, so the button is always in the same place whatever the window width. */
   display: flex;
+  flex-direction: column;
   align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
+  gap: 10px;
   margin-bottom: 18px;
 }
 
