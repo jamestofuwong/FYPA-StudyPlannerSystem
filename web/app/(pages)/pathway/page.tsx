@@ -31,6 +31,7 @@ import {
   addSemester,
   addUnit,
   moveUnit,
+  removeSemester,
   removeUnit,
   replaceUnit,
 } from '../../../../core/shared/scheduling/planEdits';
@@ -97,6 +98,11 @@ function describeWarning(w: PlanWarning, maxSemesters: number, intakeSemester: 1
       return `${w.unitCode} appears in ${w.positions.length} semesters: ${w.positions.map((p) => `Y${p.year} S${p.semester}`).join(', ')}`;
     case 'compulsory_missing':
       return `${listCodes(w.unitCodes)} ${w.unitCodes.length === 1 ? 'is' : 'are'} required to graduate but ${w.unitCodes.length === 1 ? 'is' : 'are'} not in this plan`;
+    case 'conceded_pass_retake':
+      // Routine, not an error: the RETAKE badge's own "(CP)" suffix and
+      // shortened tooltip say this already. A full sentence duplicated on
+      // the same row would overstate ordinary, correctly-handled behaviour.
+      return null;
     case 'requirement_shortfall':
       return `${CATEGORY_NAMES[w.category] ?? w.category} total ${w.have} credit points, but ${w.need} are required to graduate`;
     case 'requirement_excess':
@@ -180,6 +186,181 @@ function getRemainingMpuUnits(activePlanner: any, dashboardData: any, takenCodes
     .map(([code, name]) => ({ code, name }));
 }
 
+// Excel export: a flat, one-row-per-unit sheet, separate from the PDF's
+// grouped/banner layout above. Deliberately duplicates the PDF's small glue
+// functions (category label, WIL slot detection) rather than sharing them,
+// so nothing here can affect handleDirectPdfDownload's output.
+
+export type ExcelPlanRow = {
+  year: number | string;
+  semester: number | string;
+  term: string;
+  code: string;
+  name: string;
+  category: string;
+  categoryLabel: string;
+};
+
+function excelCategoryLabel(category: string, code: string): string {
+  if (code === 'ELECTIVE') return 'Elective';
+  if (category === 'core') return 'Core';
+  if (category === 'major_core') return 'Major Core';
+  if (category === 'prescribed_elective') return 'Prescribed Elective';
+  if (category === 'double_major') return 'Double Major';
+  if (category === 'minor') return 'Minor Elective';
+  if (category === 'wil') return 'Work-Integrated Learning';
+  if (category === 'mpu') return 'MPU';
+  return 'Elective';
+}
+
+// The canonical mapping from web/components/planner/CourseListTable.tsx,
+// the same reference used for the on-screen badge fixes (not the PDF's
+// own separate pastel palette, getCategoryColor, untouched, above).
+// Hex values pulled directly from the rgba() triples in
+// web/components/common/Primitives.module.css's .badgeBlue/.badgeGreen/
+// .badgeYellow/.badgeRed rules, and Primitives.tsx's badgePurple inline
+// style (there is no .badgePurple CSS rule; that one colour only exists
+// as an inline style, so it has to come from the component, not the CSS file).
+export function excelCategoryFillHex(category: string): string {
+  if (category === 'core') return '569CD6'; // badgeBlue
+  if (category === 'major_core') return 'DCDCAA'; // badgeYellow
+  if (category === 'mpu') return 'F48771'; // badgeRed
+  if (category === 'wil') return 'C586C0'; // badgePurple
+  // prescribed_elective, elective, double_major, minor: canonical's default badgeGreen
+  return '4EC9B0';
+}
+
+// Light grey, matching the header row's own fill. Used for Year/Semester/
+// Term (see excelCellFillHex) instead of a category colour, since those
+// columns get merged and would otherwise show whichever row's category
+// happened to land first in the merged range.
+export const EXCEL_NEUTRAL_FILL_HEX = 'D9D9D9';
+
+/**
+ * The fill colour for one data cell: neutral for Year/Semester/Term (the
+ * unit's slot, not the unit itself), the category colour for Unit Code/
+ * Name/Category (columns >= EXCEL_FIRST_UNIT_DETAIL_COL).
+ */
+export function excelCellFillHex(category: string, col: number): string {
+  return col < EXCEL_FIRST_UNIT_DETAIL_COL ? EXCEL_NEUTRAL_FILL_HEX : excelCategoryFillHex(category);
+}
+
+/**
+ * One row per unit across every semester, plus the WIL break-milestone unit
+ * (Term: Winter/Summer) and the remaining/incomplete MPU list (Term: Any,
+ * Year/Semester blank since they have no fixed slot). MPU units are NOT
+ * filtered out of a regular semester's own units here, unlike the PDF and
+ * the on-screen table (which show MPU separately), so a flat, filterable
+ * sheet never silently drops a unit; an in-semester MPU unit just gets
+ * Term "Any" instead of the semester's normal Feb/Mar or Aug/Sept.
+ */
+export function buildExcelRows(
+  semesters: CustomSemesterBucket[],
+  planIntakeSemester: 1 | 2,
+  primaryMilestone: any,
+  activeWilSlot: string | null | undefined,
+  remainingMpus: { code: string; name: string }[],
+): ExcelPlanRow[] {
+  const rows: ExcelPlanRow[] = [];
+
+  for (const sem of semesters) {
+    const slotKey = `${sem.year}-${sem.semester}`;
+    const isWilSlot = !!primaryMilestone && activeWilSlot === slotKey;
+
+    if (isWilSlot) {
+      const currentBreakOption = primaryMilestone?.availableBreakSlots?.find((b: any) => b.slotKey === slotKey);
+      const breakTerm = currentBreakOption?.termType === 'winter' ? 'Winter' : 'Summer';
+      rows.push({
+        year: sem.year,
+        semester: sem.semester,
+        term: breakTerm,
+        code: primaryMilestone.unitCode,
+        name: primaryMilestone.unitName,
+        category: 'wil',
+        categoryLabel: 'Work-Integrated Learning',
+      });
+    }
+
+    const calTerm = calendarTermFor(sem.semester, planIntakeSemester);
+    const semTerm = calTerm === 1 ? 'Feb/Mar' : 'Aug/Sept';
+
+    for (const u of sem.units as any[]) {
+      rows.push({
+        year: sem.year,
+        semester: sem.semester,
+        term: u.category === 'mpu' ? 'Any' : semTerm,
+        code: u.code,
+        name: u.name,
+        category: u.category,
+        categoryLabel: excelCategoryLabel(u.category, u.code),
+      });
+    }
+  }
+
+  for (const mpu of remainingMpus) {
+    rows.push({
+      year: '',
+      semester: '',
+      term: 'Any',
+      code: mpu.code,
+      name: mpu.name,
+      category: 'mpu',
+      categoryLabel: 'MPU',
+    });
+  }
+
+  return rows;
+}
+
+export type ExcelMergeRange = { s: { r: number; c: number }; e: { r: number; c: number } };
+
+// Excel sheet column indices for buildExcelRows's output, in the order
+// handleExcelDownload writes them: Year, Semester, Term, Unit Code, Unit
+// Name, Category. Only the first three are ever merged.
+const EXCEL_YEAR_COL = 0;
+const EXCEL_SEMESTER_COL = 1;
+const EXCEL_TERM_COL = 2;
+// First column that describes the unit itself (Unit Code) rather than its
+// slot (Year/Semester/Term): columns before this get a neutral fill in
+// handleExcelDownload, not the category colour.
+const EXCEL_FIRST_UNIT_DETAIL_COL = 3;
+
+function mergeRangesForColumn(values: (string | number)[], col: number): ExcelMergeRange[] {
+  const ranges: ExcelMergeRange[] = [];
+  let runStart = 0;
+  for (let i = 1; i <= values.length; i++) {
+    const continuesRun = i < values.length && values[i] === values[runStart];
+    if (continuesRun) continue;
+    const runLength = i - runStart;
+    // A blank run (the Year/Semester columns on trailing "remaining MPU"
+    // rows, which have no fixed slot) is never merged: a merged block of
+    // nothing but blanks reads wrong and helps no one.
+    if (runLength >= 2 && values[runStart] !== '') {
+      // +1 on both ends: row 0 is the header, data starts at row 1.
+      ranges.push({ s: { r: runStart + 1, c: col }, e: { r: i - 1 + 1, c: col } });
+    }
+    runStart = i;
+  }
+  return ranges;
+}
+
+/**
+ * Merge ranges for consecutive identical Year/Semester/Term cells, each
+ * column considered independently. A Year/Semester pair can span rows with
+ * two different Term values (a WIL break-milestone row sits in the same
+ * Year/Semester as the regular-term rows around it, but with its own
+ * "Winter"/"Summer" Term, see buildExcelRows above), so Year and Semester
+ * can merge across that span while Term does not, or vice versa. Unit Code,
+ * Unit Name and Category are never merged; they are inherently unique per
+ * row (or, for Category, not meant to be grouped visually here).
+ */
+export function computeExcelMergeRanges(rows: ExcelPlanRow[]): ExcelMergeRange[] {
+  return [
+    ...mergeRangesForColumn(rows.map((r) => r.year), EXCEL_YEAR_COL),
+    ...mergeRangesForColumn(rows.map((r) => r.semester), EXCEL_SEMESTER_COL),
+    ...mergeRangesForColumn(rows.map((r) => r.term), EXCEL_TERM_COL),
+  ];
+}
 
 export default function PathwayPage() {
   const { showToast } = useToast();
@@ -193,6 +374,7 @@ export default function PathwayPage() {
     customPlan, setCustomPlan,
     setCustomPlanStart,
     retakeUnitCodes, setRetakeUnitCodes,
+    concededPassRetakeWarnings, setConcededPassRetakeWarnings,
     injectedMinors, setInjectedMinors,
     planUnits, setPlanUnits,
     planIntakeSemester, setPlanIntakeSemester,
@@ -208,11 +390,18 @@ export default function PathwayPage() {
     breakMilestones, setBreakMilestones,
     customWilSlot, setCustomWilSlot,
     removedUnitSlots, setRemovedUnitSlots,
+    customMpuList, setCustomMpuList,
+    allDatabaseMpus, setAllDatabaseMpus,
   } = useStudentSession();
   const [customPlanLoading, setCustomPlanLoading] = useState(false);
   const [unitToRemove, setUnitToRemove] = useState<{ code: string; name: string; category: string } | null>(null);
+  const [semesterToDelete, setSemesterToDelete] = useState<{ year: number; semester: 1 | 2 } | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
 
+  // Target semester for adding an extra unit beyond degree requirements
+  const [extraUnitTargetSemester, setExtraUnitTargetSemester] = useState<{ year: number; semester: 1 | 2 } | null>(null);
+  
   // Catalogue state. The units are fetched the first time a picker is opened,
   // not with the plan, which is already a large response.
   const [catalogue, setCatalogue] = useState<CatalogueUnit[]>([]);
@@ -223,6 +412,7 @@ export default function PathwayPage() {
   // being swapped; an add is filling a gap and lets the advisor pick the semester.
   const [picker, setPicker] = useState<
     | { mode: 'replace'; oldCode: string; year: number; semester: 1 | 2 }
+    | { mode: 'add_extra'; year: number; semester: 1 | 2; isExtraUnit: boolean }
     | { mode: 'add' }
     | null
   >(null);
@@ -235,6 +425,20 @@ export default function PathwayPage() {
   const applyEdit = (next: CustomSemesterBucket[]) => {
     setCustomPlan({ ...customPlan, semesters: next });
     setIsPlanEdited(true);
+  };
+
+  // Planned units that name `code` as a prerequisite: the "Broken Prerequisite
+  // Chain" check, shared by the unit-removal and semester-deletion modals so
+  // neither reimplements it.
+  const findDependentUnits = (code: string) => {
+    const allPlannedUnits = (customPlan?.semesters ?? []).flatMap((s: any) => s.units);
+    return allPlannedUnits.filter((other: any) => {
+      if (other.code === code) return false;
+      const meta = planUnits.find((pu: any) => normaliseCode(pu.code) === normaliseCode(other.code));
+      return meta?.requisiteGroups?.some((g: any) =>
+        g.some((c: any) => c.unitCode && normaliseCode(c.unitCode) === normaliseCode(code))
+      );
+    });
   };
 
   // Fetched the first time any picker opens, not with the plan, which is
@@ -302,13 +506,21 @@ export default function PathwayPage() {
 
     // Collect all unit codes that act as prerequisites for those remaining units
     const activePrereqCodes = new Set<string>();
+    // Which specific unpassed unit(s) each prerequisite code is needed by,
+    // purely for the conceded_pass_retake warning below, so the advisor sees
+    // which unit(s) forced a retake rather than just "something needed it".
+    // Does not affect activePrereqCodes or anything the scheduler decides.
+    const prereqBlockedBy = new Map<string, Set<string>>();
     for (const tu of unpassedPlannerUnits) {
       for (const group of tu.unit.requisite_groups ?? []) {
         for (const cond of group.conditions ?? []) {
           if (cond.type === 'unit' && cond.unit?.unit_code) {
             const reqType = cond.requisite_type ?? 'prerequisite';
             if (reqType === 'prerequisite' || reqType === 'corequisite') {
-              activePrereqCodes.add(cond.unit.unit_code.trim().toUpperCase());
+              const reqCode = cond.unit.unit_code.trim().toUpperCase();
+              activePrereqCodes.add(reqCode);
+              if (!prereqBlockedBy.has(reqCode)) prereqBlockedBy.set(reqCode, new Set());
+              prereqBlockedBy.get(reqCode)!.add(tu.unit.unit_code.trim().toUpperCase());
             }
           }
         }
@@ -319,6 +531,16 @@ export default function PathwayPage() {
     const blockingConcededPasses = new Set(
       concededPassCodes.filter((cpCode) => activePrereqCodes.has(normaliseCode(cpCode)))
     );
+
+    // Visibility only: name which unit(s) forced each retake, so the advisor
+    // can tell "genuinely failed" apart from "passed with a Conceded Pass,
+    // but a prerequisite chain forces a clean retake anyway". Does not change
+    // which units get retaken (see completedForScheduler/effectiveConcededPasses).
+    const newConcededPassRetakeWarnings: PlanWarning[] = [...blockingConcededPasses].map((code) => ({
+      kind: 'conceded_pass_retake',
+      unitCode: code,
+      blockedUnitCodes: [...(prereqBlockedBy.get(normaliseCode(code)) ?? [])].sort(),
+    }));
 
     // Completed for scheduler: Keep non-blocking CP as completed; only retake blocking CP
     const completedForScheduler = rawCompletedCodes.filter(
@@ -358,11 +580,13 @@ export default function PathwayPage() {
         setCustomWilSlot(null);
         setCustomPlanStart({ year: data.startYear, semester: data.startSemester });
         setRetakeUnitCodes(retakeCodes);
+        setConcededPassRetakeWarnings(newConcededPassRetakeWarnings);
         setPlanUnits([...(data.units ?? []), ...(data.mpuUnits ?? [])]);
         setPlanIntakeSemester(data.intakeSemester === 2 ? 2 : 1);
         setPlanCompletedUnits(data.completedUnits ?? []);
         setPlanElectiveCandidates(data.electiveCandidates ?? []);
         setPlanRequirements(data.requirements ?? []);
+        setAllDatabaseMpus(data.allMpuUnits ?? []);
         setGeneratedSemesters(data.data.semesters);
         setAvailableDoubleMajors(data.availableDoubleMajors ?? []);
         setAvailableMinors(data.availableMinors ?? []);
@@ -612,8 +836,11 @@ export default function PathwayPage() {
             return sum + missingFromMinor;
           }, 0);
 
+        // Never hides this section on totalUnplanned === 0: a near-graduation
+        // student can still have MPU or WIL units outstanding (excluded from
+        // isReqUnit above), and the advisor needs Add semester/Download/the
+        // summary box regardless of how little (or nothing) remains to place.
         const totalUnplanned = unplannedUnits.length + injectedMinorMissingCount;
-        if (totalUnplanned === 0) return null;
 
         return (
           <div>
@@ -662,12 +889,12 @@ export default function PathwayPage() {
               const unitData = new Map(
                 [...planElectiveCandidates, ...planUnits, ...planCompletedUnits, ...planExtraUnits].map((u) => [normaliseCode(u.code), u])
               );
-              const placedCodes = new Set(
-                semesters.flatMap((s) => s.units.map((u) => normaliseCode(u.code)))
-              );
-              const unplacedUnits = planUnits.filter(
-                (u) => u.category !== 'mpu' && !placedCodes.has(normaliseCode(u.code))
-              );
+              const milestoneCodes = new Set(breakMilestones.map((bm: any) => normaliseCode(bm.unitCode)));
+
+              const placedCodes = new Set([
+                ...semesters.flatMap((s) => s.units.map((u) => normaliseCode(u.code))),
+                ...milestoneCodes,
+              ]);
 
               // Exclude units placed in the custom plan from completed history to avoid double-counting retakes
               const validatedCompletedCodes = (dashboardData?.completedCodes ?? []).filter(
@@ -678,8 +905,27 @@ export default function PathwayPage() {
                 (code: string) => !placedCodes.has(normaliseCode(code))
               );
 
+              // Synthesize a virtual container for active break milestones so validatePlan credits their credit points
+              const validationSemesters = breakMilestones.length > 0
+                ? [
+                    ...semesters,
+                    {
+                      year: 99,
+                      semester: 1 as const,
+                      units: breakMilestones.map((bm: any) => ({
+                        code: bm.unitCode,
+                        name: bm.unitName,
+                        category: 'wil',
+                        creditPoints: bm.creditPoints ?? 25,
+                        offeringSemesters: [1, 2] as (1 | 2)[],
+                        requisiteGroups: [],
+                      })),
+                    },
+                  ]
+                : semesters;
+
               const validation = validatePlan({
-                semesters,
+                semesters: validationSemesters,
                 completedUnitCodes: validatedCompletedCodes,
                 concededPassUnitCodes: validatedConcededPassCodes,
                 intakeSemester: planIntakeSemester,
@@ -702,25 +948,79 @@ export default function PathwayPage() {
                 requirements: planRequirements,
               });
 
+              // Specific units that must be completed (Core, Major Core, Double Major, Minor)
+              const specificUnplacedUnits = planUnits.filter(
+                (u) =>
+                  u.category !== 'mpu' &&
+                  u.category !== 'elective' &&
+                  !u.recommended &&
+                  !placedCodes.has(normaliseCode(u.code))
+              );
+
+              // Check if the validator reports an elective shortfall
+              const hasElectiveShortfall = validation.some(
+                (w) => w.kind === 'requirement_shortfall' && w.category === 'elective'
+              );
+
+              // Unplaced units list for the dropdown: specific units + generic elective slot if needed
+              const unplacedUnits: SchedulableUnit[] = [
+                ...specificUnplacedUnits,
+                ...(hasElectiveShortfall
+                  ? [
+                      {
+                        code: 'ELECTIVE',
+                        name: 'Elective Slot (To be selected)',
+                        category: 'elective',
+                        creditPoints: 12.5,
+                        offeringSemesters: [1, 2] as (1 | 2)[],
+                        requisiteGroups: [],
+                      },
+                    ]
+                  : []),
+              ];
+
               // A freshly generated plan already carries the scheduler's own
               // warnings. Once edited, the arrangement is the advisor's, so it
               // has to be re-checked.
-              const warnings: PlanWarning[] = isPlanEdited
-                ? [
-                    ...validation,
-                    // The generator's findings about units it never placed stay
-                    // true until the advisor places them
-                    ...carryForwardWarnings(customPlan.warnings ?? [], semesters),
-                  ]
-                : [
-                    ...(customPlan.warnings ?? []),
-                    // The scheduler places what it is given and never counts the
-                    // total, so a plan short of a category's credit points comes
-                    // out clean. That shortfall is worth saying before any edit.
-                    ...validation.filter(
-                      (w) => w.kind === 'requirement_shortfall' || w.kind === 'requirement_excess',
-                    ),
-                  ];
+              const warnings: PlanWarning[] = [
+                ...(isPlanEdited
+                  ? [
+                      ...validation,
+                      // The generator's findings about units it never placed stay
+                      // true until the advisor places them
+                      ...carryForwardWarnings(customPlan.warnings ?? [], semesters),
+                    ]
+                  : [
+                      ...(customPlan.warnings ?? []),
+                      // The scheduler places what it is given and never counts the
+                      // total, so a plan short of a category's credit points comes
+                      // out clean. That shortfall is worth saying before any edit.
+                      // compulsory_missing is the same: the scheduler places a unit
+                      // or reports why it could not (requisite_violation, already in
+                      // customPlan.warnings above), but never checks the finished
+                      // plan against the full required-unit list the way validatePlan
+                      // does, so a compulsory unit silently absent from a fresh plan
+                      // needs this to be said before any edit too.
+                      ...validation.filter(
+                        (w) =>
+                          w.kind === 'requirement_shortfall' ||
+                          w.kind === 'requirement_excess' ||
+                          w.kind === 'compulsory_missing',
+                      ),
+                    ]),
+                // Set once at generation time, same as retakeUnitCodes/the RETAKE
+                // badge. The substitution decision stays true regardless of edits.
+                ...concededPassRetakeWarnings,
+              ];
+
+              // Which retaken units are a Conceded Pass substitution rather than a
+              // genuine fail, so the RETAKE badge's own tooltip can say which one
+              // this is instead of always assuming a fail.
+              const concededPassRetakeCodes = new Set(
+                concededPassRetakeWarnings
+                  .filter((w): w is Extract<PlanWarning, { kind: 'conceded_pass_retake' }> => w.kind === 'conceded_pass_retake')
+                  .map((w) => normaliseCode(w.unitCode))
+              );
 
               const overCapacity = new Map<string, Extract<PlanWarning, { kind: 'over_capacity' }>>();
               const byUnit = new Map<string, string[]>();
@@ -734,6 +1034,11 @@ export default function PathwayPage() {
                 const targetCode = unitCode ? normaliseCode(unitCode) : null;
                 const targetUnit = targetCode ? unitData.get(targetCode) : null;
 
+                // Suppress all warnings for generic placeholder slots (e.g. ELECTIVE)
+                if (targetCode === 'ELECTIVE' || ('unitCode' in w && normaliseCode(w.unitCode) === 'ELECTIVE')) {
+                  continue;
+                }
+
                 // Suppress all warnings for MPU units
                 if (
                   (targetUnit && targetUnit.category === 'mpu') ||
@@ -745,6 +1050,12 @@ export default function PathwayPage() {
                 }
 
                 if (w.kind === 'short_term_only') {
+                  continue;
+                }
+
+                // Suppress WIL shortfall if breakMilestones already fulfills the required credit points
+                const totalWilMilestoneCp = breakMilestones.reduce((sum: number, bm: any) => sum + (bm.creditPoints ?? 0), 0);
+                if (w.kind === 'requirement_shortfall' && w.category === 'wil' && totalWilMilestoneCp >= w.need) {
                   continue;
                 }
 
@@ -769,6 +1080,20 @@ export default function PathwayPage() {
               }
 
               const addUnitToSemester = (code: string, bucket: CustomSemesterBucket) => {
+                // If adding a generic elective placeholder slot
+                if (code === 'ELECTIVE') {
+                  const electiveSlot: SchedulableUnit = {
+                    code: 'ELECTIVE',
+                    name: 'Elective (To be selected)',
+                    category: 'elective',
+                    creditPoints: 12.5,
+                    offeringSemesters: [1, 2],
+                    requisiteGroups: [],
+                  };
+                  applyEdit(addUnit(semesters, electiveSlot, bucket.year, bucket.semester));
+                  return;
+                }
+
                 const unit = planUnits.find((u) => normaliseCode(u.code) === normaliseCode(code));
                 if (unit) applyEdit(addUnit(semesters, unit, bucket.year, bucket.semester));
               };
@@ -777,6 +1102,13 @@ export default function PathwayPage() {
                 (dashboardData?.completedCodes ?? []).map((code: string) => normaliseCode(code))
               );
               const isMpuCode = (code: string) => normaliseCode(code).startsWith('MPU');
+              const milestoneUnitCodes = new Set(breakMilestones.map((bm: any) => normaliseCode(bm.unitCode)));
+              const isWilUnit = (u: any) =>
+                u.category === 'wil' ||
+                milestoneUnitCodes.has(normaliseCode(u.code)) ||
+                normaliseCode(u.code).startsWith('ICT20016') ||
+                normaliseCode(u.code).startsWith('SWE40001');
+
               const poolCategory = new Map(planUnits.map((u) => [normaliseCode(u.code), u.category]));
               const candidateKeys = new Set(planElectiveCandidates.map((u) => normaliseCode(u.code)));
 
@@ -790,6 +1122,7 @@ export default function PathwayPage() {
                   !placedCodes.has(key) &&
                   !completedKeys.has(key) &&
                   !isMpuCode(u.code) &&
+                  !isWilUnit(u) &&
                   (named === undefined || named === 'elective')
                 );
               });
@@ -806,7 +1139,8 @@ export default function PathwayPage() {
                   !poolCategory.has(key) &&
                   !candidateKeys.has(key) &&
                   !completedKeys.has(key) &&
-                  !isMpuCode(u.code)
+                  !isMpuCode(u.code) &&
+                  !isWilUnit(u)
                 );
               });
 
@@ -834,11 +1168,56 @@ export default function PathwayPage() {
                 : defaultSlotKey;
               const activeSlot = pickerSlots.find((slot) => slot.key === activeSlotKey);
 
+              // Helper to check if a candidate unit's prerequisites are fulfilled prior to the target semester
+              const getUnmetPrereqReasonForSlot = (targetYear: number, targetSemester: 1 | 2) => {
+                // Collect all unit codes completed prior to this semester slot
+                const completedPrior = new Set<string>([
+                  ...(dashboardData?.completedCodes ?? []).map((c: string) => normaliseCode(c)),
+                ]);
+
+                // Add units from earlier planned semesters
+                for (const s of semesters) {
+                  if (s.year < targetYear || (s.year === targetYear && s.semester < targetSemester)) {
+                    for (const u of s.units) {
+                      if (u.code !== 'ELECTIVE') {
+                        completedPrior.add(normaliseCode(u.code));
+                      }
+                    }
+                  }
+                }
+
+                return (candidate: SchedulableUnit): string | null => {
+                  const meta = unitData.get(normaliseCode(candidate.code)) ?? candidate;
+                  const reqGroups = meta.requisiteGroups ?? [];
+                  if (reqGroups.length === 0) return null;
+
+                  for (const group of reqGroups) {
+                    const missingUnits: string[] = [];
+                    let groupSatisfied = false;
+
+                    for (const cond of group) {
+                      const reqCode = cond.unitCode ? normaliseCode(cond.unitCode) : null;
+                      if (reqCode && completedPrior.has(reqCode)) {
+                        groupSatisfied = true;
+                        break;
+                      }
+                      if (cond.unitCode) missingUnits.push(cond.unitCode);
+                    }
+
+                    if (!groupSatisfied && missingUnits.length > 0) {
+                      return `Needs ${missingUnits.join(' or ')}`;
+                    }
+                  }
+                  return null;
+                };
+              };
+
               const chooseElective = (
                 unit: SchedulableUnit,
                 source: PickerSource,
                 year: number,
-                semester: 1 | 2
+                semester: 1 | 2,
+                isExtra: boolean = false
               ) => {
                 if (!picker) return;
                 // The advisor's own choice, so never a recommendation. Only a unit
@@ -848,6 +1227,7 @@ export default function PathwayPage() {
                   category: 'elective',
                   recommended: false,
                   outsidePlanner: source === 'catalogue',
+                  isExtraUnit: isExtra || (picker as any).isExtraUnit || false,
                 };
                 if (source === 'catalogue') {
                   // Kept in the session as well as the plan, so validatePlan can
@@ -893,6 +1273,20 @@ export default function PathwayPage() {
               };
 
               const handleDirectPdfDownload = async () => {
+                // Check if any generic unselected elective slots exist in the pathway
+                const unselectedElectiveCount = semesters
+                  .flatMap((s) => s.units)
+                  .filter((u) => u.code === 'ELECTIVE').length;
+
+                if (unselectedElectiveCount > 0) {
+                  showToast(
+                    `Please select a unit for all elective slots (${unselectedElectiveCount} remaining) before downloading the PDF.`,
+                    'info'
+                  );
+                  return;
+                }
+
+
                 setIsExporting(true);
                 showToast('Generating official study plan PDF...', 'info');
 
@@ -915,8 +1309,8 @@ export default function PathwayPage() {
                   );
                   const takenCodes = new Set([...completeCodes, ...currentCodes]);
                   const activePlanner = selectedPlannerIdx === -1 ? manualPlanner : dashboardData?.planners?.[selectedPlannerIdx];
-                  const remainingMpus = getRemainingMpuUnits(activePlanner, dashboardData, takenCodes);
-
+                  const defaultRemainingMpus = getRemainingMpuUnits(activePlanner, dashboardData, takenCodes);
+                  const remainingMpus = customMpuList ?? defaultRemainingMpus;
                   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
                   // Header: Course Title & Major
@@ -976,7 +1370,7 @@ export default function PathwayPage() {
 
                   // Render Year by Year
                   for (const [yearNum, sems] of Array.from(yearsMap.entries())) {
-                    if (currentY > 240) {
+                    if (currentY > 230) {
                       doc.addPage();
                       currentY = 18;
                     }
@@ -988,55 +1382,62 @@ export default function PathwayPage() {
                     doc.text(`Year ${YEAR_WORDS[yearNum] ?? yearNum}`, 14, currentY);
                     currentY += 4;
 
+                    // Build unified rows for the entire academic year (Sem 1, break milestone, Sem 2)
+                    const yearRows: any[] = [];
+
                     for (const sem of sems) {
                       const slotKey = `${sem.year}-${sem.semester}`;
                       const isWilSlot = primaryMilestone && activeWilSlot === slotKey;
                       const calTerm = calendarTermFor(sem.semester, planIntakeSemester);
                       const semMonths = calTerm === 1 ? 'Feb/Mar' : 'Aug/Sept';
 
-                      // If WIL break milestone sits before this semester
+                      const colHeaderRow = [
+                        { content: 'Unit Code', styles: { fillColor: [191, 191, 191], textColor: [0, 0, 0], fontStyle: 'bold' as const, fontSize: 9 } },
+                        { content: 'Unit Name', styles: { fillColor: [191, 191, 191], textColor: [0, 0, 0], fontStyle: 'bold' as const, fontSize: 9 } },
+                        { content: 'Category', styles: { fillColor: [191, 191, 191], textColor: [0, 0, 0], fontStyle: 'bold' as const, fontSize: 9 } },
+                      ];
+
+                      // If an intensive break milestone (e.g. WIL placement) sits before this semester
                       if (isWilSlot) {
                         const currentBreakOption = primaryMilestone?.availableBreakSlots?.find((b: any) => b.slotKey === slotKey);
                         const breakTitle = currentBreakOption?.termType === 'winter'
-                          ? `Winter Term | July ${currentBreakOption?.year ?? sem.year}`
-                          : `Summer Term | Jan ${currentBreakOption?.year ?? sem.year}`;
-
-                        autoTable(doc, {
-                          startY: currentY,
-                          margin: { left: 14, right: 14 },
-                          head: [
-                            [
-                              {
-                                content: breakTitle,
-                                colSpan: 3,
-                                styles: { fillColor: [64, 64, 64], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 10 },
-                              },
-                            ],
-                            ['Unit Code', 'Unit Name', 'Category'],
-                          ],
-                          body: [
-                            [
-                              { content: primaryMilestone.unitCode, styles: { fontStyle: 'normal' as const } },
-                              primaryMilestone.unitName,
-                              'Work-Integrated Learning',
-                            ],
-                          ],
-
-                          headStyles: { fillColor: [224, 224, 224], textColor: [0, 0, 0], fontStyle: 'bold', fontSize: 9 },
-                          bodyStyles: { fillColor: getCategoryColor('wil'), textColor: [0, 0, 0], fontSize: 9 },
-                          theme: 'plain',
-                          columnStyles: {
-                            0: { cellWidth: 35 },
-                            1: { cellWidth: 105 },
-                            2: { cellWidth: 42 },
+                          ? 'Winter Term'
+                          : 'Summer Term';
+                        // Title Banner
+                        yearRows.push([
+                          {
+                            content: breakTitle,
+                            colSpan: 3,
+                            styles: { fillColor: [64, 64, 64], textColor: [255, 255, 255], fontStyle: 'bold' as const, fontSize: 10 },
                           },
-                        });
-                        currentY = (doc as any).lastAutoTable.finalY + 15;
+                        ]);
+
+                        // Column Headers
+                        yearRows.push(colHeaderRow);
+
+                        // Unit Row
+                        yearRows.push([
+                          { content: primaryMilestone.unitCode, styles: { fontStyle: 'normal' as const, fillColor: getCategoryColor('wil') } },
+                          { content: primaryMilestone.unitName, styles: { fillColor: getCategoryColor('wil') } },
+                          { content: 'Work-Integrated Learning', styles: { fillColor: getCategoryColor('wil') } },
+                        ]);
                       }
 
-                      // Regular Semester Table
-                      const semTitle = `Semester ${sem.semester} | ${semMonths} ${sem.year}`;
-                      const semRows = sem.units
+                      // Regular Semester: Title Banner
+                      const semTitle = `Semester ${sem.semester} | ${semMonths}`;
+                      yearRows.push([
+                        {
+                          content: semTitle,
+                          colSpan: 3,
+                          styles: { fillColor: [64, 64, 64], textColor: [255, 255, 255], fontStyle: 'bold' as const, fontSize: 10 },
+                        },
+                      ]);
+
+                      // Column Headers
+                      yearRows.push(colHeaderRow);
+
+                      // Unit Rows
+                      const semUnits = sem.units
                         .filter((u: any) => u.category !== 'mpu')
                         .map((u: any) => [
                           { content: u.code, styles: { fontStyle: 'normal' as const, fillColor: getCategoryColor(u.category) } },
@@ -1044,32 +1445,25 @@ export default function PathwayPage() {
                           { content: getCategoryLabel(u.category, u.code), styles: { fillColor: getCategoryColor(u.category) } },
                         ]);
 
-
-                      autoTable(doc, {
-                        startY: currentY,
-                        margin: { left: 14, right: 14 },
-                        head: [
-                          [
-                            {
-                              content: semTitle,
-                              colSpan: 3,
-                              styles: { fillColor: [64, 64, 64], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 10 },
-                            },
-                          ],
-                          ['Unit Code', 'Unit Name', 'Category'],
-                        ],
-                        body: semRows,
-                        headStyles: { fillColor: [191, 191, 191], textColor: [0, 0, 0], fontSize: 9 },
-                        bodyStyles: { textColor: [0, 0, 0], fontSize: 9 },
-                        theme: 'plain',
-                        columnStyles: {
-                          0: { cellWidth: 35 },
-                          1: { cellWidth: 105 },
-                          2: { cellWidth: 42 },
-                        },
-                      });
-                      currentY = (doc as any).lastAutoTable.finalY + 15;
+                      yearRows.push(...semUnits);
                     }
+
+                    // Render one single continuous table for the year
+                    autoTable(doc, {
+                      startY: currentY,
+                      margin: { left: 14, right: 14 },
+                      body: yearRows,
+                      bodyStyles: { textColor: [0, 0, 0], fontSize: 9 },
+                      theme: 'plain',
+                      columnStyles: {
+                        0: { cellWidth: 35 },
+                        1: { cellWidth: 105 },
+                        2: { cellWidth: 42 },
+                      },
+                    });
+
+                    // Space before the next Year header
+                    currentY = (doc as any).lastAutoTable.finalY + 14;
                   }
 
                   // MPU Units Section
@@ -1170,9 +1564,148 @@ export default function PathwayPage() {
                 }
               };
 
+              const handleExcelDownload = async () => {
+                // Same pre-flight check as the PDF export, same message pattern
+                const unselectedElectiveCount = semesters
+                  .flatMap((s) => s.units)
+                  .filter((u) => u.code === 'ELECTIVE').length;
+
+                if (unselectedElectiveCount > 0) {
+                  showToast(
+                    `Please select a unit for all elective slots (${unselectedElectiveCount} remaining) before downloading the Excel file.`,
+                    'info'
+                  );
+                  return;
+                }
+
+                setIsExportingExcel(true);
+                showToast('Generating Excel study plan...', 'info');
+
+                try {
+                  const XLSX = await import('xlsx-js-style');
+
+                  const primaryMilestone = breakMilestones?.[0];
+                  const activeWilSlot = customWilSlot ?? primaryMilestone?.insertBeforeSlotKey;
+                  const allTranscriptUnits = [
+                    ...(scrapedStudent?.student?.courseList ?? []),
+                    ...(dashboardData?.mpuCourseList ?? []),
+                  ];
+                  const transcriptStates = resolveUnitStates(allTranscriptUnits);
+                  const completeCodes = new Set(
+                    [...transcriptStates].filter(([, state]) => state === 'passed').map(([code]) => code)
+                  );
+                  const currentCodes = new Set(
+                    [...transcriptStates].filter(([, state]) => state === 'in_progress').map(([code]) => code)
+                  );
+                  const takenCodes = new Set([...completeCodes, ...currentCodes]);
+                  const activePlanner = selectedPlannerIdx === -1 ? manualPlanner : dashboardData?.planners?.[selectedPlannerIdx];
+                  const defaultRemainingMpus = getRemainingMpuUnits(activePlanner, dashboardData, takenCodes);
+                  const remainingMpus = customMpuList ?? defaultRemainingMpus;
+
+                  const rows = buildExcelRows(semesters, planIntakeSemester, primaryMilestone, activeWilSlot, remainingMpus);
+
+                  const header = ['Year', 'Semester', 'Term', 'Unit Code', 'Unit Name', 'Category'];
+                  const aoa: (string | number)[][] = [
+                    header,
+                    ...rows.map((r) => [r.year, r.semester, r.term, r.code, r.name, r.categoryLabel]),
+                  ];
+                  const ws = XLSX.utils.aoa_to_sheet(aoa);
+
+                  const thinBorder = {
+                    top: { style: 'thin', color: { rgb: '999999' } },
+                    bottom: { style: 'thin', color: { rgb: '999999' } },
+                    left: { style: 'thin', color: { rgb: '999999' } },
+                    right: { style: 'thin', color: { rgb: '999999' } },
+                  };
+
+                  // Header row: bold, light grey, bordered
+                  for (let c = 0; c < header.length; c++) {
+                    const cellRef = XLSX.utils.encode_cell({ r: 0, c });
+                    const cell = (ws as any)[cellRef];
+                    if (!cell) continue;
+                    cell.s = {
+                      font: { bold: true },
+                      fill: { patternType: 'solid', fgColor: { rgb: 'D9D9D9' } },
+                      border: thinBorder,
+                    };
+                  }
+
+                  // Category colour fill on Unit Code/Name/Category only (columns
+                  // 3-5): that colour describes the UNIT, matching the canonical
+                  // badge mapping (not the PDF's own pastel palette). Year/Semester/
+                  // Term (columns 0-2) get a neutral grey instead: once consecutive
+                  // cells there are merged, Excel renders only the merged block's
+                  // top-left cell, so colouring them by category would show
+                  // whichever row happened to be first (arbitrary, not a grouping
+                  // colour). Every cell still gets the border, category-coloured or not.
+                  rows.forEach((row, i) => {
+                    for (let c = 0; c < header.length; c++) {
+                      const cellRef = XLSX.utils.encode_cell({ r: i + 1, c });
+                      const cell = (ws as any)[cellRef];
+                      if (!cell) continue;
+                      const fill = { patternType: 'solid' as const, fgColor: { rgb: excelCellFillHex(row.category, c) } };
+                      cell.s = { fill, border: thinBorder };
+                    }
+                  });
+
+                  // Merge consecutive identical Year/Semester/Term cells (each
+                  // column independently, see computeExcelMergeRanges) and
+                  // centre the merged block's content, without losing the fill/
+                  // border already set on the top-left cell above.
+                  const merges = computeExcelMergeRanges(rows);
+                  (ws as any)['!merges'] = merges;
+                  for (const range of merges) {
+                    const cellRef = XLSX.utils.encode_cell(range.s);
+                    const cell = (ws as any)[cellRef];
+                    if (!cell) continue;
+                    cell.s = { ...cell.s, alignment: { vertical: 'center', horizontal: 'center' } };
+                  }
+
+                  (ws as any)['!cols'] = [
+                    { wch: 6 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 40 }, { wch: 22 },
+                  ];
+
+                  const wb = XLSX.utils.book_new();
+                  XLSX.utils.book_append_sheet(wb, ws, 'Study Plan');
+
+                  const fileName = `${(selectedPlanner?.course?.name ?? 'Course').replace(/[^a-zA-Z0-9]/g, '_')}_Study_Plan.xlsx`;
+                  XLSX.writeFile(wb, fileName);
+                  showToast('Please choose your save location in the dialog to save your Excel file.', 'info');
+                } catch (err) {
+                  console.error(err);
+                  showToast('Failed to generate Excel file.', 'error');
+                } finally {
+                  setIsExportingExcel(false);
+                }
+              };
+
+              const breakTermCodes = new Set(
+                (customPlan.warnings ?? [])
+                  .filter((w: any) => w.kind === 'short_term_only')
+                  .map((w: any) => normaliseCode(w.unitCode))
+              );
+              const nonMpuUnschedulable = (customPlan.unschedulableUnits ?? []).filter(
+                (u: any) =>
+                  u.category !== 'mpu' &&
+                  !u.code?.toUpperCase().startsWith('MPU') &&
+                  !breakTermCodes.has(normaliseCode(u.code)) &&
+                  !milestoneCodes.has(normaliseCode(u.code))
+              );
+              // Ready to graduate: nothing left to schedule in the required
+              // categories, and no genuine failure reason either, just MPU
+              // and/or short-term items, tracked separately below.
+              const readyToGraduate = semesters.length === 0 && totalUnplanned === 0 && nonMpuUnschedulable.length === 0;
+              const remainingMpus = customMpuList ?? getRemainingMpuUnits(activePlanner, dashboardData, takenCodes);
+
               return (
               <div>
-                {semesters.length === 0 ? (
+                {readyToGraduate ? (
+                  <div className={styles.mpuEmptyAlert}>
+                    {remainingMpus.length > 0
+                      ? '✓ No further core units required. Complete the remaining MPU units below to finish this degree.'
+                      : '✓ This student has completed all requirements for this planner.'}
+                  </div>
+                ) : semesters.length === 0 ? (
                   <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '10px 0' }}>
                     No semesters could be generated. The reasons are listed below.
                   </div>
@@ -1263,12 +1796,28 @@ export default function PathwayPage() {
                           className={styles.addUnitSelect}
                           style={capacity ? undefined : { marginLeft: 'auto' }}
                           value=""
-                          disabled={unplacedUnits.length === 0}
-                          onChange={(e) => { addUnitToSemester(e.target.value, sem); e.currentTarget.value = ''; }}
-                          title={unplacedUnits.length === 0 ? 'Every remaining unit is already placed' : 'Add a unit to this semester'}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            e.target.value = ''; // Reset immediately
+                            if (val === '__EXTRA_UNIT__') {
+                              setExtraUnitTargetSemester({ year: sem.year, semester: sem.semester });
+                            } else if (val) {
+                              addUnitToSemester(val, sem);
+                            }
+                          }}
+                          title="Add a unit to this semester"
                         >
-                          <option value="">+ Add unit</option>
+                          <option value="" disabled hidden>
+                            + Add unit
+                          </option>
                           {unplacedUnits.map((u) => {
+                            if (u.code === 'ELECTIVE') {
+                              return (
+                                <option key="ELECTIVE" value="ELECTIVE">
+                                  + Elective Slot (To be selected)
+                                </option>
+                              );
+                            }
                             const hint = offeringHint(u, calendarTerm);
                             return (
                               <option key={u.code} value={u.code}>
@@ -1276,17 +1825,51 @@ export default function PathwayPage() {
                               </option>
                             );
                           })}
+                          <option value="__EXTRA_UNIT__">
+                            + Add Extra Unit (From Catalogue)
+                          </option>
                         </select>
+                        <button
+                          type="button"
+                          className={styles.removeBtn}
+                          onClick={() => {
+                            if (sem.units.length === 0) {
+                              applyEdit(removeSemester(semesters, sem.year, sem.semester));
+                              showToast(`Removed Year ${sem.year} Semester ${sem.semester}.`, 'success');
+                              return;
+                            }
+                            setSemesterToDelete({ year: sem.year, semester: sem.semester });
+                          }}
+                          title="Delete this semester and return its units to the pool"
+                          aria-label={`Delete Year ${sem.year} Semester ${sem.semester}`}
+                        >
+                          ✕
+                        </button>
                       </div>
-                      {picker?.mode === 'replace' && picker.year === sem.year && picker.semester === sem.semester && (
+                      {picker && picker.mode !== 'add' && picker.year === sem.year && picker.semester === sem.semester && (
                         <ElectivePicker
-                          title={picker.oldCode === 'ELECTIVE' ? 'Choose an elective' : `Swap ${picker.oldCode}`}
+                          title={
+                            picker.mode === 'add_extra'
+                              ? `Add Extra Unit · Y${sem.year} S${sem.semester}`
+                              : picker.oldCode === 'ELECTIVE'
+                              ? 'Choose an elective'
+                              : `Swap ${picker.oldCode}`
+                          }
                           plannerUnits={pickerPlannerUnits}
                           catalogueUnits={pickerCatalogueUnits}
                           prefixes={cataloguePrefixes}
                           loading={catalogueLoading}
                           term={calendarTerm}
-                          onChoose={(unit, source) => chooseElective(unit, source, sem.year, sem.semester)}
+                          getUnmetPrereqReason={getUnmetPrereqReasonForSlot(sem.year, sem.semester)}
+                          onChoose={(unit, source) =>
+                            chooseElective(
+                              unit,
+                              source,
+                              sem.year,
+                              sem.semester,
+                              picker.mode === 'add_extra'
+                            )
+                          }
                           onClose={() => setPicker(null)}
                         />
                       )}
@@ -1304,10 +1887,10 @@ export default function PathwayPage() {
                           <tbody>
                             {sem.units
                             .filter((u) => u.category !== 'mpu')
-                            .map((u) => {
+                            .map((u, uIdx) => {
                               const unitMessages = byUnit.get(normaliseCode(u.code)) ?? [];
                               return (
-                              <tr key={u.code} className={unitMessages.length > 0 ? styles.rowFlagged : undefined}>
+                              <tr key={`${u.code}-${uIdx}`} className={unitMessages.length > 0 ? styles.rowFlagged : undefined}>
                                 <td>
                                   <InlineCode red={u.category === 'core' || u.category === 'major_core'}>
                                     {u.code}
@@ -1317,7 +1900,11 @@ export default function PathwayPage() {
                                   {u.name}
                                   {retakeUnitCodes.has(normaliseUnitCode(u.code)) && (
                                     <span
-                                      title="Previously attempted and failed — this is a repeat attempt."
+                                      title={
+                                        concededPassRetakeCodes.has(normaliseCode(u.code))
+                                          ? 'Retaken: was a Conceded Pass'
+                                          : 'Previously attempted and failed — this is a repeat attempt.'
+                                      }
                                       style={{
                                         marginLeft: 6,
                                         fontSize: 9,
@@ -1326,7 +1913,7 @@ export default function PathwayPage() {
                                         letterSpacing: '0.05em',
                                       }}
                                     >
-                                      RETAKE
+                                      {concededPassRetakeCodes.has(normaliseCode(u.code)) ? 'RETAKE (CP)' : 'RETAKE'}
                                     </span>
                                   )}
                                   {u.recommended && u.code !== 'ELECTIVE' && (
@@ -1357,8 +1944,8 @@ export default function PathwayPage() {
                                       OUTSIDE PLANNER
                                     </span>
                                   )}
-                                  {unitMessages.map((message) => (
-                                    <div key={message} className={styles.rowWarning} title={message}>
+                                  {unitMessages.map((message, mIdx) => (
+                                    <div key={`msg-${message}-${mIdx}`} className={styles.rowWarning} title={message}>
                                       <span aria-hidden="true">⚠</span> {message}.
                                     </div>
                                   ))}
@@ -1366,6 +1953,7 @@ export default function PathwayPage() {
                                 <td>
                                   <Badge
                                     label={
+                                      (u as any).isExtraUnit ? 'Extra Unit' :
                                       u.code === 'ELECTIVE' ? 'Elective Slot' :
                                       u.category === 'double_major' ? 'Double Major' :
                                       u.category === 'prescribed_elective' ? 'Prescribed Elec' :
@@ -1373,12 +1961,19 @@ export default function PathwayPage() {
                                       u.category.replace(/_/g, ' ')
                                     }
                                     cls={
+                                      (u as any).isExtraUnit ? 'badgeBlue' :
                                       u.code === 'ELECTIVE' ? 'badgePurple' :
-                                      u.category === 'core' ? 'badgeRed' :
-                                      u.category === 'major_core' ? 'badgeOrange' :
-                                      u.category === 'double_major' ? 'badgeYellow' :
-                                      u.category === 'mpu' ? 'badgeBlue' :
-                                      u.category === 'minor' ? 'badgeYellow' :
+                                      // Matches the canonical mapping in CourseListTable.tsx,
+                                      // the Study Planners page's reference: major_core is
+                                      // badgeYellow there, and double_major/minor fall to its
+                                      // default badgeGreen (neither has its own explicit case).
+                                      u.category === 'core' ? 'badgeBlue' :
+                                      u.category === 'major_core' ? 'badgeYellow' :
+                                      u.category === 'double_major' ? 'badgeGreen' :
+                                      u.category === 'mpu' ? 'badgeRed' :
+                                      u.category === 'minor' ? 'badgeGreen' :
+                                      u.category === 'prescribed_elective' ? 'badgeGreen' :
+                                      u.category === 'elective' ? 'badgeGreen' :
                                       'badgePurple'
                                     }
                                   />
@@ -1492,16 +2087,42 @@ export default function PathwayPage() {
                     type="button"
                     className={styles.btnSecondary}
                     onClick={handleDirectPdfDownload}
-                    disabled={isExporting}
+                    disabled={isExporting || isExportingExcel}
                     title="Directly download official custom study planner as PDF"
                   >
                     {isExporting ? '⏳ Generating PDF...' : '💾 Download PDF'}
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.btnSecondary}
+                    onClick={handleExcelDownload}
+                    disabled={isExporting || isExportingExcel}
+                    title="Download the study plan as a flat, sortable Excel sheet"
+                  >
+                    {isExportingExcel ? '⏳ Generating Excel...' : '📊 Download Excel'}
                   </button>
                 </div>
 
                 {warnings.length > 0 && (
                   <ul className={styles.warningList}>
                     {warnings.map((w, wIdx) => {
+                      // Suppress warnings for units already scheduled in break milestones
+                      const milestoneCodes = new Set(breakMilestones.map((bm: any) => normaliseCode(bm.unitCode)));
+                      if ('unitCode' in w && milestoneCodes.has(normaliseCode(w.unitCode))) return null;
+                      if ('unitCodes' in w && (w.unitCodes as string[]).some((c) => milestoneCodes.has(normaliseCode(c)))) return null;
+
+                      // Suppress no_offering_data or requisite warnings for unselected 'ELECTIVE' placeholder slots
+                      if ('unitCode' in w && normaliseCode(w.unitCode) === 'ELECTIVE') return null;
+
+                      // Suppress short_term_only warnings since break milestones handle them
+                      if (w.kind === 'short_term_only') return null;
+
+                      // Suppress WIL shortfall if break milestones provide the required credit points
+                      const totalWilMilestoneCp = breakMilestones.reduce((sum: number, bm: any) => sum + (bm.creditPoints ?? 0), 0);
+                      if (w.kind === 'requirement_shortfall' && w.category === 'wil' && totalWilMilestoneCp >= w.need) {
+                        return null;
+                      }
+
                       const message = describeWarning(w, DEFAULT_SCHEDULER_CONFIG.maxSemesters, planIntakeSemester);
                       if (!message || w.kind === 'over_capacity') return null;
 
@@ -1565,24 +2186,27 @@ export default function PathwayPage() {
                   </ul>
                 )}
 
-                {picker?.mode === 'add' && activeSlot && (
-                  <ElectivePicker
-                    title="Choose an elective"
-                    plannerUnits={pickerPlannerUnits}
-                    catalogueUnits={pickerCatalogueUnits}
-                    prefixes={cataloguePrefixes}
-                    loading={catalogueLoading}
-                    term={activeSlot.term}
-                    slots={pickerSlots}
-                    slotKey={activeSlotKey}
-                    onSlotChange={setPickerSlotKey}
-                    onChoose={(unit, source) => {
-                      const [year, semester] = activeSlotKey.split('-').map(Number);
-                      chooseElective(unit, source, year, semester as 1 | 2);
-                    }}
-                    onClose={() => setPicker(null)}
-                  />
-                )}
+                {picker?.mode === 'add' && activeSlot && (() => {
+                  const [activeY, activeS] = activeSlotKey.split('-').map(Number);
+                  return (
+                    <ElectivePicker
+                      title="Choose an elective"
+                      plannerUnits={pickerPlannerUnits}
+                      catalogueUnits={pickerCatalogueUnits}
+                      prefixes={cataloguePrefixes}
+                      loading={catalogueLoading}
+                      term={activeSlot.term}
+                      slots={pickerSlots}
+                      slotKey={activeSlotKey}
+                      onSlotChange={setPickerSlotKey}
+                      getUnmetPrereqReason={getUnmetPrereqReasonForSlot(activeY, activeS as 1 | 2)}
+                      onChoose={(unit, source) => {
+                        chooseElective(unit, source, activeY, activeS as 1 | 2);
+                      }}
+                      onClose={() => setPicker(null)}
+                    />
+                  );
+                })()}
 
                 {(() => {
                   // Collect codes for optional break units (summer/winter only)
@@ -1593,12 +2217,15 @@ export default function PathwayPage() {
                   );
 
                   // Filter out MPU units and optional break units (which are displayed in their own table below)
+                  const milestoneCodes = new Set(breakMilestones.map((bm: any) => normaliseCode(bm.unitCode)));
                   const nonMpuUnschedulable = (customPlan.unschedulableUnits ?? []).filter(
                     (u: any) =>
                       u.category !== 'mpu' &&
                       !u.code?.toUpperCase().startsWith('MPU') &&
-                      !breakTermCodes.has(normaliseCode(u.code))
+                      !breakTermCodes.has(normaliseCode(u.code)) &&
+                      !milestoneCodes.has(normaliseCode(u.code))
                   );
+
 
                   if (!isPlanEdited && messages.length === 0 && nonMpuUnschedulable.length > 0) {
                     return (
@@ -1616,22 +2243,103 @@ export default function PathwayPage() {
 
                 {/* Remaining MPU units */}
                 {(() => {
-                  const remainingMpus = getRemainingMpuUnits(activePlanner, dashboardData, takenCodes);
+                  const defaultRemainingMpus = getRemainingMpuUnits(activePlanner, dashboardData, takenCodes);
+                  const activeMpus = customMpuList ?? defaultRemainingMpus;
+                  const currentMpuCodes = new Set(activeMpus.map((m) => m.code));
+
+                  // All MPU units defined on the degree planner
+                  const plannerMpuCodes = new Set(
+                    (activePlanner?.units ?? [])
+                      .filter((tu: any) => tu.category === 'mpu' && tu.unit)
+                      .map((tu: any) => tu.unit.unit_code?.trim().toUpperCase())
+                  );
+
+                  // Planner MPU units currently not in the table
+                  const unplacedPlannerMpus = (activePlanner?.units ?? [])
+                    .filter((tu: any) => tu.category === 'mpu' && tu.unit)
+                    .map((tu: any) => ({
+                      code: tu.unit.unit_code?.trim().toUpperCase(),
+                      name: tu.unit.unit_name,
+                    }))
+                    .filter((u: any) => u.code && !currentMpuCodes.has(u.code) && !takenCodes.has(u.code));
+
+                  // All other MPU units in the entire database not on this planner and not in the table
+                  const otherAvailableMpus = allDatabaseMpus
+                    .filter(
+                      (u) =>
+                        u.code &&
+                        !plannerMpuCodes.has(u.code) &&
+                        !currentMpuCodes.has(u.code) &&
+                        !takenCodes.has(u.code)
+                    );
+
+                  const removeMpuUnit = (code: string) => {
+                    const next = activeMpus.filter((m) => m.code !== code);
+                    setCustomMpuList(next);
+                    setIsPlanEdited(true);
+                    showToast(`Removed ${code} from MPU requirements.`, 'info');
+                  };
+
+                  const addMpuUnit = (code: string) => {
+                    const found =
+                      unplacedPlannerMpus.find((m: any) => m.code === code) ||
+                      otherAvailableMpus.find((m: any) => m.code === code);
+                    if (!found) return;
+
+                    const next = [...activeMpus, found];
+                    setCustomMpuList(next);
+                    setIsPlanEdited(true);
+                    showToast(`Added ${found.code} to MPU requirements.`, 'info');
+                  };
+
+                  const totalAvailableToAdd = unplacedPlannerMpus.length + otherAvailableMpus.length;
 
                   return (
                     <div className={styles.mpuSection}>
                       <div className={styles.mpuHeader}>
                         <div className={styles.sectionTitle} style={{ margin: 0, fontSize: 13 }}>
-                          Remaining MPU Units ({remainingMpus.length})
+                          Remaining MPU Units ({activeMpus.length})
                         </div>
-                        <span className={styles.mpuSubtitle}>
-                          -
-                        </span>
+                        <select
+                          className={styles.addUnitSelect}
+                          style={{ marginLeft: 'auto' }}
+                          value=""
+                          disabled={totalAvailableToAdd === 0}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            e.target.value = ''; // Reset immediately
+                            if (val) {
+                              addMpuUnit(val);
+                            }
+                          }}
+                          title={totalAvailableToAdd === 0 ? 'All eligible MPU units are already included' : 'Add an MPU unit'}
+                        >
+                          <option value="" disabled hidden>
+                            + Add MPU unit
+                          </option>
+                          {unplacedPlannerMpus.length > 0 && (
+                            <optgroup label="From this planner">
+                              {unplacedPlannerMpus.map((u: any) => (
+                                <option key={u.code} value={u.code}>
+                                  {u.code} · {u.name}
+                                </option>
+                              ))}
+                            </optgroup>
+                          )}
+                          {otherAvailableMpus.length > 0 && (
+                            <optgroup label="Other MPU units">
+                              {otherAvailableMpus.map((u: any) => (
+                                <option key={u.code} value={u.code}>
+                                  {u.code} · {u.name}
+                                </option>
+                              ))}
+                            </optgroup>
+                          )}
+                        </select>
                       </div>
-
-                      {remainingMpus.length === 0 ? (
+                      {activeMpus.length === 0 ? (
                         <div className={styles.mpuEmptyAlert}>
-                          ✓ All required MPU units have been completed or are currently in progress!
+                          ✓ All required MPU units have been completed, exempted, or satisfied
                         </div>
                       ) : (
                         <div className={styles.mpuTableWrap}>
@@ -1640,38 +2348,39 @@ export default function PathwayPage() {
                               <col style={{ width: 120 }} />
                               <col style={{ width: 'auto' }} />
                               <col style={{ width: 140 }} />
-                              <col style={{ width: 140 }} />
+                              <col style={{ width: 80 }} />
                             </colgroup>
                             <thead>
                               <tr>
                                 <th>Unit Code</th>
                                 <th>Unit Title</th>
                                 <th>Type</th>
-                                <th>Status</th>
+                                <th style={{ textAlign: 'center' }}>Edit</th>
                               </tr>
                             </thead>
                             <tbody>
-                              {remainingMpus.map((mpu) => {
-                                const isCurrent = currentCodes.has(mpu.code);
-                                return (
-                                  <tr key={mpu.code}>
-                                    <td>
-                                      <InlineCode>{mpu.code}</InlineCode>
-                                    </td>
-                                    <td style={{ whiteSpace: 'normal' }}>{mpu.name}</td>
-                                    <td>
-                                      <Badge label="MPU" cls="badgeBlue" />
-                                    </td>
-                                    <td>
-                                      {isCurrent ? (
-                                        <span className={styles.statusInProgress}>● In Progress</span>
-                                      ) : (
-                                        <span className={styles.statusPending}>Pending</span>
-                                      )}
-                                    </td>
-                                  </tr>
-                                );
-                              })}
+                              {activeMpus.map((mpu) => (
+                                <tr key={mpu.code}>
+                                  <td>
+                                    <InlineCode>{mpu.code}</InlineCode>
+                                  </td>
+                                  <td style={{ whiteSpace: 'normal' }}>{mpu.name}</td>
+                                  <td>
+                                    <Badge label="MPU" cls="badgeRed" />
+                                  </td>
+                                  <td style={{ textAlign: 'center' }}>
+                                    <button
+                                      type="button"
+                                      className={styles.removeBtn}
+                                      onClick={() => removeMpuUnit(mpu.code)}
+                                      title={`Remove ${mpu.code} from MPU requirements`}
+                                      aria-label={`Remove ${mpu.code}`}
+                                    >
+                                      ✕
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
                             </tbody>
                           </table>
                         </div>
@@ -1689,16 +2398,7 @@ export default function PathwayPage() {
       {unitToRemove && (() => {
         const isCore = unitToRemove.category === 'core' || unitToRemove.category === 'major_core';
         const isElective = unitToRemove.category === 'elective' || unitToRemove.category === 'prescribed_elective';
-        
-        // Check if any other planned unit depends on this one as a prerequisite
-        const allPlannedUnits = (customPlan?.semesters ?? []).flatMap((s: any) => s.units);
-        const dependentUnits = allPlannedUnits.filter((other: any) => {
-          if (other.code === unitToRemove.code) return false;
-          const meta = planUnits.find((pu: any) => normaliseCode(pu.code) === normaliseCode(other.code));
-          return meta?.requisiteGroups?.some((g: any) =>
-            g.some((c: any) => c.unitCode && normaliseCode(c.unitCode) === normaliseCode(unitToRemove.code))
-          );
-        });
+        const dependentUnits = findDependentUnits(unitToRemove.code);
 
         return (
           <div className={styles.modalOverlay} onClick={() => setUnitToRemove(null)}>
@@ -1771,7 +2471,14 @@ export default function PathwayPage() {
                       }));
                     }
 
-                    applyEdit(removeUnit(customPlan.semesters, code));
+                    applyEdit(
+                      removeUnit(
+                        customPlan.semesters,
+                        code,
+                        currentBucket ? { year: currentBucket.year, semester: currentBucket.semester } : undefined
+                      )
+                    );
+
                     setUnitToRemove(null);
                     showToast(`Removed ${code} from study pathway.`, 'info');
                   }}
@@ -1783,6 +2490,161 @@ export default function PathwayPage() {
           </div>
         );
       })()}
+      {/* Semester Deletion Confirmation Modal: same shell as the unit-removal
+          modal above, reused rather than a second differently-styled dialog. */}
+      {semesterToDelete && (() => {
+        const targetBucket = (customPlan?.semesters ?? []).find(
+          (s: any) => s.year === semesterToDelete.year && s.semester === semesterToDelete.semester
+        );
+        const semesterUnits = targetBucket?.units ?? [];
+        const unitCount = semesterUnits.length;
+        const coreUnits = semesterUnits.filter((u: any) => u.category === 'core' || u.category === 'major_core');
+        const electiveUnits = semesterUnits.filter((u: any) => u.category === 'elective' || u.category === 'prescribed_elective');
+
+        // Same check as the unit-removal modal, once per unit in this semester,
+        // excluding dependents that are themselves being deleted along with it
+        const semesterCodes = new Set(semesterUnits.map((u: any) => normaliseCode(u.code)));
+        const dependentsByUnit = semesterUnits
+          .map((u: any) => ({
+            unit: u,
+            dependents: findDependentUnits(u.code).filter((d: any) => !semesterCodes.has(normaliseCode(d.code))),
+          }))
+          .filter((entry: any) => entry.dependents.length > 0);
+
+        return (
+          <div className={styles.modalOverlay} onClick={() => setSemesterToDelete(null)}>
+            <div className={styles.modalCard} onClick={(e) => e.stopPropagation()}>
+              <div className={styles.modalHeader}>
+                <span className={styles.modalTitle}>
+                  <span aria-hidden="true">⚠</span> Delete this semester?
+                </span>
+                <button
+                  type="button"
+                  className={styles.removeBtn}
+                  onClick={() => setSemesterToDelete(null)}
+                  style={{ background: 'transparent', border: 'none', fontSize: 13 }}
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className={styles.modalBody}>
+                <div>
+                  Are you sure you want to delete Year {semesterToDelete.year} Semester {semesterToDelete.semester}?
+                </div>
+
+                {unitCount > 0 && (
+                  <div className={styles.modalWarningBox}>
+                    <strong>Consequences of Deletion:</strong>
+                    <ul>
+                      {coreUnits.length > 0 && (
+                        <li>
+                          <strong>Compulsory Core Unit{coreUnits.length !== 1 ? 's' : ''}:</strong> {coreUnits.map((u: any) => u.code).join(', ')} required to satisfy degree requirements. Deleting this semester will block graduation until completed.
+                        </li>
+                      )}
+                      {electiveUnits.length > 0 && (
+                        <li>
+                          <strong>Credit Shortfall:</strong> Removing {electiveUnits.length} elective{electiveUnits.length !== 1 ? 's' : ''} reduces total earned credits and may leave the plan short of the graduation requirement.
+                        </li>
+                      )}
+                      {dependentsByUnit.map((entry: any) => (
+                        <li key={entry.unit.code}>
+                          <strong>Broken Prerequisite Chain:</strong> {entry.dependents.length} other planned unit{entry.dependents.length !== 1 ? 's' : ''} ({entry.dependents.map((d: any) => d.code).join(', ')}) depend on {entry.unit.code}!
+                        </li>
+                      ))}
+                      <li>
+                        {unitCount} unit{unitCount !== 1 ? 's' : ''} will be returned to the unplaced pool and can be re-added later.
+                      </li>
+                    </ul>
+                  </div>
+                )}
+              </div>
+
+              <div className={styles.modalActions}>
+                <button
+                  type="button"
+                  className={styles.btnSecondary}
+                  onClick={() => setSemesterToDelete(null)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className={styles.btnDanger}
+                  onClick={() => {
+                    applyEdit(removeSemester(customPlan.semesters, semesterToDelete.year, semesterToDelete.semester));
+                    showToast(
+                      `Removed Year ${semesterToDelete.year} Semester ${semesterToDelete.semester}. ${unitCount} unit${unitCount !== 1 ? 's' : ''} returned to the unplaced pool.`,
+                      'success'
+                    );
+                    setSemesterToDelete(null);
+                  }}
+                >
+                  Delete Semester
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+      {/* Extra Unit Confirmation Modal */}
+      {extraUnitTargetSemester && (
+        <div className={styles.modalOverlay} onClick={() => setExtraUnitTargetSemester(null)}>
+          <div className={styles.modalCard} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.modalHeader}>
+              <span className={styles.modalTitle}>
+                <span aria-hidden="true">⚠</span> Add Extra Unit (Beyond Degree Requirements)
+              </span>
+              <button
+                type="button"
+                className={styles.removeBtn}
+                onClick={() => setExtraUnitTargetSemester(null)}
+                style={{ background: 'transparent', border: 'none', fontSize: 13 }}
+              >
+                ✕
+              </button>
+            </div>
+            <div className={styles.modalBody}>
+              <div>
+                You are adding an extra unit into <strong>Year {extraUnitTargetSemester.year} Semester {extraUnitTargetSemester.semester}</strong>.
+              </div>
+              <div className={styles.modalWarningBox}>
+                <strong>Important Advising Notice:</strong>
+                <ul>
+                  <li>
+                    <strong>Degree Cap Exceeded:</strong> This student is already on track to satisfy standard graduation credit point requirements.
+                  </li>
+                </ul>
+              </div>
+            </div>
+            <div className={styles.modalActions}>
+              <button
+                type="button"
+                className={styles.btnSecondary}
+                onClick={() => setExtraUnitTargetSemester(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className={styles.btnPrimary}
+                onClick={() => {
+                  const target = extraUnitTargetSemester;
+                  setExtraUnitTargetSemester(null);
+                  openPicker({
+                    mode: 'add_extra',
+                    year: target.year,
+                    semester: target.semester,
+                    isExtraUnit: true,
+                  });
+                }}
+              >
+                Confirm & Choose Unit
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

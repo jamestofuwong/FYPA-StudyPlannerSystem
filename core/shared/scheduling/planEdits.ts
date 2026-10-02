@@ -42,13 +42,30 @@ function findPlaced(
 export function removeUnit(
   semesters: ReadonlyArray<CustomSemesterBucket>,
   unitCode: string,
+  at?: { year: number; semester: 1 | 2 },
 ): CustomSemesterBucket[] {
   const code = normaliseCode(unitCode);
-  // An emptied semester stays, since the advisor may be about to refill it
-  return semesters.map((bucket) => ({
-    ...bucket,
-    units: bucket.units.filter((unit) => normaliseCode(unit.code) !== code),
-  }));
+  return semesters.map((bucket) => {
+    // If a specific semester was targeted, ignore other semesters
+    if (at && (bucket.year !== at.year || bucket.semester !== at.semester)) {
+      return { ...bucket, units: [...bucket.units] };
+    }
+
+    // A generic placeholder like elective can exist multiple times; only remove one
+    if (code === 'ELECTIVE') {
+      const idx = bucket.units.findIndex((u) => normaliseCode(u.code) === code);
+      if (idx === -1) return { ...bucket, units: [...bucket.units] };
+      const units = [...bucket.units];
+      units.splice(idx, 1);
+      return { ...bucket, units };
+    }
+
+    // Standard units: remove wherever it sits
+    return {
+      ...bucket,
+      units: bucket.units.filter((unit) => normaliseCode(unit.code) !== code),
+    };
+  });
 }
 
 /**
@@ -66,7 +83,10 @@ export function addUnit(
   if (!targetExists) return copy(semesters);
 
   const code = normaliseCode(unit.code);
-  if (findPlaced(semesters, code)) return moveUnit(semesters, code, year, semester);
+  // Generic placeholders like 'ELECTIVE' can appear multiple times and should never trigger moveUnit
+  if (code !== 'ELECTIVE' && findPlaced(semesters, code)) {
+    return moveUnit(semesters, code, year, semester);
+  }
 
   const placed: ScheduledUnit = {
     code: unit.code,
@@ -150,6 +170,20 @@ export function replaceUnit(
     units[index] = replacement;
     return { ...bucket, units };
   });
+}
+
+/**
+ * Removes the { year, semester } bucket entirely, units and all. An unknown
+ * slot leaves the plan as it was. This function does not concern itself with
+ * where those units end up; same separation as removeUnit, which only ever
+ * touches the semesters array. The page decides what else needs updating.
+ */
+export function removeSemester(
+  semesters: ReadonlyArray<CustomSemesterBucket>,
+  year: number,
+  semester: 1 | 2,
+): CustomSemesterBucket[] {
+  return copy(semesters.filter((bucket) => !(bucket.year === year && bucket.semester === semester)));
 }
 
 /**

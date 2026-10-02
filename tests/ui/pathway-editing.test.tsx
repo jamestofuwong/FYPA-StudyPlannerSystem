@@ -774,3 +774,140 @@ describe('removing a unit asks for confirmation', () => {
     expect(card.queryByText(/Compulsory Core Unit/)).toBeNull();
   });
 });
+
+describe('deleting a semester', () => {
+  const deleteButtons = () => screen.getAllByLabelText(/^Delete Year \d+ Semester \d+$/i);
+  const overlay = () => document.querySelector('[class*="modalOverlay"]') as HTMLElement;
+  const modalCard = () => document.querySelector('[class*="modalCard"]') as HTMLElement;
+
+  test('deleting an empty semester needs no confirmation and removes it', async () => {
+    render(<Harness />);
+    await generate();
+
+    fireEvent.click(screen.getByText('+ Add semester'));
+    await screen.findByText(/YEAR 2 · SEM 1/i);
+    expect(deleteButtons()).toHaveLength(3);
+
+    fireEvent.click(deleteButtons()[2]);
+
+    expect(screen.queryByText(/Delete this semester\?/i)).toBeNull();
+    await waitFor(() => expect(deleteButtons()).toHaveLength(2));
+    expect(screen.queryByText(/YEAR 2 · SEM 1/i)).toBeNull();
+  });
+
+  test('deleting a semester with units opens the same modal shell used for unit removal, naming the unit count', async () => {
+    render(<Harness />);
+    await generate();
+
+    // Y1 S1 holds INTRO, C1, C2, C3 (4 units)
+    fireEvent.click(deleteButtons()[0]);
+
+    const card = within(await waitFor(() => modalCard()));
+    expect(card.getByText(/Delete this semester\?/)).toBeTruthy();
+    expect(card.getByText(/4 units will be returned to the unplaced pool/i)).toBeTruthy();
+  });
+
+  test('a compulsory core unit and a broken prerequisite chain are both surfaced, reusing the unit-removal modal\'s own checks', async () => {
+    render(<Harness />);
+    await generate();
+
+    // Y1 S1 holds INTRO/C1/C2/C3, all core; ADV in Y1 S2 needs INTRO
+    fireEvent.click(deleteButtons()[0]);
+
+    const card = within(await waitFor(() => modalCard()));
+    expect(card.getByText(/Compulsory Core Units?:/)).toBeTruthy();
+    expect(card.getByText(/INTRO, C1, C2, C3/)).toBeTruthy();
+    expect(card.getByText(/Broken Prerequisite Chain/)).toBeTruthy();
+    expect(card.getByText(/depend on INTRO/i)).toBeTruthy();
+  });
+
+  test('clicking Cancel closes the modal with no change to the plan', async () => {
+    render(<Harness />);
+    await generate();
+
+    fireEvent.click(deleteButtons()[0]);
+    await screen.findByText(/Delete this semester\?/);
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+
+    expect(screen.queryByText(/Delete this semester\?/)).toBeNull();
+    expect(screen.getByText('C1', { selector: 'code' })).toBeTruthy();
+    expect(screen.getByText('INTRO', { selector: 'code' })).toBeTruthy();
+    expect(screen.queryByText('edited')).toBeNull();
+  });
+
+  test('clicking the overlay also closes the modal with no change, same as the unit-removal modal', async () => {
+    render(<Harness />);
+    await generate();
+
+    fireEvent.click(deleteButtons()[0]);
+    await screen.findByText(/Delete this semester\?/);
+    fireEvent.click(overlay());
+
+    expect(screen.queryByText(/Delete this semester\?/)).toBeNull();
+    expect(screen.getByText('C1', { selector: 'code' })).toBeTruthy();
+  });
+
+  test('confirming via "Delete Semester" removes the semester, returns its units to the picker, marks the plan edited, and toasts', async () => {
+    render(<Harness />);
+    await generate();
+
+    expect(within(pickers()[1]).queryByText(/^C1 ·/)).toBeNull();
+
+    fireEvent.click(deleteButtons()[0]);
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete Semester' }));
+
+    await waitFor(() => expect(screen.queryByText('C1', { selector: 'code' })).toBeNull());
+    expect(screen.queryByText('INTRO', { selector: 'code' })).toBeNull();
+    // The only remaining semester's picker now offers C1 again
+    expect(within(pickers()[0]).getByText(/^C1 ·/)).toBeTruthy();
+    expect(await screen.findByText('edited')).toBeTruthy();
+    expect(await screen.findByText(/Removed Year 1 Semester 1\. 4 units returned to the unplaced pool\./i)).toBeTruthy();
+  });
+
+  test('a recommended unit in the deleted semester is dropped the same way Remove would drop it', async () => {
+    const withRecommended = () => ({
+      semesters: [
+        {
+          year: 1,
+          semester: 1 as const,
+          units: [
+            { code: 'INTRO', name: 'Intro to Programming', category: 'core' },
+            { code: 'REC1', name: 'Recommended Unit', category: 'elective', recommended: true },
+          ],
+        },
+        { year: 1, semester: 2 as const, units: [{ code: 'ADV', name: 'Advanced Programming', category: 'core' }] },
+      ],
+      unschedulableUnits: [],
+      warnings: [],
+    });
+    global.fetch = jest.fn((url: string) => {
+      if (String(url).includes('/api/custom-planner')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            success: true,
+            data: withRecommended(),
+            units: PLAN_UNITS,
+            intakeSemester: 1,
+            requirements: REQUIREMENTS,
+            completedUnits: [],
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    }) as unknown as typeof fetch;
+
+    render(<Harness />);
+    await generate();
+
+    expect(screen.getByText('RECOMMENDED')).toBeTruthy();
+
+    fireEvent.click(deleteButtons()[0]);
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete Semester' }));
+
+    // Same end state removeUnit('REC1') would leave: the row (and its
+    // RECOMMENDED tag) is simply gone, no special handling either way
+    await waitFor(() => expect(screen.queryByText('REC1', { selector: 'code' })).toBeNull());
+    expect(screen.queryByText('RECOMMENDED')).toBeNull();
+  });
+});

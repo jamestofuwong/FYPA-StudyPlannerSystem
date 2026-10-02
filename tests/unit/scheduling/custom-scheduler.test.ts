@@ -807,4 +807,101 @@ describe('Custom Planner Scheduler', () => {
       if (!result.ok) expect(result.error).toMatch(/config/);
     });
   });
+
+  // The capstone semester (wherever "Project B" lands) backfills leftover pool
+  // electives into a generic ELECTIVE placeholder when there is room left. A
+  // prescribed_elective is compulsory and cannot be substituted this way: a
+  // blocked one must stay visible, not be disguised as a swappable elective.
+  describe('capstone elective backfill', () => {
+    const capstoneB = unit('CAPSTONEB', { name: 'Final Year Project B', offeringSemesters: [] });
+    const blocked = (code: string, category: string) =>
+      unit(code, {
+        category,
+        offeringSemesters: [],
+        requisiteGroups: [[{ type: 'unit', unitCode: 'NEVER', requisiteType: 'prerequisite' }]],
+      });
+
+    test('a blocked prescribed_elective is not converted to the ELECTIVE placeholder', () => {
+      const result = buildCustomPlan(
+        [capstoneB, blocked('BLOCKED-PE', 'prescribed_elective')],
+        [], 2024, 1,
+      );
+
+      const capstoneSemester = result.semesters.find((s) => s.units.some((u) => u.code === 'CAPSTONEB'))!;
+      expect(capstoneSemester.units.map((u) => u.code)).toEqual(['CAPSTONEB']);
+      expect(capstoneSemester.units.some((u) => u.code === 'ELECTIVE')).toBe(false);
+    });
+
+    test('that blocked prescribed_elective is reported by its own code, with the missing prerequisite named', () => {
+      const result = buildCustomPlan(
+        [capstoneB, blocked('BLOCKED-PE', 'prescribed_elective')],
+        [], 2024, 1,
+      );
+
+      expect(result.unschedulableUnits.map((u) => u.code)).toContain('BLOCKED-PE');
+      expect(result.warnings).toContainEqual({
+        kind: 'requisite_violation',
+        unitCode: 'BLOCKED-PE',
+        missing: ['NEVER'],
+      });
+    });
+
+    test('a prescribed_elective blocked by a Conceded Pass names both the missing unit and the Conceded Pass reason', () => {
+      // The exact shape of the real case this fix targets: COS30015 needing
+      // TNE10006, which the student holds only as a Conceded Pass.
+      const gate = unit('CONCEDEDGATE');
+      const pe = unit('BLOCKED-CP', {
+        category: 'prescribed_elective',
+        offeringSemesters: [],
+        requisiteGroups: [[{ type: 'unit', unitCode: 'CONCEDEDGATE', requisiteType: 'prerequisite' }]],
+      });
+
+      const result = buildCustomPlan([capstoneB, pe], ['CONCEDEDGATE'], 2024, 1, 1, ['CONCEDEDGATE']);
+
+      const capstoneSemester = result.semesters.find((s) => s.units.some((u) => u.code === 'CAPSTONEB'))!;
+      expect(capstoneSemester.units.some((u) => u.code === 'ELECTIVE')).toBe(false);
+      expect(result.unschedulableUnits.map((u) => u.code)).toContain('BLOCKED-CP');
+      expect(result.warnings).toContainEqual({
+        kind: 'requisite_violation',
+        unitCode: 'BLOCKED-CP',
+        missing: ['CONCEDEDGATE'],
+        concededPass: ['CONCEDEDGATE'],
+      });
+    });
+
+    test('a plain elective in the same blocked situation still converts to the ELECTIVE placeholder (no regression)', () => {
+      const result = buildCustomPlan(
+        [capstoneB, blocked('BLOCKED-EL', 'elective')],
+        [], 2024, 1,
+      );
+
+      const capstoneSemester = result.semesters.find((s) => s.units.some((u) => u.code === 'CAPSTONEB'))!;
+      expect(capstoneSemester.units.map((u) => u.code)).toEqual(['CAPSTONEB', 'ELECTIVE']);
+      expect(result.unschedulableUnits.map((u) => u.code)).not.toContain('BLOCKED-EL');
+      expect(result.warnings.some((w: any) => w.unitCode === 'BLOCKED-EL')).toBe(false);
+    });
+
+    test('a blocked prescribed_elective is untouched even when it is the only thing left in the pool', () => {
+      // Exercises the OTHER backfill path: "if only electives remain, drop the
+      // pool and end at Project B" must not also silently drop a compulsory unit.
+      const result = buildCustomPlan(
+        [capstoneB, blocked('BLOCKED-PE', 'prescribed_elective')],
+        [], 2024, 1,
+      );
+
+      expect(result.unschedulableUnits.map((u) => u.code)).toContain('BLOCKED-PE');
+      expect(result.warnings.some((w: any) => w.unitCode === 'BLOCKED-PE' && w.kind === 'requisite_violation')).toBe(true);
+    });
+
+    test('a mix of a blocked prescribed_elective and a blocked plain elective: only the elective is converted', () => {
+      const result = buildCustomPlan(
+        [capstoneB, blocked('BLOCKED-PE', 'prescribed_elective'), blocked('BLOCKED-EL', 'elective')],
+        [], 2024, 1,
+      );
+
+      const capstoneSemester = result.semesters.find((s) => s.units.some((u) => u.code === 'CAPSTONEB'))!;
+      expect(capstoneSemester.units.map((u) => u.code)).toEqual(['CAPSTONEB', 'ELECTIVE']);
+      expect(result.unschedulableUnits.map((u) => u.code)).toEqual(['BLOCKED-PE']);
+    });
+  });
 });
