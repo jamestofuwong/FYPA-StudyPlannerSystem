@@ -11,11 +11,12 @@
 /* ── Header ─────────────────────────────────────────────────────────────────── */
 
 .header {
+  /* Title, subtitle, then the button to the other view, stacked. Both class estimation pages lay their
+     header out the same way, so the button is always in the same place whatever the window width. */
   display: flex;
+  flex-direction: column;
   align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
+  gap: 10px;
   margin-bottom: 4px;
 }
 
@@ -680,4 +681,196 @@
 .reportLink:hover {
   background: var(--accent-blue);
   color: #fff;
+}
+
+/* ── The three-step layout ─────────────────────────────────────────────────
+   Steps, tabs and the paged table live in components/ui.module.css. These are the pieces specific to what
+   the estimator shows inside them. */
+
+.subPanel {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.progressHead {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.tabIntro {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+.muted {
+  color: var(--text-muted);
+}
+
+.ok {
+  color: var(--accent-green);
+}
+
+.bad {
+  color: var(--accent-red);
+}
+
+.warn {
+  color: var(--accent-orange);
+}
+
+.headcount {
+  color: var(--accent-blue);
+  font-weight: 600;
+}
+
+/* Student filters, beside the search box. */
+.filterChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip,
+.chipActive {
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  padding: 4px 10px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.chip span,
+.chipActive span {
+  margin-left: 4px;
+  opacity: 0.7;
+}
+
+.chip:hover {
+  border-color: var(--accent-blue);
+}
+
+.chipActive {
+  border-color: var(--accent-blue);
+  background: var(--active-bg);
+  color: var(--accent-blue);
+  font-weight: 600;
+}
+
+/* One student's estimate, in sentences. */
+.studentDetail {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  line-height: 1.5;
+  white-space: normal;
+}
+
+.studentDetail strong {
+  color: var(--text-primary);
+}
+
+.rawToggle summary {
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* The Checks tab. */
+.checks {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.checksHeading {
+  margin: 6px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+/* How the estimate narrows: owed, then takeable, then predicted. */
+.funnel {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.funnel > div {
+  flex: 1 1 150px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  background: var(--surface-bg);
+}
+
+.funnel strong {
+  font-size: 18px;
+  color: var(--text-primary);
+}
+
+.funnel span {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.funnel em {
+  font-style: normal;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.funnelArrow {
+  align-self: center;
+  color: var(--text-muted);
+}
+
+/* The run log: closed by default, problems only unless asked. */
+.logDetails {
+  margin-top: 4px;
+}
+
+.logDetails > summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.logScope {
+  display: flex;
+  gap: 6px;
+  margin: 8px 0;
+}
+
+.logScope button {
+  background: none;
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  padding: 3px 10px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.logScope .scopeActive {
+  border-color: var(--accent-blue);
+  color: var(--accent-blue);
 }

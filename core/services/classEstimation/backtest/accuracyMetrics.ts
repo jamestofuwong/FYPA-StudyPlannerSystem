@@ -18,7 +18,7 @@
 // Two further figures answer questions the headline cannot:
 //   withinTolerance   the share of units whose own prediction landed within 30% of reality, which is closer
 //                     to how a Head of Department reads the table, one unit at a time
-//   student recall    of the units students actually took, the share the estimator named for them, which
+//   student recall    of the units students took, the share the estimator named for them, which
 //                     separates "the totals came out right by accident" from "it knew who takes what"
 // ============================================================
 

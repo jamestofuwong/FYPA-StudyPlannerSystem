@@ -1,9 +1,13 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useScrollToTopOnMount } from '../../../lib/scrollToTop';
 import styles from './page.module.css';
+import ui from './components/ui.module.css';
+import { DataTable } from './components/DataTable';
+import { Step, Tabs, Figure } from './components/Layout';
+import { DEFAULT_CLASS_ESTIMATION_CONFIG } from '../../../../core/shared/types/classEstimation';
 import type { EstimationPreview } from '../../../../core/services/classEstimation/estimationPreview';
 import { describeAcademicNow } from '../../../../core/services/classEstimation/academicCalendar';
 import {
@@ -113,6 +117,26 @@ const NEW_INTAKE_KEY = 'class_estimation_new_intake';
 
 let _logKey = 0;
 
+/** The tabs results are split across, so only one long list is ever on screen. */
+type ResultsTab = 'units' | 'electives' | 'students' | 'checks';
+type StudentFilter = 'all' | 'major' | 'commonCore' | 'notEstimated' | 'error';
+
+const DEFAULT_LOAD_CAP = DEFAULT_CLASS_ESTIMATION_CONFIG.loadCap;
+
+/** Where students came from, in words rather than the internal source ids. */
+const SOURCE_NAMES: Record<string, string> = {
+  portal: 'the portal',
+  import: 'DPA files',
+  mock: 'generated test data',
+  mixed: 'several sources',
+};
+
+const ELECTIVE_TYPE: Record<string, string> = {
+  prescribed: 'Prescribed',
+  freeElective: 'Free',
+  mixed: 'Both',
+};
+
 /**
  * What the page was showing, kept so leaving for the Head of Department view and coming back does not throw
  * the last run away. Next.js unmounts a page on navigation, and every useState below goes with it.
@@ -132,7 +156,8 @@ type EstimatorMemory = {
   maxId: string;
   retention: string;
   newIntake: string;
-  openRun: SavedRunDetail | null;
+  resultsTab: ResultsTab;
+  studentFilter: StudentFilter;
   runLabel: string;
   runStatusMsg: string | null;
   previewStatus: 'idle' | 'loading' | 'done' | 'error';
@@ -191,7 +216,13 @@ export default function ClassEstimationPage() {
   // Brand-new students the HoD expects. They are not in the portal, so there is nothing to derive it from.
   const [newIntake, setNewIntake] = useState(remembered?.newIntake ?? '0');
   const [runs, setRuns] = useState<SavedRun[]>([]);
-  const [openRun, setOpenRun] = useState<SavedRunDetail | null>(remembered?.openRun ?? null);
+  const [resultsTab, setResultsTab] = useState<ResultsTab>(remembered?.resultsTab ?? 'units');
+  const [studentFilter, setStudentFilter] = useState<StudentFilter>(remembered?.studentFilter ?? 'all');
+  // Step 1 folds once students are loaded; this opens it again. Not remembered: arriving back on the page
+  // with students loaded should show the result, not the loading controls.
+  const [loadOpen, setLoadOpen] = useState(false);
+  // The run log shows only problems unless asked, since 500 lines of successes bury the few that matter.
+  const [logScope, setLogScope] = useState<'problems' | 'all'>('problems');
   const [runLabel, setRunLabel] = useState(remembered?.runLabel ?? '');
   const [runStatusMsg, setRunStatusMsg] = useState<string | null>(remembered?.runStatusMsg ?? null);
   const [savingRun, setSavingRun] = useState(false);
@@ -218,7 +249,7 @@ export default function ClassEstimationPage() {
   useEffect(() => {
     estimatorMemory = {
       runStatus, progress, summary, log, errorMsg, minId, maxId, retention, newIntake,
-      openRun, runLabel, runStatusMsg, previewStatus, preview, previewError,
+      resultsTab, studentFilter, runLabel, runStatusMsg, previewStatus, preview, previewError,
       source, files, importStatus, importResult, importError,
     };
   });
@@ -319,17 +350,9 @@ export default function ClassEstimationPage() {
     }
   };
 
-  const viewRun = async (id: string) => {
-    if (openRun?.id === id) { setOpenRun(null); return; }   // clicking the open one closes it
-    const res = await fetch(`/api/class-estimation/runs/${id}`).catch(() => null);
-    if (!res?.ok) { setRunStatusMsg('Could not load that run.'); return; }
-    setOpenRun(await res.json());
-  };
-
   const deleteRun = async (id: string) => {
     const res = await fetch(`/api/class-estimation/runs/${id}`, { method: 'DELETE' }).catch(() => null);
     if (!res?.ok) { setRunStatusMsg('Could not delete that run.'); return; }
-    if (openRun?.id === id) setOpenRun(null);
     refreshRuns();
   };
 
@@ -596,8 +619,41 @@ export default function ClassEstimationPage() {
   };
 
   const progressCardTitle =
-    isRunning          ? 'Fetching Degree Audits' :
-    runStatus === 'done' ? 'Completed' : 'Stopped';
+    isRunning          ? 'Fetching transcripts' :
+    runStatus === 'done' ? 'Finished' : 'Stopped';
+
+  // ── Step 1 folds to a single line once students are loaded, unless a run is in progress or it was opened.
+  const loadedCount = Number(stored?.storedStudents) || 0;
+  const loadFolded = loadedCount > 0 && !isRunning && !loadOpen;
+  // Guarded: a response without bySource, from an older server or an error body, must not take the page down.
+  const loadedFrom = Object.entries(stored?.bySource ?? {})
+    .map(([k, n]) => `${SOURCE_NAMES[k] ?? k} (${Number(n).toLocaleString()})`)
+    .join(', ');
+
+  const problems = log.filter((entry) => entry.type !== 'done');
+  const shownLog = logScope === 'all' ? log : problems;
+
+  // ── Figures for step 2. Pipeline counts live on the Checks tab; these are what a reader actually wants.
+  const s = preview?.summary;
+  const estimatedCount = s ? s.students - s.noMajorOrPlanner - s.errors : 0;
+  const needsLook = s ? s.noMajorOrPlanner + s.errors : 0;
+  const unitsRunning = s ? s.totals.units - s.totals.unitsWithNoStudents : 0;
+
+  const studentRows = (preview?.students ?? []).filter((student) => {
+    if (studentFilter === 'all') return true;
+    if (studentFilter === 'major') return student.basis === 'major' && !student.error;
+    if (studentFilter === 'commonCore') return student.basis === 'commonCore' && !student.error;
+    if (studentFilter === 'error') return Boolean(student.error);
+    return !student.error && !student.basis;   // not estimated
+  });
+
+  const filterCounts = preview ? {
+    all: preview.students.length,
+    major: preview.students.filter((x) => x.basis === 'major' && !x.error).length,
+    commonCore: preview.students.filter((x) => x.basis === 'commonCore' && !x.error).length,
+    notEstimated: preview.students.filter((x) => !x.error && !x.basis).length,
+    error: preview.students.filter((x) => Boolean(x.error)).length,
+  } : null;
 
   return (
     <div className={styles.panel} ref={rootRef}>
@@ -607,20 +663,35 @@ export default function ClassEstimationPage() {
         <div>
           <h1 className={styles.title}>Class Estimation</h1>
           <p className={styles.subtitle}>
-            Estimate next-semester enrollment headcount for each unit
+            How many students to expect in each unit next semester, worked out from current students&apos;
+            transcripts. Three steps: load the students, run the estimate, save it.
           </p>
         </div>
-        {/* The read-only view of a saved run, without the scrape controls or the per-student diagnostics.
-            A button rather than a text link, since it is the page most people will actually want. */}
+        {/* The read-only view of a saved run, without the controls or the per-student detail. */}
         <Link href="/class-estimation/report" className={styles.reportLink}>
           Head of Department view →
         </Link>
       </div>
 
-      {/* ── Where transcripts come from ──────────────────────────────────────── */}
-      <div className={styles.card}>
-        <div className={styles.sectionTitle}>Student Data Source</div>
-
+      {/* ── Step 1: load students ────────────────────────────────────────────── */}
+      <Step
+        number={1}
+        title="Load current students"
+        explainer="Choose where transcripts come from. Each student's record is read once and kept in memory only, never saved."
+        done={loadedCount > 0 && !isRunning}
+        folded={loadFolded}
+        summary={
+          <>
+            <strong>{loadedCount.toLocaleString()} students loaded</strong>
+            {loadedFrom && ` from ${loadedFrom}`}
+            {summary && ` · last fetch: ${summary.completed.toLocaleString()} read`}
+            {summary && summary.skipped > 0 && `, ${summary.skipped} skipped`}
+            {summary && summary.failed > 0 && `, ${summary.failed} failed`}
+          </>
+        }
+        onToggle={loadedCount > 0 && !isRunning ? () => setLoadOpen(!loadOpen) : undefined}
+        toggleLabel={loadFolded ? 'Load again' : 'Hide'}
+      >
         <div className={styles.sourceRow}>
           {sourceOptions.map((option) => (
             <button
@@ -636,269 +707,187 @@ export default function ClassEstimationPage() {
           ))}
         </div>
 
-        {stored && stored.storedStudents > 0 && (
-          <div className={styles.storedBadge}>
-            <span className={styles.statusDot} style={{ background: 'var(--accent-green)' }} />
-            {stored.storedStudents.toLocaleString()} student(s) loaded
-            {Object.keys(stored.bySource).length > 0 && ` · from ${Object.entries(stored.bySource).map(([k, n]) => `${k} (${n})`).join(', ')}`}
-          </div>
-        )}
-      </div>
-
-      {/* ── Imported files ───────────────────────────────────────────────────── */}
-      {source === 'import' && (
-        <div className={styles.card}>
-          <div className={styles.sectionTitle}>Import Student DPA Files</div>
-
-          <div
-            className={`${styles.dropZone} ${dragging ? styles.dropZoneActive : ''}`}
-            onClick={() => fileInputRef.current?.click()}
-            onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-            onDragLeave={() => setDragging(false)}
-            onDrop={(e) => { e.preventDefault(); setDragging(false); addFiles(e.dataTransfer.files); }}
-          >
-            {files.length === 0
-              ? 'Drag DPA files here, or click to choose. One file per student, or one sheet holding many.'
-              : `${files.length} file(s) ready. Drop more to replace this selection.`}
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              accept=".xlsx,.xls,.csv"
-              style={{ display: 'none' }}
-              onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }}
-            />
-          </div>
-
-          {files.length > 0 && !importResult && (
-            <div className={styles.fileList}>
-              {files.map((file) => (
-                <div key={file.name} className={styles.fileRow}>
-                  <span className={styles.fileName}>{file.name}</span>
-                  <span className={styles.fileNote}>{(file.size / 1024).toFixed(0)} KB</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Per-file outcome, so one unreadable file is visible rather than lost in a total. */}
-          {importResult && (
-            <div className={styles.fileList}>
-              {importResult.files.map((file) => (
-                <div
-                  key={file.filename}
-                  className={`${styles.fileRow} ${file.ok ? styles.fileRowOk : styles.fileRowFail}`}
-                >
-                  <span>{file.ok ? '✓' : '✗'}</span>
-                  <span className={styles.fileName}>{file.filename}</span>
-                  <span className={styles.fileNote}>
-                    {file.ok
-                      ? `${file.students.length} student(s)${file.rowWarnings.length > 0 ? ` · ${file.rowWarnings.length} row warning(s)` : ''}`
-                      : file.error}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {importResult && (
-            <p className={styles.hintText} style={{ marginTop: 8 }}>
-              {importResult.preview
-                ? `Preview only, nothing stored yet: ${importResult.totalStudents} student(s) across ${importResult.totalFiles} file(s)`
-                : `Stored ${importResult.storedStudents} student(s), replacing any previous batch`}
-              {importResult.filesFailed > 0 && ` · ${importResult.filesFailed} file(s) failed`}
-            </p>
-          )}
-
-          {importError && <div className={styles.errorBox}>{importError}</div>}
-
-          <div className={styles.actionRow}>
-            <button
-              className={styles.btnSecondary}
-              disabled={files.length === 0 || importStatus === 'working'}
-              onClick={() => runImport(true)}
+        {/* Imported DPA files */}
+        {source === 'import' && (
+          <div className={styles.subPanel}>
+            <div
+              className={`${styles.dropZone} ${dragging ? styles.dropZoneActive : ''}`}
+              onClick={() => fileInputRef.current?.click()}
+              onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={(e) => { e.preventDefault(); setDragging(false); addFiles(e.dataTransfer.files); }}
             >
-              {importStatus === 'working' ? 'Reading…' : 'Preview'}
-            </button>
-            <button
-              className={styles.btnPrimary}
-              disabled={files.length === 0 || importStatus === 'working'}
-              onClick={() => runImport(false)}
-            >
-              Import {files.length > 0 ? `${files.length} file(s)` : ''}
-            </button>
-            {files.length > 0 && (
-              <button
-                className={styles.btnSecondary}
-                disabled={importStatus === 'working'}
-                onClick={() => { setFiles([]); setImportResult(null); setImportError(null); setImportStatus('idle'); }}
-              >
-                Clear
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ── Scrape configuration + start ─────────────────────────────────────── */}
-      {source !== 'import' && (
-      <div className={styles.card}>
-        <div className={styles.sectionTitle}>
-          {source === 'mock' ? 'Mock Data' : 'Portal Session'}
-        </div>
-
-        {source === 'mock' ? (
-          <div className={styles.statusRow}>
-            <span className={styles.statusDot} style={{ background: 'var(--accent-green)' }} />
-            <span style={{ fontSize: 12, color: 'var(--accent-green)' }}>
-              Ready · generated from the planners loaded in this system, no login needed
-            </span>
-          </div>
-        ) : (
-          <>
-            <div className={styles.statusRow}>
-              <span
-                className={styles.statusDot}
-                style={{ background: isLoggedIn ? 'var(--accent-green)' : 'var(--text-muted)' }}
+              {files.length === 0
+                ? 'Drag DPA files here, or click to choose. One file per student, or one sheet holding many.'
+                : `${files.length} file(s) ready. Drop more to replace this selection.`}
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept=".xlsx,.xls,.csv"
+                style={{ display: 'none' }}
+                onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }}
               />
-              <span style={{ fontSize: 12, color: isLoggedIn ? 'var(--accent-green)' : 'var(--text-muted)' }}>
-                {isLoggedIn
-                  ? `Connected · ${studentCount.toLocaleString()} students loaded`
-                  : 'Not connected'}
-              </span>
             </div>
 
-            {!isLoggedIn && (
+            {/* A file list long enough to matter is paged like everything else on the page. */}
+            {importResult ? (
+              <DataTable
+                rows={importResult.files}
+                rowKey={(file) => file.filename}
+                searchText={(file) => file.filename}
+                searchPlaceholder="Find a file"
+                pageSize={8}
+                columns={[
+                  { key: 'ok', label: '', width: '24px', render: (file) => (file.ok ? <span className={styles.ok}>✓</span> : <span className={styles.bad}>✗</span>) },
+                  { key: 'name', label: 'File', width: 'minmax(140px, 1fr)', render: (file) => file.filename, sortValue: (file) => file.filename },
+                  {
+                    key: 'result', label: 'Result', width: 'minmax(160px, 1.4fr)',
+                    render: (file) => (file.ok
+                      ? `${file.students.length} student(s)${file.rowWarnings.length ? ` · ${file.rowWarnings.length} row warning(s)` : ''}`
+                      : file.error),
+                  },
+                ]}
+              />
+            ) : files.length > 0 && (
+              <p className={styles.hintText}>{files.map((file) => file.name).slice(0, 6).join(', ')}{files.length > 6 ? ` and ${files.length - 6} more` : ''}</p>
+            )}
+
+            {importResult && (
               <p className={styles.hintText}>
-                Log in to the portal via the top-bar button before running estimation.
+                {importResult.preview
+                  ? `Checked, nothing loaded yet: ${importResult.totalStudents} student(s) in ${importResult.totalFiles} file(s).`
+                  : `Loaded ${importResult.storedStudents} student(s), replacing any earlier batch.`}
+                {importResult.filesFailed > 0 && ` ${importResult.filesFailed} file(s) could not be read.`}
               </p>
             )}
-          </>
+            {importError && <div className={styles.errorBox}>{importError}</div>}
+
+            <div className={styles.actionRow}>
+              <button className={styles.btnSecondary} disabled={files.length === 0 || importStatus === 'working'} onClick={() => runImport(true)}>
+                {importStatus === 'working' ? 'Reading…' : 'Check files'}
+              </button>
+              <button className={styles.btnPrimary} disabled={files.length === 0 || importStatus === 'working'} onClick={() => runImport(false)}>
+                Load {files.length > 0 ? `${files.length} file(s)` : 'files'}
+              </button>
+              {files.length > 0 && (
+                <button
+                  className={styles.btnSecondary}
+                  disabled={importStatus === 'working'}
+                  onClick={() => { setFiles([]); setImportResult(null); setImportError(null); setImportStatus('idle'); }}
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
         )}
 
-        {/* ID range filter */}
-        <div className={styles.rangeRow}>
-          <div className={styles.rangeField}>
-            <label className={styles.rangeLabel}>Min Student ID</label>
-            <input
-              className={styles.rangeInput}
-              type="number"
-              placeholder="e.g. 102780000"
-              value={minId}
-              onChange={(e) => setMinId(e.target.value)}
-              disabled={isRunning}
-            />
-          </div>
-          <div className={styles.rangeField}>
-            <label className={styles.rangeLabel}>Max Student ID</label>
-            <input
-              className={styles.rangeInput}
-              type="number"
-              placeholder="e.g. 102800000"
-              value={maxId}
-              onChange={(e) => setMaxId(e.target.value)}
-              disabled={isRunning}
-            />
-          </div>
-        </div>
-        <p className={styles.hintText} style={{ marginTop: 4 }}>
-          Leave both fields empty to process all students.
-        </p>
+        {/* Portal or generated students */}
+        {source !== 'import' && (
+          <div className={styles.subPanel}>
+            {source === 'mock' ? (
+              <div className={styles.statusRow}>
+                <span className={styles.statusDot} style={{ background: 'var(--accent-green)' }} />
+                <span style={{ fontSize: 12, color: 'var(--accent-green)' }}>
+                  Ready · generated test students built from the planners in this system, no login needed
+                </span>
+              </div>
+            ) : (
+              <div className={styles.statusRow}>
+                <span className={styles.statusDot} style={{ background: isLoggedIn ? 'var(--accent-green)' : 'var(--text-muted)' }} />
+                <span style={{ fontSize: 12, color: isLoggedIn ? 'var(--accent-green)' : 'var(--text-muted)' }}>
+                  {isLoggedIn
+                    ? `Connected · ${studentCount.toLocaleString()} students available`
+                    : 'Not connected. Log in to the portal with the button in the top bar first.'}
+                </span>
+              </div>
+            )}
 
-        {/* Action buttons */}
-        <div className={styles.actionRow}>
-          <button
-            className={styles.btnPrimary}
-            disabled={!canStartScrape}
-            onClick={startEstimation}
-          >
-            {runStatus === 'done' ? 'Run Again' : 'Start Estimation'}
-          </button>
-          {isRunning && (
-            <button className={styles.btnDanger} onClick={cancelEstimation}>
-              Cancel
-            </button>
-          )}
-        </div>
-      </div>
-      )}
-
-      {/* ── Progress card ────────────────────────────────────────────────────── */}
-      {progress && (
-        <div className={styles.card}>
-          <div className={styles.sectionTitle}>{progressCardTitle}</div>
-
-          <div className={styles.progressWrap}>
-            <div
-              className={`${styles.progressFill} ${isRunning ? styles.progressAnimated : ''}`}
-              style={{
-                width: `${pct}%`,
-                background: runStatus === 'done' ? 'var(--accent-green)' : 'var(--accent-blue)',
-              }}
-            />
-          </div>
-
-          <div className={styles.progressLabel}>
-            <span>{progress.current.toLocaleString()} / {progress.total.toLocaleString()} students</span>
-            <span>{pct}%</span>
-          </div>
-
-          {isRunning && progress.studentName && (
-            <div className={styles.currentStatus}>
-              <span className={styles.spinner} />
-              <span className={styles.phaseLabel}>
-                {PHASE_LABEL[progress.phase] ?? progress.phase}
-              </span>
-              <span className={styles.studentName}>{progress.studentName}</span>
+            <div className={styles.rangeRow}>
+              <div className={styles.rangeField}>
+                <label className={styles.rangeLabel}>From student ID</label>
+                <input className={styles.rangeInput} type="number" placeholder="e.g. 102780000" value={minId} onChange={(e) => setMinId(e.target.value)} disabled={isRunning} />
+              </div>
+              <div className={styles.rangeField}>
+                <label className={styles.rangeLabel}>To student ID</label>
+                <input className={styles.rangeInput} type="number" placeholder="e.g. 102800000" value={maxId} onChange={(e) => setMaxId(e.target.value)} disabled={isRunning} />
+              </div>
             </div>
-          )}
+            <p className={styles.hintText}>Leave both empty to read every student.</p>
 
-          {errorMsg && <div className={styles.errorBox}>{errorMsg}</div>}
-        </div>
-      )}
-
-      {/* ── Summary ──────────────────────────────────────────────────────────── */}
-      {summary && (
-        <div className={styles.card}>
-          <div className={styles.sectionTitle}>Summary</div>
-          <div className={styles.summaryGrid}>
-            <div className={styles.summaryItem}>
-              <span className={styles.summaryValue} style={{ color: 'var(--accent-green)' }}>
-                {summary.completed.toLocaleString()}
-              </span>
-              <span className={styles.summaryLabel}>Completed</span>
-            </div>
-            <div className={styles.summaryItem}>
-              <span className={styles.summaryValue} style={{ color: 'var(--accent-yellow)' }}>
-                {summary.skipped.toLocaleString()}
-              </span>
-              <span className={styles.summaryLabel}>Skipped</span>
-            </div>
-            <div className={styles.summaryItem}>
-              <span className={styles.summaryValue} style={{ color: 'var(--accent-red)' }}>
-                {summary.failed.toLocaleString()}
-              </span>
-              <span className={styles.summaryLabel}>Failed</span>
-            </div>
-            <div className={styles.summaryItem}>
-              <span className={styles.summaryValue} style={{ color: 'var(--text-primary)' }}>
-                {summary.total.toLocaleString()}
-              </span>
-              <span className={styles.summaryLabel}>Total</span>
+            <div className={styles.actionRow}>
+              <button className={styles.btnPrimary} disabled={!canStartScrape} onClick={startEstimation}>
+                {runStatus === 'done' ? 'Read again' : 'Read transcripts'}
+              </button>
+              {isRunning && <button className={styles.btnDanger} onClick={cancelEstimation}>Cancel</button>}
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* ── Pipeline preview (Phases 0-3, diagnostic) ────────────────────────── */}
-      <div className={styles.card}>
-        <div className={styles.sectionTitle}>Pipeline Preview</div>
-        <p className={styles.hintText}>
-          Runs matching, candidate resolution, eligibility and ranking over whichever students are currently
-          loaded, scraped or imported. Nothing is saved. Try it on a small batch first.
-        </p>
+        {/* Progress, only while there is something to show */}
+        {progress && (
+          <div className={styles.subPanel}>
+            <div className={styles.progressHead}>
+              <span>{progressCardTitle}</span>
+              <span>{progress.current.toLocaleString()} / {progress.total.toLocaleString()} · {pct}%</span>
+            </div>
+            <div className={styles.progressWrap}>
+              <div
+                className={`${styles.progressFill} ${isRunning ? styles.progressAnimated : ''}`}
+                style={{ width: `${pct}%`, background: runStatus === 'done' ? 'var(--accent-green)' : 'var(--accent-blue)' }}
+              />
+            </div>
+            {isRunning && progress.studentName && (
+              <div className={styles.currentStatus}>
+                <span className={styles.spinner} />
+                <span className={styles.phaseLabel}>{PHASE_LABEL[progress.phase] ?? progress.phase}</span>
+                <span className={styles.studentName}>{progress.studentName}</span>
+              </div>
+            )}
+            {summary && (
+              <p className={styles.hintText}>
+                {summary.completed.toLocaleString()} read · {summary.skipped.toLocaleString()} skipped · {summary.failed.toLocaleString()} failed
+              </p>
+            )}
+            {errorMsg && <div className={styles.errorBox}>{errorMsg}</div>}
 
-        {/* The target semester is derived, not picked, so it is stated with the reason rather than offered. */}
+            {/* The log is a diagnostic, so it is closed by default and shows only the problems. */}
+            {log.length > 0 && (
+              <details className={styles.logDetails}>
+                <summary>
+                  Run log · {problems.length === 0 ? 'no problems' : `${problems.length} problem(s)`}
+                </summary>
+                <div className={styles.logScope}>
+                  <button type="button" className={logScope === 'problems' ? styles.scopeActive : ''} onClick={() => setLogScope('problems')}>
+                    Problems ({problems.length})
+                  </button>
+                  <button type="button" className={logScope === 'all' ? styles.scopeActive : ''} onClick={() => setLogScope('all')}>
+                    Everything ({log.length})
+                  </button>
+                </div>
+                <div className={styles.logWrap} ref={logWrapRef}>
+                  {shownLog.length === 0 && <div className={styles.logEntry}>Nothing went wrong.</div>}
+                  {shownLog.map((entry) => (
+                    <div key={entry.key} className={`${styles.logEntry} ${logEntryClass[entry.type]}`}>
+                      <span className={styles.logIcon}>{logIcon[entry.type]}</span>
+                      {entry.text}
+                    </div>
+                  ))}
+                </div>
+              </details>
+            )}
+          </div>
+        )}
+      </Step>
+
+      {/* ── Step 2: estimate ─────────────────────────────────────────────────── */}
+      <Step
+        number={2}
+        title="Estimate next semester"
+        explainer="Works out which units each loaded student still needs, which of those they can take next semester, and adds them up per unit."
+        done={Boolean(preview)}
+      >
         <div className={styles.targetRow}>
           <span className={styles.targetLabel}>Estimating for</span>
           <span className={styles.targetValue}>{preview?.target?.label ?? academicNow.label}</span>
@@ -907,319 +896,379 @@ export default function ClassEstimationPage() {
 
         <div className={styles.actionRow}>
           <div className={styles.rangeField}>
-            <label className={styles.rangeLabel}>
+            <label className={styles.rangeLabel} title="The share of current students you expect to come back. Visa refusals, withdrawals and deferrals all reduce it.">
               Students returning (%){retentionSaved ? ' · saved' : ''}
             </label>
-            <input
-              className={styles.rangeInput}
-              type="number"
-              min={1}
-              max={100}
-              value={retention}
-              onChange={(e) => setRetention(e.target.value)}
-              disabled={previewStatus === 'loading' || isRunning}
-            />
+            <input className={styles.rangeInput} type="number" min={1} max={100} value={retention}
+              onChange={(e) => setRetention(e.target.value)} disabled={previewStatus === 'loading' || isRunning} />
           </div>
           <div className={styles.rangeField}>
-            <label className={styles.rangeLabel}>New students expected</label>
-            <input
-              className={styles.rangeInput}
-              type="number"
-              min={0}
-              value={newIntake}
-              onChange={(e) => setNewIntake(e.target.value)}
-              disabled={previewStatus === 'loading' || isRunning}
-            />
+            <label className={styles.rangeLabel} title="Brand-new first-year students. They are not in the portal yet, so this is entered by hand and placed on the units every first-semester student takes.">
+              New students expected
+            </label>
+            <input className={styles.rangeInput} type="number" min={0} value={newIntake}
+              onChange={(e) => setNewIntake(e.target.value)} disabled={previewStatus === 'loading' || isRunning} />
           </div>
-          <button
-            className={styles.btnPrimary}
-            disabled={previewStatus === 'loading' || isRunning}
-            onClick={runPreview}
-          >
-            {previewStatus === 'loading' ? 'Running…' : 'Run Preview'}
+          <button className={styles.btnPrimary} disabled={previewStatus === 'loading' || isRunning || loadedCount === 0} onClick={runPreview}>
+            {previewStatus === 'loading' ? 'Estimating…' : preview ? 'Estimate again' : 'Run estimate'}
           </button>
-          {preview && (
-            <button className={styles.btnSecondary} onClick={copyPreview}>
-              {copied ? 'Copied' : 'Copy JSON'}
-            </button>
-          )}
         </div>
-
+        {loadedCount === 0 && !preview && <p className={styles.hintText}>Load students in step 1 first.</p>}
         {previewError && <div className={styles.errorBox} style={{ marginTop: 12 }}>{previewError}</div>}
 
-        {preview && (
+        {preview && s && (
           <>
-            <div className={styles.summaryGrid} style={{ marginTop: 16 }}>
-              {([
-                ['Students', preview.summary.students],
-                ['With planner', preview.summary.withPlanner],
-                ['Shared core', preview.summary.commonCoreOnly],
-                ['Not estimated', preview.summary.noMajorOrPlanner],
-                ['Errors', preview.summary.errors],
-                ['Candidates', preview.summary.totalCandidates],
-                ['Eligible', preview.summary.totalEligible],
-                ['Picked', preview.summary.totalPicked],
-              ] as const).map(([label, value]) => (
-                <div className={styles.summaryItem} key={label}>
-                  <span className={styles.summaryValue} style={{ color: 'var(--text-primary)' }}>
-                    {value.toLocaleString()}
-                  </span>
-                  <span className={styles.summaryLabel}>{label}</span>
-                </div>
-              ))}
+            <div className={ui.figures}>
+              <Figure value={estimatedCount.toLocaleString()} label="Students estimated"
+                note={`${s.withPlanner.toLocaleString()} by their major · ${s.commonCoreOnly.toLocaleString()} first-years by shared units`} />
+              <Figure value={s.totals.headcount.toLocaleString()} label="Enrolments expected"
+                note={`${(s.retentionRate * 100).toFixed(0)}% returning${s.newIntakeCount > 0 ? ` + ${s.newIntakeCount} new` : ''}`} tone="good" />
+              <Figure value={unitsRunning.toLocaleString()} label="Units running"
+                note={s.totals.unitsWithNoStudents > 0 ? `${s.totals.unitsWithNoStudents} more expected to draw nobody` : 'every unit draws students'} />
+              <Figure value={needsLook.toLocaleString()} label="Need a look"
+                note={needsLook > 0 ? 'see the Students tab' : 'every student was estimated'} tone={needsLook > 0 ? 'warn' : undefined} />
             </div>
 
-            <div className={styles.previewNotes}>
-              <div>
-                Not eligible: {preview.summary.ineligibleByReason['not-offered-in-term']} not offered this semester,{' '}
-                {preview.summary.ineligibleByReason['requisites-unmet']} requisites unmet,{' '}
-                {preview.summary.ineligibleByReason['not-in-planner']} not in planner
-              </div>
-              <div>
-                Eligible only because the unit has no offering data: {preview.summary.eligibleWithoutOfferingData}
-              </div>
-              {preview.summary.outsideRecommendedTerm > 0 && (
-                <div>
-                  Predicted outside the semester their planner recommends: {preview.summary.outsideRecommendedTerm}{' '}
-                  (normal for retakes, worth a look if a whole cohort appears here)
-                </div>
-              )}
-              {preview.summary.plannerCounts.map((p) => (
-                <div key={p.plannerId}>
-                  {p.students} × {p.majorName} ({p.intakeYear} S{p.intakeSemester})
-                </div>
-              ))}
-              {Object.entries(preview.summary.mappingWarningCounts).map(([warning, n]) => (
-                <div key={warning}>⚠ {n} × {warning}</div>
-              ))}
-            </div>
+            <Tabs<ResultsTab>
+              active={resultsTab}
+              onChange={setResultsTab}
+              tabs={[
+                { id: 'units', label: 'Enrolment by unit', count: s.projectedByUnit.length },
+                { id: 'electives', label: 'Electives', count: s.electiveSeatsByUnit.length },
+                { id: 'students', label: 'Students', count: preview.students.length },
+                { id: 'checks', label: 'Checks' },
+              ]}
+            />
 
-            {/* The actual answer. Everything below this is the workings behind it. */}
-            {preview.summary.projectedByUnit.length > 0 && (
-              <div className={styles.electiveBlock}>
-                <div className={styles.electiveHeading}>
-                  Projected enrolment
-                  <span className={styles.electiveNote}>
-                    {(preview.summary.retentionRate * 100).toFixed(0)}% of students assumed returning
-                    {preview.summary.grouping.workSaved > 0 &&
-                      ` · ${preview.summary.grouping.groups} distinct situations across ${preview.summary.grouping.students} students`}
-                  </span>
-                </div>
-
-                <div className={styles.electiveTable}>
-                  <div className={`${styles.electiveRow} ${styles.projectedRow} ${styles.electiveHead}`}>
-                    <span>Unit</span>
-                    <span>Required</span>
-                    <span>Elective</span>
-                    <span>New</span>
-                    <span>Headcount</span>
-                  </div>
-                  {preview.summary.projectedByUnit.slice(0, 60).map((u) => (
-                    <div key={u.code} className={`${styles.electiveRow} ${styles.projectedRow}`}>
-                      <span className={styles.electiveCode}>{u.code}</span>
-                      <span className={styles.electiveNote}>{u.fromNamedPicks || '-'}</span>
-                      <span className={styles.electiveNote}>
-                        {u.fromElectives > 0 ? u.fromElectives.toFixed(1) : '-'}
-                      </span>
-                      <span className={styles.electiveNote}>{u.fromNewIntake || '-'}</span>
-                      <span className={styles.electiveSeats}>{u.headcount}</span>
-                    </div>
-                  ))}
-                </div>
-
-                <p className={styles.hintText} style={{ marginTop: 8 }}>
-                  Required counts whole students the planner says still owe the unit. Elective counts shares
-                  of a student spread over the options they could pick. New is the intake figure, which is not
-                  discounted because it is already what you expect to arrive. Headcount is the lot, rounded
-                  once at the end, so the column need not add up to the total below.
+            {resultsTab === 'units' && (
+              <>
+                <p className={styles.tabIntro}>
+                  The estimate, one row per unit. <strong>Required</strong> is students whose planner says they still
+                  owe the unit. <strong>Elective</strong> is shares of students spread over the options they could pick,
+                  so it is fractional. <strong>New</strong> is the new-student figure. <strong>Headcount</strong> is all
+                  three after the returning rate, rounded once at the end. Click a heading to sort.
                 </p>
-
-                <div className={styles.previewNotes} style={{ marginTop: 8 }}>
-                  <div>
-                    {preview.summary.totals.units} units · {preview.summary.totals.headcount.toLocaleString()} enrolments
-                    {preview.summary.totals.unitsWithNoStudents > 0 &&
-                      ` · ${preview.summary.totals.unitsWithNoStudents} predicted not to run`}
+                <DataTable
+                  rows={s.projectedByUnit}
+                  rowKey={(unit) => unit.code}
+                  searchText={(unit) => unit.code}
+                  searchPlaceholder="Find a unit"
+                  initialSort={{ key: 'headcount', direction: 'desc' }}
+                  columns={[
+                    { key: 'code', label: 'Unit', width: 'minmax(90px, 1fr)', render: (unit) => <span className={styles.mono}>{unit.code}</span>, sortValue: (unit) => unit.code },
+                    { key: 'named', label: 'Required', hint: 'Students whose planner says they still owe this unit', width: '90px', align: 'right', render: (unit) => unit.fromNamedPicks || '–', sortValue: (unit) => unit.fromNamedPicks },
+                    { key: 'elective', label: 'Elective', hint: 'Shares of students who could choose this as an elective', width: '90px', align: 'right', render: (unit) => (unit.fromElectives > 0 ? unit.fromElectives.toFixed(1) : '–'), sortValue: (unit) => unit.fromElectives },
+                    { key: 'new', label: 'New', hint: 'New first-year students, entered by hand', width: '70px', align: 'right', render: (unit) => unit.fromNewIntake || '–', sortValue: (unit) => unit.fromNewIntake },
+                    {
+                      key: 'headcount', label: 'Headcount', width: '150px', align: 'right', sortValue: (unit) => unit.projected,
+                      render: (unit) => (unit.headcount === 0
+                        ? <span className={styles.muted}>0 · not expected to run</span>
+                        : <strong className={styles.headcount}>{unit.headcount.toLocaleString()}</strong>),
+                    },
+                  ]}
+                />
+                {(s.newIntakeCount > 0 || s.newIntake.warnings.length > 0) && (
+                  <div className={styles.previewNotes}>
+                    {s.newIntakeCount > 0 && <div>{s.newIntakeCount} new students placed on {s.newIntake.units.join(', ') || 'no units'}.</div>}
+                    {s.newIntake.warnings.map((warning) => <div key={warning}>⚠ {warning}</div>)}
                   </div>
-                  {preview.summary.newIntakeCount > 0 && (
-                    <div>
-                      {preview.summary.newIntakeCount} new students placed on{' '}
-                      {preview.summary.newIntake.units.join(', ') || 'no units'}
-                    </div>
-                  )}
-                  {preview.summary.newIntake.warnings.map((warning) => (
-                    <div key={warning}>⚠ {warning}</div>
-                  ))}
-                </div>
-              </div>
+                )}
+              </>
             )}
 
-            {/* Electives are predicted as shares of a seat, never as named picks, so they get their own
-                table rather than sitting in the picked list and looking like certainties. */}
-            {preview.summary.electiveSeatsByUnit.length > 0 && (
-              <div className={styles.electiveBlock}>
-                <div className={styles.electiveHeading}>
-                  Expected elective enrolment
-                  <span className={styles.electiveNote}>
-                    fractional on purpose, each student is spread over the electives they could take
-                  </span>
-                </div>
-
-                <div className={styles.electiveTable}>
-                  <div className={`${styles.electiveRow} ${styles.electiveHead}`}>
-                    <span>Unit</span>
-                    <span>Type</span>
-                    <span>Taken by</span>
-                    <span>Expected</span>
-                  </div>
-                  {preview.summary.electiveSeatsByUnit.slice(0, 30).map((u) => (
-                    <div key={u.code} className={styles.electiveRow}>
-                      <span className={styles.electiveCode}>{u.code}</span>
-                      <span className={styles.electiveNote}>
-                        {u.category === 'mixed' ? 'both' : u.category === 'prescribed' ? 'prescribed' : 'free'}
-                      </span>
-                      <span className={styles.electiveNote}>{u.popularity}</span>
-                      <span className={styles.electiveSeats}>{u.expectedSeats.toFixed(1)}</span>
-                    </div>
-                  ))}
-                </div>
-
-                {preview.summary.electiveSeatsUnplaced > 0 && (
-                  <p className={styles.hintText} style={{ marginTop: 8 }}>
-                    {preview.summary.electiveSeatsUnplaced.toFixed(1)} elective seat(s) could not be placed:
-                    those students owe a slot but every unit in their pool is either not running next
-                    semester or has requisites they have not met.
+            {resultsTab === 'electives' && (
+              <>
+                <p className={styles.tabIntro}>
+                  Nobody can say which elective a particular student will pick, so each student&apos;s elective places are
+                  shared across every option open to them, weighted by how many current students have already taken it.
+                  Single units are rough; the total across a group of electives is the reliable part.
+                </p>
+                <DataTable
+                  rows={s.electiveSeatsByUnit}
+                  rowKey={(unit) => unit.code}
+                  searchText={(unit) => unit.code}
+                  searchPlaceholder="Find an elective"
+                  initialSort={{ key: 'expected', direction: 'desc' }}
+                  columns={[
+                    { key: 'code', label: 'Unit', width: 'minmax(90px, 1fr)', render: (unit) => <span className={styles.mono}>{unit.code}</span>, sortValue: (unit) => unit.code },
+                    { key: 'type', label: 'Type', width: '110px', render: (unit) => ELECTIVE_TYPE[unit.category] ?? unit.category, sortValue: (unit) => unit.category },
+                    { key: 'popularity', label: 'Taken by', hint: 'Current students who have already passed this unit, which is what the shares are weighted by', width: '90px', align: 'right', render: (unit) => unit.popularity, sortValue: (unit) => unit.popularity },
+                    { key: 'expected', label: 'Expected', width: '90px', align: 'right', render: (unit) => <strong className={styles.headcount}>{unit.expectedSeats.toFixed(1)}</strong>, sortValue: (unit) => unit.expectedSeats },
+                  ]}
+                  empty="No student has elective places to fill next semester."
+                />
+                {s.electiveSeatsUnplaced > 0 && (
+                  <p className={styles.hintText}>
+                    {s.electiveSeatsUnplaced.toFixed(1)} elective place(s) could not be placed: those students owe an elective but
+                    none of their options is running next semester or open to them yet.
                   </p>
                 )}
-              </div>
+              </>
             )}
 
-            <div className={styles.previewList}>
-              {preview.students.slice(0, 200).map((s) => (
-                <details key={s.studentId} className={styles.previewRow}>
-                  <summary>
-                    <span>{s.name} ({s.studentId})</span>
-                    <span className={styles.previewMeta}>
-                      {s.error
-                        ? `error: ${s.error}`
-                        : s.planner
-                          ? `${s.planner.majorName} ${s.planner.matchPct.toFixed(0)}% · ${s.candidateCount} candidates → ${s.eligibleCount} eligible → ${s.picked.length} picked`
-                          : s.basis === 'commonCore'
-                            ? `shared core, major not detectable yet · ${s.candidateCount} candidates → ${s.eligibleCount} eligible → ${s.picked.length} picked`
-                            : `not estimated (${s.matchStatus ?? 'n/a'})`}
-                    </span>
-                  </summary>
-                  <pre className={styles.previewPre}>{JSON.stringify(s, null, 2)}</pre>
-                </details>
-              ))}
-              {preview.students.length > 200 && (
-                <p className={styles.hintText}>
-                  Showing the first 200 of {preview.students.length.toLocaleString()} students. Copy JSON includes all of them.
+            {resultsTab === 'students' && filterCounts && (
+              <>
+                <p className={styles.tabIntro}>
+                  Every loaded student and what was predicted for them. Click a student to see why.
                 </p>
-              )}
-            </div>
+                <DataTable
+                  rows={studentRows}
+                  rowKey={(student) => student.studentId}
+                  searchText={(student) => `${student.studentId} ${student.name} ${student.planner?.majorName ?? ''}`}
+                  searchPlaceholder="Find a student or major"
+                  toolbar={
+                    <div className={styles.filterChips}>
+                      {([
+                        ['all', 'All', filterCounts.all],
+                        ['major', 'By major', filterCounts.major],
+                        ['commonCore', 'First-years (shared units)', filterCounts.commonCore],
+                        ['notEstimated', 'Not estimated', filterCounts.notEstimated],
+                        ['error', 'Errors', filterCounts.error],
+                      ] as const).filter(([id, , n]) => id === 'all' || n > 0).map(([id, label, n]) => (
+                        <button key={id} type="button" className={studentFilter === id ? styles.chipActive : styles.chip} onClick={() => setStudentFilter(id)}>
+                          {label} <span>{n.toLocaleString()}</span>
+                        </button>
+                      ))}
+                    </div>
+                  }
+                  columns={[
+                    { key: 'student', label: 'Student', width: 'minmax(150px, 1.3fr)', render: (st) => studentLabel(st), sortValue: (st) => st.studentId },
+                    { key: 'basis', label: 'Estimated from', width: 'minmax(150px, 1.2fr)', render: (st) => describeBasis(st), sortValue: (st) => st.planner?.majorName ?? st.basis ?? '' },
+                    { key: 'picked', label: 'Predicted units', width: 'minmax(180px, 1.6fr)', render: (st) => (st.picked.length ? st.picked.map((u) => u.code).join(', ') : <span className={styles.muted}>none</span>), sortValue: (st) => st.picked.length },
+                    { key: 'electives', label: 'Elective options', width: '120px', align: 'right', render: (st) => (st.electives.length || <span className={styles.muted}>–</span>), sortValue: (st) => st.electives.length },
+                  ]}
+                  renderExpanded={(st) => <StudentDetail student={st} loadCap={DEFAULT_LOAD_CAP} />}
+                  empty="No student in this group."
+                />
+              </>
+            )}
+
+            {resultsTab === 'checks' && (
+              <div className={styles.checks}>
+                <p className={styles.tabIntro}>
+                  How the estimate was narrowed down, and anything worth checking before trusting it.
+                </p>
+
+                <div className={styles.funnel}>
+                  <div><strong>{s.totalCandidates.toLocaleString()}</strong><span>units still owed</span><em>across every student&apos;s planner</em></div>
+                  <span className={styles.funnelArrow}>→</span>
+                  <div><strong>{s.totalEligible.toLocaleString()}</strong><span>can be taken next semester</span><em>running then, prerequisites met</em></div>
+                  <span className={styles.funnelArrow}>→</span>
+                  <div><strong>{s.totalPicked.toLocaleString()}</strong><span>predicted</span><em>the earliest ones, up to a normal load</em></div>
+                </div>
+
+                <div className={styles.previewNotes}>
+                  <div>
+                    Ruled out: {s.ineligibleByReason['not-offered-in-term'].toLocaleString()} not running next semester ·{' '}
+                    {s.ineligibleByReason['requisites-unmet'].toLocaleString()} prerequisites not met yet
+                    {s.ineligibleByReason['not-in-planner'] > 0 && ` · ${s.ineligibleByReason['not-in-planner']} not in the student's planner`}
+                  </div>
+                  {s.eligibleWithoutOfferingData > 0 && (
+                    <div>⚠ {s.eligibleWithoutOfferingData} predicted unit(s) have no offering data, so they were assumed to run every semester.</div>
+                  )}
+                  {s.outsideRecommendedTerm > 0 && (
+                    <div>
+                      {s.outsideRecommendedTerm.toLocaleString()} prediction(s) fall in a semester the student&apos;s planner does not
+                      recommend. Normal for retakes; worth checking if a whole group appears there.
+                    </div>
+                  )}
+                  {Object.entries(s.mappingWarningCounts).map(([warning, n]) => (
+                    <div key={warning}>{n.toLocaleString()} × {warning}</div>
+                  ))}
+                </div>
+
+                <h3 className={styles.checksHeading}>Majors detected</h3>
+                <DataTable
+                  rows={s.plannerCounts}
+                  rowKey={(p) => p.plannerId}
+                  searchText={(p) => p.majorName}
+                  searchPlaceholder="Find a major"
+                  pageSize={8}
+                  initialSort={{ key: 'students', direction: 'desc' }}
+                  columns={[
+                    { key: 'major', label: 'Major', width: 'minmax(160px, 1fr)', render: (p) => p.majorName, sortValue: (p) => p.majorName },
+                    { key: 'intake', label: 'Intake', width: '110px', render: (p) => `${p.intakeYear} S${p.intakeSemester}`, sortValue: (p) => p.intakeYear * 10 + p.intakeSemester },
+                    { key: 'students', label: 'Students', width: '90px', align: 'right', render: (p) => p.students, sortValue: (p) => p.students },
+                  ]}
+                />
+
+                <div className={styles.actionRow}>
+                  <button className={styles.btnSecondary} onClick={copyPreview}>{copied ? 'Copied' : 'Copy raw data (JSON)'}</button>
+                </div>
+              </div>
+            )}
           </>
         )}
-      </div>
+      </Step>
 
-      {/* ── Saved runs ───────────────────────────────────────────────────────── */}
-      <div className={styles.card}>
-        <div className={styles.sectionTitle}>Saved Runs</div>
+      {/* ── Step 3: save ─────────────────────────────────────────────────────── */}
+      <Step
+        number={3}
+        title="Save the estimate"
+        explainer="Saving records the per-unit figures and the settings behind them, never any student's details, so the Head of Department view and the Excel download can use it later."
+        done={runs.length > 0}
+      >
         <p className={styles.hintText}>
-          Saving recalculates on the server, so re-scrape or re-import before saving and the
-            run will record the new cohort, not the one shown previously.
+          Saving recalculates on the server from the students loaded now, so load the batch you want recorded first.
         </p>
-
         <div className={styles.actionRow}>
           <div className={styles.rangeField} style={{ flex: 1, minWidth: 180 }}>
             <label className={styles.rangeLabel}>Label (optional)</label>
-            <input
-              className={styles.rangeInput}
-              type="text"
-              placeholder="e.g. before the FTES change"
-              value={runLabel}
-              onChange={(e) => setRunLabel(e.target.value)}
-              disabled={savingRun}
-            />
+            <input className={styles.rangeInput} type="text" placeholder="e.g. before the FTES change" value={runLabel}
+              onChange={(e) => setRunLabel(e.target.value)} disabled={savingRun} />
           </div>
-          <button className={styles.btnPrimary} disabled={savingRun} onClick={saveRun}>
-            {savingRun ? 'Saving…' : 'Save This Run'}
+          <button className={styles.btnPrimary} disabled={savingRun || loadedCount === 0} onClick={saveRun}>
+            {savingRun ? 'Saving…' : 'Save this estimate'}
           </button>
         </div>
+        {runStatusMsg && <p className={styles.hintText}>{runStatusMsg}</p>}
 
-        {runStatusMsg && <p className={styles.hintText} style={{ marginTop: 8 }}>{runStatusMsg}</p>}
-
-        {runs.length === 0 ? (
-          <p className={styles.hintText} style={{ marginTop: 12 }}>No runs saved yet.</p>
-        ) : (
-          <div className={styles.fileList} style={{ marginTop: 12 }}>
-            {runs.map((run) => (
-              <div key={run.id}>
-                <div className={styles.fileRow}>
-                  <button className={styles.runLink} onClick={() => viewRun(run.id)}>
-                    {new Date(run.createdAt).toLocaleString()}
-                    {run.label ? ` · ${run.label}` : ''}
-                  </button>
-                  <span className={styles.fileNote}>
-                    S{run.targetSemester} {run.targetYear} · {run.studentCount.toLocaleString()} students
-                    {run.newIntake > 0 && ` + ${run.newIntake} new`}
-                    {' · '}{(run.retentionRate * 100).toFixed(0)}% returning
-                    {' · '}{run.totalHeadcount.toLocaleString()} enrolments over {run.unitCount} units
-                    {' · '}{run.source}
-                  </span>
-                  <button className={styles.runDelete} onClick={() => deleteRun(run.id)}>Remove</button>
-                </div>
-
-                {openRun?.id === run.id && (
-                  <div className={styles.electiveTable} style={{ margin: '6px 0 12px' }}>
-                    <div className={`${styles.electiveRow} ${styles.projectedRow} ${styles.electiveHead}`}>
-                      <span>Unit</span>
-                      <span>Required</span>
-                      <span>Elective</span>
-                      <span>New</span>
-                      <span>Headcount</span>
-                    </div>
-                    {openRun.units.map((unit) => (
-                      <div key={unit.unitCode} className={`${styles.electiveRow} ${styles.projectedRow}`}>
-                        <span className={styles.electiveCode}>{unit.unitCode}</span>
-                        <span className={styles.electiveNote}>{unit.fromNamedPicks || '-'}</span>
-                        <span className={styles.electiveNote}>
-                          {unit.fromElectives > 0 ? unit.fromElectives.toFixed(1) : '-'}
-                        </span>
-                        <span className={styles.electiveNote}>{unit.fromNewIntake || '-'}</span>
-                        <span className={styles.electiveSeats}>{unit.headcount}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
+        {runs.length > 0 && (
+          <div style={{ marginTop: 14 }}>
+            <DataTable
+              rows={runs}
+              rowKey={(run) => run.id}
+              searchText={(run) => `${run.label ?? ''} ${new Date(run.createdAt).toLocaleString()} ${run.source}`}
+              searchPlaceholder="Find a saved estimate"
+              pageSize={5}
+              columns={[
+                { key: 'when', label: 'Saved', width: 'minmax(150px, 1.4fr)', render: (run) => <>{new Date(run.createdAt).toLocaleString()}{run.label ? <span className={styles.muted}> · {run.label}</span> : null}</>, sortValue: (run) => run.createdAt },
+                { key: 'term', label: 'For', width: '80px', render: (run) => `S${run.targetSemester} ${run.targetYear}`, sortValue: (run) => run.targetYear * 10 + run.targetSemester },
+                { key: 'students', label: 'Students', width: '90px', align: 'right', render: (run) => `${run.studentCount.toLocaleString()}${run.newIntake ? ` +${run.newIntake}` : ''}`, sortValue: (run) => run.studentCount },
+                { key: 'returning', label: 'Returning', width: '90px', align: 'right', render: (run) => `${(run.retentionRate * 100).toFixed(0)}%`, sortValue: (run) => run.retentionRate },
+                { key: 'total', label: 'Enrolments', width: '100px', align: 'right', render: (run) => run.totalHeadcount.toLocaleString(), sortValue: (run) => run.totalHeadcount },
+                { key: 'source', label: 'Source', width: '80px', render: (run) => SOURCE_NAMES[run.source] ?? run.source, sortValue: (run) => run.source },
+                {
+                  key: 'actions', label: '', width: '70px', align: 'right',
+                  render: (run) => (
+                    <button type="button" className={styles.runDelete} onClick={(e) => { e.stopPropagation(); void deleteRun(run.id); }}>
+                      Remove
+                    </button>
+                  ),
+                },
+              ]}
+              renderExpanded={(run) => <SavedRunUnits id={run.id} />}
+            />
           </div>
         )}
-      </div>
+      </Step>
+    </div>
+  );
+}
 
-      {/* ── Log ──────────────────────────────────────────────────────────────── */}
-      {log.length > 0 && (
-        <div className={styles.card}>
-          <div className={styles.sectionTitle}>
-            Log
-            <span style={{ marginLeft: 8, fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>
-              ({log.length.toLocaleString()} entries)
-            </span>
-          </div>
-          <div className={styles.logWrap} ref={logWrapRef}>
-            {log.map((entry) => (
-              <div
-                key={entry.key}
-                className={`${styles.logEntry} ${logEntryClass[entry.type]}`}
-              >
-                <span className={styles.logIcon}>{logIcon[entry.type]}</span>
-                {entry.text}
-              </div>
-            ))}
-          </div>
+// ── Pieces used above ────────────────────────────────────────────────────────
+
+type StudentResult = EstimationPreview['students'][number];
+
+/**
+ * The student's ID, plus their name only when it says something the ID does not. Imported DPA files carry no
+ * name, so the name falls back to the ID, and generated students are named after theirs; showing both
+ * printed the same number twice.
+ */
+function studentLabel(student: StudentResult): ReactNode {
+  const name = student.name?.trim() ?? '';
+  const nameAddsSomething = name !== '' && !name.includes(student.studentId);
+  return nameAddsSomething
+    ? <>{student.studentId} <span className={styles.muted}>{name}</span></>
+    : <>{student.studentId}{/^mock/i.test(name) && <span className={styles.muted}> · generated</span>}</>;
+}
+
+/** How a student was estimated, in a few words. */
+function describeBasis(student: StudentResult): ReactNode {
+  if (student.error) return <span className={styles.bad}>Error</span>;
+  if (student.planner) return <>{student.planner.majorName} <span className={styles.muted}>{student.planner.matchPct.toFixed(0)}% match</span></>;
+  if (student.basis === 'commonCore') return <span className={styles.muted}>First-year shared units</span>;
+  return <span className={styles.warn}>Not estimated</span>;
+}
+
+const REASON_WORDS: Record<string, string> = {
+  'not-offered-in-term': 'not running next semester',
+  'requisites-unmet': 'prerequisites not met yet',
+  'not-in-planner': 'not in their planner',
+};
+
+/** One student's estimate, explained in sentences rather than shown as data. */
+function StudentDetail({ student, loadCap }: { student: StudentResult; loadCap: number }) {
+  if (student.error) return <div className={styles.bad}>Could not be estimated: {student.error}</div>;
+
+  return (
+    <div className={styles.studentDetail}>
+      <div>
+        <strong>Estimated from: </strong>
+        {student.planner
+          ? `the ${student.planner.majorName} planner for the ${student.planner.intakeYear} semester ${student.planner.intakeSemester} intake, a ${student.planner.matchPct.toFixed(0)}% match with their transcript.`
+          : student.basis === 'commonCore'
+            ? 'the units every major shares. They are early enough in the course that their major cannot be told apart yet, so only units certain for any major are counted.'
+            : `nothing. No planner fitted their transcript (${student.matchStatus ?? 'no match'}).`}
+      </div>
+      <div><strong>Has passed or is taking: </strong>{student.completedCount} unit(s).</div>
+      <div>
+        <strong>Predicted next semester: </strong>
+        {student.picked.length ? student.picked.map((u) => u.code).join(', ') : 'nothing they are required to take.'}
+        {student.droppedByLoadCap > 0 && ` ${student.droppedByLoadCap} more could be taken but were left for later, to keep to a ${loadCap}-unit load.`}
+      </div>
+      {student.electives.length > 0 && (
+        <div>
+          <strong>Elective options, shared: </strong>
+          {student.electives.slice(0, 8).map((e) => `${e.code} (${e.expectedSeats.toFixed(2)})`).join(', ')}
+          {student.electives.length > 8 && ` and ${student.electives.length - 8} more`}
         </div>
       )}
-
+      {student.ineligible.length > 0 && (
+        <div>
+          <strong>Still owed but not predicted: </strong>
+          {student.ineligible.slice(0, 8).map((u) => `${u.code}, ${REASON_WORDS[u.reason] ?? u.reason}`).join('; ')}
+          {student.ineligible.length > 8 && `; and ${student.ineligible.length - 8} more`}
+        </div>
+      )}
+      {student.mappingWarnings.length > 0 && (
+        <div className={styles.muted}>Assumed: {student.mappingWarnings.join('; ')}</div>
+      )}
+      <details className={styles.rawToggle}>
+        <summary>Raw data</summary>
+        <pre className={styles.previewPre}>{JSON.stringify(student, null, 2)}</pre>
+      </details>
     </div>
+  );
+}
+
+/** A saved estimate's unit figures, fetched when its row is opened. */
+function SavedRunUnits({ id }: { id: string }) {
+  const [units, setUnits] = useState<SavedRunDetail['units'] | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let live = true;
+    fetch(`/api/class-estimation/runs/${id}`)
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(String(res.status)))))
+      .then((data: SavedRunDetail) => { if (live) setUnits(data.units); })
+      .catch(() => { if (live) setFailed(true); });
+    return () => { live = false; };
+  }, [id]);
+
+  if (failed) return <div className={styles.bad}>This estimate could not be loaded.</div>;
+  if (!units) return <div className={styles.muted}>Loading…</div>;
+
+  return (
+    <>
+      <div className={styles.actionRow} style={{ marginTop: 0, marginBottom: 8 }}>
+        <a className={styles.btnSecondary} href={`/api/class-estimation/runs/${id}/export`}>Download Excel</a>
+      </div>
+      <DataTable
+        rows={units}
+        rowKey={(unit) => unit.unitCode}
+        searchText={(unit) => unit.unitCode}
+        searchPlaceholder="Find a unit"
+        pageSize={10}
+        initialSort={{ key: 'headcount', direction: 'desc' }}
+        columns={[
+          { key: 'code', label: 'Unit', width: 'minmax(90px, 1fr)', render: (unit) => <span className={styles.mono}>{unit.unitCode}</span>, sortValue: (unit) => unit.unitCode },
+          { key: 'named', label: 'Required', width: '90px', align: 'right', render: (unit) => unit.fromNamedPicks || '–', sortValue: (unit) => unit.fromNamedPicks },
+          { key: 'elective', label: 'Elective', width: '90px', align: 'right', render: (unit) => (unit.fromElectives > 0 ? unit.fromElectives.toFixed(1) : '–'), sortValue: (unit) => unit.fromElectives },
+          { key: 'new', label: 'New', width: '70px', align: 'right', render: (unit) => unit.fromNewIntake || '–', sortValue: (unit) => unit.fromNewIntake },
+          { key: 'headcount', label: 'Headcount', width: '100px', align: 'right', render: (unit) => <strong className={styles.headcount}>{unit.headcount}</strong>, sortValue: (unit) => unit.projected },
+        ]}
+      />
+    </>
   );
 }
