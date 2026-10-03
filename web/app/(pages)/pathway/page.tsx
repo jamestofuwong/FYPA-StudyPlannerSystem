@@ -37,12 +37,18 @@ import {
 } from '../../../../core/shared/scheduling/planEdits';
 import {
   buildPlanPayload,
+  rowsToPayload,
   payloadToRows,
   PLAN_DATA_SHEET_NAME,
   PLAN_DATA_SHEET_NOTE,
+  PLAN_FILE_LIMITS,
   type BuildPlanPayloadInput,
   type PlanPayload,
 } from '../../../../core/shared/planFile';
+import { overlayRestoredArrangement } from '../../../../core/shared/planFile/restore';
+
+/** A plan file's payload is a few KB; this is a generous cap against a hostile oversized upload. */
+const MAX_PLAN_FILE_BYTES = 5 * 1024 * 1024;
 
 const CATEGORY_NAMES: Record<string, string> = {
   core: 'Core units',
@@ -130,11 +136,13 @@ function EmptyState({
   message,
   actionLabel,
   onAction,
+  children,
 }: {
   title: string;
   message: string;
   actionLabel?: string;
   onAction?: () => void;
+  children?: React.ReactNode;
 }) {
   return (
     <div className={styles.panel}>
@@ -152,6 +160,7 @@ function EmptyState({
             {actionLabel}
           </button>
         )}
+        {children}
       </div>
     </div>
   );
@@ -493,11 +502,12 @@ export default function PathwayPage() {
   const { showToast } = useToast();
   const router = useRouter();
   const {
-    scrapedStudent,
-    studentLoaded,
-    dashboardData,
-    selectedPlannerIdx,
+    scrapedStudent: realScrapedStudent,
+    studentLoaded: realStudentLoaded,
+    dashboardData: realDashboardData,
+    selectedPlannerIdx: realSelectedPlannerIdx,
     manualPlanner,
+    restoredSession, setRestoredSession,
     customPlan, setCustomPlan,
     customPlanStart, setCustomPlanStart,
     retakeUnitCodes, setRetakeUnitCodes,
@@ -520,11 +530,32 @@ export default function PathwayPage() {
     customMpuList, setCustomMpuList,
     allDatabaseMpus, setAllDatabaseMpus,
   } = useStudentSession();
+
+  // The single substitution point: when a plan file is restored, every read
+  // below of scrapedStudent/studentLoaded/dashboardData/selectedPlannerIdx
+  // (there is no other declaration of these names in this file) transparently
+  // sees the restored, student-less session instead of the real one, with no
+  // other call site needing to know the difference. manualPlanner is
+  // untouched since selectedPlannerIdx === 0 here always takes the
+  // dashboardData.planners branch. The real session, and every other page,
+  // never sees this: restoredSession lives only in the provider and this one
+  // spot reads it.
+  const scrapedStudent = restoredSession ? restoredSession.scrapedStudent : realScrapedStudent;
+  const studentLoaded = restoredSession ? true : realStudentLoaded;
+  const dashboardData = restoredSession ? restoredSession.dashboardData : realDashboardData;
+  const selectedPlannerIdx = restoredSession ? 0 : realSelectedPlannerIdx;
+
   const [customPlanLoading, setCustomPlanLoading] = useState(false);
   const [unitToRemove, setUnitToRemove] = useState<{ code: string; name: string; category: string } | null>(null);
   const [semesterToDelete, setSemesterToDelete] = useState<{ year: number; semester: 1 | 2 } | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [isExportingExcel, setIsExportingExcel] = useState(false);
+  const [isRestoringPlan, setIsRestoringPlan] = useState(false);
+  const [restoreImportReport, setRestoreImportReport] = useState<{
+    restoredUnitCount: number;
+    restoredSemesterCount: number;
+    skipped: { code: string; reason: string }[];
+  } | null>(null);
 
   // Target semester for adding an extra unit beyond degree requirements
   const [extraUnitTargetSemester, setExtraUnitTargetSemester] = useState<{ year: number; semester: 1 | 2 } | null>(null);
@@ -746,6 +777,164 @@ export default function PathwayPage() {
 
   const selectedPlanner = selectedPlannerIdx === -1 ? manualPlanner : dashboardData?.planners?.[selectedPlannerIdx];
 
+  // Untrusted input from here down: an advisor-supplied .xlsx file, not a
+  // scraped transcript. Every step below either rejects outright with a
+  // clear message (REQ: no plan-only fallback this sprint) or skips the
+  // offending item and reports it, and never evaluates a formula, builds
+  // HTML, or uses a cell value to build a query/path/command.
+  const handleRestoreFile = async (file: File) => {
+    if (!file.name.toLowerCase().endsWith('.xlsx')) {
+      showToast('Please choose a .xlsx file exported from this app.', 'error');
+      return;
+    }
+    if (file.size > MAX_PLAN_FILE_BYTES) {
+      showToast('This file is too large to be a plan export.', 'error');
+      return;
+    }
+
+    setIsRestoringPlan(true);
+    try {
+      const XLSX = await import('xlsx-js-style');
+      let wb;
+      try {
+        const buffer = await file.arrayBuffer();
+        wb = XLSX.read(buffer, { type: 'array', cellFormula: false, cellHTML: false });
+      } catch {
+        showToast('Could not read this file. Make sure it is a valid .xlsx file.', 'error');
+        return;
+      }
+
+      const planDataWs = wb.Sheets[PLAN_DATA_SHEET_NAME];
+      if (!planDataWs) {
+        showToast('This file has no "Plan Data" sheet, so it cannot be restored. It may be from an older export, or that sheet was removed.', 'error');
+        return;
+      }
+
+      // Cap the sheet's declared dimensions before converting it to JSON, so
+      // a hostile file cannot claim an enormous range and exhaust memory.
+      const ref = (planDataWs as any)['!ref'];
+      if (ref) {
+        const range = XLSX.utils.decode_range(ref);
+        if (range.e.r - range.s.r > PLAN_FILE_LIMITS.maxRows + 5) {
+          showToast("This file's Plan Data sheet is larger than a plan export should ever be.", 'error');
+          return;
+        }
+      }
+
+      const planDataRows = XLSX.utils.sheet_to_json(planDataWs, { header: 1, raw: false }) as string[][];
+      const result = rowsToPayload(planDataRows.slice(1)); // row 0 is the human-readable note, not data
+      if ('error' in result) {
+        showToast(result.error, 'error');
+        return;
+      }
+      const { payload, issues } = result;
+
+      const resolveRes = await fetch('/api/plan-file/resolve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          planner: payload.planner,
+          minorNames: payload.minorNames,
+          doubleMajorMajorName: payload.doubleMajorMajorName,
+          outsidePlannerUnitCodes: payload.outsidePlannerUnitCodes,
+        }),
+      });
+      const resolveData = await resolveRes.json();
+      if (!resolveRes.ok || !resolveData.success) {
+        showToast(resolveData.error ?? 'Could not find a matching planner for this file.', 'error');
+        return;
+      }
+
+      // A synthetic, codes-only transcript: the restored session never holds
+      // a real grade or term, only enough to make resolveUnitStates and
+      // getCompletedUnitCodes/getConcededPassUnitCodes agree with the file.
+      const concededPassSet = new Set(payload.concededPassUnitCodes);
+      const syntheticCourseList = payload.completedUnitCodes.map((code) => ({
+        courseId: code, courseTitle: code, credits: 0, creditsEarned: 0,
+        status: 'Complete', grade: concededPassSet.has(code) ? 'CP' : 'HD', term: '',
+      }));
+
+      setRestoredSession({
+        scrapedStudent: { studentId: 'restored', student: { courseList: syntheticCourseList, selectedEnrollment: '' } as any },
+        dashboardData: { completedCodes: payload.completedUnitCodes, mpuCourseList: [], planners: [resolveData.planner] },
+        exportDate: payload.exportDate,
+      });
+
+      const genRes = await fetch('/api/custom-planner', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          plannerId: resolveData.planner.id,
+          completedUnitCodes: payload.completedUnitCodes,
+          concededPassUnitCodes: payload.concededPassUnitCodes,
+          courseList: [],
+          injectedMinorIds: resolveData.minorIds,
+          selectedDoubleMajorId: resolveData.doubleMajorPlannerId,
+          startYear: payload.startYear,
+          startSemester: payload.startSemester,
+        }),
+      });
+      const genData = await genRes.json();
+      if (!genRes.ok || !genData.success) {
+        showToast('Failed to rebuild this plan from the matched planner.', 'error');
+        setRestoredSession(null);
+        return;
+      }
+
+      const overlay = overlayRestoredArrangement(payload, {
+        units: genData.units ?? [],
+        mpuUnits: genData.mpuUnits ?? [],
+        electiveCandidates: genData.electiveCandidates ?? [],
+        completedUnits: genData.completedUnits ?? [],
+        outsidePlannerUnits: resolveData.outsidePlannerUnits ?? [],
+      });
+
+      setCustomPlan({ semesters: overlay.semesters, unschedulableUnits: genData.data.unschedulableUnits, warnings: genData.data.warnings });
+      setGeneratedSemesters(genData.data.semesters);
+      setBreakMilestones(genData.breakMilestones ?? []);
+      setCustomPlanStart({ year: payload.startYear, semester: payload.startSemester });
+      setPlanUnits([...(genData.units ?? []), ...(genData.mpuUnits ?? [])]);
+      setPlanIntakeSemester(genData.intakeSemester === 2 ? 2 : 1);
+      setPlanCompletedUnits(genData.completedUnits ?? []);
+      setPlanElectiveCandidates(genData.electiveCandidates ?? []);
+      setPlanRequirements(genData.requirements ?? []);
+      setAllDatabaseMpus(genData.allMpuUnits ?? []);
+      setAvailableDoubleMajors(genData.availableDoubleMajors ?? []);
+      setAvailableMinors(genData.availableMinors ?? []);
+      setPlanExtraUnits(resolveData.outsidePlannerUnits ?? []);
+      setCustomMpuList(payload.customMpuList);
+      setCustomWilSlot(payload.customWilSlot);
+      setInjectedMinors(new Set(resolveData.minorIds));
+      setSelectedDoubleMajorId(resolveData.doubleMajorPlannerId);
+      setRetakeUnitCodes(new Set(payload.arrangement.filter((u) => u.retake).map((u) => normaliseCode(u.code))));
+      setConcededPassRetakeWarnings(
+        payload.arrangement
+          .filter((u) => u.concededPassRetake)
+          .map((u): PlanWarning => ({ kind: 'conceded_pass_retake', unitCode: u.code, blockedUnitCodes: [] }))
+      );
+      // The saved arrangement is the advisor's, not the scheduler's own
+      // output for this run, so it must be treated as edited: the page then
+      // picks its warnings from validatePlan plus carried-forward warnings,
+      // never from customPlan.warnings directly. See the warnings block above.
+      setIsPlanEdited(true);
+
+      setRestoreImportReport({
+        restoredUnitCount: overlay.restoredUnitCount,
+        restoredSemesterCount: overlay.restoredSemesterCount,
+        skipped: [
+          ...issues.map((i) => ({ code: '', reason: i.message })),
+          ...overlay.skipped,
+          ...resolveData.unmatchedMinorNames.map((n: string) => ({ code: n, reason: 'minor not found on the matched planner' })),
+          ...(resolveData.doubleMajorUnmatched ? [{ code: payload.doubleMajorMajorName ?? '', reason: 'double major not found for this course/intake' }] : []),
+          ...resolveData.unresolvedOutsidePlannerUnitCodes.map((c: string) => ({ code: c, reason: 'unit not found in the catalogue' })),
+        ],
+      });
+      showToast('Plan restored from file.', 'success');
+    } finally {
+      setIsRestoringPlan(false);
+    }
+  };
+
   if (!studentLoaded || !dashboardData || !selectedPlanner) {
     return (
       <EmptyState
@@ -753,7 +942,27 @@ export default function PathwayPage() {
         message="Search for a student on the Major Detection page first."
         actionLabel="Go to Major Detection"
         onAction={() => router.push(panelToPath('dashboard'))}
-      />
+      >
+        <div style={{ marginTop: 20, paddingTop: 20, borderTop: '1px solid var(--border-color, rgba(255,255,255,0.1))', width: '100%', maxWidth: 360 }}>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>
+            or restore a previously exported plan (only its "Plan Data" sheet is read; edits made elsewhere in the file are ignored)
+          </div>
+          <label className={styles.btnSecondary} style={{ fontSize: 12, cursor: isRestoringPlan ? 'wait' : 'pointer', display: 'inline-block' }}>
+            {isRestoringPlan ? 'Restoring…' : 'Import plan from Excel'}
+            <input
+              type="file"
+              accept=".xlsx"
+              disabled={isRestoringPlan}
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = '';
+                if (file) void handleRestoreFile(file);
+              }}
+            />
+          </label>
+        </div>
+      </EmptyState>
     );
   }
 
@@ -786,6 +995,42 @@ export default function PathwayPage() {
         {selectedPlanner.major?.name ?? selectedPlanner.course?.name ?? 'Selected planner'}
         . Change the student or planner on the Major Detection page.
       </div>
+
+      {restoredSession && (
+        <div className={styles.mpuEmptyAlert} style={{ marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <span>
+            Restored from a file exported on {new Date(restoredSession.exportDate).toLocaleDateString()}.
+            Completed units are as of that date.
+            {restoreImportReport && restoreImportReport.skipped.length > 0 && (
+              <> {restoreImportReport.skipped.length} item{restoreImportReport.skipped.length !== 1 ? 's' : ''} skipped, see below.</>
+            )}
+          </span>
+          <button
+            type="button"
+            className={styles.btnSecondary}
+            style={{ fontSize: 11, whiteSpace: 'nowrap' }}
+            onClick={() => {
+              setRestoredSession(null);
+              setRestoreImportReport(null);
+            }}
+          >
+            Close restored plan
+          </button>
+        </div>
+      )}
+
+      {restoreImportReport && (
+        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>
+          Restored {restoreImportReport.restoredUnitCount} unit{restoreImportReport.restoredUnitCount !== 1 ? 's' : ''} across {restoreImportReport.restoredSemesterCount} semester{restoreImportReport.restoredSemesterCount !== 1 ? 's' : ''}.
+          {restoreImportReport.skipped.length > 0 && (
+            <ul style={{ margin: '4px 0 0 18px', padding: 0 }}>
+              {restoreImportReport.skipped.map((s, i) => (
+                <li key={i}>{s.code ? `${s.code}: ` : ''}{s.reason}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       {/* Double Major Opportunities */}
       {(availableDoubleMajors.length > 0 || selectedDoubleMajorId !== null) && (

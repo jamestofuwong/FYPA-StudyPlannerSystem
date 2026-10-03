@@ -16,6 +16,19 @@ type LoadedStudent = { student: ScrapedStudent; studentId: string };
 type DataSource = 'scrape' | 'import_xlsx' | 'import_manual' | 'import_paste';
 type CustomPlanStart = { year: number; semester: 1 | 2 };
 
+/**
+ * A plan restored from an exported file, with no real student behind it.
+ * Kept separate from scrapedStudent/dashboardData/studentLoaded so the
+ * dashboard (and every other page) never mistakes it for a real student;
+ * only the pathway page's own substitution point reads this.
+ */
+export type RestoredSession = {
+  scrapedStudent: LoadedStudent;
+  dashboardData: any;
+  /** ISO date the source file was exported on, for the "snapshot" banner. */
+  exportDate: string;
+};
+
 export type StudentSessionState = {
   scrapedStudent: LoadedStudent | null;
   setScrapedStudent: Dispatch<SetStateAction<LoadedStudent | null>>;
@@ -89,6 +102,9 @@ export type StudentSessionState = {
   setCustomMpuList: React.Dispatch<React.SetStateAction<{ code: string; name: string }[] | null>>;
   allDatabaseMpus: { code: string; name: string }[];
   setAllDatabaseMpus: React.Dispatch<React.SetStateAction<{ code: string; name: string }[]>>;
+
+  restoredSession: RestoredSession | null;
+  setRestoredSession: Dispatch<SetStateAction<RestoredSession | null>>;
 };
 
 const StudentSessionContext = createContext<StudentSessionState | null>(null);
@@ -128,6 +144,7 @@ export function StudentSessionProvider({ children }: { children: ReactNode }) {
   const [removedUnitSlots, setRemovedUnitSlots] = useState<Record<string, { year: number; semester: 1 | 2 }>>({});
   const [customMpuList, setCustomMpuList] = useState<{ code: string; name: string }[] | null>(null);
   const [allDatabaseMpus, setAllDatabaseMpus] = useState<{ code: string; name: string }[]>([]);
+  const [restoredSession, setRestoredSession] = useState<RestoredSession | null>(null);
 
 
   // Switching planner discards the custom plan built for the previous one. This runs
@@ -151,6 +168,7 @@ export function StudentSessionProvider({ children }: { children: ReactNode }) {
     setAvailableDoubleMajors([]);
     setSelectedDoubleMajorId(null);
     setCustomMpuList(null);
+    setRestoredSession(null);
   }, [selectedPlannerIdx, dashboardData, manualPlanner]);
 
   return (
@@ -184,6 +202,7 @@ export function StudentSessionProvider({ children }: { children: ReactNode }) {
         removedUnitSlots, setRemovedUnitSlots,
         customMpuList, setCustomMpuList,
         allDatabaseMpus, setAllDatabaseMpus,
+        restoredSession, setRestoredSession,
       }}
     >
       {children}

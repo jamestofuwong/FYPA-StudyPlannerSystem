@@ -51,6 +51,7 @@ export default function DashboardPage() {
     setPlanRequirements,
     setGeneratedSemesters,
     setIsPlanEdited,
+    setRestoredSession,
   } = useStudentSession();
   const router = useRouter();
   const [openYears, setOpenYears] = useState<Set<string>>(new Set());
@@ -582,6 +583,7 @@ export default function DashboardPage() {
     setPlanRequirements([]);
     setGeneratedSemesters([]);
     setIsPlanEdited(false);
+    setRestoredSession(null);
     setScraperError(null);
     setInternalLoading(true);
     try {
@@ -689,6 +691,7 @@ export default function DashboardPage() {
     setPlanRequirements([]);
     setGeneratedSemesters([]);
     setIsPlanEdited(false);
+    setRestoredSession(null);
     setScraperError(null);
     // REQ-SEC-101: no sessionStorage to remove, data was never persisted
     showToast('Student data cleared.', 'info');
