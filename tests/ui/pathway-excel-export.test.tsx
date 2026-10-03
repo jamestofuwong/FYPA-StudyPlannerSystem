@@ -128,4 +128,50 @@ describe('Excel export wiring', () => {
     const [, fileName] = writeFile.mock.calls[0];
     expect(fileName).toBe('BA_CS_Study_Plan.xlsx');
   });
+
+  test('a realistic worst-case plan (100 units, well within the scheduler\'s own config caps) still succeeds', async () => {
+    const units = Array.from({ length: 100 }, (_, i) => schedulableUnit(`UNIT${String(i).padStart(4, '0')}`, `Unit ${i}`, 'core'));
+    mockFetch(units);
+
+    render(
+      <ToastProvider>
+        <StudentSessionProvider>
+          <Seed semUnits={units} />
+          <PathwayPage />
+        </StudentSessionProvider>
+      </ToastProvider>
+    );
+    await generate('UNIT0000');
+
+    const excelButton = await screen.findByText(/Download Excel/i);
+    await act(async () => { fireEvent.click(excelButton); });
+
+    await screen.findByText(/Please choose your save location/i);
+    expect(writeFile).toHaveBeenCalledTimes(1);
+  });
+
+  test('a plan large enough that its arrangement cell would exceed Excel\'s own cell limit is blocked, writing nothing', async () => {
+    // Empirically, xlsx-js-style's real XLSX.write throws past 32,767
+    // characters per cell; 400+ units in the arrangement reliably exceeds
+    // that (see tests/unit/planFile/planFile.test.ts's own measurement).
+    const units = Array.from({ length: 450 }, (_, i) => schedulableUnit(`UNIT${String(i).padStart(4, '0')}`, `Unit ${i}`, 'core'));
+    mockFetch(units);
+
+    render(
+      <ToastProvider>
+        <StudentSessionProvider>
+          <Seed semUnits={units} />
+          <PathwayPage />
+        </StudentSessionProvider>
+      </ToastProvider>
+    );
+    await generate('UNIT0000');
+
+    const excelButton = await screen.findByText(/Download Excel/i);
+    await act(async () => { fireEvent.click(excelButton); });
+
+    await screen.findByText(/too large to save a restorable Excel file/i);
+    expect(writeFile).not.toHaveBeenCalled();
+    expect(bookAppendSheet).not.toHaveBeenCalled();
+  });
 });

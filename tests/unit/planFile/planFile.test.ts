@@ -6,6 +6,7 @@ import {
   payloadToRows,
   rowsToPayload,
   validatePayload,
+  findOversizedPlanDataCells,
   type BuildPlanPayloadInput,
   type PlanPayload,
 } from '@core/shared/planFile';
@@ -411,5 +412,43 @@ describe('Part 3: worst-case export sizing', () => {
     if ('error' in r) return;
     expect(r.payload.arrangement).toEqual([]);
     expect(r.issues.some((i) => i.code === 'cell_too_large')).toBe(true);
+  });
+
+  // Empirically confirmed (xlsx-js-style, real XLSX.write): a cell over
+  // 32,767 characters throws "Text length must not exceed 32767
+  // characters" — Excel's own hard per-cell limit. maxCellLength was
+  // previously 200,000, comfortably accepting a cell this size; it no
+  // longer does.
+  test('a cell between the new 32,767 cap and the old 200,000 cap is now rejected on import, where it previously was not', () => {
+    const rows = payloadToRows(buildPlanPayload(worstCasePayloadInput()));
+    const arrangementRowIdx = rows.findIndex((row) => row[0] === 'arrangement');
+    const midSizedArrangement = JSON.stringify(
+      Array.from({ length: 600 }, () => ({ code: 'X', category: 'core', year: 1, semester: 1, position: 0 }))
+    );
+    expect(midSizedArrangement.length).toBeGreaterThan(32_767);
+    expect(midSizedArrangement.length).toBeLessThan(200_000);
+    rows[arrangementRowIdx] = ['arrangement', midSizedArrangement];
+
+    const r = rowsToPayload(rows);
+    expect('error' in r).toBe(false);
+    if ('error' in r) return;
+    expect(r.payload.arrangement).toEqual([]);
+    expect(r.issues.some((i) => i.code === 'cell_too_large')).toBe(true);
+  });
+
+  test('findOversizedPlanDataCells: a normal and the worst-case payload both report no oversized cells', () => {
+    expect(findOversizedPlanDataCells(buildPlanPayload(richInput))).toEqual([]);
+    expect(findOversizedPlanDataCells(buildPlanPayload(worstCasePayloadInput()))).toEqual([]);
+  });
+
+  test('findOversizedPlanDataCells: an arrangement large enough to exceed Excel\'s cell limit is reported by field name', () => {
+    const tooLarge = buildPlanPayload({
+      ...worstCasePayloadInput(),
+      arrangement: Array.from({ length: 400 }, (_, i) => ({
+        code: `UNIT${i}`, category: 'core', year: 1, semester: 1 as const, position: 0,
+        recommended: false, outsidePlanner: false, retake: false, concededPassRetake: false,
+      })),
+    });
+    expect(findOversizedPlanDataCells(tooLarge)).toEqual(['arrangement']);
   });
 });

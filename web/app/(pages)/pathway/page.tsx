@@ -39,6 +39,7 @@ import {
   buildPlanPayload,
   rowsToPayload,
   payloadToRows,
+  findOversizedPlanDataCells,
   PLAN_DATA_SHEET_NAME,
   PLAN_DATA_SHEET_NOTE,
   PLAN_FILE_LIMITS,
@@ -2051,6 +2052,19 @@ export default function PathwayPage() {
                     startSemester: customPlanStart?.semester ?? planIntakeSemester,
                   };
                   const payload = buildPlanPayload(payloadInput);
+
+                  // Checked before any write, not after: a damaged or
+                  // silently-truncated Plan Data cell would be worse than no
+                  // export at all, since it would restore wrong or not at all.
+                  const oversizedFields = findOversizedPlanDataCells(payload);
+                  if (oversizedFields.length > 0) {
+                    showToast(
+                      'This plan is too large to save a restorable Excel file (one of its saved fields exceeds Excel\'s own cell size limit). The readable table itself is unaffected; only the "Plan Data" restore sheet is.',
+                      'error'
+                    );
+                    return;
+                  }
+
                   const wb = buildExcelWorkbook(XLSX, rows, headerInfo, payload);
 
                   const fileName = `${(selectedPlanner?.course?.name ?? 'Course').replace(/[^a-zA-Z0-9]/g, '_')}_Study_Plan.xlsx`;

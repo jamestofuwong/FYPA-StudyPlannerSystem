@@ -27,13 +27,21 @@ export const PLAN_FILE_LIMITS = {
   /** Applies to completedUnitCodes, concededPassUnitCodes, outsidePlannerUnitCodes, minorNames, customMpuList and arrangement. */
   maxCodesPerList: 1000,
   /**
-   * Bounds a single cell's raw text BEFORE JSON.parse runs, so a hostile
-   * cell can't force a huge parse just to be truncated afterwards by
-   * maxCodesPerList. Sized well above what maxCodesPerList's own ceiling
-   * could ever produce (1000 arrangement entries serialise to well under
-   * 100 KB), not against a realistic plan's actual size.
+   * Bounds a single cell's raw text BEFORE JSON.parse runs — both against a
+   * hostile cell forcing a huge parse, and because this is Excel's own hard
+   * per-cell character limit (confirmed empirically: xlsx-js-style's
+   * XLSX.write throws "Text length must not exceed 32767 characters" one
+   * character past this). A cell this size could never have come from our
+   * own export (handleExcelDownload's own pre-write check below blocks
+   * that case before writing), so on import anything longer is already
+   * known-impossible from a genuine file. 1000 arrangement entries (this
+   * module's own maxCodesPerList ceiling) serialise to roughly 159 KB,
+   * comfortably over this limit, which is exactly why the real guard
+   * against an oversized plan is the pre-write cell check, not a smaller
+   * maxCodesPerList: a realistic plan (the scheduler config caps real
+   * usage around 100 units) serialises to ~16 KB, well inside this cap.
    */
-  maxCellLength: 200_000,
+  maxCellLength: 32_767,
 };
 
 export const PLAN_CATEGORIES = [
@@ -143,6 +151,22 @@ export function buildPlanPayload(input: BuildPlanPayloadInput): PlanPayload {
     startYear: input.startYear,
     startSemester: input.startSemester,
   };
+}
+
+/**
+ * Field names whose cell (from payloadToRows) would exceed maxCellLength —
+ * Excel's own hard per-cell character limit. Checked before writing: an
+ * export this large would otherwise either throw deep inside XLSX.write, or
+ * (confirmed empirically not to happen here, but not a guarantee worth
+ * relying on for every future xlsx-js-style version) be silently truncated
+ * into invalid JSON that rowsToPayload would then have to drop on import.
+ * Neither is acceptable, so handleExcelDownload checks this first and
+ * blocks the export outright when it's non-empty.
+ */
+export function findOversizedPlanDataCells(payload: PlanPayload): string[] {
+  return payloadToRows(payload)
+    .filter(([, value]) => value.length > PLAN_FILE_LIMITS.maxCellLength)
+    .map(([key]) => key);
 }
 
 // --- rows <-> payload -------------------------------------------------
