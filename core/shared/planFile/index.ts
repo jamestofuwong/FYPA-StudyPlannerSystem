@@ -12,7 +12,7 @@ export const PLAN_FILE_FORMAT_VERSION = 1;
 export const PLAN_FILE_MARKER = 'SPS_PLAN_FILE';
 export const PLAN_DATA_SHEET_NAME = 'Plan Data';
 export const PLAN_DATA_SHEET_NOTE =
-  'This sheet holds machine-readable data used to restore this plan in the Study Planner app. Do not edit it.';
+  'Machine-readable data used to restore this plan in the Study Planner app. It contains the student\'s completed units and plan details. Do not edit, delete or forward this sheet.';
 
 export const PLAN_FILE_LIMITS = {
   /**

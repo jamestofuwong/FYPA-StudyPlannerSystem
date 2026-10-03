@@ -521,6 +521,15 @@ export function buildExcelWorkbook(
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Study Plan');
   XLSX.utils.book_append_sheet(wb, planDataWs, PLAN_DATA_SHEET_NAME);
+
+  // Hidden (1), not very hidden (2): very hidden is a common trick in
+  // malicious files and can trip a mail filter. "Study Plan" stays
+  // index 0 and unhidden, which every reader defaults an active sheet to
+  // in the absence of an explicit saved view (confirmed empirically: this
+  // library's own write path emits no <bookViews> element at all, under
+  // any Workbook property name, so an explicit activeTab cannot be forced
+  // here — sheet order plus visibility is the only available control).
+  wb.Workbook = { Sheets: [{ Hidden: 0 }, { Hidden: 1 }] };
   return wb;
 }
 
@@ -1035,6 +1044,7 @@ export default function PathwayPage() {
           <span>
             Restored from a file exported on {new Date(restoredSession.exportDate).toLocaleDateString()}.
             Completed and in-progress units are as of that date.
+            This file has not been verified against the student's record; confirm it before relying on it.
             {restoreImportReport && restoreImportReport.skipped.length > 0 && (
               <> {restoreImportReport.skipped.length} item{restoreImportReport.skipped.length !== 1 ? 's' : ''} skipped, see below.</>
             )}
@@ -2069,7 +2079,10 @@ export default function PathwayPage() {
 
                   const fileName = `${(selectedPlanner?.course?.name ?? 'Course').replace(/[^a-zA-Z0-9]/g, '_')}_Study_Plan.xlsx`;
                   XLSX.writeFile(wb, fileName);
-                  showToast('Please choose your save location in the dialog to save your Excel file.', 'info');
+                  showToast(
+                    'Please choose your save location in the dialog to save your Excel file. This file includes hidden restore data (completed units and plan details).',
+                    'info'
+                  );
                 } catch (err) {
                   console.error(err);
                   showToast('Failed to generate Excel file.', 'error');

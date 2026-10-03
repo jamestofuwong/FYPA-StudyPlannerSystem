@@ -184,6 +184,9 @@ describe('restoring a plan from an exported Excel file', () => {
     expect(document.body.textContent).toMatch(/Restored from a file exported on/i);
     expect(document.body.textContent).toMatch(/1 item skipped/i);
     expect(document.body.textContent).toMatch(/GHOST1/i);
+    // The banner also warns the file is unverified against the student's own record.
+    expect(document.body.textContent).toMatch(/has not been verified against the student's record/i);
+    expect(document.body.textContent).toMatch(/confirm it before relying on it/i);
 
     // Remaining MPU list restored.
     expect(screen.getByText('MPU1', { selector: 'code' })).toBeTruthy();

@@ -154,6 +154,9 @@ describe('Excel export wiring', () => {
     // Empirically, xlsx-js-style's real XLSX.write throws past 32,767
     // characters per cell; 400+ units in the arrangement reliably exceeds
     // that (see tests/unit/planFile/planFile.test.ts's own measurement).
+    // Rendering 450 rows is genuinely slow under a loaded test run, hence
+    // the explicit longer timeout below rather than fewer units, which
+    // would risk no longer reliably exceeding the limit.
     const units = Array.from({ length: 450 }, (_, i) => schedulableUnit(`UNIT${String(i).padStart(4, '0')}`, `Unit ${i}`, 'core'));
     mockFetch(units);
 
@@ -173,5 +176,26 @@ describe('Excel export wiring', () => {
     await screen.findByText(/too large to save a restorable Excel file/i);
     expect(writeFile).not.toHaveBeenCalled();
     expect(bookAppendSheet).not.toHaveBeenCalled();
+  }, 15000);
+
+  test('the save toast tells the advisor the file includes hidden restore data, keeping the save-location wording', async () => {
+    const units = [schedulableUnit('CORE1', 'Core Unit', 'core')];
+    mockFetch(units);
+
+    render(
+      <ToastProvider>
+        <StudentSessionProvider>
+          <Seed semUnits={units} />
+          <PathwayPage />
+        </StudentSessionProvider>
+      </ToastProvider>
+    );
+    await generate('CORE1');
+
+    const excelButton = await screen.findByText(/Download Excel/i);
+    await act(async () => { fireEvent.click(excelButton); });
+
+    expect(await screen.findByText(/Please choose your save location in the dialog to save your Excel file\./i)).toBeTruthy();
+    expect(await screen.findByText(/This file includes hidden restore data \(completed units and plan details\)\./i)).toBeTruthy();
   });
 });

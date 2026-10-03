@@ -1,10 +1,15 @@
 import * as XLSX from 'xlsx-js-style';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+import { execSync } from 'child_process';
 import {
   buildExcelRows,
   buildStudyPlanHeaderRows,
   buildStudyPlanSheetAoa,
   applyStudyPlanSheetStyling,
   buildPlanDataSheetAoa,
+  buildExcelWorkbook,
   computeExcelMergeRanges,
   EXCEL_TABLE_HEADER_ROW,
   EXCEL_COLUMN_HEADER,
@@ -152,6 +157,111 @@ describe('buildPlanDataSheetAoa round trip through rowsToPayload', () => {
     expect(result.payload).toEqual(payload);
   });
 });
+
+describe('the "Plan Data" sheet is hidden, not very hidden, and "Study Plan" stays the active sheet', () => {
+  function sampleWorkbookArgs() {
+    const rows = buildExcelRows(
+      [{ year: 1, semester: 1, units: [{ code: 'CORE1', name: 'Core Unit', category: 'core', offeringSemesters: [1, 2], requisiteGroups: [] } as any] }],
+      1, null, null, []
+    );
+    const headerInfo: ExcelPlanHeaderInfo = { courseName: 'Bachelor of Computer Science', majorName: 'AI', intakeYear: 2023, intakeMonth: 9 };
+    const payload = buildPlanPayload(richPayloadInput());
+    return { rows, headerInfo, payload };
+  }
+
+  test('wb.Workbook.Sheets marks "Plan Data" Hidden: 1 (not 2, very hidden) and "Study Plan" Hidden: 0', () => {
+    const { rows, headerInfo, payload } = sampleWorkbookArgs();
+    const wb = buildExcelWorkbook(XLSX, rows, headerInfo, payload);
+    expect(wb.SheetNames).toEqual(['Study Plan', PLAN_DATA_SHEET_NAME]);
+    expect(wb.Workbook.Sheets).toEqual([{ Hidden: 0 }, { Hidden: 1 }]);
+  });
+
+  test('"Study Plan" is index 0, the first (and only unhidden) sheet — the active sheet, since nothing else overrides it', () => {
+    const { rows, headerInfo, payload } = sampleWorkbookArgs();
+    const wb = buildExcelWorkbook(XLSX, rows, headerInfo, payload);
+    expect(wb.SheetNames[0]).toBe('Study Plan');
+  });
+
+  test('RAW-FILE CHECK: xl/workbook.xml has state="hidden" on "Plan Data" and no state attribute on "Study Plan"', () => {
+    const { rows, headerInfo, payload } = sampleWorkbookArgs();
+    const wb = buildExcelWorkbook(XLSX, rows, headerInfo, payload);
+
+    const outPath = path.join(os.tmpdir(), `hidden-sheet-check-${process.pid}-${Date.now()}.xlsx`);
+    const extractDir = `${outPath}_unzipped`;
+    try {
+      XLSX.writeFile(wb, outPath);
+      fs.mkdirSync(extractDir, { recursive: true });
+      execSync(`unzip -o "${outPath}" -d "${extractDir}"`);
+      const workbookXml = fs.readFileSync(path.join(extractDir, 'xl', 'workbook.xml'), 'utf-8');
+
+      const sheetsXml = workbookXml.match(/<sheet[^>]*\/>/g) ?? [];
+      const planDataSheet = sheetsXml.find((s) => s.includes(`name="${PLAN_DATA_SHEET_NAME}"`));
+      const studyPlanSheet = sheetsXml.find((s) => s.includes('name="Study Plan"'));
+
+      expect(planDataSheet).toContain('state="hidden"');
+      expect(planDataSheet).not.toContain('state="veryHidden"');
+      expect(studyPlanSheet).toBeDefined();
+      expect(studyPlanSheet).not.toContain('state=');
+    } finally {
+      fs.rmSync(outPath, { force: true });
+      fs.rmSync(extractDir, { recursive: true, force: true });
+    }
+  });
+
+  test('reading the hidden "Plan Data" sheet back still returns its data (hidden does not mean unreadable)', () => {
+    const { rows, headerInfo, payload } = sampleWorkbookArgs();
+    const wb = buildExcelWorkbook(XLSX, rows, headerInfo, payload);
+    const planDataRows: string[][] = XLSX.utils.sheet_to_json(wb.Sheets[PLAN_DATA_SHEET_NAME], { header: 1, raw: false });
+    expect(planDataRows[0]).toEqual([PLAN_DATA_SHEET_NOTE]);
+    const result = rowsToPayload(planDataRows.slice(1));
+    expect('error' in result).toBe(false);
+    if ('error' in result) return;
+    expect(result.payload).toEqual(payload);
+  });
+
+  test('an OLD export whose "Plan Data" sheet is still VISIBLE (no Workbook.Sheets at all) still imports successfully', () => {
+    // Simulates a file exported before this change: no wb.Workbook override,
+    // so the sheet has no hidden state — exactly like every export this
+    // branch has made until now.
+    const payload = buildPlanPayload(richPayloadInput());
+    const ws = XLSX.utils.aoa_to_sheet(buildStudyPlanSheetAoa(rows_forOldExport(), headerInfo_forOldExport()));
+    const planDataWs = XLSX.utils.aoa_to_sheet(buildPlanDataSheetAoa(payload));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Study Plan');
+    XLSX.utils.book_append_sheet(wb, planDataWs, PLAN_DATA_SHEET_NAME);
+    // No wb.Workbook set at all — the old shape.
+
+    const planDataRows: string[][] = XLSX.utils.sheet_to_json(wb.Sheets[PLAN_DATA_SHEET_NAME], { header: 1, raw: false });
+    const result = rowsToPayload(planDataRows.slice(1));
+    expect('error' in result).toBe(false);
+    if ('error' in result) return;
+    expect(result.payload).toEqual(payload);
+  });
+
+  test('the note row says what it contains and warns not to edit/delete/forward it, and import still treats it as the note row (ignored)', () => {
+    expect(PLAN_DATA_SHEET_NOTE).toMatch(/completed units and plan details/i);
+    expect(PLAN_DATA_SHEET_NOTE).toMatch(/do not edit, delete or forward/i);
+
+    const { rows, headerInfo, payload } = sampleWorkbookArgs();
+    const wb = buildExcelWorkbook(XLSX, rows, headerInfo, payload);
+    const planDataRows: string[][] = XLSX.utils.sheet_to_json(wb.Sheets[PLAN_DATA_SHEET_NAME], { header: 1, raw: false });
+    expect(planDataRows[0]).toEqual([PLAN_DATA_SHEET_NOTE]); // still row 0, same layout
+    const result = rowsToPayload(planDataRows.slice(1)); // import still drops row 0 the same way
+    expect('error' in result).toBe(false);
+    if ('error' in result) return;
+    expect(result.issues).toEqual([]); // the note row is not mistaken for a malformed data row
+  });
+});
+
+function rows_forOldExport(): ExcelPlanRow[] {
+  return buildExcelRows(
+    [{ year: 1, semester: 1, units: [{ code: 'CORE1', name: 'Core Unit', category: 'core', offeringSemesters: [1, 2], requisiteGroups: [] } as any] }],
+    1, null, null, []
+  );
+}
+function headerInfo_forOldExport(): ExcelPlanHeaderInfo {
+  return { courseName: 'Bachelor of Computer Science', majorName: 'AI', intakeYear: 2023, intakeMonth: 9 };
+}
 
 function minimalPayloadInput(): BuildPlanPayloadInput {
   return {
