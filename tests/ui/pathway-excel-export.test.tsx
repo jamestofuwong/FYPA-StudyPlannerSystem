@@ -119,7 +119,11 @@ describe('Excel export wiring', () => {
     await act(async () => { fireEvent.click(excelButton); });
 
     await screen.findByText(/Please choose your save location/i);
-    expect(bookAppendSheet).toHaveBeenCalledTimes(1);
+    // Two sheets now: the readable "Study Plan" table, and the machine-readable
+    // "Plan Data" sheet used to restore the plan later.
+    expect(bookAppendSheet).toHaveBeenCalledTimes(2);
+    const sheetNames = bookAppendSheet.mock.calls.map((call) => call[2]);
+    expect(sheetNames).toEqual(['Study Plan', 'Plan Data']);
     expect(writeFile).toHaveBeenCalledTimes(1);
     const [, fileName] = writeFile.mock.calls[0];
     expect(fileName).toBe('BA_CS_Study_Plan.xlsx');

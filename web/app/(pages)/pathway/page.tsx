@@ -35,6 +35,14 @@ import {
   removeUnit,
   replaceUnit,
 } from '../../../../core/shared/scheduling/planEdits';
+import {
+  buildPlanPayload,
+  payloadToRows,
+  PLAN_DATA_SHEET_NAME,
+  PLAN_DATA_SHEET_NOTE,
+  type BuildPlanPayloadInput,
+  type PlanPayload,
+} from '../../../../core/shared/planFile';
 
 const CATEGORY_NAMES: Record<string, string> = {
   core: 'Core units',
@@ -362,6 +370,125 @@ export function computeExcelMergeRanges(rows: ExcelPlanRow[]): ExcelMergeRange[]
   ];
 }
 
+const EXCEL_MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+/** Same Semester 1/2 rule as the PDF header (handleDirectPdfDownload), kept separate since this task does not touch the PDF export. */
+function excelIntakeSemesterOf(intakeMonth: number | null | undefined): 1 | 2 {
+  return intakeMonth != null && intakeMonth >= 7 ? 2 : 1;
+}
+
+export interface ExcelPlanHeaderInfo {
+  courseName: string;
+  majorName: string | null;
+  intakeYear: number | null;
+  intakeMonth: number | null;
+}
+
+/**
+ * The readable sheet's title block, matching the PDF header's content but in
+ * plain ASCII: a middle dot in the PDF header was shown to come back as a
+ * replacement glyph under text extraction, so this sheet avoids non-ASCII
+ * punctuation entirely rather than risk the same damage on whatever reads it.
+ */
+export function buildStudyPlanHeaderRows(info: ExcelPlanHeaderInfo): string[][] {
+  const monthName = info.intakeMonth != null && info.intakeMonth >= 1 && info.intakeMonth <= 12
+    ? EXCEL_MONTH_NAMES[info.intakeMonth - 1]
+    : null;
+  const intakeLine = monthName && info.intakeYear != null
+    ? `Intake: ${monthName} ${info.intakeYear} (Semester ${excelIntakeSemesterOf(info.intakeMonth)})`
+    : 'Intake: Unknown';
+  return [
+    [info.courseName.toUpperCase()],
+    [`Major: ${info.majorName ?? 'Standard Pathway'}`],
+    [intakeLine],
+  ];
+}
+
+export const EXCEL_COLUMN_HEADER = ['Year', 'Semester', 'Term', 'Unit Code', 'Unit Name', 'Category'];
+
+const EXCEL_HEADER_TEXT_ROWS = 3;
+const EXCEL_BLANK_ROWS_AFTER_HEADER = 1;
+/**
+ * Row index (0-based) of the Year/Semester/Term/... column-header row in the
+ * readable sheet, now that the title block pushes it down from row 0.
+ * computeExcelMergeRanges above is untouched and still returns ranges in
+ * "row 0 = column header" space; applyStudyPlanSheetStyling below is the one
+ * place that adds this offset before writing anything to the real sheet.
+ */
+export const EXCEL_TABLE_HEADER_ROW = EXCEL_HEADER_TEXT_ROWS + EXCEL_BLANK_ROWS_AFTER_HEADER;
+
+/** The readable "Study Plan" sheet's full row data: title block, blank row, column header, then one row per unit. */
+export function buildStudyPlanSheetAoa(rows: ExcelPlanRow[], info: ExcelPlanHeaderInfo): (string | number)[][] {
+  return [
+    ...buildStudyPlanHeaderRows(info),
+    [],
+    EXCEL_COLUMN_HEADER,
+    ...rows.map((r) => [r.year, r.semester, r.term, r.code, r.name, r.categoryLabel]),
+  ];
+}
+
+/**
+ * The same header/fill/border/merge styling handleExcelDownload always
+ * applied, shifted down by EXCEL_TABLE_HEADER_ROW for the title block now
+ * above it. Takes the xlsx-js-style module as a parameter (rather than
+ * importing it directly) so this stays callable from a test with a
+ * statically-imported copy of the real library, not a mock.
+ */
+export function applyStudyPlanSheetStyling(XLSX: any, ws: any, rows: ExcelPlanRow[]): void {
+  const thinBorder = {
+    top: { style: 'thin', color: { rgb: '999999' } },
+    bottom: { style: 'thin', color: { rgb: '999999' } },
+    left: { style: 'thin', color: { rgb: '999999' } },
+    right: { style: 'thin', color: { rgb: '999999' } },
+  };
+
+  // Column-header row: bold, light grey, bordered
+  for (let c = 0; c < EXCEL_COLUMN_HEADER.length; c++) {
+    const cellRef = XLSX.utils.encode_cell({ r: EXCEL_TABLE_HEADER_ROW, c });
+    const cell = ws[cellRef];
+    if (!cell) continue;
+    cell.s = {
+      font: { bold: true },
+      fill: { patternType: 'solid', fgColor: { rgb: 'D9D9D9' } },
+      border: thinBorder,
+    };
+  }
+
+  rows.forEach((row, i) => {
+    for (let c = 0; c < EXCEL_COLUMN_HEADER.length; c++) {
+      const cellRef = XLSX.utils.encode_cell({ r: EXCEL_TABLE_HEADER_ROW + 1 + i, c });
+      const cell = ws[cellRef];
+      if (!cell) continue;
+      const fill = { patternType: 'solid' as const, fgColor: { rgb: excelCellFillHex(row.category, c) } };
+      cell.s = { fill, border: thinBorder };
+    }
+  });
+
+  // Merges from computeExcelMergeRanges are in "row 0 = column header" space;
+  // shift both ends by EXCEL_TABLE_HEADER_ROW before writing them for real.
+  const merges = computeExcelMergeRanges(rows).map((range) => ({
+    s: { r: range.s.r + EXCEL_TABLE_HEADER_ROW, c: range.s.c },
+    e: { r: range.e.r + EXCEL_TABLE_HEADER_ROW, c: range.e.c },
+  }));
+  ws['!merges'] = merges;
+  for (const range of merges) {
+    const cellRef = XLSX.utils.encode_cell(range.s);
+    const cell = ws[cellRef];
+    if (!cell) continue;
+    cell.s = { ...cell.s, alignment: { vertical: 'center', horizontal: 'center' } };
+  }
+
+  ws['!cols'] = [{ wch: 6 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 40 }, { wch: 22 }];
+}
+
+/** The "Plan Data" sheet's row data: a plain-text note, then the payload's own key/value rows. Kept unformatted and merge-free. */
+export function buildPlanDataSheetAoa(payload: PlanPayload): string[][] {
+  return [[PLAN_DATA_SHEET_NOTE], ...payloadToRows(payload)];
+}
+
 export default function PathwayPage() {
   const { showToast } = useToast();
   const router = useRouter();
@@ -372,7 +499,7 @@ export default function PathwayPage() {
     selectedPlannerIdx,
     manualPlanner,
     customPlan, setCustomPlan,
-    setCustomPlanStart,
+    customPlanStart, setCustomPlanStart,
     retakeUnitCodes, setRetakeUnitCodes,
     concededPassRetakeWarnings, setConcededPassRetakeWarnings,
     injectedMinors, setInjectedMinors,
@@ -1604,69 +1731,57 @@ export default function PathwayPage() {
 
                   const rows = buildExcelRows(semesters, planIntakeSemester, primaryMilestone, activeWilSlot, remainingMpus);
 
-                  const header = ['Year', 'Semester', 'Term', 'Unit Code', 'Unit Name', 'Category'];
-                  const aoa: (string | number)[][] = [
-                    header,
-                    ...rows.map((r) => [r.year, r.semester, r.term, r.code, r.name, r.categoryLabel]),
-                  ];
-                  const ws = XLSX.utils.aoa_to_sheet(aoa);
-
-                  const thinBorder = {
-                    top: { style: 'thin', color: { rgb: '999999' } },
-                    bottom: { style: 'thin', color: { rgb: '999999' } },
-                    left: { style: 'thin', color: { rgb: '999999' } },
-                    right: { style: 'thin', color: { rgb: '999999' } },
+                  const headerInfo: ExcelPlanHeaderInfo = {
+                    courseName: selectedPlanner?.course?.name ?? 'Course',
+                    majorName: selectedPlanner?.major?.name ?? null,
+                    intakeYear: selectedPlanner?.intake_year ?? null,
+                    intakeMonth: selectedPlanner?.intake_month ?? null,
                   };
+                  const aoa = buildStudyPlanSheetAoa(rows, headerInfo);
+                  const ws = XLSX.utils.aoa_to_sheet(aoa);
+                  applyStudyPlanSheetStyling(XLSX, ws, rows);
 
-                  // Header row: bold, light grey, bordered
-                  for (let c = 0; c < header.length; c++) {
-                    const cellRef = XLSX.utils.encode_cell({ r: 0, c });
-                    const cell = (ws as any)[cellRef];
-                    if (!cell) continue;
-                    cell.s = {
-                      font: { bold: true },
-                      fill: { patternType: 'solid', fgColor: { rgb: 'D9D9D9' } },
-                      border: thinBorder,
-                    };
-                  }
-
-                  // Category colour fill on Unit Code/Name/Category only (columns
-                  // 3-5): that colour describes the UNIT, matching the canonical
-                  // badge mapping (not the PDF's own pastel palette). Year/Semester/
-                  // Term (columns 0-2) get a neutral grey instead: once consecutive
-                  // cells there are merged, Excel renders only the merged block's
-                  // top-left cell, so colouring them by category would show
-                  // whichever row happened to be first (arbitrary, not a grouping
-                  // colour). Every cell still gets the border, category-coloured or not.
-                  rows.forEach((row, i) => {
-                    for (let c = 0; c < header.length; c++) {
-                      const cellRef = XLSX.utils.encode_cell({ r: i + 1, c });
-                      const cell = (ws as any)[cellRef];
-                      if (!cell) continue;
-                      const fill = { patternType: 'solid' as const, fgColor: { rgb: excelCellFillHex(row.category, c) } };
-                      cell.s = { fill, border: thinBorder };
-                    }
-                  });
-
-                  // Merge consecutive identical Year/Semester/Term cells (each
-                  // column independently, see computeExcelMergeRanges) and
-                  // centre the merged block's content, without losing the fill/
-                  // border already set on the top-left cell above.
-                  const merges = computeExcelMergeRanges(rows);
-                  (ws as any)['!merges'] = merges;
-                  for (const range of merges) {
-                    const cellRef = XLSX.utils.encode_cell(range.s);
-                    const cell = (ws as any)[cellRef];
-                    if (!cell) continue;
-                    cell.s = { ...cell.s, alignment: { vertical: 'center', horizontal: 'center' } };
-                  }
-
-                  (ws as any)['!cols'] = [
-                    { wch: 6 }, { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 40 }, { wch: 22 },
-                  ];
+                  const payloadInput: BuildPlanPayloadInput = {
+                    planner: {
+                      courseCode: selectedPlanner?.course?.code ?? null,
+                      courseName: selectedPlanner?.course?.name ?? 'Course',
+                      majorName: selectedPlanner?.major?.name ?? null,
+                      intakeYear: selectedPlanner?.intake_year ?? 0,
+                      intakeMonth: selectedPlanner?.intake_month ?? null,
+                    },
+                    completedUnitCodes: getCompletedUnitCodes(allTranscriptUnits),
+                    concededPassUnitCodes: getConcededPassUnitCodes(allTranscriptUnits),
+                    arrangement: semesters.flatMap((sem) =>
+                      (sem.units as any[]).map((u, position) => ({
+                        code: u.code,
+                        category: u.category,
+                        year: sem.year,
+                        semester: sem.semester,
+                        position,
+                        recommended: !!u.recommended,
+                        outsidePlanner: !!u.outsidePlanner,
+                        retake: retakeUnitCodes.has(normaliseCode(u.code)),
+                        concededPassRetake: concededPassRetakeCodes.has(normaliseCode(u.code)),
+                      }))
+                    ),
+                    outsidePlannerUnitCodes: planExtraUnits.map((u) => u.code),
+                    minorNames: availableMinors
+                      .filter((m: any) => injectedMinors.has(m.minorId))
+                      .map((m: any) => m.minorName),
+                    doubleMajorMajorName: selectedDoubleMajorId
+                      ? availableDoubleMajors.find((dm: any) => dm.plannerId === selectedDoubleMajorId)?.majorName ?? null
+                      : null,
+                    customWilSlot: customWilSlot ?? null,
+                    customMpuList: remainingMpus,
+                    startYear: customPlanStart?.year ?? selectedPlanner?.intake_year ?? 0,
+                    startSemester: customPlanStart?.semester ?? planIntakeSemester,
+                  };
+                  const payload = buildPlanPayload(payloadInput);
+                  const planDataWs = XLSX.utils.aoa_to_sheet(buildPlanDataSheetAoa(payload));
 
                   const wb = XLSX.utils.book_new();
                   XLSX.utils.book_append_sheet(wb, ws, 'Study Plan');
+                  XLSX.utils.book_append_sheet(wb, planDataWs, PLAN_DATA_SHEET_NAME);
 
                   const fileName = `${(selectedPlanner?.course?.name ?? 'Course').replace(/[^a-zA-Z0-9]/g, '_')}_Study_Plan.xlsx`;
                   XLSX.writeFile(wb, fileName);
