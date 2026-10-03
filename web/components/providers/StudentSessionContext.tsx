@@ -27,6 +27,16 @@ export type RestoredSession = {
   dashboardData: any;
   /** ISO date the source file was exported on, for the "snapshot" banner. */
   exportDate: string;
+  /**
+   * The saved plan's start position, same kind as customPlanStart and the
+   * /api/custom-planner response's own startYear/startSemester: a slot
+   * "year of study" counter (1, 2, 3, ...), not a calendar year, and a slot
+   * semester (1 | 2), not a calendar term. Regenerate must send these
+   * explicitly for a restored session, since its synthetic transcript has
+   * no terms for the server's own resolveNextStudyTerm to derive them from.
+   */
+  startYear: number;
+  startSemester: 1 | 2;
 };
 
 export type StudentSessionState = {

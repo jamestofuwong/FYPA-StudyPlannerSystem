@@ -752,6 +752,12 @@ export default function PathwayPage() {
           courseList: scrapedStudent?.student?.courseList ?? [],
           injectedMinorIds: [...effectiveInjections],
           selectedDoubleMajorId: effectiveDoubleMajorId,
+          // A restored session's synthetic transcript carries no terms (the
+          // payload is codes only), so the server's own resolveNextStudyTerm
+          // fallback would derive Year 1 Semester 1 from zero terms, not the
+          // saved plan's real position. Explicit here, and ONLY here: a
+          // normal session must send exactly the body it always has.
+          ...(restoredSession ? { startYear: restoredSession.startYear, startSemester: restoredSession.startSemester } : {}),
         }),
       });
 
@@ -883,6 +889,8 @@ export default function PathwayPage() {
         scrapedStudent: { studentId: 'restored', student: { courseList: syntheticCourseList, selectedEnrollment: '' } as any },
         dashboardData: { completedCodes: payload.completedUnitCodes, mpuCourseList: [], planners: [resolveData.planner] },
         exportDate: payload.exportDate,
+        startYear: payload.startYear,
+        startSemester: payload.startSemester,
       });
 
       const genRes = await fetch('/api/custom-planner', {

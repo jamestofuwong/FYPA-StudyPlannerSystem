@@ -1,10 +1,10 @@
 /** @jest-environment jsdom */
-import React from 'react';
+import React, { useEffect } from 'react';
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import * as XLSX from 'xlsx-js-style';
 import PathwayPage from '@/app/(pages)/pathway/page';
 import DashboardPage from '@/app/(pages)/dashboard/page';
-import { StudentSessionProvider } from '@/components/providers/StudentSessionContext';
+import { StudentSessionProvider, useStudentSession } from '@/components/providers/StudentSessionContext';
 import { ToastProvider } from '@/components/providers/ToastProvider';
 import { buildPlanPayload, payloadToRows, PLAN_DATA_SHEET_NAME, PLAN_DATA_SHEET_NOTE, type BuildPlanPayloadInput, type PlanPayload } from '@core/shared/planFile';
 
@@ -60,8 +60,12 @@ const richPayloadInput: BuildPlanPayloadInput = {
   doubleMajorMajorName: null,
   customWilSlot: null,
   customMpuList: [{ code: 'MPU1', name: 'MPU Unit' }],
-  startYear: 2023,
-  startSemester: 2,
+  // Slot "year of study" / slot semester, the same kind customPlanStart and
+  // the /api/custom-planner response use — NOT the planner's calendar
+  // intakeYear (2023, above). A near-graduation student's own start slot,
+  // e.g. "Year 4 Semester 1", not a calendar year.
+  startYear: 4,
+  startSemester: 1,
 };
 
 function buildRealPlanFile(payload: PlanPayload, opts: { noPlanDataSheet?: boolean; oversized?: boolean } = {}): File {
@@ -355,22 +359,23 @@ describe('restoring a plan from an exported Excel file', () => {
     expect(screen.queryByText('CORE1', { selector: 'code' })).toBeNull();
   });
 
-  // Part 5: what does "Regenerate" do on a restored session? The payload
-  // deliberately carries no terms (codes only), so the synthetic courseList
-  // built on restore has every row's term blank. generateCustomPlan's own
-  // request never sends an explicit startYear/startSemester (see
-  // page.tsx's /api/custom-planner call) — it only ever sends courseList
-  // and lets the server's resolveNextStudyTerm derive the start position by
-  // counting distinct _S1/_S2 terms in it. Zero distinct terms resolves to
-  // year 1 semester 1 (customPlannerScheduler.ts's own documented fallback),
-  // regardless of the restored plan's real position. Not fixed here per the
-  // task's explicit instruction — reported, not patched.
-  test('Part 5: "Regenerate" after a restore resets the start position to Year 1 Semester 1, not the original position', async () => {
+  // Part 5 (originally) / Part 1 of the follow-up hardening task: what does
+  // "Regenerate" do on a restored session? The payload deliberately carries
+  // no terms (codes only), so the synthetic courseList built on restore has
+  // every row's term blank, and generateCustomPlan's own request only ever
+  // sent courseList, leaving the server's resolveNextStudyTerm to derive the
+  // start position by counting distinct _S1/_S2 terms in it — zero distinct
+  // terms resolved to Year 1 Semester 1 regardless of the restored plan's
+  // real position. Fixed: generateCustomPlan now sends restoredSession's own
+  // saved startYear/startSemester explicitly, the same slot kind the server
+  // already echoes back via customPlanStart, ONLY when restoredSession is
+  // present, so the regenerated plan keeps the original's start position.
+  test('"Regenerate" after a restore keeps the saved start position, not Year 1 Semester 1', async () => {
     const originalConfirm = window.confirm;
     window.confirm = jest.fn(() => true);
     try {
       mockRestoreFetch();
-      const payload = buildPlanPayload(richPayloadInput); // startYear: 2023, startSemester: 2
+      const payload = buildPlanPayload(richPayloadInput); // startYear: 4, startSemester: 1 (slot kind)
       const file = buildRealPlanFile(payload);
 
       render(<Harness />);
@@ -380,10 +385,10 @@ describe('restoring a plan from an exported Excel file', () => {
       const fetchMock = global.fetch as jest.Mock;
       const firstGenerateCall = fetchMock.mock.calls.find((c) => String(c[0]).includes('/api/custom-planner'));
       const firstGenerateBody = JSON.parse(firstGenerateCall![1].body);
-      // The restore's OWN generate call does send the original position explicitly.
-      expect(firstGenerateBody.startYear).toBe(2023);
-      expect(firstGenerateBody.startSemester).toBe(2);
-      // But every synthetic transcript row has a blank term, by construction.
+      // The restore's own generate call sends the original position explicitly.
+      expect(firstGenerateBody.startYear).toBe(4);
+      expect(firstGenerateBody.startSemester).toBe(1);
+      // Every synthetic transcript row still has a blank term, by construction.
       expect(firstGenerateBody.courseList.every((row: any) => row.term === '')).toBe(true);
 
       fetchMock.mockClear();
@@ -393,15 +398,155 @@ describe('restoring a plan from an exported Excel file', () => {
 
       const regenerateCall = fetchMock.mock.calls.find((c) => String(c[0]).includes('/api/custom-planner'));
       const regenerateBody = JSON.parse(regenerateCall![1].body);
-      // Regenerate never sends an explicit start position at all, unlike the
-      // restore's own first call — this is the actual behaviour difference.
-      expect(regenerateBody.startYear).toBeUndefined();
-      expect(regenerateBody.startSemester).toBeUndefined();
-      // And its courseList is just as blank-term as before, so the server's
-      // resolveNextStudyTerm falls back to Year 1 Semester 1 (0 distinct terms).
-      expect(regenerateBody.courseList.every((row: any) => row.term === '')).toBe(true);
+      // Regenerate now sends the SAME saved start position as the restore's
+      // own first call, not Year 1 Semester 1 — the actual fix.
+      expect(regenerateBody.startYear).toBe(4);
+      expect(regenerateBody.startSemester).toBe(1);
     } finally {
       window.confirm = originalConfirm;
     }
+  });
+});
+
+describe('Regenerate keeps the same first-semester slot and calendar-term label as the restore, for both intakes', () => {
+  // calendarTermFor(slotSemester, intakeSemester) flips for a September
+  // intake (intakeSemester 2) and passes through for a February intake
+  // (intakeSemester 1) — see customPlannerScheduler.ts. monthsOf(1) =
+  // "Feb/Mar", monthsOf(2) = "Aug/Sep".
+  test.each([
+    { label: 'September intake', intakeMonth: 9, intakeSemester: 2 as const, expectedMonths: 'Aug/Sep' },
+    { label: 'February intake', intakeMonth: 2, intakeSemester: 1 as const, expectedMonths: 'Feb/Mar' },
+  ])('$label: restored and regenerated plans both show YEAR 4 SEM 1 $expectedMonths', async ({ intakeMonth, intakeSemester, expectedMonths }) => {
+    const originalConfirm = window.confirm;
+    window.confirm = jest.fn(() => true);
+    try {
+      const fixturePlanner = () => ({ ...planner(), intake_month: intakeMonth });
+
+      global.fetch = jest.fn((url: string, init?: any) => {
+        const u = String(url);
+        if (u.includes('/api/plan-file/resolve')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({
+              success: true, planner: fixturePlanner(), minorIds: [], unmatchedMinorNames: [],
+              doubleMajorPlannerId: null, doubleMajorUnmatched: false, outsidePlannerUnits: [], unresolvedOutsidePlannerUnitCodes: [],
+            }),
+          });
+        }
+        if (u.includes('/api/custom-planner')) {
+          // Echoes the request's own startYear/startSemester into the first
+          // semester bucket, simulating a real scheduler starting exactly
+          // where it was told to — this is what makes the test meaningful:
+          // if generateCustomPlan stopped sending the saved position, this
+          // mock would fall back to undefined/undefined and the two headings
+          // below would stop matching.
+          const body = JSON.parse(init.body);
+          const startYear = body.startYear ?? 1;
+          const startSemester = body.startSemester ?? 1;
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({
+              success: true,
+              data: { semesters: [{ year: startYear, semester: startSemester, units: [schedulableUnit('CORE1', 'Core Unit', 'core')] }], unschedulableUnits: [], warnings: [] },
+              units: [schedulableUnit('CORE1', 'Core Unit', 'core')],
+              mpuUnits: [], electiveCandidates: [], completedUnits: [],
+              intakeSemester,
+              requirements: [], allMpuUnits: [], availableDoubleMajors: [], availableMinors: [], breakMilestones: [],
+              startYear, startSemester,
+            }),
+          });
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+      }) as unknown as typeof fetch;
+
+      const payload = buildPlanPayload({
+        ...richPayloadInput,
+        planner: { ...richPayloadInput.planner, intakeMonth },
+        arrangement: [
+          { code: 'CORE1', category: 'core', year: 4, semester: 1, position: 0, recommended: false, outsidePlanner: false, retake: false, concededPassRetake: false },
+        ],
+        outsidePlannerUnitCodes: [],
+        minorNames: [],
+        customMpuList: [],
+        startYear: 4,
+        startSemester: 1,
+      });
+      const file = buildRealPlanFile(payload);
+
+      render(<Harness />);
+      await uploadFile(file);
+
+      const expectedHeading = new RegExp(`YEAR 4.*SEM 1.*${expectedMonths.replace('/', '\\/')}`);
+      await waitFor(() => expect(document.body.textContent).toMatch(expectedHeading));
+
+      await act(async () => {
+        fireEvent.click(await screen.findByText(/Regenerate Pathway/i));
+      });
+
+      await waitFor(() => expect(document.body.textContent).toMatch(expectedHeading));
+    } finally {
+      window.confirm = originalConfirm;
+    }
+  });
+});
+
+describe('a normal (non-restored) session is unaffected by the restoredSession start-position fix', () => {
+  function NormalSeed() {
+    const session = useStudentSession();
+    useEffect(() => {
+      session.setStudentLoaded(true);
+      session.setScrapedStudent({ studentId: 'S1', student: { courseList: [], selectedEnrollment: '' } as any });
+      session.setDashboardData({
+        completedCodes: [], mpuCourseList: [],
+        planners: [{ ...planner(), units: [{ category: 'core', year_level: 1, semester: 1, unit: { unit_code: 'CORE1', unit_name: 'Core Unit', requisite_groups: [] } }] }],
+      });
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+    return null;
+  }
+
+  const NormalHarness = () => (
+    <ToastProvider>
+      <StudentSessionProvider>
+        <NormalSeed />
+        <PathwayPage />
+      </StudentSessionProvider>
+    </ToastProvider>
+  );
+
+  test('the generate request body is exactly the same shape as before this fix: no startYear/startSemester keys at all', async () => {
+    global.fetch = jest.fn((url: string) => {
+      if (String(url).includes('/api/custom-planner')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            success: true,
+            data: { semesters: [{ year: 1, semester: 1, units: [schedulableUnit('CORE1', 'Core Unit', 'core')] }], unschedulableUnits: [], warnings: [] },
+            units: [schedulableUnit('CORE1', 'Core Unit', 'core')],
+            intakeSemester: 1, requirements: [], completedUnits: [],
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    }) as unknown as typeof fetch;
+
+    render(<NormalHarness />);
+    await act(async () => {
+      fireEvent.click(await screen.findByText(/Generate Custom Pathway/i));
+    });
+    await screen.findByText('CORE1', { selector: 'code' });
+
+    const fetchMock = global.fetch as jest.Mock;
+    const call = fetchMock.mock.calls.find((c) => String(c[0]).includes('/api/custom-planner'));
+    const body = JSON.parse(call![1].body);
+
+    // The exact same key set this request has always had — restoredSession
+    // is null for a normal session, so the conditional spread adds nothing.
+    expect(Object.keys(body).sort()).toEqual([
+      'completedUnitCodes', 'concededPassUnitCodes', 'courseList',
+      'injectedMinorIds', 'plannerId', 'selectedDoubleMajorId',
+    ].sort());
+    expect(body).not.toHaveProperty('startYear');
+    expect(body).not.toHaveProperty('startSemester');
   });
 });
