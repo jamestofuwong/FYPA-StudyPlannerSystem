@@ -311,4 +311,97 @@ describe('restoring a plan from an exported Excel file', () => {
     await screen.findByText('CORE1', { selector: 'code' });
     expect(document.body.textContent).toMatch(/MISSING_CORE.*required to graduate but.*not in this plan/i);
   });
+
+  test('a Plan Data sheet with a huge declared range but few actual cells is rejected before sheet_to_json ever runs', async () => {
+    mockRestoreFetch();
+    const payload = buildPlanPayload(richPayloadInput);
+    const planDataWs = XLSX.utils.aoa_to_sheet([[PLAN_DATA_SHEET_NOTE], ...payloadToRows(payload)]);
+    // A real worksheet whose own !ref claims 100,000 rows while only ~15 are
+    // actually populated — confirmed empirically that XLSX.write/read
+    // preserve this attribute verbatim, so this is a faithful simulation of
+    // a hand-crafted hostile file, not a test artefact.
+    (planDataWs as any)['!ref'] = 'A1:B100000';
+    const readableWs = XLSX.utils.aoa_to_sheet([['BACHELOR OF COMPUTER SCIENCE']]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, readableWs, 'Study Plan');
+    XLSX.utils.book_append_sheet(wb, planDataWs, PLAN_DATA_SHEET_NAME);
+    const arrayBuffer: ArrayBuffer = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+    const file = new File([arrayBuffer], 'hostile.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+    render(<Harness />);
+    await uploadFile(file);
+
+    await screen.findByText(/larger than a plan export should ever be/i);
+    expect(screen.queryByText('CORE1', { selector: 'code' })).toBeNull();
+  });
+
+  test('the readable "Study Plan" sheet is never parsed for data, even when it contains a full payload by mistake', async () => {
+    mockRestoreFetch();
+    const payload = buildPlanPayload(richPayloadInput);
+    // The valid payload sits in the READABLE sheet instead of "Plan Data" —
+    // if handleRestoreFile ever fell back to parsing the readable sheet,
+    // this file would restore successfully. It must not: only the sheet
+    // named PLAN_DATA_SHEET_NAME is ever read, so this must still block.
+    const misplacedWs = XLSX.utils.aoa_to_sheet([[PLAN_DATA_SHEET_NOTE], ...payloadToRows(payload)]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, misplacedWs, 'Study Plan');
+    const arrayBuffer: ArrayBuffer = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+    const file = new File([arrayBuffer], 'misplaced.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+    render(<Harness />);
+    await uploadFile(file);
+
+    await screen.findByText(/has no "Plan Data" sheet/i);
+    expect(screen.queryByText('CORE1', { selector: 'code' })).toBeNull();
+  });
+
+  // Part 5: what does "Regenerate" do on a restored session? The payload
+  // deliberately carries no terms (codes only), so the synthetic courseList
+  // built on restore has every row's term blank. generateCustomPlan's own
+  // request never sends an explicit startYear/startSemester (see
+  // page.tsx's /api/custom-planner call) — it only ever sends courseList
+  // and lets the server's resolveNextStudyTerm derive the start position by
+  // counting distinct _S1/_S2 terms in it. Zero distinct terms resolves to
+  // year 1 semester 1 (customPlannerScheduler.ts's own documented fallback),
+  // regardless of the restored plan's real position. Not fixed here per the
+  // task's explicit instruction — reported, not patched.
+  test('Part 5: "Regenerate" after a restore resets the start position to Year 1 Semester 1, not the original position', async () => {
+    const originalConfirm = window.confirm;
+    window.confirm = jest.fn(() => true);
+    try {
+      mockRestoreFetch();
+      const payload = buildPlanPayload(richPayloadInput); // startYear: 2023, startSemester: 2
+      const file = buildRealPlanFile(payload);
+
+      render(<Harness />);
+      await uploadFile(file);
+      await screen.findByText('CORE1', { selector: 'code' });
+
+      const fetchMock = global.fetch as jest.Mock;
+      const firstGenerateCall = fetchMock.mock.calls.find((c) => String(c[0]).includes('/api/custom-planner'));
+      const firstGenerateBody = JSON.parse(firstGenerateCall![1].body);
+      // The restore's OWN generate call does send the original position explicitly.
+      expect(firstGenerateBody.startYear).toBe(2023);
+      expect(firstGenerateBody.startSemester).toBe(2);
+      // But every synthetic transcript row has a blank term, by construction.
+      expect(firstGenerateBody.courseList.every((row: any) => row.term === '')).toBe(true);
+
+      fetchMock.mockClear();
+      await act(async () => {
+        fireEvent.click(await screen.findByText(/Regenerate Pathway/i));
+      });
+
+      const regenerateCall = fetchMock.mock.calls.find((c) => String(c[0]).includes('/api/custom-planner'));
+      const regenerateBody = JSON.parse(regenerateCall![1].body);
+      // Regenerate never sends an explicit start position at all, unlike the
+      // restore's own first call — this is the actual behaviour difference.
+      expect(regenerateBody.startYear).toBeUndefined();
+      expect(regenerateBody.startSemester).toBeUndefined();
+      // And its courseList is just as blank-term as before, so the server's
+      // resolveNextStudyTerm falls back to Year 1 Semester 1 (0 distinct terms).
+      expect(regenerateBody.courseList.every((row: any) => row.term === '')).toBe(true);
+    } finally {
+      window.confirm = originalConfirm;
+    }
+  });
 });

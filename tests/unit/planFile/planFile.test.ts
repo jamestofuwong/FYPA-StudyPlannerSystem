@@ -229,3 +229,187 @@ describe('rowsToPayload on a malformed sheet', () => {
     expect('error' in r).toBe(true);
   });
 });
+
+// Part 2: hostile-input hardening. rowsToPayload's only "key-like" cell data
+// is a Plan Data row's key column, and it only ever reaches a Map guarded by
+// the ROW_KEYS allowlist — never a plain-object property write — so there is
+// no path from a cell value to Object.prototype. These tests prove it, not
+// just assert it: every case below must produce an issue or a clear error,
+// never throw, and leave Object.prototype provably untouched.
+describe('Part 2: hostile spreadsheet input never pollutes Object.prototype', () => {
+  const validRows = () => payloadToRows(buildPlanPayload(richInput));
+
+  const expectCleanPrototype = () => {
+    expect(({} as any).polluted).toBeUndefined();
+    expect(Object.getPrototypeOf({})).toBe(Object.prototype);
+    expect(Object.keys(Object.prototype)).toEqual([]);
+  };
+
+  afterEach(() => {
+    expectCleanPrototype();
+  });
+
+  test.each(['__proto__', 'constructor', 'prototype'])('a metadata row keyed "%s" is ignored, not written anywhere, and reported as an issue', (poisonKey) => {
+    const rows = [...validRows(), [poisonKey, '{"polluted":true}']];
+    const r = rowsToPayload(rows);
+    expect(() => rowsToPayload(rows)).not.toThrow();
+    expect('error' in r).toBe(false);
+    if ('error' in r) return;
+    expect(r.issues.some((i) => i.code === 'unknown_key' && i.message.includes(poisonKey))).toBe(true);
+    // The rest of the sheet still restored correctly around the poisoned row.
+    expect(r.payload.planner.courseCode).toBe('BA-CS');
+  });
+
+  test('duplicate metadata keys: the first value is kept, the duplicate is reported as an issue, never silently overwritten', () => {
+    const rows = validRows();
+    const plannerRowIdx = rows.findIndex((row) => row[0] === 'planner');
+    const duplicateRows = [...rows, ['planner', JSON.stringify({ courseCode: 'FAKE', courseName: 'Fake Course', majorName: null, intakeYear: 1, intakeMonth: null })]];
+    const r = rowsToPayload(duplicateRows);
+    expect('error' in r).toBe(false);
+    if ('error' in r) return;
+    expect(r.payload.planner.courseCode).toBe(rows[plannerRowIdx] && JSON.parse(rows[plannerRowIdx][1]).courseCode);
+    expect(r.issues.some((i) => i.code === 'duplicate_key')).toBe(true);
+  });
+
+  test('a cell that looks like a formula is treated as plain text, never evaluated, in any string field', () => {
+    const rows = validRows();
+    const doubleMajorRowIdx = rows.findIndex((row) => row[0] === 'doubleMajorMajorName');
+    rows[doubleMajorRowIdx] = ['doubleMajorMajorName', JSON.stringify('=1+1')];
+    const minorNamesRowIdx = rows.findIndex((row) => row[0] === 'minorNames');
+    rows[minorNamesRowIdx] = ['minorNames', JSON.stringify(['=HYPERLINK("http://example.com","click")'])];
+
+    const r = rowsToPayload(rows);
+    expect('error' in r).toBe(false);
+    if ('error' in r) return;
+    // Preserved as the literal text, not evaluated to 2 or turned into a link object.
+    expect(r.payload.doubleMajorMajorName).toBe('=1+1');
+    expect(r.payload.minorNames).toEqual(['=HYPERLINK("http://example.com","click")']);
+  });
+
+  test('non-string cell types (number, boolean, object-like "date", error marker) in the key/value columns never throw', () => {
+    const weirdRows = [
+      ['marker', PLAN_FILE_MARKER],
+      ['formatVersion', 1 as any], // number instead of string
+      [true as any, 'x'], // boolean key
+      ['exportDate', new Date() as any], // Date instead of string
+      ['planner', '#REF!'], // error-looking text, but still just a string
+    ];
+    expect(() => rowsToPayload(weirdRows)).not.toThrow();
+    const r = rowsToPayload(weirdRows);
+    // formatVersion came through as a number, not a string, so the row is
+    // skipped by the string-type guard and the version is unresolved -> error.
+    expect('error' in r).toBe(true);
+  });
+
+  test('a version cell that is a number is accepted exactly like the string form', () => {
+    const rows = validRows().map((row) => (row[0] === 'formatVersion' ? ['formatVersion', String(PLAN_FILE_FORMAT_VERSION)] : row));
+    const r1 = rowsToPayload(rows);
+    expect('error' in r1).toBe(false);
+
+    // Simulate a caller that never stringified the cell (raw: true somewhere upstream):
+    // the Map's string-only guard rejects it cleanly rather than coercing silently.
+    const numericRows = rows.map((row) => (row[0] === 'formatVersion' ? ['formatVersion', PLAN_FILE_FORMAT_VERSION as any] : row));
+    const r2 = rowsToPayload(numericRows);
+    expect('error' in r2).toBe(true);
+  });
+
+  test('strings over the length cap are dropped with an issue, not truncated silently into something else', () => {
+    const rows = validRows();
+    const minorNamesRowIdx = rows.findIndex((row) => row[0] === 'minorNames');
+    const tooLong = 'X'.repeat(PLAN_FILE_LIMITS.maxStringLength + 1);
+    rows[minorNamesRowIdx] = ['minorNames', JSON.stringify([tooLong, 'A Real Minor'])];
+    const r = rowsToPayload(rows);
+    expect('error' in r).toBe(false);
+    if ('error' in r) return;
+    expect(r.payload.minorNames).toEqual(['A Real Minor']);
+    expect(r.issues.some((i) => i.code === 'bad_string')).toBe(true);
+  });
+
+  test('rowsToPayload rejects on row count alone, via a length check before the row loop runs', () => {
+    const hugeRows: string[][] = new Array(PLAN_FILE_LIMITS.maxRows + 1000);
+    for (let i = 0; i < hugeRows.length; i++) hugeRows[i] = ['marker', PLAN_FILE_MARKER];
+    const r = rowsToPayload(hugeRows);
+    expect('error' in r).toBe(true);
+    if (!('error' in r)) return;
+    expect(r.error).toMatch(/more rows than a plan file should ever contain/i);
+  });
+});
+
+// The "declared range huge, few actual cells" and "readable sheet never
+// parsed" cases operate one layer up, at the real XLSX worksheet — see
+// tests/ui/pathway-restore-plan.test.tsx for those (they need a real
+// worksheet's "!ref" attribute, which this pure module never sees).
+
+// Part 3: is maxRows = 50 realistic? The Plan Data sheet is one row per
+// top-level field (14 today — see ROW_KEYS), never one row per item, so a
+// double major / long completed list / many retakes never adds a row at
+// all, only lengthens an existing cell. The real worst-case dimension is
+// cell length, which maxCellLength now bounds directly.
+describe('Part 3: worst-case export sizing', () => {
+  function worstCasePayloadInput(): BuildPlanPayloadInput {
+    // double major, one minor, several outside-planner units, ~30 completed
+    // codes, an MPU list, and a full scheduler-sized arrangement (the
+    // DEFAULT_SCHEDULER_CONFIG caps real usage well under 1000, this is the
+    // realistic worst case, not the absolute allowed maximum).
+    const arrangement = Array.from({ length: 100 }, (_, i) => ({
+      code: `UNIT${String(i).padStart(4, '0')}`,
+      category: 'core',
+      year: Math.floor(i / 5) + 1,
+      semester: (i % 2 === 0 ? 1 : 2) as 1 | 2,
+      position: i % 5,
+      recommended: i % 10 === 0,
+      outsidePlanner: i % 15 === 0,
+      retake: i % 20 === 0,
+      concededPassRetake: i % 25 === 0,
+    }));
+    return {
+      planner: { courseCode: 'BA-CS', courseName: 'Bachelor of Computer Science', majorName: 'Artificial Intelligence', intakeYear: 2023, intakeMonth: 9 },
+      completedUnitCodes: Array.from({ length: 30 }, (_, i) => `DONE${String(i).padStart(3, '0')}`),
+      concededPassUnitCodes: ['CPUNIT1', 'CPUNIT2'],
+      arrangement,
+      outsidePlannerUnitCodes: ['OUT1', 'OUT2', 'OUT3', 'OUT4'],
+      minorNames: ['Data Science Minor'],
+      doubleMajorMajorName: 'Software Development',
+      customWilSlot: '4-2',
+      customMpuList: Array.from({ length: 6 }, (_, i) => ({ code: `MPU${i}`, name: `Malaysian Studies and Language Unit Number ${i}` })),
+      startYear: 2023,
+      startSemester: 2 as const,
+    };
+  }
+
+  test('a realistic worst-case export is exactly 14 rows (fixed), regardless of content size', () => {
+    const payload = buildPlanPayload(worstCasePayloadInput());
+    const rows = payloadToRows(payload);
+    expect(rows.length).toBe(14);
+    expect(rows.length).toBeLessThan(PLAN_FILE_LIMITS.maxRows);
+  });
+
+  test('the worst-case export imports successfully, with no cells rejected', () => {
+    const payload = buildPlanPayload(worstCasePayloadInput());
+    const rows = payloadToRows(payload);
+    // Sanity: every cell is comfortably under the per-cell length cap too.
+    for (const [, value] of rows) expect(value.length).toBeLessThan(PLAN_FILE_LIMITS.maxCellLength);
+
+    const r = rowsToPayload(rows);
+    expect('error' in r).toBe(false);
+    if ('error' in r) return;
+    expect(r.issues).toEqual([]);
+    expect(r.payload).toEqual(payload);
+  });
+
+  test('a single cell exceeding maxCellLength is dropped with an issue, never parsed', () => {
+    const rows = payloadToRows(buildPlanPayload(worstCasePayloadInput()));
+    const arrangementRowIdx = rows.findIndex((row) => row[0] === 'arrangement');
+    const hostileArrangement = JSON.stringify(
+      Array.from({ length: 50000 }, () => ({ code: 'X', category: 'core', year: 1, semester: 1, position: 0 }))
+    );
+    expect(hostileArrangement.length).toBeGreaterThan(PLAN_FILE_LIMITS.maxCellLength);
+    rows[arrangementRowIdx] = ['arrangement', hostileArrangement];
+
+    const r = rowsToPayload(rows);
+    expect('error' in r).toBe(false);
+    if ('error' in r) return;
+    expect(r.payload.arrangement).toEqual([]);
+    expect(r.issues.some((i) => i.code === 'cell_too_large')).toBe(true);
+  });
+});

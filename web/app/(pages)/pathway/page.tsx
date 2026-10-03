@@ -498,6 +498,31 @@ export function buildPlanDataSheetAoa(payload: PlanPayload): string[][] {
   return [[PLAN_DATA_SHEET_NOTE], ...payloadToRows(payload)];
 }
 
+/**
+ * The full two-sheet workbook handleExcelDownload writes, as a pure
+ * function of already-computed state. Extracted so a test can capture the
+ * exact workbook a real export produces and feed it straight into the real
+ * import, rather than only ever exercising import against a hand-built
+ * fixture. Takes the xlsx-js-style module as a parameter, same reason as
+ * applyStudyPlanSheetStyling: callable with a statically-imported real copy
+ * from a test, not a mock.
+ */
+export function buildExcelWorkbook(
+  XLSX: any,
+  rows: ExcelPlanRow[],
+  headerInfo: ExcelPlanHeaderInfo,
+  payload: PlanPayload
+): any {
+  const ws = XLSX.utils.aoa_to_sheet(buildStudyPlanSheetAoa(rows, headerInfo));
+  applyStudyPlanSheetStyling(XLSX, ws, rows);
+  const planDataWs = XLSX.utils.aoa_to_sheet(buildPlanDataSheetAoa(payload));
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Study Plan');
+  XLSX.utils.book_append_sheet(wb, planDataWs, PLAN_DATA_SHEET_NAME);
+  return wb;
+}
+
 export default function PathwayPage() {
   const { showToast } = useToast();
   const router = useRouter();
@@ -1000,7 +1025,7 @@ export default function PathwayPage() {
         <div className={styles.mpuEmptyAlert} style={{ marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
           <span>
             Restored from a file exported on {new Date(restoredSession.exportDate).toLocaleDateString()}.
-            Completed units are as of that date.
+            Completed and in-progress units are as of that date.
             {restoreImportReport && restoreImportReport.skipped.length > 0 && (
               <> {restoreImportReport.skipped.length} item{restoreImportReport.skipped.length !== 1 ? 's' : ''} skipped, see below.</>
             )}
@@ -1982,10 +2007,6 @@ export default function PathwayPage() {
                     intakeYear: selectedPlanner?.intake_year ?? null,
                     intakeMonth: selectedPlanner?.intake_month ?? null,
                   };
-                  const aoa = buildStudyPlanSheetAoa(rows, headerInfo);
-                  const ws = XLSX.utils.aoa_to_sheet(aoa);
-                  applyStudyPlanSheetStyling(XLSX, ws, rows);
-
                   const payloadInput: BuildPlanPayloadInput = {
                     planner: {
                       courseCode: selectedPlanner?.course?.code ?? null,
@@ -2022,11 +2043,7 @@ export default function PathwayPage() {
                     startSemester: customPlanStart?.semester ?? planIntakeSemester,
                   };
                   const payload = buildPlanPayload(payloadInput);
-                  const planDataWs = XLSX.utils.aoa_to_sheet(buildPlanDataSheetAoa(payload));
-
-                  const wb = XLSX.utils.book_new();
-                  XLSX.utils.book_append_sheet(wb, ws, 'Study Plan');
-                  XLSX.utils.book_append_sheet(wb, planDataWs, PLAN_DATA_SHEET_NAME);
+                  const wb = buildExcelWorkbook(XLSX, rows, headerInfo, payload);
 
                   const fileName = `${(selectedPlanner?.course?.name ?? 'Course').replace(/[^a-zA-Z0-9]/g, '_')}_Study_Plan.xlsx`;
                   XLSX.writeFile(wb, fileName);

@@ -15,11 +15,25 @@ export const PLAN_DATA_SHEET_NOTE =
   'This sheet holds machine-readable data used to restore this plan in the Study Planner app. Do not edit it.';
 
 export const PLAN_FILE_LIMITS = {
-  /** Metadata rows in the Plan Data sheet, excluding the note row. */
+  /**
+   * Metadata rows in the Plan Data sheet, excluding the note row. The sheet
+   * is one row per top-level field (14 today, see ROW_KEYS below): a double
+   * major, a long completed list, retakes, etc. all pack into existing
+   * cells as JSON, not extra rows, so this never scales with plan size.
+   * 50 is already ~3.5x that fixed count, with room for a few more fields later.
+   */
   maxRows: 50,
   maxStringLength: 255,
   /** Applies to completedUnitCodes, concededPassUnitCodes, outsidePlannerUnitCodes, minorNames, customMpuList and arrangement. */
   maxCodesPerList: 1000,
+  /**
+   * Bounds a single cell's raw text BEFORE JSON.parse runs, so a hostile
+   * cell can't force a huge parse just to be truncated afterwards by
+   * maxCodesPerList. Sized well above what maxCodesPerList's own ceiling
+   * could ever produce (1000 arrangement entries serialise to well under
+   * 100 KB), not against a realistic plan's actual size.
+   */
+  maxCellLength: 200_000,
 };
 
 export const PLAN_CATEGORIES = [
@@ -167,6 +181,13 @@ export function payloadToRows(payload: PlanPayload): string[][] {
 /** Parses a JSON cell defensively. Never throws; bad JSON becomes `fallback` plus an issue. */
 function parseJsonCell(raw: string | undefined, key: string, fallback: unknown, issues: PlanPayloadIssue[]): unknown {
   if (raw === undefined) return fallback;
+  // Checked before JSON.parse, not after: a hostile cell many megabytes
+  // long should never be parsed at all just to be truncated by
+  // maxCodesPerList afterwards.
+  if (raw.length > PLAN_FILE_LIMITS.maxCellLength) {
+    issues.push({ code: 'cell_too_large', message: `"${key}" in the Plan Data sheet was too large to read; using a default instead.` });
+    return fallback;
+  }
   try {
     return JSON.parse(raw);
   } catch {
@@ -181,12 +202,24 @@ export function rowsToPayload(rows: string[][]): PlanPayloadResult {
     return { error: 'The Plan Data sheet has more rows than a plan file should ever contain.' };
   }
 
+  // byKey is a Map, and every key reaching it has already passed the
+  // ROW_KEYS allowlist below — a cell value of "__proto__", "constructor" or
+  // "prototype" is just an unrecognised key here, never a property write,
+  // so it cannot reach Object.prototype through this or any later step.
+  const issues: PlanPayloadIssue[] = [];
   const byKey = new Map<string, string>();
   for (const row of rows) {
     if (!Array.isArray(row) || row.length < 2) continue;
     const [key, value] = row;
     if (typeof key !== 'string' || typeof value !== 'string') continue;
-    if (!(ROW_KEYS as readonly string[]).includes(key)) continue;
+    if (!(ROW_KEYS as readonly string[]).includes(key)) {
+      issues.push({ code: 'unknown_key', message: `Ignored an unrecognised Plan Data row ("${key}").` });
+      continue;
+    }
+    if (byKey.has(key)) {
+      issues.push({ code: 'duplicate_key', message: `"${key}" appeared more than once in the Plan Data sheet; the first value was kept.` });
+      continue;
+    }
     byKey.set(key, value);
   }
 
@@ -194,7 +227,6 @@ export function rowsToPayload(rows: string[][]): PlanPayloadResult {
     return { error: 'This file does not contain a Study Planner Plan Data sheet.' };
   }
 
-  const issues: PlanPayloadIssue[] = [];
   const formatVersionRaw = byKey.get('formatVersion');
   const formatVersion = formatVersionRaw !== undefined ? Number(formatVersionRaw) : NaN;
   if (!Number.isFinite(formatVersion) || formatVersion !== PLAN_FILE_FORMAT_VERSION) {
