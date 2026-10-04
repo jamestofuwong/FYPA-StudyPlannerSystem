@@ -47,10 +47,12 @@ import {
   type PlanPayload,
 } from '../../../../core/shared/planFile';
 import { overlayRestoredArrangement } from '../../../../core/shared/planFile/restore';
-import { encodePayloadForPdf, PDF_PAYLOAD_PREFIX, PDF_PAYLOAD_LIMITS } from '../../../../core/shared/planFile/pdfPayload';
+import { encodePayloadForPdf, decodePayloadFromPdf, PDF_PAYLOAD_PREFIX, PDF_PAYLOAD_LIMITS } from '../../../../core/shared/planFile/pdfPayload';
 
 /** A plan file's payload is a few KB; this is a generous cap against a hostile oversized upload. */
 const MAX_PLAN_FILE_BYTES = 5 * 1024 * 1024;
+/** Matches the /api/plan-file/read-pdf route's own cap: our own exported PDFs are ~10 KB. */
+const MAX_PDF_FILE_BYTES = 2 * 1024 * 1024;
 
 const CATEGORY_NAMES: Record<string, string> = {
   core: 'Core units',
@@ -886,58 +888,74 @@ export default function PathwayPage() {
 
   const selectedPlanner = selectedPlannerIdx === -1 ? manualPlanner : dashboardData?.planners?.[selectedPlannerIdx];
 
-  // Untrusted input from here down: an advisor-supplied .xlsx file, not a
-  // scraped transcript. Every step below either rejects outright with a
-  // clear message (REQ: no plan-only fallback this sprint) or skips the
+  // Untrusted input from here down: an advisor-supplied .xlsx or .pdf file,
+  // not a scraped transcript. Every step below either rejects outright with
+  // a clear message (REQ: no plan-only fallback this sprint) or skips the
   // offending item and reports it, and never evaluates a formula, builds
   // HTML, or uses a cell value to build a query/path/command.
-  const handleRestoreFile = async (file: File) => {
-    if (!file.name.toLowerCase().endsWith('.xlsx')) {
-      showToast('Please choose a .xlsx file exported from this app.', 'error');
-      return;
-    }
-    if (file.size > MAX_PLAN_FILE_BYTES) {
-      showToast('This file is too large to be a plan export.', 'error');
-      return;
-    }
 
-    setIsRestoringPlan(true);
+  /** Reads the Plan Data sheet from an .xlsx workbook's raw bytes. Never throws. */
+  const extractPayloadFromExcelBytes = async (buffer: ArrayBuffer): Promise<ReturnType<typeof rowsToPayload>> => {
+    if (buffer.byteLength > MAX_PLAN_FILE_BYTES) {
+      return { error: 'This file is too large to be a plan export.' };
+    }
+    const XLSX = await import('xlsx-js-style');
+    let wb;
     try {
-      const XLSX = await import('xlsx-js-style');
-      let wb;
-      try {
-        const buffer = await file.arrayBuffer();
-        wb = XLSX.read(buffer, { type: 'array', cellFormula: false, cellHTML: false });
-      } catch {
-        showToast('Could not read this file. Make sure it is a valid .xlsx file.', 'error');
-        return;
-      }
+      wb = XLSX.read(buffer, { type: 'array', cellFormula: false, cellHTML: false });
+    } catch {
+      return { error: 'Could not read this file. Make sure it is a valid .xlsx file.' };
+    }
 
-      const planDataWs = wb.Sheets[PLAN_DATA_SHEET_NAME];
-      if (!planDataWs) {
-        showToast('This file has no "Plan Data" sheet, so it cannot be restored. It may be from an older export, or that sheet was removed.', 'error');
-        return;
-      }
+    const planDataWs = wb.Sheets[PLAN_DATA_SHEET_NAME];
+    if (!planDataWs) {
+      return { error: 'This file has no "Plan Data" sheet, so it cannot be restored. It may be from an older export, or that sheet was removed.' };
+    }
 
-      // Cap the sheet's declared dimensions before converting it to JSON, so
-      // a hostile file cannot claim an enormous range and exhaust memory.
-      const ref = (planDataWs as any)['!ref'];
-      if (ref) {
-        const range = XLSX.utils.decode_range(ref);
-        if (range.e.r - range.s.r > PLAN_FILE_LIMITS.maxRows + 5) {
-          showToast("This file's Plan Data sheet is larger than a plan export should ever be.", 'error');
-          return;
-        }
+    // Cap the sheet's declared dimensions before converting it to JSON, so
+    // a hostile file cannot claim an enormous range and exhaust memory.
+    const ref = (planDataWs as any)['!ref'];
+    if (ref) {
+      const range = XLSX.utils.decode_range(ref);
+      if (range.e.r - range.s.r > PLAN_FILE_LIMITS.maxRows + 5) {
+        return { error: "This file's Plan Data sheet is larger than a plan export should ever be." };
       }
+    }
 
-      const planDataRows = XLSX.utils.sheet_to_json(planDataWs, { header: 1, raw: false }) as string[][];
-      const result = rowsToPayload(planDataRows.slice(1)); // row 0 is the human-readable note, not data
-      if ('error' in result) {
-        showToast(result.error, 'error');
-        return;
+    const planDataRows = XLSX.utils.sheet_to_json(planDataWs, { header: 1, raw: false }) as string[][];
+    return rowsToPayload(planDataRows.slice(1)); // row 0 is the human-readable note, not data
+  };
+
+  /** Reads the restore payload from a PDF's Keywords property, via the server (pdfjs-dist never runs client-side). Never throws. */
+  const extractPayloadFromPdfBytes = async (buffer: ArrayBuffer): Promise<ReturnType<typeof decodePayloadFromPdf>> => {
+    if (buffer.byteLength > MAX_PDF_FILE_BYTES) {
+      return { error: 'This file is too large to be a plan export.' };
+    }
+    let keywords: string | null;
+    try {
+      const res = await fetch('/api/plan-file/read-pdf', { method: 'POST', body: buffer });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        return { error: data.error ?? 'This PDF could not be read.' };
       }
-      const { payload, issues } = result;
+      keywords = data.keywords;
+    } catch {
+      return { error: 'This PDF could not be read.' };
+    }
+    return decodePayloadFromPdf(keywords);
+  };
 
+  /**
+   * Everything after a payload has been validated: planner resolution,
+   * the restoredSession slot, the generate-then-overlay rebuild, and the
+   * import report. Shared by both readers so the Excel path's behaviour
+   * stays exactly what it was before the PDF path existed.
+   */
+  const restoreFromPayload = async (
+    payload: PlanPayload,
+    issues: { message: string }[],
+    source: 'excel' | 'pdf'
+  ) => {
       const resolveRes = await fetch('/api/plan-file/resolve', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -967,6 +985,7 @@ export default function PathwayPage() {
         scrapedStudent: { studentId: 'restored', student: { courseList: syntheticCourseList, selectedEnrollment: '' } as any },
         dashboardData: { completedCodes: payload.completedUnitCodes, mpuCourseList: [], planners: [resolveData.planner] },
         exportDate: payload.exportDate,
+        source,
         startYear: payload.startYear,
         startSemester: payload.startSemester,
       });
@@ -1041,6 +1060,35 @@ export default function PathwayPage() {
         ],
       });
       showToast('Plan restored from file.', 'success');
+  };
+
+  const handleRestoreFile = async (file: File) => {
+    setIsRestoringPlan(true);
+    try {
+      const buffer = await file.arrayBuffer();
+      const bytes = new Uint8Array(buffer);
+      const isPdf = bytes.length >= 5 && String.fromCharCode(...bytes.subarray(0, 5)) === '%PDF-';
+      const isZip = bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4b && bytes[2] === 0x03 && bytes[3] === 0x04; // 'PK\x03\x04'
+
+      let source: 'excel' | 'pdf';
+      let result: { payload: PlanPayload; issues: { message: string }[] } | { error: string };
+      if (isPdf) {
+        source = 'pdf';
+        result = await extractPayloadFromPdfBytes(buffer);
+      } else if (isZip) {
+        source = 'excel';
+        result = await extractPayloadFromExcelBytes(buffer);
+      } else {
+        showToast('This file is not a supported plan export (.xlsx or .pdf).', 'error');
+        return;
+      }
+
+      if ('error' in result) {
+        showToast(result.error, 'error');
+        return;
+      }
+
+      await restoreFromPayload(result.payload, result.issues, source);
     } finally {
       setIsRestoringPlan(false);
     }
@@ -1056,13 +1104,13 @@ export default function PathwayPage() {
       >
         <div style={{ marginTop: 20, paddingTop: 20, borderTop: '1px solid var(--border-color, rgba(255,255,255,0.1))', width: '100%', maxWidth: 360 }}>
           <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>
-            or restore a previously exported plan (only its "Plan Data" sheet is read; edits made elsewhere in the file are ignored)
+            or restore a previously exported plan (only the restore data inside the file is read — the "Plan Data" sheet for Excel, the document properties for PDF; edits made to the visible table or pages are ignored)
           </div>
           <label className={styles.btnSecondary} style={{ fontSize: 12, cursor: isRestoringPlan ? 'wait' : 'pointer', display: 'inline-block' }}>
-            {isRestoringPlan ? 'Restoring…' : 'Import plan from Excel'}
+            {isRestoringPlan ? 'Restoring…' : 'Import plan (Excel or PDF)'}
             <input
               type="file"
-              accept=".xlsx"
+              accept=".xlsx,.pdf"
               disabled={isRestoringPlan}
               style={{ display: 'none' }}
               onChange={(e) => {
@@ -1110,7 +1158,7 @@ export default function PathwayPage() {
       {restoredSession && (
         <div className={styles.mpuEmptyAlert} style={{ marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
           <span>
-            Restored from a file exported on {new Date(restoredSession.exportDate).toLocaleDateString()}.
+            Restored from {restoredSession.source === 'pdf' ? 'a PDF' : 'an Excel'} file exported on {new Date(restoredSession.exportDate).toLocaleDateString()}.
             Completed and in-progress units are as of that date.
             This file has not been verified against the student's record; confirm it before relying on it.
             {restoreImportReport && restoreImportReport.skipped.length > 0 && (

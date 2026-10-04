@@ -3,7 +3,7 @@
 import React from 'react';
 import {
   BookOpen, Bot, ShieldCheck, Search, Cpu, ListChecks,
-  Compass, AppWindow, Activity, ListOrdered, Lightbulb
+  Compass, AppWindow, Activity, ListOrdered, Lightbulb, FileUp
 } from 'lucide-react';
 import styles from './page.module.css';
 
@@ -158,6 +158,12 @@ export default function UserGuide() {
             <AppWindow className={styles.proTipIcon} size={20} />
             <div className={styles.proTipContent}>
               <p><strong>Keep Tabs Open:</strong> You can keep the "Major Detection" tab open while exploring the "Study Planners" tab to easily cross-reference your required units.</p>
+            </div>
+          </div>
+          <div className={styles.proTipCard}>
+            <FileUp className={styles.proTipIcon} size={20} />
+            <div className={styles.proTipContent}>
+              <p><strong>Restoring a Plan:</strong> To restore a plan on the Study Pathway page, import the original Excel or PDF file exactly as it was exported from this app. A copy that has since been edited or re-saved may not restore correctly. Printing a PDF to a new PDF, or converting it to another format, removes what the import needs — only a file exported directly from this app will work.</p>
             </div>
           </div>
         </div>

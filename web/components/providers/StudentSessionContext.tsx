@@ -35,6 +35,8 @@ export type RestoredSession = {
    * explicitly for a restored session, since its synthetic transcript has
    * no terms for the server's own resolveNextStudyTerm to derive them from.
    */
+  /** Which file format this session was restored from, for the banner's wording only — never changes restore logic. */
+  source: 'excel' | 'pdf';
   startYear: number;
   startSemester: 1 | 2;
 };

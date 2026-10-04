@@ -151,9 +151,9 @@ async function uploadFile(file: File) {
 }
 
 describe('restoring a plan from an exported Excel file', () => {
-  test('the empty state (no student loaded) shows "Import plan from Excel"', async () => {
+  test('the empty state (no student loaded) shows "Import plan (Excel or PDF)"', async () => {
     render(<Harness />);
-    expect(await screen.findByText(/Import plan from Excel/i)).toBeTruthy();
+    expect(await screen.findByText(/Import plan \(Excel or PDF\)/i)).toBeTruthy();
   });
 
   test('a full round trip restores the arrangement, positions, flags, extras, minors, MPU list and the snapshot banner', async () => {
@@ -181,7 +181,7 @@ describe('restoring a plan from an exported Excel file', () => {
     expect(y1s1Rows.indexOf('CORE1')).toBeLessThan(y1s1Rows.indexOf('RETAKEUNIT'));
 
     // Snapshot banner with the export date, and the skipped-item note for GHOST1.
-    expect(document.body.textContent).toMatch(/Restored from a file exported on/i);
+    expect(document.body.textContent).toMatch(/Restored from (a PDF|an Excel) file exported on/i);
     expect(document.body.textContent).toMatch(/1 item skipped/i);
     expect(document.body.textContent).toMatch(/GHOST1/i);
     // The banner also warns the file is unverified against the student's own record.
@@ -202,7 +202,7 @@ describe('restoring a plan from an exported Excel file', () => {
     await act(async () => {
       fireEvent.click(screen.getByText(/Close restored plan/i));
     });
-    expect(await screen.findByText(/Import plan from Excel/i)).toBeTruthy();
+    expect(await screen.findByText(/Import plan \(Excel or PDF\)/i)).toBeTruthy();
   });
 
   test('after a restore, the dashboard still shows its normal "no student" state', async () => {
@@ -235,7 +235,7 @@ describe('restoring a plan from an exported Excel file', () => {
 
     await screen.findByText(/not in this database/i);
     expect(screen.queryByText('CORE1', { selector: 'code' })).toBeNull();
-    expect(screen.getByText(/Import plan from Excel/i)).toBeTruthy();
+    expect(screen.getByText(/Import plan \(Excel or PDF\)/i)).toBeTruthy();
   });
 
   test('an oversized Plan Data sheet is rejected before parsing', async () => {
@@ -248,13 +248,13 @@ describe('restoring a plan from an exported Excel file', () => {
     expect(screen.queryByText('CORE1', { selector: 'code' })).toBeNull();
   });
 
-  test('a non-.xlsx file is rejected outright', async () => {
+  test('a file that is neither a PDF nor a ZIP (.xlsx) is rejected outright, by content not extension', async () => {
     mockRestoreFetch();
     render(<Harness />);
     const file = new File(['not a spreadsheet'], 'notes.txt', { type: 'text/plain' });
     await uploadFile(file);
 
-    await screen.findByText(/Please choose a \.xlsx file/i);
+    await screen.findByText(/not a supported plan export/i);
   });
 
   test('a file missing the Plan Data sheet is blocked, no plan-only fallback', async () => {
