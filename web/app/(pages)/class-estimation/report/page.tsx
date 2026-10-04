@@ -13,6 +13,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { useScrollToTopOnMount } from '../../../../lib/scrollToTop';
 import styles from './page.module.css';
+import { DataTable } from '../components/DataTable';
 
 type SavedRun = {
   id: string;
@@ -56,7 +57,6 @@ export default function ClassEstimationReportPage() {
   const [run, setRun] = useState<SavedRunDetail | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'empty' | 'error'>('loading');
   const [error, setError] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
 
   // The app scrolls an inner panel, not the window, so without this the page opens wherever the estimator
   // was left scrolled to. See scrollToTop.ts.
@@ -93,9 +93,8 @@ export default function ClassEstimationReportPage() {
       });
   }, [loadRun]);
 
-  const visibleUnits = run
-    ? run.units.filter((unit) => unit.unitCode.toLowerCase().includes(search.trim().toLowerCase()))
-    : [];
+  // The bars in the table are drawn against the largest class, so the biggest units stand out at a glance.
+  const largestClass = Math.max(1, ...(run?.units.map((unit) => unit.headcount) ?? []));
 
   // What the figure is mostly made of, which is the difference between a class that will run and one that
   // might. Compulsory units are certain; elective-heavy ones are a spread across options.
@@ -217,43 +216,49 @@ export default function ClassEstimationReportPage() {
             </div>
           </div>
 
-          {/* The figures. One row per unit, largest first, no internal vocabulary. */}
+          {/* Side by side on a wide screen, the guide beside the figures it explains; stacked when narrow. */}
+          <div className={styles.columns}>
+          {/* The figures. One row per unit, largest first, no internal vocabulary. Paged, so a course with
+              hundreds of units takes the same space as one with twenty. */}
           <div className={styles.card}>
-            <div className={styles.tableTop}>
-              <div className={styles.sectionTitle}>Expected enrolment by unit</div>
-              <input
-                className={styles.search}
-                type="text"
-                placeholder="Find a unit"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </div>
+            <div className={styles.sectionTitle} style={{ marginBottom: 12 }}>Expected enrolment by unit</div>
 
-            <div className={styles.table}>
-              <div className={`${styles.row} ${styles.head}`}>
-                <span>Unit</span>
-                <span>Students</span>
-                <span>Made up of</span>
-              </div>
-
-              {visibleUnits.map((unit) => (
-                <div key={unit.unitCode} className={styles.row}>
-                  <span className={styles.code}>{unit.unitCode}</span>
-                  <span className={styles.count}>
-                    {unit.headcount}
-                    {unit.headcount === 0 && <span className={styles.notRunning}> not expected to run</span>}
-                  </span>
-                  <span className={styles.basis}>{describeBasis(unit)}</span>
-                </div>
-              ))}
-
-              {visibleUnits.length === 0 && (
-                <div className={styles.row}>
-                  <span className={styles.basis}>No unit matches “{search}”.</span>
-                </div>
-              )}
-            </div>
+            <DataTable
+              rows={run.units}
+              rowKey={(unit) => unit.unitCode}
+              searchText={(unit) => unit.unitCode}
+              searchPlaceholder="Find a unit"
+              pageSize={20}
+              initialSort={{ key: 'students', direction: 'desc' }}
+              columns={[
+                {
+                  key: 'unit', label: 'Unit', width: 'minmax(100px, 0.8fr)',
+                  render: (unit) => <span className={styles.code}>{unit.unitCode}</span>,
+                  sortValue: (unit) => unit.unitCode,
+                },
+                {
+                  key: 'students', label: 'Students', width: 'minmax(180px, 1.6fr)',
+                  sortValue: (unit) => unit.projected,
+                  // A bar against the largest class, so the big units stand out without reading every number.
+                  render: (unit) => (unit.headcount === 0
+                    ? <span className={styles.notRunning}>0 · not expected to run</span>
+                    : (
+                      <span className={styles.countCell}>
+                        <span className={styles.count}>{unit.headcount.toLocaleString()}</span>
+                        <span className={styles.bar}>
+                          <span className={styles.barFill} style={{ width: `${(unit.headcount / largestClass) * 100}%` }} />
+                        </span>
+                      </span>
+                    )),
+                },
+                {
+                  key: 'basis', label: 'Made up of', width: 'minmax(150px, 1fr)',
+                  render: (unit) => <span className={styles.basis}>{describeBasis(unit)}</span>,
+                  sortValue: (unit) => describeBasis(unit),
+                },
+              ]}
+              empty="This estimate has no units."
+            />
 
             <p className={styles.hintText} style={{ marginTop: 10 }}>
               Each unit is worked out on its own and rounded at the end, so the column may not add up to the
@@ -261,7 +266,7 @@ export default function ClassEstimationReportPage() {
             </p>
           </div>
 
-          <div className={styles.card}>
+          <div className={`${styles.card} ${styles.guide}`}>
             <div className={styles.sectionTitle}>How to read this</div>
             <div className={styles.assumptions}>
               <div>
@@ -283,6 +288,7 @@ export default function ClassEstimationReportPage() {
                 against, and it is worth checking against the first week&apos;s real enrolments.
               </div>
             </div>
+          </div>
           </div>
         </>
       )}
