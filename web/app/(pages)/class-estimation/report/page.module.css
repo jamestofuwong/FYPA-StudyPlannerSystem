@@ -2,15 +2,63 @@
    operated, so the figures get space and there is no dense diagnostic output to fit in. */
 
 .panel {
+  /* Full width, like the estimator page. It used to stop at 1100px, which left half a wide screen empty. */
   padding: 20px 24px 40px;
-  max-width: 1100px;
+}
+
+/* The unit table and the reading guide: side by side when there is room, stacked when there is not. */
+.columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+@media (min-width: 1200px) {
+  .columns {
+    grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr);
+  }
+
+  /* The guide stays in view while the table is scrolled. */
+  .guide {
+    position: sticky;
+    top: 0;
+  }
+}
+
+.columns > .card {
+  margin-bottom: 0;
+}
+
+.countCell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.bar {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--surface-bg);
+  overflow: hidden;
+}
+
+.barFill {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--accent-blue);
 }
 
 .header {
+  /* Title, subtitle, then the button to the other view, stacked. Both class estimation pages lay their
+     header out the same way, so the button is always in the same place whatever the window width. */
   display: flex;
+  flex-direction: column;
   align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
+  gap: 10px;
   margin-bottom: 18px;
 }
 
@@ -238,6 +286,10 @@
 }
 
 .count {
+  /* A fixed width so every bar starts at the same point and the bars compare like for like. */
+  flex-shrink: 0;
+  min-width: 48px;
+  text-align: right;
   font-size: 16px;
   font-weight: 600;
   color: var(--text-primary);

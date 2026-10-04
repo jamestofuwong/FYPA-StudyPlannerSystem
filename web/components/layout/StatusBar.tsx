@@ -14,6 +14,8 @@ const PANEL_LABELS: Record<PanelId, string> = {
     settings: 'Settings',
     "cloud-sync": 'Cloud Sync',
     "user-guide": 'User Guide', 
+    "class-estimation": 'Class Estimation',
+    copilot: 'AI Copilot',
 };
 
 interface StatusBarProps {

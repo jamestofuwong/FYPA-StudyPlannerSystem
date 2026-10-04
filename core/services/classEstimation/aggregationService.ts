@@ -1,7 +1,7 @@
 // ============================================================
-// Phase 8, aggregation. Turns per-student predictions into the per-unit headcount the HoD actually acts on.
+// Phase 8, aggregation. Turns per-student predictions into the per-unit headcount the HoD acts on.
 //
-// Three things happen here and the order matters:
+// Order matters for these three things:
 //
 //   1. The continuing cohort's contributions are added up per unit. Named picks are whole students, elective
 //      shares are fractions, both already worked out upstream.
@@ -11,13 +11,13 @@
 // Step 3 comes after step 2 on purpose. New students are not in the portal yet, so the HoD is typing what
 // they expect to actually turn up. Discounting that would cut the same no-shows twice.
 //
-// Rounding happens once, at the very end, on the final figure. Every stage before it stays fractional. A
+// Rounding happens once at the very end on the final figure. Every stage before it stays fractional. A
 // figure rounded at each step accumulates error, and with elective shares often well below 1 a premature
 // round would throw whole classes away.
 //
-// Per-unit rounding also means the rounded figures do not necessarily add up to a rounded grand total. That
-// is the right trade: the HoD staffs individual units, so each unit's own figure has to be the best one
-// available, not adjusted to make a column sum tidily.
+// Per-unit rounding also means the rounded figures do not necessarily add up to a rounded grand total. 
+// The HoD staffs individual units, so each unit's own figure has to be the best one available, 
+// not adjusted to make a column sum tidily.
 // ============================================================
 
 import { applyRetention } from './retention';

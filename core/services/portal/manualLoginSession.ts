@@ -82,7 +82,9 @@ export async function step1_launch(onStatus?: (msg: string) => void): Promise<vo
     defaultViewport: null,
   });
 
-  page = await browser.newPage();
+  // Reuse the default about:blank tab instead of opening a second one
+  const existingPages = await browser.pages();
+  page = existingPages[0] ?? await browser.newPage();
   page.setDefaultNavigationTimeout(NAV_TIMEOUT_MS);
 
   // Intercept all requests to capture the `token` header when Angular fires

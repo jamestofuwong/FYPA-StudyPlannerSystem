@@ -125,7 +125,9 @@ export async function captureLoginSession(
     let capturedToken: string | null = null;
 
     try {
-      const page: Page = await browser.newPage();
+      // Reuse the default about:blank tab instead of opening a second one
+      const existingPages = await browser.pages();
+      const page: Page = existingPages[0] ?? await browser.newPage();
       page.setDefaultNavigationTimeout(NAV_TIMEOUT_MS);
 
       log('Navigating to portal…');
@@ -176,7 +178,9 @@ export async function captureLoginSession(
   let ssoCookies: CookieParam[] = [];
 
   try {
-    const page: Page = await headedBrowser.newPage();
+    // Reuse the default about:blank tab instead of opening a second one
+    const existingPages = await headedBrowser.pages();
+    const page: Page = existingPages[0] ?? await headedBrowser.newPage();
     page.setDefaultNavigationTimeout(NAV_TIMEOUT_MS);
 
     log('Navigating to portal…');
