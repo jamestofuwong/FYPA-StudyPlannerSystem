@@ -13,7 +13,7 @@ const MAX_PDF_BYTES = 2 * 1024 * 1024;
 
 /**
  * Reads only the Keywords document property from an uploaded PDF, via
- * pdfjs-dist's getMetadata() (isolated in ./pdfjsReader) — never renders a
+ * pdfjs-dist's getMetadata() (isolated in ./pdfjsReader), never renders a
  * page, never returns anything else from the document. The parser is an
  * attack surface just like the spreadsheet reader: content is sniffed by
  * magic bytes, never trusted by extension or Content-Type, and size is

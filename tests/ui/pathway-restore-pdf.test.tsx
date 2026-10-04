@@ -12,16 +12,14 @@ import { encodePayloadForPdf } from '@core/shared/planFile/pdfPayload';
 const jsPDF = (jsPDFModule as any).default || jsPDFModule;
 
 // Full restore round trip through the PDF path: a real PDF built with the
-// real jsPDF library and the real encodePayloadForPdf (the exact function
-// handleDirectPdfDownload calls), read back through the real import path
-// (content sniffing, extractPayloadFromPdfBytes, decodePayloadFromPdf,
-// restoreFromPayload). Only the network boundary is mocked: /api/plan-file/
-// read-pdf (which wraps pdfjs-dist — jest cannot load its ESM build, and a
-// real server isn't available in a unit test; that extraction is proven for
-// real separately, by a standalone Node script and a real Next.js
-// production server, see the Commit 3 report) and /api/plan-file/resolve
-// plus /api/custom-planner (which need a real database), matching exactly
-// how the existing Excel E2E test mocks the same two endpoints.
+// real jsPDF library and the real encodePayloadForPdf, read back through
+// the real import path (content sniffing, extractPayloadFromPdfBytes,
+// decodePayloadFromPdf, restoreFromPayload). Only the network boundary is
+// mocked: /api/plan-file/read-pdf (jest cannot load pdfjs-dist's ESM build;
+// that extraction is proven separately, by a standalone Node script and a
+// real Next.js server) and /api/plan-file/resolve plus /api/custom-planner
+// (which need a real database), matching how the Excel E2E test mocks the
+// same two endpoints.
 
 if (!(File.prototype as any).arrayBuffer) {
   (File.prototype as any).arrayBuffer = function (this: File) {

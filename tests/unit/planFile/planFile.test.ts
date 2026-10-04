@@ -44,8 +44,8 @@ describe('buildPlanPayload', () => {
   test('never contains a student ID, student name, grade or term field anywhere', () => {
     const payload = buildPlanPayload(richInput);
     const json = JSON.stringify(payload).toLowerCase();
-    // customMpuList legitimately has a unit "name" (task's own decision table), so this
-    // checks specific forbidden KEYS, not the word "name" in general.
+    // customMpuList legitimately has a unit "name" field, so this checks
+    // specific forbidden KEYS, not the word "name" in general.
     for (const forbiddenKey of ['"studentid"', '"studentname"', '"grade"', '"grades"', '"term"', '"terms"']) {
       expect(json.includes(forbiddenKey)).toBe(false);
     }
@@ -231,12 +231,11 @@ describe('rowsToPayload on a malformed sheet', () => {
   });
 });
 
-// Part 2: hostile-input hardening. rowsToPayload's only "key-like" cell data
-// is a Plan Data row's key column, and it only ever reaches a Map guarded by
-// the ROW_KEYS allowlist — never a plain-object property write — so there is
-// no path from a cell value to Object.prototype. These tests prove it, not
-// just assert it: every case below must produce an issue or a clear error,
-// never throw, and leave Object.prototype provably untouched.
+// rowsToPayload's only "key-like" cell data is a Plan Data row's key column,
+// and it only ever reaches a Map guarded by the ROW_KEYS allowlist, never a
+// plain-object property write, so there is no path from a cell value to
+// Object.prototype. These tests prove it: every case below must produce an
+// issue or a clear error, never throw, and leave Object.prototype untouched.
 describe('Part 2: hostile spreadsheet input never pollutes Object.prototype', () => {
   const validRows = () => payloadToRows(buildPlanPayload(richInput));
 
@@ -337,15 +336,15 @@ describe('Part 2: hostile spreadsheet input never pollutes Object.prototype', ()
 });
 
 // The "declared range huge, few actual cells" and "readable sheet never
-// parsed" cases operate one layer up, at the real XLSX worksheet — see
+// parsed" cases operate one layer up, at the real XLSX worksheet: see
 // tests/ui/pathway-restore-plan.test.tsx for those (they need a real
 // worksheet's "!ref" attribute, which this pure module never sees).
 
-// Part 3: is maxRows = 50 realistic? The Plan Data sheet is one row per
-// top-level field (14 today — see ROW_KEYS), never one row per item, so a
-// double major / long completed list / many retakes never adds a row at
-// all, only lengthens an existing cell. The real worst-case dimension is
-// cell length, which maxCellLength now bounds directly.
+// maxRows = 50 is realistic: the Plan Data sheet is one row per top-level
+// field (14 today, see ROW_KEYS), never one row per item, so a double
+// major, long completed list or many retakes never adds a row, only
+// lengthens an existing cell. The real worst-case dimension is cell
+// length, which maxCellLength bounds directly.
 describe('Part 3: worst-case export sizing', () => {
   function worstCasePayloadInput(): BuildPlanPayloadInput {
     // double major, one minor, several outside-planner units, ~30 completed
@@ -414,11 +413,8 @@ describe('Part 3: worst-case export sizing', () => {
     expect(r.issues.some((i) => i.code === 'cell_too_large')).toBe(true);
   });
 
-  // Empirically confirmed (xlsx-js-style, real XLSX.write): a cell over
-  // 32,767 characters throws "Text length must not exceed 32767
-  // characters" — Excel's own hard per-cell limit. maxCellLength was
-  // previously 200,000, comfortably accepting a cell this size; it no
-  // longer does.
+  // xlsx-js-style's real XLSX.write throws "Text length must not exceed
+  // 32767 characters" past that, Excel's own hard per-cell limit.
   test('a cell between the new 32,767 cap and the old 200,000 cap is now rejected on import, where it previously was not', () => {
     const rows = payloadToRows(buildPlanPayload(worstCasePayloadInput()));
     const arrangementRowIdx = rows.findIndex((row) => row[0] === 'arrangement');

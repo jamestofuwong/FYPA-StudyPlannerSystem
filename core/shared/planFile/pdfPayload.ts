@@ -2,35 +2,25 @@ import { validatePayload, type PlanPayload, type PlanPayloadResult } from './ind
 
 // The PDF export carries the same restore payload the Excel export carries,
 // base64-encoded into the PDF's Keywords document property (the only custom
-// metadata field jsPDF's setProperties actually honours — confirmed by
-// hands-on testing that a custom key is silently dropped). A normal reader
-// sees nothing on the page; File > Properties shows a long base64 string.
-// This is encoding, not encryption, and that is accepted.
+// metadata field jsPDF's setProperties honours; any other key is silently
+// dropped). A normal reader sees nothing on the page; File > Properties
+// shows a long base64 string. This is encoding, not encryption.
 //
-// No Buffer here: this module is imported by the browser-side export
-// handler as well as the server-side read route, so it only uses
-// TextEncoder/TextDecoder and btoa/atob, all available as globals in both
-// environments (confirmed: Node >= 16 and every browser this app targets).
+// No Buffer here: this module is imported by both the browser-side export
+// handler and the server-side read route, so it only uses
+// TextEncoder/TextDecoder and btoa/atob, available as globals in both.
 
 export const PDF_PAYLOAD_PREFIX = 'SPSPLAN1:';
 
 export const PDF_PAYLOAD_LIMITS = {
-  /**
-   * Caps the base64 TEXT, checked before decoding. Hands-on testing proved
-   * the Keywords field round-trips up to 64,000 characters intact across
-   * pdfplumber, pypdf and pdfjs; this is that literal proven ceiling.
-   */
+  /** Caps the base64 TEXT, checked before decoding: the Keywords field round-trips up to 64,000 characters intact across pdfplumber, pypdf and pdfjs. */
   maxEncodedLength: 64_000,
   /**
-   * Caps the DECODED byte length, checked before JSON.parse. Deliberately
-   * NOT the exact 3/4 byte-equivalent of maxEncodedLength (that would be
-   * 48,000): kept at 45,000 so the two caps are independent checks with a
-   * real gap between them, rather than one making the other redundant. A
-   * real measured payload (15 arrangement units, 13 completed codes) was
-   * 3,237 bytes; the realistic worst case (the scheduler's own config caps
-   * a plan around 100 units, see PLAN_FILE_LIMITS's own comment) serialises
-   * to roughly 16-20 KB — this leaves more than 2x headroom over that
-   * worst case while staying well inside the proven-safe range.
+   * Caps the DECODED byte length, checked before JSON.parse. Not the exact
+   * 3/4 byte-equivalent of maxEncodedLength (48,000): kept at 45,000 so the
+   * two caps are independent, with a real gap between them. A realistic
+   * plan (~100 units, see PLAN_FILE_LIMITS) serialises to ~16-20 KB, well
+   * under this cap.
    */
   maxDecodedLength: 45_000,
 };

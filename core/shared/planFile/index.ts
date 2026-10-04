@@ -1,12 +1,7 @@
-// A plan file is a snapshot of a generated Study Pathway, embedded as a
-// machine-readable payload in the "Plan Data" sheet of an exported Excel
-// workbook, so the plan can be restored later without a transcript. This
-// module is pure (no DOM, no fetch, no xlsx library) so it can be unit
-// tested in isolation and shared between the export and import code paths.
-//
-// Codes only: no student ID, name, grade or term may ever appear here.
-// validatePayload is the trust boundary for an untrusted uploaded file and
-// must never throw; every malformed item becomes an issue, not a crash.
+// A plan file is a machine-readable payload embedded in the "Plan Data"
+// sheet of an exported Excel workbook, so a plan can be restored without a
+// transcript. Codes only: no student ID, name, grade or term may appear
+// here. validatePayload is the trust boundary and must never throw.
 
 export const PLAN_FILE_FORMAT_VERSION = 1;
 export const PLAN_FILE_MARKER = 'SPS_PLAN_FILE';
@@ -14,31 +9,19 @@ export const PLAN_DATA_SHEET_NAME = 'Plan Data';
 export const PLAN_DATA_SHEET_NOTE = 'Plan Data';
 
 export const PLAN_FILE_LIMITS = {
-  /**
-   * Metadata rows in the Plan Data sheet, excluding the note row. The sheet
-   * is one row per top-level field (14 today, see ROW_KEYS below): a double
-   * major, a long completed list, retakes, etc. all pack into existing
-   * cells as JSON, not extra rows, so this never scales with plan size.
-   * 50 is already ~3.5x that fixed count, with room for a few more fields later.
-   */
+  /** Metadata rows in the Plan Data sheet, excluding the note row: one row per top-level field (14 today, see ROW_KEYS). 50 leaves room to grow. */
   maxRows: 50,
   maxStringLength: 255,
   /** Applies to completedUnitCodes, concededPassUnitCodes, outsidePlannerUnitCodes, minorNames, customMpuList and arrangement. */
   maxCodesPerList: 1000,
   /**
-   * Bounds a single cell's raw text BEFORE JSON.parse runs — both against a
-   * hostile cell forcing a huge parse, and because this is Excel's own hard
-   * per-cell character limit (confirmed empirically: xlsx-js-style's
-   * XLSX.write throws "Text length must not exceed 32767 characters" one
-   * character past this). A cell this size could never have come from our
-   * own export (handleExcelDownload's own pre-write check below blocks
-   * that case before writing), so on import anything longer is already
-   * known-impossible from a genuine file. 1000 arrangement entries (this
-   * module's own maxCodesPerList ceiling) serialise to roughly 159 KB,
-   * comfortably over this limit, which is exactly why the real guard
-   * against an oversized plan is the pre-write cell check, not a smaller
-   * maxCodesPerList: a realistic plan (the scheduler config caps real
-   * usage around 100 units) serialises to ~16 KB, well inside this cap.
+   * Bounds a single cell's raw text before JSON.parse runs, Excel's own
+   * hard per-cell limit (xlsx-js-style's XLSX.write throws "Text length
+   * must not exceed 32767 characters" past this). handleExcelDownload's
+   * pre-write check blocks an oversized export before it's written, so on
+   * import a cell this size cannot be a genuine file. 1000 arrangement
+   * entries serialise to ~159 KB, well over this cap, which is why the real
+   * guard is that pre-write check, not a smaller maxCodesPerList.
    */
   maxCellLength: 32_767,
 };
@@ -153,14 +136,10 @@ export function buildPlanPayload(input: BuildPlanPayloadInput): PlanPayload {
 }
 
 /**
- * Field names whose cell (from payloadToRows) would exceed maxCellLength —
- * Excel's own hard per-cell character limit. Checked before writing: an
- * export this large would otherwise either throw deep inside XLSX.write, or
- * (confirmed empirically not to happen here, but not a guarantee worth
- * relying on for every future xlsx-js-style version) be silently truncated
- * into invalid JSON that rowsToPayload would then have to drop on import.
- * Neither is acceptable, so handleExcelDownload checks this first and
- * blocks the export outright when it's non-empty.
+ * Field names whose cell would exceed maxCellLength, Excel's own hard
+ * per-cell limit. Checked before writing: an export this large would
+ * otherwise throw deep inside XLSX.write, or get silently truncated into
+ * invalid JSON, so handleExcelDownload blocks the export outright instead.
  */
 export function findOversizedPlanDataCells(payload: PlanPayload): string[] {
   return payloadToRows(payload)
@@ -168,12 +147,9 @@ export function findOversizedPlanDataCells(payload: PlanPayload): string[] {
     .map(([key]) => key);
 }
 
-// --- rows <-> payload -------------------------------------------------
-//
 // The Plan Data sheet is a two-column key/value table. Composite fields are
-// stored as their own JSON string in the value cell, so one corrupted field
-// (a hand-edited cell, a truncated copy-paste) only affects that one field
-// when read back, rather than the whole sheet.
+// their own JSON string in the value cell, so one corrupted field only
+// affects that field on read back, not the whole sheet.
 
 const ROW_KEYS = [
   'marker', 'formatVersion', 'exportDate', 'planner',
@@ -226,7 +202,7 @@ export function rowsToPayload(rows: string[][]): PlanPayloadResult {
   }
 
   // byKey is a Map, and every key reaching it has already passed the
-  // ROW_KEYS allowlist below — a cell value of "__proto__", "constructor" or
+  // ROW_KEYS allowlist below: a cell value of "__proto__", "constructor" or
   // "prototype" is just an unrecognised key here, never a property write,
   // so it cannot reach Object.prototype through this or any later step.
   const issues: PlanPayloadIssue[] = [];
@@ -278,8 +254,6 @@ export function rowsToPayload(rows: string[][]): PlanPayloadResult {
   return { payload: result.payload, issues: [...issues, ...result.issues] };
 }
 
-// --- validation ---------------------------------------------------------
-//
 // The trust boundary for an untrusted uploaded file. Never throws: every
 // unrecognised or malformed item is dropped and recorded in `issues`, and
 // the caller decides what to do with a payload that came back partial.

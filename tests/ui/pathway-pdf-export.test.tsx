@@ -8,21 +8,18 @@ import { ToastProvider } from '@/components/providers/ToastProvider';
 import { decodePayloadFromPdf, PDF_PAYLOAD_PREFIX, PDF_PAYLOAD_LIMITS } from '@core/shared/planFile/pdfPayload';
 import { rowsToPayload, PLAN_DATA_SHEET_NAME } from '@core/shared/planFile';
 
-// Real xlsx-js-style, only writeFile replaced (to capture the workbook
-// instead of trying to trigger a real browser download inside jsdom) — the
-// same reliable jest.mock + requireActual pattern used in
-// tests/ui/pathway-export-import-roundtrip.test.tsx.
+// Real xlsx-js-style, only writeFile replaced, to capture the workbook
+// instead of triggering a real browser download inside jsdom.
 jest.mock('xlsx-js-style', () => {
   const real = jest.requireActual('xlsx-js-style');
   return { ...real, writeFile: jest.fn() };
 });
 
-// jsPDF's save is an OWN property added inside its constructor (confirmed:
-// not on the prototype), so it can't be jest.spyOn'd directly — wrapping
-// the constructor instead. __esModule: true is required on the returned
-// object: without it, the dynamic `await import('jspdf')` the handler uses
-// double-wraps the mock (confirmed empirically — mod.default came back as
-// an object, not the patched function, until this flag was added).
+// jsPDF's save is an own property added inside its constructor, not on the
+// prototype, so it can't be jest.spyOn'd directly; the constructor is
+// wrapped instead. __esModule: true is required on the returned object:
+// without it, the handler's dynamic `await import('jspdf')` double-wraps
+// the mock and mod.default comes back as an object, not a function.
 let capturedKeywordsCalls: any[] = [];
 let capturedSaveCount = 0;
 jest.mock('jspdf', () => {

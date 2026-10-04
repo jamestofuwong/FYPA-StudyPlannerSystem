@@ -20,11 +20,9 @@ import { buildPlanPayload, rowsToPayload, PLAN_DATA_SHEET_NAME, PLAN_DATA_SHEET_
 import type { CustomSemesterBucket } from '@core/services/scheduling/customPlannerScheduler';
 
 // This file uses the REAL xlsx-js-style library throughout (not a mock),
-// because an earlier commit found its JS-level readback unreliable for
-// merged-cell styling specifically; what's checked here (row text, merge
-// range offsets, workbook sheet names) is the part that IS reliable at the
-// JS level. The actual visible-styling verification was done empirically
-// against the raw OOXML, outside the repo, and is not re-asserted here.
+// since its JS-level readback is unreliable for merged-cell styling
+// specifically; what's checked here (row text, merge range offsets,
+// workbook sheet names) is the part that IS reliable at the JS level.
 
 describe('buildStudyPlanHeaderRows', () => {
   test('a September intake reads "Intake: September <year> (Semester 2)", plain ASCII', () => {
@@ -220,16 +218,14 @@ describe('the "Plan Data" sheet is hidden, not very hidden, and "Study Plan" sta
   });
 
   test('an OLD export whose "Plan Data" sheet is still VISIBLE (no Workbook.Sheets at all) still imports successfully', () => {
-    // Simulates a file exported before this change: no wb.Workbook override,
-    // so the sheet has no hidden state — exactly like every export this
-    // branch has made until now.
+    // Simulates an old export: no wb.Workbook override, so the sheet has no hidden state.
     const payload = buildPlanPayload(richPayloadInput());
     const ws = XLSX.utils.aoa_to_sheet(buildStudyPlanSheetAoa(rows_forOldExport(), headerInfo_forOldExport()));
     const planDataWs = XLSX.utils.aoa_to_sheet(buildPlanDataSheetAoa(payload));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Study Plan');
     XLSX.utils.book_append_sheet(wb, planDataWs, PLAN_DATA_SHEET_NAME);
-    // No wb.Workbook set at all — the old shape.
+    // No wb.Workbook set at all: the old shape.
 
     const planDataRows: string[][] = XLSX.utils.sheet_to_json(wb.Sheets[PLAN_DATA_SHEET_NAME], { header: 1, raw: false });
     const result = rowsToPayload(planDataRows.slice(1));

@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
     // shape: the @@unique constraint still applies at the database level
     // (at most one row can match), but the generated compound-key TS type
     // does not accept null for a nullable column in the key, even though
-    // both major_id and intake_month are genuinely nullable here.
+    // both major_id and intake_month are nullable here.
     const template = await prisma.plannerTemplate.findFirst({
       where: {
         course_id: course.id,

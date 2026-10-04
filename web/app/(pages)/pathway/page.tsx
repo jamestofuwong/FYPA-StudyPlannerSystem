@@ -388,7 +388,7 @@ const EXCEL_MONTH_NAMES = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
-/** Same Semester 1/2 rule as the PDF header (handleDirectPdfDownload), kept separate since this task does not touch the PDF export. */
+/** Same Semester 1/2 rule as the PDF header (handleDirectPdfDownload), kept as its own copy rather than shared. */
 function excelIntakeSemesterOf(intakeMonth: number | null | undefined): 1 | 2 {
   return intakeMonth != null && intakeMonth >= 7 ? 2 : 1;
 }
@@ -525,12 +525,7 @@ export interface PlanPayloadInputSource {
   planIntakeSemester: 1 | 2;
 }
 
-/**
- * The one place that gathers page state into a BuildPlanPayloadInput, used
- * by both exports so they can never drift apart. Previously inline in
- * handleExcelDownload only; handleDirectPdfDownload needs the identical
- * shape to embed in the PDF's own Keywords property.
- */
+/** The one place that gathers page state into a BuildPlanPayloadInput, used by both exports so they can never drift apart. */
 export function buildPlanPayloadInputForExport(source: PlanPayloadInputSource): BuildPlanPayloadInput {
   return {
     planner: {
@@ -571,12 +566,9 @@ export function buildPlanPayloadInputForExport(source: PlanPayloadInputSource): 
 
 /**
  * The full two-sheet workbook handleExcelDownload writes, as a pure
- * function of already-computed state. Extracted so a test can capture the
- * exact workbook a real export produces and feed it straight into the real
- * import, rather than only ever exercising import against a hand-built
- * fixture. Takes the xlsx-js-style module as a parameter, same reason as
- * applyStudyPlanSheetStyling: callable with a statically-imported real copy
- * from a test, not a mock.
+ * function of already-computed state, so a test can feed a real export
+ * straight into a real import. Takes the xlsx-js-style module as a
+ * parameter, same reason as applyStudyPlanSheetStyling.
  */
 export function buildExcelWorkbook(
   XLSX: any,
@@ -593,12 +585,9 @@ export function buildExcelWorkbook(
   XLSX.utils.book_append_sheet(wb, planDataWs, PLAN_DATA_SHEET_NAME);
 
   // Hidden (1), not very hidden (2): very hidden is a common trick in
-  // malicious files and can trip a mail filter. "Study Plan" stays
-  // index 0 and unhidden, which every reader defaults an active sheet to
-  // in the absence of an explicit saved view (confirmed empirically: this
-  // library's own write path emits no <bookViews> element at all, under
-  // any Workbook property name, so an explicit activeTab cannot be forced
-  // here — sheet order plus visibility is the only available control).
+  // malicious files and can trip a mail filter. "Study Plan" stays index 0
+  // and unhidden, which every reader defaults to as the active sheet, since
+  // this library's write path emits no <bookViews> element to force one.
   wb.Workbook = { Sheets: [{ Hidden: 0 }, { Hidden: 1 }] };
   return wb;
 }
@@ -636,15 +625,12 @@ export default function PathwayPage() {
     allDatabaseMpus, setAllDatabaseMpus,
   } = useStudentSession();
 
-  // The single substitution point: when a plan file is restored, every read
-  // below of scrapedStudent/studentLoaded/dashboardData/selectedPlannerIdx
-  // (there is no other declaration of these names in this file) transparently
-  // sees the restored, student-less session instead of the real one, with no
-  // other call site needing to know the difference. manualPlanner is
-  // untouched since selectedPlannerIdx === 0 here always takes the
-  // dashboardData.planners branch. The real session, and every other page,
-  // never sees this: restoredSession lives only in the provider and this one
-  // spot reads it.
+  // The single substitution point: every read below of
+  // scrapedStudent/studentLoaded/dashboardData transparently sees the
+  // restored, student-less session instead of the real one. manualPlanner
+  // is untouched since selectedPlannerIdx === 0 always takes the
+  // dashboardData.planners branch. restoredSession lives only in the
+  // provider; no other page or call site sees it.
   const scrapedStudent = restoredSession ? restoredSession.scrapedStudent : realScrapedStudent;
   const studentLoaded = restoredSession ? true : realStudentLoaded;
   const dashboardData = restoredSession ? restoredSession.dashboardData : realDashboardData;

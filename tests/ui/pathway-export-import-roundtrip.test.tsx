@@ -7,21 +7,15 @@ import { StudentSessionProvider, useStudentSession } from '@/components/provider
 import { ToastProvider } from '@/components/providers/ToastProvider';
 import { PLAN_DATA_SHEET_NAME } from '@core/shared/planFile';
 
-// Part 4: a TRUE end-to-end round trip. Every other round-trip test either
-// builds its workbook from a hand-made payload (pathway-restore-plan.test)
-// or exercises export/import as pure functions (planFile.test, restore.test).
-// None of them prove that handleExcelDownload itself gathers page state
-// (minors -> names, the double-major name, retake/CP-retake flags,
-// positions, extra units, the WIL slot) correctly. This file does: it seeds
-// real session state, clicks the real "Download Excel" button, captures the
-// real workbook, then feeds that exact workbook into a fresh render's real
-// import path. Only writeFile is replaced (to capture its argument instead
-// of trying to trigger a real browser download inside jsdom) — every other
-// function (aoa_to_sheet, book_new, write, read, sheet_to_json, ...) is the
-// real, unmocked implementation. jest.mock (not jest.spyOn on the static
-// import) is used because page.tsx's dynamic `await import(...)` and this
-// file's static `import * as XLSX` are not guaranteed to share one mutable
-// object under ts-jest's ESM/CJS interop; jest.mock intercepts both.
+// An end-to-end round trip: seeds real session state, clicks the real
+// "Download Excel" button, captures the real workbook, then feeds that
+// exact workbook into a fresh render's real import path. Only writeFile is
+// replaced, to capture its argument instead of triggering a real download
+// inside jsdom; every other function is the real, unmocked implementation.
+// jest.mock (not jest.spyOn on the static import) is used because page.tsx's
+// dynamic `await import(...)` and this file's static `import * as XLSX` are
+// not guaranteed to share one mutable object under ts-jest's ESM/CJS
+// interop; jest.mock intercepts both.
 jest.mock('xlsx-js-style', () => {
   const real = jest.requireActual('xlsx-js-style');
   return { ...real, writeFile: jest.fn() };
@@ -235,9 +229,8 @@ describe('Part 4: true end-to-end export -> import round trip', () => {
     expect(cpRow.textContent).toContain('RETAKE (CP)');
 
     // Outside-planner and recommended units survive with their flags intact
-    // (outsidePlanner renders its own "outside the planner" tag; recommended
-    // its own "Not named by the planner" tag — both present confirms the
-    // flag, not just the unit code, round-tripped).
+    // (outsidePlanner renders its own "outside the planner" tag, recommended
+    // its own "Not named by the planner" tag, confirming the flag round-tripped, not just the unit code).
     expect(screen.getByText('OUT1', { selector: 'code' })).toBeTruthy();
     expect(screen.getByText('REC1', { selector: 'code' })).toBeTruthy();
 

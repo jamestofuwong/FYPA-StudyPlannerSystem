@@ -89,9 +89,9 @@ describe('decodePayloadFromPdf: the untrusted-PDF security boundary', () => {
   });
 
   test('oversize ENCODED input is rejected before any decoding happens (base64 decode never runs)', () => {
-    // Deliberately invalid base64 padding so that if the length check did
-    // NOT run first, atob would throw instead of the length-check error —
-    // proving the ORDER, not just that both checks exist.
+    // Invalid base64 padding, so that if the length check did NOT run
+    // first, atob would throw instead of the length-check error, proving
+    // the ORDER, not just that both checks exist.
     const hostile = PDF_PAYLOAD_PREFIX + 'A'.repeat(PDF_PAYLOAD_LIMITS.maxEncodedLength + 1);
     const r = decodePayloadFromPdf(hostile);
     expect('error' in r).toBe(true);
@@ -100,10 +100,10 @@ describe('decodePayloadFromPdf: the untrusted-PDF security boundary', () => {
   });
 
   test('oversize DECODED input (valid base64, valid length, but decodes past the byte cap) is rejected before JSON.parse', () => {
-    // Sized to land in the deliberate gap between the two caps: over
-    // maxDecodedLength (45,000 bytes) but its base64 form still under
-    // maxEncodedLength (64,000 chars) — proving the decoded check is a
-    // real, independent guard, not redundant with the encoded one.
+    // Sized to land in the gap between the two caps: over maxDecodedLength
+    // (45,000 bytes) but its base64 form still under maxEncodedLength
+    // (64,000 chars), proving the decoded check is a real, independent
+    // guard, not redundant with the encoded one.
     const bigJson = JSON.stringify({ padding: 'X'.repeat(PDF_PAYLOAD_LIMITS.maxDecodedLength + 500) });
     const bytes = new TextEncoder().encode(bigJson);
     expect(bytes.length).toBeGreaterThan(PDF_PAYLOAD_LIMITS.maxDecodedLength);

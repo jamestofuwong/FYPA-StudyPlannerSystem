@@ -119,8 +119,8 @@ describe('Excel export wiring', () => {
     await act(async () => { fireEvent.click(excelButton); });
 
     await screen.findByText(/Please choose your save location/i);
-    // Two sheets now: the readable "Study Plan" table, and the machine-readable
-    // "Plan Data" sheet used to restore the plan later.
+    // Two sheets: the readable "Study Plan" table, and the machine-readable
+    // "Plan Data" sheet.
     expect(bookAppendSheet).toHaveBeenCalledTimes(2);
     const sheetNames = bookAppendSheet.mock.calls.map((call) => call[2]);
     expect(sheetNames).toEqual(['Study Plan', 'Plan Data']);
@@ -151,12 +151,10 @@ describe('Excel export wiring', () => {
   });
 
   test('a plan large enough that its arrangement cell would exceed Excel\'s own cell limit is blocked, writing nothing', async () => {
-    // Empirically, xlsx-js-style's real XLSX.write throws past 32,767
-    // characters per cell; 400+ units in the arrangement reliably exceeds
-    // that (see tests/unit/planFile/planFile.test.ts's own measurement).
-    // Rendering 450 rows is genuinely slow under a loaded test run, hence
-    // the explicit longer timeout below rather than fewer units, which
-    // would risk no longer reliably exceeding the limit.
+    // xlsx-js-style's real XLSX.write throws past 32,767 characters per
+    // cell; 400+ units in the arrangement reliably exceeds that. Rendering
+    // 450 rows is slow under a loaded test run, hence the longer timeout
+    // below rather than fewer units.
     const units = Array.from({ length: 450 }, (_, i) => schedulableUnit(`UNIT${String(i).padStart(4, '0')}`, `Unit ${i}`, 'core'));
     mockFetch(units);
 

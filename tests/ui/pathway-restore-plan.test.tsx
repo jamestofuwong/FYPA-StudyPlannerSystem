@@ -11,8 +11,8 @@ import { buildPlanPayload, payloadToRows, PLAN_DATA_SHEET_NAME, PLAN_DATA_SHEET_
 // Full restore round trip: a real .xlsx workbook built with the real
 // xlsx-js-style library (not a mock), read back through the real import
 // path. Only /api/plan-file/resolve and /api/custom-planner are mocked,
-// since those need a real database; everything else — parsing, validation,
-// the overlay, and the rendered page — is the real code.
+// since those need a real database; everything else (parsing, validation,
+// the overlay, and the rendered page) is the real code.
 
 // jsdom's File has no .arrayBuffer() in this environment, unlike a real
 // browser/Electron; handleRestoreFile's own use of it is correct for the
@@ -61,9 +61,8 @@ const richPayloadInput: BuildPlanPayloadInput = {
   customWilSlot: null,
   customMpuList: [{ code: 'MPU1', name: 'MPU Unit' }],
   // Slot "year of study" / slot semester, the same kind customPlanStart and
-  // the /api/custom-planner response use — NOT the planner's calendar
-  // intakeYear (2023, above). A near-graduation student's own start slot,
-  // e.g. "Year 4 Semester 1", not a calendar year.
+  // the /api/custom-planner response use, not the planner's calendar
+  // intakeYear (2023, above): e.g. "Year 4 Semester 1", not a calendar year.
   startYear: 4,
   startSemester: 1,
 };
@@ -334,9 +333,9 @@ describe('restoring a plan from an exported Excel file', () => {
     const payload = buildPlanPayload(richPayloadInput);
     const planDataWs = XLSX.utils.aoa_to_sheet([[PLAN_DATA_SHEET_NOTE], ...payloadToRows(payload)]);
     // A real worksheet whose own !ref claims 100,000 rows while only ~15 are
-    // actually populated — confirmed empirically that XLSX.write/read
-    // preserve this attribute verbatim, so this is a faithful simulation of
-    // a hand-crafted hostile file, not a test artefact.
+    // actually populated. XLSX.write/read preserve this attribute verbatim,
+    // so this is a faithful simulation of a hand-crafted hostile file, not
+    // a test artefact.
     (planDataWs as any)['!ref'] = 'A1:B100000';
     const readableWs = XLSX.utils.aoa_to_sheet([['BACHELOR OF COMPUTER SCIENCE']]);
     const wb = XLSX.utils.book_new();
@@ -355,8 +354,8 @@ describe('restoring a plan from an exported Excel file', () => {
   test('the readable "Study Plan" sheet is never parsed for data, even when it contains a full payload by mistake', async () => {
     mockRestoreFetch();
     const payload = buildPlanPayload(richPayloadInput);
-    // The valid payload sits in the READABLE sheet instead of "Plan Data" —
-    // if handleRestoreFile ever fell back to parsing the readable sheet,
+    // The valid payload sits in the READABLE sheet instead of "Plan Data".
+    // If handleRestoreFile ever fell back to parsing the readable sheet,
     // this file would restore successfully. It must not: only the sheet
     // named PLAN_DATA_SHEET_NAME is ever read, so this must still block.
     const misplacedWs = XLSX.utils.aoa_to_sheet([[PLAN_DATA_SHEET_NOTE], ...payloadToRows(payload)]);
@@ -372,17 +371,13 @@ describe('restoring a plan from an exported Excel file', () => {
     expect(screen.queryByText('CORE1', { selector: 'code' })).toBeNull();
   });
 
-  // Part 5 (originally) / Part 1 of the follow-up hardening task: what does
-  // "Regenerate" do on a restored session? The payload deliberately carries
-  // no terms (codes only), so the synthetic courseList built on restore has
-  // every row's term blank, and generateCustomPlan's own request only ever
-  // sent courseList, leaving the server's resolveNextStudyTerm to derive the
-  // start position by counting distinct _S1/_S2 terms in it — zero distinct
-  // terms resolved to Year 1 Semester 1 regardless of the restored plan's
-  // real position. Fixed: generateCustomPlan now sends restoredSession's own
-  // saved startYear/startSemester explicitly, the same slot kind the server
-  // already echoes back via customPlanStart, ONLY when restoredSession is
-  // present, so the regenerated plan keeps the original's start position.
+  // "Regenerate" on a restored session: the payload carries no terms (codes
+  // only), so the synthetic courseList built on restore has every row's
+  // term blank. generateCustomPlan sends restoredSession's own saved
+  // startYear/startSemester explicitly, only when restoredSession is
+  // present, so the server's resolveNextStudyTerm (which would otherwise
+  // count zero distinct terms and fall back to Year 1 Semester 1) keeps the
+  // original's start position instead.
   test('"Regenerate" after a restore keeps the saved start position, not Year 1 Semester 1', async () => {
     const originalConfirm = window.confirm;
     window.confirm = jest.fn(() => true);
@@ -412,7 +407,7 @@ describe('restoring a plan from an exported Excel file', () => {
       const regenerateCall = fetchMock.mock.calls.find((c) => String(c[0]).includes('/api/custom-planner'));
       const regenerateBody = JSON.parse(regenerateCall![1].body);
       // Regenerate now sends the SAME saved start position as the restore's
-      // own first call, not Year 1 Semester 1 — the actual fix.
+      // own first call, not Year 1 Semester 1.
       expect(regenerateBody.startYear).toBe(4);
       expect(regenerateBody.startSemester).toBe(1);
     } finally {
@@ -424,7 +419,7 @@ describe('restoring a plan from an exported Excel file', () => {
 describe('Regenerate keeps the same first-semester slot and calendar-term label as the restore, for both intakes', () => {
   // calendarTermFor(slotSemester, intakeSemester) flips for a September
   // intake (intakeSemester 2) and passes through for a February intake
-  // (intakeSemester 1) — see customPlannerScheduler.ts. monthsOf(1) =
+  // (intakeSemester 1), per customPlannerScheduler.ts. monthsOf(1) =
   // "Feb/Mar", monthsOf(2) = "Aug/Sep".
   test.each([
     { label: 'September intake', intakeMonth: 9, intakeSemester: 2 as const, expectedMonths: 'Aug/Sep' },
@@ -449,10 +444,9 @@ describe('Regenerate keeps the same first-semester slot and calendar-term label 
         if (u.includes('/api/custom-planner')) {
           // Echoes the request's own startYear/startSemester into the first
           // semester bucket, simulating a real scheduler starting exactly
-          // where it was told to — this is what makes the test meaningful:
-          // if generateCustomPlan stopped sending the saved position, this
-          // mock would fall back to undefined/undefined and the two headings
-          // below would stop matching.
+          // where it was told to. If generateCustomPlan stopped sending the
+          // saved position, this mock would fall back to undefined/undefined
+          // and the two headings below would stop matching.
           const body = JSON.parse(init.body);
           const startYear = body.startYear ?? 1;
           const startSemester = body.startSemester ?? 1;
@@ -553,7 +547,7 @@ describe('a normal (non-restored) session is unaffected by the restoredSession s
     const call = fetchMock.mock.calls.find((c) => String(c[0]).includes('/api/custom-planner'));
     const body = JSON.parse(call![1].body);
 
-    // The exact same key set this request has always had — restoredSession
+    // The exact same key set this request has always had: restoredSession
     // is null for a normal session, so the conditional spread adds nothing.
     expect(Object.keys(body).sort()).toEqual([
       'completedUnitCodes', 'concededPassUnitCodes', 'courseList',

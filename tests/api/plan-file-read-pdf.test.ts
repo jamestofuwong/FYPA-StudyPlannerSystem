@@ -2,13 +2,11 @@ import { NextRequest } from 'next/server';
 import { POST } from '@/app/api/plan-file/read-pdf/route';
 import { readPdfKeywords } from '@/app/api/plan-file/read-pdf/pdfjsReader';
 
-// pdfjs-dist's legacy build uses `import.meta`, which jest cannot parse
-// (confirmed empirically — "Cannot use 'import.meta' outside a module" when
-// the route's own import of it runs under jest). The route's real logic —
-// size caps, magic-byte sniffing, error wrapping — is tested here against a
-// mocked reader; the REAL pdfjs-dist read is proven by a standalone Node
-// script outside the repo (see the Commit 3 report) and by a real Next.js
-// build, neither of which jest can stand in for.
+// pdfjs-dist's legacy build uses `import.meta`, which jest cannot parse. The
+// route's own logic (size caps, magic-byte sniffing, error wrapping) is
+// tested here against a mocked reader; the real pdfjs-dist read is proven
+// by a standalone Node script and a real Next.js build, neither of which
+// jest can stand in for.
 jest.mock('@/app/api/plan-file/read-pdf/pdfjsReader', () => ({
   readPdfKeywords: jest.fn(),
 }));
@@ -49,8 +47,8 @@ describe('POST /api/plan-file/read-pdf', () => {
   });
 
   test('a PDF re-rendered so its metadata is gone leads to the clear "no keywords" case, not an error', async () => {
-    // Simulated here by the reader returning null, exactly as a real
-    // metadata-stripped PDF would (see Commit 1/2's pdftocairo finding).
+    // Simulated by the reader returning null, exactly as a real
+    // metadata-stripped PDF would.
     mockedReadPdfKeywords.mockResolvedValue({ keywords: null });
     const res = await POST(requestWithBody(Buffer.concat([PDF_HEADER, Buffer.from('rest')])));
     expect(res.status).toBe(200);
@@ -111,10 +109,8 @@ describe('POST /api/plan-file/read-pdf', () => {
   });
 
   test('an enormous Keywords field from the reader is not specially handled here — decodePayloadFromPdf\'s own caps apply downstream, this route just forwards the string', async () => {
-    // This route's own job is only to extract the field; the encoded-length
-    // cap belongs to decodePayloadFromPdf (Commit 1), which runs on the
-    // import side after this route returns. Confirms the route itself
-    // never throws or truncates regardless of string size.
+    // The encoded-length cap belongs to decodePayloadFromPdf on the import
+    // side; this route only extracts the field, regardless of its size.
     const hugeKeywords = 'SPSPLAN1:' + 'A'.repeat(500_000);
     mockedReadPdfKeywords.mockResolvedValue({ keywords: hugeKeywords });
     const res = await POST(requestWithBody(Buffer.concat([PDF_HEADER, Buffer.from('x')])));
