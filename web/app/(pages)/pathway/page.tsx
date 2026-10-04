@@ -47,6 +47,7 @@ import {
   type PlanPayload,
 } from '../../../../core/shared/planFile';
 import { overlayRestoredArrangement } from '../../../../core/shared/planFile/restore';
+import { encodePayloadForPdf, PDF_PAYLOAD_PREFIX, PDF_PAYLOAD_LIMITS } from '../../../../core/shared/planFile/pdfPayload';
 
 /** A plan file's payload is a few KB; this is a generous cap against a hostile oversized upload. */
 const MAX_PLAN_FILE_BYTES = 5 * 1024 * 1024;
@@ -497,6 +498,73 @@ export function applyStudyPlanSheetStyling(XLSX: any, ws: any, rows: ExcelPlanRo
 /** The "Plan Data" sheet's row data: a plain-text note, then the payload's own key/value rows. Kept unformatted and merge-free. */
 export function buildPlanDataSheetAoa(payload: PlanPayload): string[][] {
   return [[PLAN_DATA_SHEET_NOTE], ...payloadToRows(payload)];
+}
+
+/**
+ * Everything both handleExcelDownload and handleDirectPdfDownload need to
+ * build a BuildPlanPayloadInput from the page's current state. A plain data
+ * bag, not a hook, so this stays callable from a test without rendering
+ * the page.
+ */
+export interface PlanPayloadInputSource {
+  selectedPlanner: any;
+  semesters: CustomSemesterBucket[];
+  allTranscriptUnits: any[];
+  retakeUnitCodes: Set<string>;
+  concededPassRetakeCodes: Set<string>;
+  planExtraUnits: SchedulableUnit[];
+  availableMinors: any[];
+  injectedMinors: Set<string>;
+  selectedDoubleMajorId: string | null;
+  availableDoubleMajors: any[];
+  customWilSlot: string | null;
+  remainingMpus: { code: string; name: string }[];
+  customPlanStart: { year: number; semester: 1 | 2 } | null;
+  planIntakeSemester: 1 | 2;
+}
+
+/**
+ * The one place that gathers page state into a BuildPlanPayloadInput, used
+ * by both exports so they can never drift apart. Previously inline in
+ * handleExcelDownload only; handleDirectPdfDownload needs the identical
+ * shape to embed in the PDF's own Keywords property.
+ */
+export function buildPlanPayloadInputForExport(source: PlanPayloadInputSource): BuildPlanPayloadInput {
+  return {
+    planner: {
+      courseCode: source.selectedPlanner?.course?.code ?? null,
+      courseName: source.selectedPlanner?.course?.name ?? 'Course',
+      majorName: source.selectedPlanner?.major?.name ?? null,
+      intakeYear: source.selectedPlanner?.intake_year ?? 0,
+      intakeMonth: source.selectedPlanner?.intake_month ?? null,
+    },
+    completedUnitCodes: getCompletedUnitCodes(source.allTranscriptUnits),
+    concededPassUnitCodes: getConcededPassUnitCodes(source.allTranscriptUnits),
+    arrangement: source.semesters.flatMap((sem) =>
+      (sem.units as any[]).map((u, position) => ({
+        code: u.code,
+        category: u.category,
+        year: sem.year,
+        semester: sem.semester,
+        position,
+        recommended: !!u.recommended,
+        outsidePlanner: !!u.outsidePlanner,
+        retake: source.retakeUnitCodes.has(normaliseCode(u.code)),
+        concededPassRetake: source.concededPassRetakeCodes.has(normaliseCode(u.code)),
+      }))
+    ),
+    outsidePlannerUnitCodes: source.planExtraUnits.map((u) => u.code),
+    minorNames: source.availableMinors
+      .filter((m: any) => source.injectedMinors.has(m.minorId))
+      .map((m: any) => m.minorName),
+    doubleMajorMajorName: source.selectedDoubleMajorId
+      ? source.availableDoubleMajors.find((dm: any) => dm.plannerId === source.selectedDoubleMajorId)?.majorName ?? null
+      : null,
+    customWilSlot: source.customWilSlot ?? null,
+    customMpuList: source.remainingMpus,
+    startYear: source.customPlanStart?.year ?? source.selectedPlanner?.intake_year ?? 0,
+    startSemester: source.customPlanStart?.semester ?? source.planIntakeSemester,
+  };
 }
 
 /**
@@ -1969,6 +2037,26 @@ export default function PathwayPage() {
                     });
                   }
 
+                  // Embeds the same restore payload the Excel export carries,
+                  // in the one custom Info field jsPDF actually writes
+                  // (setProperties silently drops any key besides title,
+                  // subject, author, keywords and creator). The PDF is the
+                  // main deliverable, so an oversized plan never blocks the
+                  // export; it just exports without the payload, same as an
+                  // export this feature predates.
+                  const pdfPayloadInput = buildPlanPayloadInputForExport({
+                    selectedPlanner, semesters, allTranscriptUnits, retakeUnitCodes, concededPassRetakeCodes,
+                    planExtraUnits, availableMinors, injectedMinors, selectedDoubleMajorId, availableDoubleMajors,
+                    customWilSlot, remainingMpus, customPlanStart, planIntakeSemester,
+                  });
+                  const pdfPayload = buildPlanPayload(pdfPayloadInput);
+                  const encodedKeywords = encodePayloadForPdf(pdfPayload);
+                  if (encodedKeywords.length - PDF_PAYLOAD_PREFIX.length <= PDF_PAYLOAD_LIMITS.maxEncodedLength) {
+                    doc.setProperties({ keywords: encodedKeywords });
+                  } else {
+                    showToast('Restore data was omitted because this plan is too large to embed in the PDF.', 'info');
+                  }
+
                   const fileName = `${(selectedPlanner?.course?.name ?? 'Course').replace(/[^a-zA-Z0-9]/g, '_')}_Study_Plan.pdf`;
                   doc.save(fileName);
                   showToast('Please choose your save location in the dialog to save your PDF.', 'info');
@@ -2026,41 +2114,11 @@ export default function PathwayPage() {
                     intakeYear: selectedPlanner?.intake_year ?? null,
                     intakeMonth: selectedPlanner?.intake_month ?? null,
                   };
-                  const payloadInput: BuildPlanPayloadInput = {
-                    planner: {
-                      courseCode: selectedPlanner?.course?.code ?? null,
-                      courseName: selectedPlanner?.course?.name ?? 'Course',
-                      majorName: selectedPlanner?.major?.name ?? null,
-                      intakeYear: selectedPlanner?.intake_year ?? 0,
-                      intakeMonth: selectedPlanner?.intake_month ?? null,
-                    },
-                    completedUnitCodes: getCompletedUnitCodes(allTranscriptUnits),
-                    concededPassUnitCodes: getConcededPassUnitCodes(allTranscriptUnits),
-                    arrangement: semesters.flatMap((sem) =>
-                      (sem.units as any[]).map((u, position) => ({
-                        code: u.code,
-                        category: u.category,
-                        year: sem.year,
-                        semester: sem.semester,
-                        position,
-                        recommended: !!u.recommended,
-                        outsidePlanner: !!u.outsidePlanner,
-                        retake: retakeUnitCodes.has(normaliseCode(u.code)),
-                        concededPassRetake: concededPassRetakeCodes.has(normaliseCode(u.code)),
-                      }))
-                    ),
-                    outsidePlannerUnitCodes: planExtraUnits.map((u) => u.code),
-                    minorNames: availableMinors
-                      .filter((m: any) => injectedMinors.has(m.minorId))
-                      .map((m: any) => m.minorName),
-                    doubleMajorMajorName: selectedDoubleMajorId
-                      ? availableDoubleMajors.find((dm: any) => dm.plannerId === selectedDoubleMajorId)?.majorName ?? null
-                      : null,
-                    customWilSlot: customWilSlot ?? null,
-                    customMpuList: remainingMpus,
-                    startYear: customPlanStart?.year ?? selectedPlanner?.intake_year ?? 0,
-                    startSemester: customPlanStart?.semester ?? planIntakeSemester,
-                  };
+                  const payloadInput: BuildPlanPayloadInput = buildPlanPayloadInputForExport({
+                    selectedPlanner, semesters, allTranscriptUnits, retakeUnitCodes, concededPassRetakeCodes,
+                    planExtraUnits, availableMinors, injectedMinors, selectedDoubleMajorId, availableDoubleMajors,
+                    customWilSlot, remainingMpus, customPlanStart, planIntakeSemester,
+                  });
                   const payload = buildPlanPayload(payloadInput);
 
                   // Checked before any write, not after: a damaged or
