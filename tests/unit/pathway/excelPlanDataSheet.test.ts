@@ -238,9 +238,9 @@ describe('the "Plan Data" sheet is hidden, not very hidden, and "Study Plan" sta
     expect(result.payload).toEqual(payload);
   });
 
-  test('the note row says what it contains and warns not to edit/delete/forward it, and import still treats it as the note row (ignored)', () => {
-    expect(PLAN_DATA_SHEET_NOTE).toMatch(/completed units and plan details/i);
-    expect(PLAN_DATA_SHEET_NOTE).toMatch(/do not edit, delete or forward/i);
+  test('row 0 of a freshly built sheet is a neutral label, with no sentence about restoring, editing, deleting or forwarding, and import still treats it as the note row (ignored)', () => {
+    expect(PLAN_DATA_SHEET_NOTE).not.toMatch(/restor/i);
+    expect(PLAN_DATA_SHEET_NOTE).not.toMatch(/edit|delete|forward/i);
 
     const { rows, headerInfo, payload } = sampleWorkbookArgs();
     const wb = buildExcelWorkbook(XLSX, rows, headerInfo, payload);
@@ -250,6 +250,21 @@ describe('the "Plan Data" sheet is hidden, not very hidden, and "Study Plan" sta
     expect('error' in result).toBe(false);
     if ('error' in result) return;
     expect(result.issues).toEqual([]); // the note row is not mistaken for a malformed data row
+  });
+
+  test('an OLD export whose row 0 still holds the previous long note still imports', () => {
+    // Simulates a file exported before this change: row 0 holds the old
+    // long sentence, not today's short label. The import only skips exactly
+    // one leading row, so it must not care what that row says.
+    const OLD_NOTE = 'Machine-readable data used to restore this plan in the Study Planner app. It contains the student\'s completed units and plan details. Do not edit, delete or forward this sheet.';
+    const { payload } = sampleWorkbookArgs();
+    const planDataRows: string[][] = [[OLD_NOTE], ...buildPlanDataSheetAoa(payload).slice(1)];
+
+    const result = rowsToPayload(planDataRows.slice(1));
+    expect('error' in result).toBe(false);
+    if ('error' in result) return;
+    expect(result.issues).toEqual([]);
+    expect(result.payload).toEqual(payload);
   });
 });
 

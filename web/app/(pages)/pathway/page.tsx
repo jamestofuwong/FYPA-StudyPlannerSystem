@@ -1104,7 +1104,7 @@ export default function PathwayPage() {
       >
         <div style={{ marginTop: 20, paddingTop: 20, borderTop: '1px solid var(--border-color, rgba(255,255,255,0.1))', width: '100%', maxWidth: 360 }}>
           <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>
-            or restore a previously exported plan (only the restore data inside the file is read — the "Plan Data" sheet for Excel, the document properties for PDF; edits made to the visible table or pages are ignored)
+            or restore a previously exported plan
           </div>
           <label className={styles.btnSecondary} style={{ fontSize: 12, cursor: isRestoringPlan ? 'wait' : 'pointer', display: 'inline-block' }}>
             {isRestoringPlan ? 'Restoring…' : 'Import plan (Excel or PDF)'}
@@ -2186,7 +2186,7 @@ export default function PathwayPage() {
                   const fileName = `${(selectedPlanner?.course?.name ?? 'Course').replace(/[^a-zA-Z0-9]/g, '_')}_Study_Plan.xlsx`;
                   XLSX.writeFile(wb, fileName);
                   showToast(
-                    'Please choose your save location in the dialog to save your Excel file. This file includes hidden restore data (completed units and plan details).',
+                    'Please choose your save location in the dialog to save your Excel file.',
                     'info'
                   );
                 } catch (err) {

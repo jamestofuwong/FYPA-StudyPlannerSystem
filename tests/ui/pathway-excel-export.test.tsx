@@ -178,7 +178,7 @@ describe('Excel export wiring', () => {
     expect(bookAppendSheet).not.toHaveBeenCalled();
   }, 15000);
 
-  test('the save toast tells the advisor the file includes hidden restore data, keeping the save-location wording', async () => {
+  test('the save toast only has the save-location wording, with no mention of restore data', async () => {
     const units = [schedulableUnit('CORE1', 'Core Unit', 'core')];
     mockFetch(units);
 
@@ -196,6 +196,7 @@ describe('Excel export wiring', () => {
     await act(async () => { fireEvent.click(excelButton); });
 
     expect(await screen.findByText(/Please choose your save location in the dialog to save your Excel file\./i)).toBeTruthy();
-    expect(await screen.findByText(/This file includes hidden restore data \(completed units and plan details\)\./i)).toBeTruthy();
+    expect(screen.queryByText(/restore data/i)).toBeNull();
+    expect(screen.queryByText(/hidden/i)).toBeNull();
   });
 });

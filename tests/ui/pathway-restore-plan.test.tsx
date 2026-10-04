@@ -156,6 +156,16 @@ describe('restoring a plan from an exported Excel file', () => {
     expect(await screen.findByText(/Import plan \(Excel or PDF\)/i)).toBeTruthy();
   });
 
+  test('the hint under the import control is a short neutral line, with no mention of the Plan Data sheet, document properties, or ignored edits', async () => {
+    render(<Harness />);
+    expect(await screen.findByText(/or restore a previously exported plan/i)).toBeTruthy();
+    expect(screen.queryByText(/Plan Data/i)).toBeNull();
+    expect(screen.queryByText(/document properties/i)).toBeNull();
+    expect(screen.queryByText(/ignored/i)).toBeNull();
+    // the label itself is unchanged
+    expect(screen.getByText(/Import plan \(Excel or PDF\)/i)).toBeTruthy();
+  });
+
   test('a full round trip restores the arrangement, positions, flags, extras, minors, MPU list and the snapshot banner', async () => {
     mockRestoreFetch();
     const payload = buildPlanPayload(richPayloadInput);
