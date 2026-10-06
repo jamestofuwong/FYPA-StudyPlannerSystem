@@ -3,16 +3,16 @@
 //
 // Core and major core units can be predicted individually: the planner says which ones a student still owes
 // and roughly when they take them, so unitRanker.ts picks named units. Electives cannot. A student owing two
-// prescribed slots will pick two units out of a pool of a dozen, and nothing in the transcript says which.
+// prescribed slots will pick two units out of a pool of a 12, and nothing in the transcript says which.
 // Naming two would be a guess presented as a fact, and it would swing a unit's headcount between 0 and the
 // whole cohort depending on which way the guess fell.
 //
 // So this spreads each student's elective seats fractionally across every pool unit they could actually take.
 // One student owing one slot from a pool of five contributes 0.2 of a seat to each, not 1 seat to a guess.
 // Summed over a cohort those fractions land close to the real spread even though no individual prediction is
-// right, which is the only honest thing to do with a signal this weak.
+// right with a signal this weak.
 //
-// Three things narrow the pool before it gets here, which is what makes the spread worth anything at all:
+// Three things narrow the pool before it gets here:
 //   major        the pool comes from the matched planner's own elective groups (plannerCandidateResolver.ts)
 //   eligibility  requisites are already checked against the student's transcript (eligibilityFilter.ts)
 //   offering     units not running in the semester being estimated are already gone (eligibilityEngine.ts)
@@ -36,20 +36,20 @@ type PoolCategory = ElectiveExpectation['category'];
 /**
  * Add-one smoothing on the popularity weights.
  *
- * Without it a unit nobody in the batch has passed gets a weight of zero and is predicted to draw nobody,
- * which is wrong twice over: a newly offered elective has no history by definition, and a pool where nobody
- * has passed anything would divide by zero. Adding one to every weight makes an all-new pool come out as a
- * plain uniform split and keeps a popular unit ahead without letting it take everything.
+ * Without it, a unit nobody in the batch has passed gets a weight of zero and is predicted to draw nobody. 
+ * A newly offered elective has no history by definition, and a pool where nobody has passed anything would 
+ * divide by zero. Adding one to every weight makes an all-new pool come out as a plain uniform split and keeps 
+ * a popular unit ahead without letting it take everything.
  */
 const SMOOTHING = 1;
 
 /**
  * How many students in this batch have passed or are taking each unit.
  *
- * Counted across every record, not just pool units, because the lookup is only ever read for codes that are
+ * Counted across every record, not just pool units, because the lookup is only read for codes that are
  * in some student's pool and filtering first would cost more than it saves. A unit a student has already
  * passed is not in their own candidate pool, plannerCandidateResolver.ts subtracts it, so a student never
- * weights a unit they are themselves being predicted into.
+ * weights a unit they themselves being predicted into.
  */
 export function buildElectivePopularity(records: EstimationRecord[]): Map<string, number> {
   const popularity = new Map<string, number>();

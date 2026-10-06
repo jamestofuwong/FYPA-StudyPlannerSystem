@@ -5,16 +5,15 @@
 // import would build one, and put through the same preview the dashboard runs. Nothing about the estimator
 // is special-cased for testing, so what is measured is what ships.
 //
-// Two settings are forced, and both are about fairness rather than convenience:
 //
-//   Retention is 1. The transcripts only contain students still on record when they were exported, so
-//   anyone who dropped out never appears on either side. Discounting the prediction for dropouts the actual
-//   figure cannot contain would make the estimate look worse than it is. The flip side is that this backtest
-//   says nothing about whether the retention rate itself is right, which is reported with every result.
+// Retention is 1. The transcripts only contain students still on record when they were exported, so
+// anyone who dropped out never appears on either side. Discounting the prediction for dropouts the actual
+// figure cannot contain would make the estimate look worse than it is. The flip side is that this backtest
+// says nothing about whether the retention rate itself is right, which is reported with every result.
 //
-//   New intake is 0, and students who started in the target semester are left out of the actual figure. They
-//   are the number the HoD types by hand, not something predicted from a transcript, so scoring the
-//   estimator on them would be scoring it on an input.
+// New intake is 0, and students who started in the target semester are left out of the actual figure. They
+// are the number the HoD types by hand, not something predicted from a transcript, so scoring the
+// estimator on them would be scoring it on an input.
 // ============================================================
 
 import { buildEstimationRecord } from '../estimationRecordBuilder';

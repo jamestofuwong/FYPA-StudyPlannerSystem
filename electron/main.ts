@@ -98,6 +98,47 @@ function runMigrations(): Promise<void> {
   });
 }
 
+// ── Prisma Generate ─────────────────────────────────────────────────────────────
+function runPrismaGenerate(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const isDev = !app.isPackaged;
+    if (!isDev) {
+      // In production, the client is already pre-compiled in build
+      return resolve();
+    }
+
+    const dbBaseDir = path.join(process.cwd(), 'core', 'db');
+    const schemaDir = path.join(dbBaseDir, 'prisma', 'schema');
+    const prismaCliPath = path.resolve(process.cwd(), 'node_modules/prisma/build/index.js');
+
+    console.log('[DB] Running Prisma generate...');
+
+    const proc = fork(
+      prismaCliPath,
+      ['generate', `--schema=${schemaDir}`],
+      {
+        cwd: dbBaseDir,
+        env: { ...process.env },
+        stdio: 'pipe',
+      }
+    );
+
+    proc.stdout?.on('data', (d) => console.log(`[Prisma Generate]: ${d.toString().trim()}`));
+    proc.stderr?.on('data', (d) => console.error(`[Prisma Generate Error]: ${d.toString().trim()}`));
+
+    proc.on('exit', (code) => {
+      if (code === 0) {
+        console.log('[DB] Prisma Client generated successfully.');
+        resolve();
+      } else {
+        reject(new Error(`Prisma generate failed with exit code ${code}`));
+      }
+    });
+
+    proc.on('error', (err) => reject(err));
+  });
+}
+
 app.whenReady().then(initLogger);
 
 function isDirectory(dirPath: string): boolean {
@@ -146,9 +187,6 @@ function getNextProjectDir(): string {
 }
 
 async function startNextServer(): Promise<NextServerHandle> {
-  // Expose userData path so Next.js API routes can locate portal-session.json
-  process.env.APP_DATA_DIR = app.getPath('userData');
-
   const nextApp = next({
     dev: false,
     dir: getNextProjectDir()
@@ -341,6 +379,8 @@ nativeTheme.on("updated", () => {
 app.whenReady().then(async () => {
   // Set DATABASE_URL immediately so Prisma has the connection string
   process.env.DATABASE_URL = getDatabaseUrl();
+  // Set APP_DATA_DIR unconditionally (dev and prod) so portal session persistence works
+  process.env.APP_DATA_DIR = app.getPath('userData');
 
   // Start Ollama (non-blocking — app opens even if Ollama isn't ready yet)
   startOllama().catch((err) => console.error('[Ollama] Startup error:', err));
@@ -351,9 +391,11 @@ app.whenReady().then(async () => {
   // Open window immediately — don't block on DB init
   const dbPromise = startDatabase()
     .then(async (isFirstRun) => {
-      // 1. Database is running, now run schema migrations
+      // 1. Database is running, now run schema migrations & client generation
       try {
         await runMigrations();
+        // Generate Prisma client so new models are immediately usable in repositories
+        await runPrismaGenerate();
         // 2. Load seed files only if this is a brand new database (isFirstRun)
         await runSeedsIfFirstRun(isFirstRun);
       } catch (migrationError) {

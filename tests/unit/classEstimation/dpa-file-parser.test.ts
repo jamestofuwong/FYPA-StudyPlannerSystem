@@ -1,7 +1,7 @@
 // ============================================================
 // Tests for core/services/classEstimation/dpaImport/dpaFileParser.ts.
 // Workbooks are built in memory with xlsx-js-style rather than committing fixture files, so the expected
-// layout is visible in the test itself. The first case is the real Tyans_DPA.xlsx shape: a 0-credit
+// layout is visible in the test itself. The first case is Tyans_DPA.xlsx shape: a 0-credit
 // integrity module, a 25-credit WIL placement in a winter term, and the three statuses that appear on a
 // real transcript (Complete, Current, Scheduled).
 // ============================================================

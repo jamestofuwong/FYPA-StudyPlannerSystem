@@ -22,6 +22,8 @@ import {
   resolveUnitStates,
 } from '../../../../core/shared/constants/grades';
 import { Badge, InlineCode, ProgressBar, type BadgeClass } from '../../../components/common/Primitives';
+import MinorProgressCard from '../../../components/common/MinorProgressCard';
+
 
 // Main component
 
@@ -82,6 +84,7 @@ export default function DashboardPage() {
   const [scraperError, setScraperError] = useState<string | null>(null);
 
   // REQ-SEC-101: no sessionStorage restore. Student data must live in RAM only
+  const [studentCount, setStudentCount] = useState(0);
 
   // Poll scraper status on mount to reflect portal session state.
   useEffect(() => {
@@ -90,6 +93,7 @@ export default function DashboardPage() {
       if (!res?.ok) return;
       const data = await res.json();
       setPortalSessionStatus(data.sessionStatus ?? 'idle');
+      setStudentCount(data.studentCount ?? 0);
       setScraperApiStatus((prev) => (prev === 'scraping' || prev === 'pending' ? prev : data.status));
     };
     poll();
@@ -110,7 +114,8 @@ export default function DashboardPage() {
   const isScraping = scraperApiStatus === 'scraping';
   const isWaitingForList = false;
   const isLoggedIn = portalSessionStatus === 'logged-in';
-  const isDisabled = !isLoggedIn || loading;
+  const isLoadingStudentList = isLoggedIn && studentCount === 0;
+  const isDisabled = !isLoggedIn || isLoadingStudentList || loading;
 
   // Fetches degree audit via the portal API pipeline for a given enrollment.
   const fetchViaPortal = async (dbId: number, studentNumber: string, enrollID: number): Promise<ScrapedStudent | null> => {
@@ -717,6 +722,7 @@ export default function DashboardPage() {
               portalSessionStatus === 'idle'          ? 'Log in to portal via Scraper page' :
               portalSessionStatus === 'login-pending' ? 'Logging in to portal…' :
               portalSessionStatus === 'login-error'   ? 'Portal login failed — retry in Scraper page' :
+              isLoadingStudentList                    ? 'Loading student list…' :
               'Student ID or name'
             }
             disabled={isDisabled}
@@ -739,6 +745,12 @@ export default function DashboardPage() {
             </div>
           )}
         </div>
+        {isLoadingStudentList && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+            <div className={styles.spinner} style={{ width: 14, height: 14, borderWidth: 2 }} />
+            Loading student list…
+          </div>
+        )}
         <select
           className={styles.enrollSelect}
           value={enrollmentMode}

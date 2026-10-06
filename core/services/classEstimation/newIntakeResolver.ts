@@ -2,7 +2,7 @@
 // Phase 8. Which units a brand-new student takes in their first semester.
 //
 // A new student has not picked a major, and would not be distinguishable by one even if they had: the
-// matching work established that every major in this course shares its first-year units, which is exactly
+// matching work established that every major in this course shares its first-year units, which is 
 // why a first-year student's major cannot be detected. The same fact makes this easy. The first semester of
 // year one is the same units whichever major they eventually choose, so the intersection across the majors
 // is the answer rather than a compromise.
