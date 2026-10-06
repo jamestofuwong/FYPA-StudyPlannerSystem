@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useMemo, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useMemo } from 'react'
 import type { UnitListing } from '@student/lib/types'
+import { usePendingNavigation } from '@student/components/common/PendingNavigation'
 import styles from './UnitCatalog.module.css'
 
 interface Props {
@@ -25,13 +25,10 @@ function pageRange(current: number, total: number): (number | '…')[] {
 }
 
 export default function UnitCatalog({ units }: Props) {
-  const router = useRouter()
+  const navigation = usePendingNavigation('Loading unit details...')
   const [query, setQuery]           = useState('')
   const [activeLevel, setActiveLevel] = useState<number | null>(null)
   const [page, setPage]             = useState(1)
-
-  // Reset to page 1 whenever filters change
-  useEffect(() => { setPage(1) }, [query, activeLevel])
 
   const filtered = useMemo(() => {
     let result = units
@@ -68,13 +65,19 @@ export default function UnitCatalog({ units }: Props) {
             type="search"
             placeholder="Search by code or unit name…"
             value={query}
-            onChange={e => setQuery(e.target.value)}
+            onChange={e => {
+              setQuery(e.target.value)
+              setPage(1)
+            }}
             aria-label="Search units"
           />
           {query && (
             <button
               className={styles.searchClear}
-              onClick={() => setQuery('')}
+              onClick={() => {
+                setQuery('')
+                setPage(1)
+              }}
               type="button"
               aria-label="Clear search"
             >✕</button>
@@ -87,14 +90,20 @@ export default function UnitCatalog({ units }: Props) {
             <button
               type="button"
               className={`${styles.chip} ${activeLevel === null ? styles.chipActive : ''}`}
-              onClick={() => setActiveLevel(null)}
+              onClick={() => {
+                setActiveLevel(null)
+                setPage(1)
+              }}
             >All</button>
             {LEVELS.map(level => (
               <button
                 key={level}
                 type="button"
                 className={`${styles.chip} ${activeLevel === level ? styles.chipActive : ''}`}
-                onClick={() => setActiveLevel(activeLevel === level ? null : level)}
+                onClick={() => {
+                  setActiveLevel(activeLevel === level ? null : level)
+                  setPage(1)
+                }}
               >Year {level}</button>
             ))}
           </div>
@@ -114,7 +123,11 @@ export default function UnitCatalog({ units }: Props) {
           <p className={styles.emptySubtitle}>Try adjusting your search or filter.</p>
           <button
             className={styles.emptyReset}
-            onClick={() => { setQuery(''); setActiveLevel(null) }}
+            onClick={() => {
+              setQuery('')
+              setActiveLevel(null)
+              setPage(1)
+            }}
             type="button"
           >Clear filters</button>
         </div>
@@ -134,10 +147,10 @@ export default function UnitCatalog({ units }: Props) {
                 {paginated.map(unit => (
                   <tr
                     key={unit.code}
-                    className={styles.unitRow}
-                    onClick={() => router.push(`/units/${unit.code}`)}
+                    className={`${styles.unitRow} ${navigation.activePendingHref === `/units/${unit.code}` ? styles.unitRowPending : ''}`}
+                    onClick={() => navigation.push(`/units/${unit.code}`)}
                     tabIndex={0}
-                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') router.push(`/units/${unit.code}`) }}
+                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') navigation.push(`/units/${unit.code}`) }}
                     role="link"
                     aria-label={`View ${unit.name}`}
                   >
@@ -154,7 +167,14 @@ export default function UnitCatalog({ units }: Props) {
                           ? unit.availability.join(' · ')
                           : '—'}
                       </span>
-                      <span className={styles.viewHint} aria-hidden="true">View unit →</span>
+                      <span className={styles.viewHint} aria-hidden="true">
+                        View unit
+                        {navigation.activePendingHref === `/units/${unit.code}` ? (
+                          <span className={styles.inlineSpinner} />
+                        ) : (
+                          <span>→</span>
+                        )}
+                      </span>
                     </td>
                   </tr>
                 ))}

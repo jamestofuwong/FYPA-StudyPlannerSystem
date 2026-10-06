@@ -102,6 +102,7 @@
   padding: 0 0 0 56px;
   display: flex;
   align-items: center;
+  gap: var(--space-2);
   opacity: 0;
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-semibold);
@@ -113,3 +114,21 @@
 }
 
 .unitRow:hover .viewHint { opacity: 1; }
+.unitRowPending .viewHint { opacity: 1; }
+
+.inlineSpinner {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 13px;
+  height: 13px;
+  border: 2px solid color-mix(in srgb, var(--color-accent) 24%, transparent);
+  border-top-color: var(--color-accent);
+  border-radius: 999px;
+  animation: spin 0.75s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

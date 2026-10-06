@@ -10,9 +10,15 @@ function secret(): Uint8Array {
 }
 
 function buildCsp(nonce: string): string {
+  const scriptSrc = [
+    "'self'",
+    `'nonce-${nonce}'`,
+    process.env.NODE_ENV !== 'production' ? "'unsafe-eval'" : null,
+  ].filter(Boolean).join(' ')
+
   return [
     "default-src 'self'",
-    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`,
+    `script-src ${scriptSrc}`,
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",
     "font-src 'self'",

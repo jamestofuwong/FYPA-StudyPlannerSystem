@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import Nav from '@student/components/Nav/Nav'
 import { getCachedUnit } from '@student/lib/catalog'
+import RequisiteUnitLink from './RequisiteUnitLink'
 import styles from './page.module.css'
 
 interface Props {
@@ -171,7 +172,7 @@ export default async function UnitDetailPage({ params }: Props) {
                     <ul className={styles.reqList}>
                       {unit.prerequisites.map(c => (
                         <li key={c}>
-                          <Link href={`/units/${c}`} className={styles.reqLink}>{c}</Link>
+                          <RequisiteUnitLink code={c} />
                         </li>
                       ))}
                     </ul>
@@ -193,7 +194,7 @@ export default async function UnitDetailPage({ params }: Props) {
                     <ul className={styles.reqList}>
                       {unit.corequisites.map(c => (
                         <li key={c}>
-                          <Link href={`/units/${c}`} className={styles.reqLink}>{c}</Link>
+                          <RequisiteUnitLink code={c} />
                         </li>
                       ))}
                     </ul>
@@ -215,7 +216,7 @@ export default async function UnitDetailPage({ params }: Props) {
                     <ul className={styles.reqList}>
                       {unit.antirequisites.map(c => (
                         <li key={c}>
-                          <Link href={`/units/${c}`} className={styles.reqLink}>{c}</Link>
+                          <RequisiteUnitLink code={c} />
                         </li>
                       ))}
                     </ul>

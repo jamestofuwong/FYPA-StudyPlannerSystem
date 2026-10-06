@@ -1,5 +1,5 @@
-import Link from 'next/link'
 import type { PlannerSummary } from '@student/lib/types'
+import { PendingLink } from '@student/components/common/PendingNavigation'
 import styles from './PlannerCard.module.css'
 
 interface Props {
@@ -23,7 +23,12 @@ export default function PlannerCard({ planner }: Props) {
   const abbrev = courseAbbrev(planner.courseName)
 
   return (
-    <Link href={`/planners/${planner.id}`} className={styles.card}>
+    <PendingLink
+      href={`/planners/${planner.id}`}
+      label="Loading study planner..."
+      className={styles.card}
+      ariaLabel={`View ${planner.courseName}${planner.majorName ? ` ${planner.majorName}` : ''} planner`}
+    >
       <div className={styles.bar}>
         <span className={styles.barCode}>{abbrev}</span>
       </div>
@@ -49,6 +54,6 @@ export default function PlannerCard({ planner }: Props) {
           <span className={styles.viewLink}>View planner →</span>
         </div>
       </div>
-    </Link>
+    </PendingLink>
   )
 }

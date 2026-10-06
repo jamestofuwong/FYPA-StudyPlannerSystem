@@ -419,6 +419,8 @@
 }
 
 .reqLink {
+  display: inline-flex;
+  align-items: center;
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
   color: var(--color-accent);
@@ -426,6 +428,18 @@
   transition: color 0.15s;
 }
 .reqLink:hover { color: var(--color-accent-dark); text-decoration: underline; }
+
+.reqInlineSpinner {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 13px;
+  height: 13px;
+  margin-left: var(--space-2);
+  border: 2px solid color-mix(in srgb, currentColor 24%, transparent);
+  border-top-color: currentColor;
+  border-radius: 999px;
+  animation: spin 0.75s linear infinite;
+}
 
 .reqNone {
   font-size: var(--font-size-sm);
@@ -454,4 +468,10 @@
 @media (max-width: 640px) {
   .main { padding: var(--space-5) var(--space-4) var(--space-10); }
   .heroTitle { font-size: var(--font-size-2xl); }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }

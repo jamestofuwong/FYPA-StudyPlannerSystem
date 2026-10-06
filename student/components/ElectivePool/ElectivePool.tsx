@@ -1,7 +1,7 @@
 'use client'
 
-import { useRouter } from 'next/navigation'
 import type { Unit } from '@student/lib/types'
+import { usePendingNavigation } from '@student/components/common/PendingNavigation'
 import styles from './ElectivePool.module.css'
 
 interface Props {
@@ -27,10 +27,10 @@ function groupByMonth(units: Unit[]): { month: string; units: Unit[] }[] {
     .map(([month, units]) => ({ month, units }))
 }
 
-function UnitRow({ unit, onClick }: { unit: Unit; onClick: () => void }) {
+function UnitRow({ unit, onClick, pending }: { unit: Unit; onClick: () => void; pending: boolean }) {
   return (
     <div
-      className={styles.unitRow}
+      className={`${styles.unitRow} ${pending ? styles.unitRowPending : ''}`}
       onClick={onClick}
       tabIndex={0}
       onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') onClick() }}
@@ -41,14 +41,17 @@ function UnitRow({ unit, onClick }: { unit: Unit; onClick: () => void }) {
       <span className={styles.cellName}>{unit.name}</span>
       <span className={styles.cellPrereq}>
         {unit.prerequisites?.join(', ') ?? 'Nil'}
-        <span className={styles.viewHint} aria-hidden="true">View unit →</span>
+        <span className={styles.viewHint} aria-hidden="true">
+          View unit
+          {pending ? <span className={styles.inlineSpinner} /> : <span>→</span>}
+        </span>
       </span>
     </div>
   )
 }
 
 export default function ElectivePool({ units }: Props) {
-  const router = useRouter()
+  const navigation = usePendingNavigation('Loading unit details...')
 
   if (units.length === 0) return null
 
@@ -63,7 +66,12 @@ export default function ElectivePool({ units }: Props) {
           <span>Pre-requisites</span>
         </div>
         {units.map(unit => (
-          <UnitRow key={unit.id} unit={unit} onClick={() => router.push(`/units/${unit.code}`)} />
+          <UnitRow
+            key={unit.id}
+            unit={unit}
+            pending={navigation.activePendingHref === `/units/${unit.code}`}
+            onClick={() => navigation.push(`/units/${unit.code}`)}
+          />
         ))}
       </div>
     )
@@ -81,7 +89,12 @@ export default function ElectivePool({ units }: Props) {
               <span>Pre-requisites</span>
             </div>
             {monthUnits.map(unit => (
-              <UnitRow key={unit.id} unit={unit} onClick={() => router.push(`/units/${unit.code}`)} />
+              <UnitRow
+                key={unit.id}
+                unit={unit}
+                pending={navigation.activePendingHref === `/units/${unit.code}`}
+                onClick={() => navigation.push(`/units/${unit.code}`)}
+              />
             ))}
           </div>
         </div>
