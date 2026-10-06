@@ -51,6 +51,7 @@ export const NAV_SECTIONS: NavSection[] = [
     label: 'Major Detection',
     items: [
       { id: 'dashboard', icon: '🎓', label: 'Major Detection' },
+      { id: 'pathway', icon: '🧭', label: 'Student Pathway' },
     ],
   },
   {

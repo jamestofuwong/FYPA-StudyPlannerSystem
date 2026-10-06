@@ -806,7 +806,8 @@ BEGIN
         'COS30049', 'major_core', '2', '2',
         'COS30082', 'major_core', '2', '2',
         -- E2
-        'ICT20016', 'wil', '2', '2',
+
+        'ICT20016', 'wil', '2', '3',
 
         'COS40005', 'core', '3', '1',
         'SWE30003', 'major_core', '3', '1',
@@ -860,7 +861,8 @@ BEGIN
         'COS30049', 'major_core', '2', '2',
         'TNE30009', 'major_core', '2', '2',
         'COS30019', 'prescribed_elective', '2', '2',
-        'ICT20016', 'wil', '2', '2',
+
+        'ICT20016', 'wil', '2', '3',
 
         'COS40005', 'core', '3', '1',
         'SWE30003', 'major_core', '3', '1',
@@ -914,7 +916,8 @@ BEGIN
         'COS30049', 'major_core', '2', '2',
         'COS30045', 'major_core', '2', '2',
         -- E3
-        'ICT20016', 'wil', '2', '2',
+
+        'ICT20016', 'wil', '2', '3',
 
         'COS40005', 'core', '3', '1',
         'SWE30003', 'major_core', '3', '1',
@@ -968,7 +971,8 @@ BEGIN
         'COS30049', 'major_core', '2', '2',
         'COS30017', 'major_core', '2', '2',
         -- E3
-        'ICT20016', 'wil', '2', '2',
+
+        'ICT20016', 'wil', '2', '3',
 
         'COS40005', 'core', '3', '1',
         'SWE30003', 'major_core', '3', '1',
@@ -1022,7 +1026,8 @@ BEGIN
         'COS30049', 'major_core', '2', '2',
         'COS30008', 'major_core', '2', '2',
         'SWE30009', 'major_core', '2', '2',
-        'ICT20016', 'wil', '2', '2',
+        
+        'ICT20016', 'wil', '2', '3',
 
         'COS40005', 'core', '3', '1',
         'SWE30003', 'major_core', '3', '1',

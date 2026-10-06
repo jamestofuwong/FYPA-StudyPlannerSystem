@@ -22,7 +22,7 @@ const nextConfig = {
     APP_VERSION: appVersion,
   },
   transpilePackages: ['core'],
-  serverExternalPackages: ['@local/prisma-client'],
+  serverExternalPackages: ['@local/prisma-client', 'pdfjs-dist'],
   webpack: (config) => {
     config.resolve.fallback = { fs: false, net: false, tls: false };
     return config;
