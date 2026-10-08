@@ -4,6 +4,7 @@ import styles from './UnitRow.module.css'
 const CATEGORY_LABELS: Record<UnitCategory | string, string> = {
   core:                'Core',
   major_core:          'Major',
+  double_major:        'Second Major',
   prescribed_elective: 'Elective',
   elective:            'Elective',
   wil:                 'WIL',
@@ -13,6 +14,7 @@ const CATEGORY_LABELS: Record<UnitCategory | string, string> = {
 const CATEGORY_CLASS: Record<UnitCategory | string, string> = {
   core:                'core',
   major_core:          'majorCore',
+  double_major:        'majorCore',
   prescribed_elective: 'elective',
   elective:            'elective',
   wil:                 'wil',

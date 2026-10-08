@@ -9,6 +9,7 @@ import type { SemesterBlock, Unit } from './types'
 
 export interface PlanBuilderConfig {
   plannerId: string
+  secondMajorId?: string
   intakeYear: number
   intakeMonth: number
 }
@@ -31,6 +32,7 @@ export interface GenerationResult {
   semesters: SemesterBlock[]
   completedCodes: Set<string>
   electivePool: Unit[]
+  warnings?: string[]
 }
 
 type GenerationResultJson = Omit<GenerationResult, 'completedCodes'> & {
@@ -52,5 +54,6 @@ export async function generatePlan(input: GenerationInput): Promise<GenerationRe
     semesters: data.semesters,
     electivePool: data.electivePool,
     completedCodes: new Set(data.completedCodes),
+    warnings: data.warnings,
   }
 }

@@ -1,6 +1,7 @@
 export type UnitCategory =
   | 'core'
   | 'major_core'
+  | 'double_major'
   | 'prescribed_elective'
   | 'elective'
   | 'wil'
@@ -17,6 +18,7 @@ export interface Unit {
   isElectiveSlot: boolean
   prerequisites?: string[]
   availability?: string[]
+  sourceMajorName?: string | null
 }
 
 export interface SemesterBlock {

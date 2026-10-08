@@ -51,8 +51,15 @@
 /* ── Config grid ── */
 .configGrid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: var(--space-4);
+}
+
+.intakeGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(180px, 1fr));
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
 }
 
 .field {
@@ -104,6 +111,11 @@
 .select:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+.numberInput {
+  background-image: none;
+  padding-right: 12px;
 }
 
 /* ── Completed semester tables ── */
@@ -450,6 +462,16 @@
   margin-bottom: var(--space-4);
 }
 
+.warningBox {
+  padding: 12px var(--space-4);
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: var(--radius-md);
+  color: #92400e;
+  font-size: var(--font-size-sm);
+  margin-bottom: var(--space-4);
+}
+
 /* ── Generated Plan ── */
 .planSection {
   padding-top: var(--space-8);
@@ -580,6 +602,7 @@
 
 @media (max-width: 600px) {
   .configGrid     { grid-template-columns: 1fr; }
+  .intakeGrid     { grid-template-columns: 1fr; }
   .generateBar    { flex-direction: column; align-items: flex-start; }
   .completedCount { margin-left: 0; }
 }

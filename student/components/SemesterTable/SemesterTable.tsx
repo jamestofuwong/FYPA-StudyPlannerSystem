@@ -16,6 +16,7 @@ function rowClass(category: string, isSlot: boolean): string {
   switch (category) {
     case 'core':                return styles.rowCore
     case 'major_core':          return styles.rowMajor
+    case 'double_major':        return styles.rowMajor
     case 'prescribed_elective':
     case 'elective':            return styles.rowElective
     case 'wil':                 return styles.rowWil

@@ -73,11 +73,12 @@ interface CompletedSemester {
 
 const DRAFT_KEY = 'plan-builder-draft'
 const RESULT_CACHE_KEY = 'plan-builder-result-cache'
-const RESULT_CACHE_VERSION = 1
+const RESULT_CACHE_VERSION = 3
 
 interface PlanBuilderDraft {
   selectedCourseId: string
   selectedPlannerId: string
+  selectedSecondMajorId: string
   intakeYear: number
   intakeMonth: number
   completedSemesters: CompletedSemester[]
@@ -106,17 +107,20 @@ function normalizeCompletedSemesters(semesters: CompletedSemester[]): string[][]
 
 function resultCacheKey({
   plannerId,
+  secondMajorId,
   intakeYear,
   intakeMonth,
   completedSemesters,
 }: {
   plannerId: string
+  secondMajorId?: string
   intakeYear: number
   intakeMonth: number
   completedSemesters: CompletedSemester[]
 }): string {
   return JSON.stringify({
     plannerId,
+    secondMajorId: secondMajorId || '',
     intakeYear,
     intakeMonth,
     completedSemesters: normalizeCompletedSemesters(completedSemesters),
@@ -192,6 +196,7 @@ function readDraft(): PlanBuilderDraft | null {
       return {
         selectedCourseId: data.selectedCourseId,
         selectedPlannerId: typeof data.selectedPlannerId === 'string' ? data.selectedPlannerId : '',
+        selectedSecondMajorId: typeof data.selectedSecondMajorId === 'string' ? data.selectedSecondMajorId : '',
         intakeYear: typeof data.intakeYear === 'number' ? data.intakeYear : currentYear,
         intakeMonth: typeof data.intakeMonth === 'number' ? data.intakeMonth : 3,
         completedSemesters,
@@ -202,6 +207,7 @@ function readDraft(): PlanBuilderDraft | null {
     return {
       selectedCourseId: '',
       selectedPlannerId: '',
+      selectedSecondMajorId: '',
       intakeYear: currentYear,
       intakeMonth: 3,
       completedSemesters,
@@ -248,6 +254,7 @@ export default function PlanBuilderClient({
   // ── Config ──
   const [selectedCourseId, setSelectedCourseId]   = useState('')
   const [selectedPlannerId, setSelectedPlannerId] = useState('')
+  const [selectedSecondMajorId, setSelectedSecondMajorId] = useState('')
   const [intakeYear, setIntakeYear]               = useState(new Date().getFullYear())
   const [intakeMonth, setIntakeMonth]             = useState(3)
 
@@ -269,6 +276,8 @@ export default function PlanBuilderClient({
 
   const selectedCourse  = plannerOptions.find(c => c.courseId === selectedCourseId)
   const majors          = selectedCourse?.majors ?? []
+  const primaryMajorId  = majors.find(m => m.plannerId === selectedPlannerId)?.majorId ?? null
+  const secondMajorOptions = (selectedCourse?.secondMajors ?? []).filter(m => m.majorId !== primaryMajorId)
   const canGenerate     = Boolean(selectedPlannerId)
 
   const allCompletedCodes = completedSemesters.flatMap(s => s.unitCodes)
@@ -278,8 +287,10 @@ export default function PlanBuilderClient({
     if (draft) {
       const course = plannerOptions.find(c => c.courseId === draft.selectedCourseId)
       const plannerOk = course?.majors.some(m => m.plannerId === draft.selectedPlannerId)
+      const secondMajorOk = course?.secondMajors.some(m => m.majorId === draft.selectedSecondMajorId)
       setSelectedCourseId(course ? course.courseId : '')
       setSelectedPlannerId(plannerOk ? draft.selectedPlannerId : '')
+      setSelectedSecondMajorId(secondMajorOk ? draft.selectedSecondMajorId : '')
       setIntakeYear(draft.intakeYear)
       setIntakeMonth(draft.intakeMonth)
       setCompletedSemesters(draft.completedSemesters)
@@ -287,6 +298,7 @@ export default function PlanBuilderClient({
       if (plannerOk) {
         setResult(readCachedResult(resultCacheKey({
           plannerId: draft.selectedPlannerId,
+          secondMajorId: secondMajorOk ? draft.selectedSecondMajorId : '',
           intakeYear: draft.intakeYear,
           intakeMonth: draft.intakeMonth,
           completedSemesters: draft.completedSemesters,
@@ -301,11 +313,12 @@ export default function PlanBuilderClient({
     writeDraft({
       selectedCourseId,
       selectedPlannerId,
+      selectedSecondMajorId,
       intakeYear,
       intakeMonth,
       completedSemesters,
     })
-  }, [draftReady, selectedCourseId, selectedPlannerId, intakeYear, intakeMonth, completedSemesters])
+  }, [draftReady, selectedCourseId, selectedPlannerId, selectedSecondMajorId, intakeYear, intakeMonth, completedSemesters])
 
   function clearGeneratedPlan() {
     setResult(null)
@@ -315,6 +328,19 @@ export default function PlanBuilderClient({
   function handleCourseChange(id: string) {
     setSelectedCourseId(id)
     setSelectedPlannerId('')
+    setSelectedSecondMajorId('')
+    clearGeneratedPlan()
+  }
+
+  function handlePrimaryMajorChange(plannerId: string) {
+    setSelectedPlannerId(plannerId)
+    const nextPrimaryMajorId = majors.find(m => m.plannerId === plannerId)?.majorId ?? null
+    setSelectedSecondMajorId(current => !plannerId || current === nextPrimaryMajorId ? '' : current)
+    clearGeneratedPlan()
+  }
+
+  function handleSecondMajorChange(majorId: string) {
+    setSelectedSecondMajorId(majorId)
     clearGeneratedPlan()
   }
 
@@ -432,6 +458,7 @@ export default function PlanBuilderClient({
     if (!canGenerate) return
     const cacheKey = resultCacheKey({
       plannerId: selectedPlannerId,
+      secondMajorId: selectedSecondMajorId,
       intakeYear,
       intakeMonth,
       completedSemesters,
@@ -450,14 +477,21 @@ export default function PlanBuilderClient({
     setError(null)
     try {
       const res = await generatePlan({
-        config: { plannerId: selectedPlannerId, intakeYear, intakeMonth },
+        config: {
+          plannerId: selectedPlannerId,
+          secondMajorId: selectedSecondMajorId || undefined,
+          intakeYear,
+          intakeMonth,
+        },
         completedSemesters: completedSemesters.map(semester => ({ unitCodes: semester.unitCodes })),
       })
       if (!res) {
         setError('No plan template found for the selected configuration. Try a different course or major.')
       } else {
         setResult(res)
-        writeCachedResult(cacheKey, res)
+        if (!res.warnings || res.warnings.length === 0) {
+          writeCachedResult(cacheKey, res)
+        }
         setTimeout(() => {
           document.getElementById('generated-plan')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
         }, 100)
@@ -509,7 +543,7 @@ export default function PlanBuilderClient({
               id="major"
               className={styles.select}
               value={selectedPlannerId}
-              onChange={e => { setSelectedPlannerId(e.target.value); clearGeneratedPlan() }}
+              onChange={e => handlePrimaryMajorChange(e.target.value)}
               disabled={!selectedCourseId}
               tabIndex={selectedCourseId ? 0 : -1}
             >
@@ -520,6 +554,43 @@ export default function PlanBuilderClient({
             </select>
           </div>
 
+          <div
+            className={`${styles.field} ${!selectedCourseId ? styles.fieldHidden : ''}`}
+            aria-hidden={!selectedCourseId}
+          >
+            <label className={styles.label} htmlFor="secondMajor">
+              Second Major
+            </label>
+            <select
+              id="secondMajor"
+              className={styles.select}
+              value={selectedSecondMajorId}
+              onChange={e => handleSecondMajorChange(e.target.value)}
+              disabled={!selectedCourseId || !selectedPlannerId}
+              tabIndex={selectedCourseId ? 0 : -1}
+            >
+              <option value="">No second major</option>
+              {secondMajorOptions.map(m => (
+                <option key={m.majorId} value={m.majorId}>{m.majorName}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </section>
+
+      <div className={styles.divider} />
+
+      {/* ── Section 2: Completed Semesters ── */}
+      <section className={styles.section}>
+        <div className={styles.sectionHeader}>
+          <span className={styles.sectionNum}>2</span>
+          <div>
+            <h2 className={styles.sectionTitle}>Intake</h2>
+            <p className={styles.sectionSubtitle}>Select your intake month and year.</p>
+          </div>
+        </div>
+
+        <div className={styles.intakeGrid}>
           <div className={styles.field}>
             <label className={styles.label} htmlFor="intakeMonth">Intake Month</label>
             <select
@@ -539,7 +610,7 @@ export default function PlanBuilderClient({
             <input
               id="intakeYear"
               type="number"
-              className={styles.select}
+              className={`${styles.select} ${styles.numberInput}`}
               value={intakeYear}
               min={2000}
               max={2099}
@@ -547,14 +618,14 @@ export default function PlanBuilderClient({
             />
           </div>
         </div>
+
       </section>
 
       <div className={styles.divider} />
 
-      {/* ── Section 2: Completed Semesters ── */}
       <section className={styles.section}>
         <div className={styles.sectionHeader}>
-          <span className={styles.sectionNum}>2</span>
+          <span className={styles.sectionNum}>3</span>
           <div>
             <h2 className={styles.sectionTitle}>Units Completed</h2>
             <p className={styles.sectionSubtitle}>
@@ -697,6 +768,11 @@ export default function PlanBuilderClient({
       </div>
 
       {error && <div className={styles.errorBox} role="alert">{error}</div>}
+      {result?.warnings?.map(warning => (
+        <div key={warning} className={styles.warningBox} role="status">
+          {warning}
+        </div>
+      ))}
 
       {/* ── Generated Plan ── */}
       {result && (
@@ -750,6 +826,12 @@ export default function PlanBuilderClient({
                   <span className={styles.summaryLabel}>Major</span>
                   <span className={styles.summaryValue}>
                     {majors.find(m => m.plannerId === selectedPlannerId)?.majorName ?? '—'}
+                  </span>
+                </div>
+                <div className={styles.summaryRow}>
+                  <span className={styles.summaryLabel}>Second Major</span>
+                  <span className={styles.summaryValue}>
+                    {secondMajorOptions.find(m => m.majorId === selectedSecondMajorId)?.majorName ?? 'None'}
                   </span>
                 </div>
                 <hr className={styles.summaryDivider} />

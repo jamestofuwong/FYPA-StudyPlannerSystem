@@ -8,15 +8,26 @@ export interface PlannerMajorOption {
   plannerId: string
 }
 
+export interface PlannerSecondMajorOption {
+  majorId: string
+  majorName: string
+}
+
 export interface PlannerCourseOption {
   courseId: string
   courseName: string
   majors: PlannerMajorOption[]
+  secondMajors: PlannerSecondMajorOption[]
 }
 
 export async function getPlannerOptions(): Promise<PlannerCourseOption[]> {
   const templates = await prisma.plannerTemplate.findMany({
-    include: { course: true, major: true },
+    include: {
+      course: {
+        include: { majors: { orderBy: { name: 'asc' } } },
+      },
+      major: true,
+    },
     orderBy: { intake_year: 'desc' },
   })
 
@@ -29,7 +40,15 @@ export async function getPlannerOptions(): Promise<PlannerCourseOption[]> {
     seen.add(comboKey)
 
     if (!courseMap.has(t.course_id)) {
-      courseMap.set(t.course_id, { courseId: t.course_id, courseName: t.course.name, majors: [] })
+      courseMap.set(t.course_id, {
+        courseId: t.course_id,
+        courseName: t.course.name,
+        majors: [],
+        secondMajors: t.course.majors.map(major => ({
+          majorId: major.id,
+          majorName: major.name,
+        })),
+      })
     }
     courseMap.get(t.course_id)!.majors.push({
       majorId: t.major_id ?? null,
@@ -126,6 +145,7 @@ export async function getPlannerById(id: string): Promise<PlannerDetail | null> 
       semester: s.sem_number,
       isElectiveSlot: su.is_elective_slot,
       prerequisites: su.unit?.requisites.map(r => r.requisite_unit.code) ?? [],
+      sourceMajorName: su.category === 'major_core' ? t.major?.name ?? null : null,
     })),
   }))
 
