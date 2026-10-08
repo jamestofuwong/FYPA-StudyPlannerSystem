@@ -46,6 +46,11 @@ export interface AggregationInput {
    * full, which is every Year 1, Semester 1 unit in the planners loaded so far.
    */
   newIntakeShares?: Record<string, number>;
+  /**
+   * New students per course, each placed on its own course's first-semester units. When given, these replace
+   * the single newIntakeUnits / newIntakeCount pair above, which remains for callers with one course.
+   */
+  newIntakeGroups?: Array<{ count: number; codes: string[]; shares?: Record<string, number> }>;
   retentionRate: number;
 }
 
@@ -72,6 +77,8 @@ export function roundHeadcount(projected: number): number {
 
 export function aggregate(input: AggregationInput): AggregatedUnit[] {
   const { continuing, newIntakeUnits, newIntakeCount, retentionRate, newIntakeShares = {} } = input;
+  const groups = input.newIntakeGroups
+    ?? [{ count: newIntakeCount, codes: newIntakeUnits, shares: newIntakeShares }];
 
   const byCode = new Map<string, { fromNamedPicks: number; fromElectives: number; fromNewIntake: number }>();
 
@@ -90,11 +97,12 @@ export function aggregate(input: AggregationInput): AggregatedUnit[] {
   }
 
   // A negative figure would quietly subtract students, and new intake is typed by hand.
-  const intake = Math.max(0, newIntakeCount);
-  if (intake > 0) {
+  for (const group of groups) {
+    const intake = Math.max(0, group.count);
+    if (intake === 0) continue;
     // De-duplicated: the same unit appearing twice in the list must not double the intake on it.
-    for (const code of new Set(newIntakeUnits)) {
-      entryFor(code).fromNewIntake += intake * (newIntakeShares[code] ?? 1);
+    for (const code of new Set(group.codes)) {
+      entryFor(code).fromNewIntake += intake * (group.shares?.[code] ?? 1);
     }
   }
 

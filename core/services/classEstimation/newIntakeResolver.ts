@@ -1,11 +1,12 @@
 // ============================================================
 // Phase 8. Which units a brand-new student takes in their first semester: Year 1, Semester 1.
 //
-// New students are not in the portal, so they are a number the Head of Department types in, and they all
-// start in the same place: the first slot of a Computer Science planner. Every major's Year 1, Semester 1
-// units are read and the whole figure goes onto them, so those units rise by the full intake rather than the
-// students being spread around. In every intake loaded so far all five majors share that first semester
-// exactly; should one ever differ, a unit only some majors take gets the matching share of the students.
+// New students are not in the portal, so they are a number the Head of Department types in, one per course,
+// and they all start in the same place: the first slot of their course's planners. Every major's Year 1,
+// Semester 1 units are read and the course's whole figure goes onto them, so those units rise by the full
+// intake rather than the students being spread around. In every Computer Science intake loaded so far all
+// five majors share that first semester exactly; should one ever differ, a unit only some majors take gets
+// the matching share of the students.
 //
 // Credit-transfer students, who start part way through, are not handled here. They are rare and the Head of
 // Department places them by hand.
@@ -26,7 +27,7 @@ import * as plannerRepository from '../../db/repositories/plannerRepository';
 import { intakeSemesterFromMonth } from '../matching/plannerTemplateBuilder';
 
 export interface NewIntakeUnits {
-  /** Units any Computer Science major puts in Year 1, Semester 1, sorted. */
+  /** Units any of the course's majors puts in Year 1, Semester 1, sorted. */
   codes: string[];
   /**
    * Share of the new students expected in each unit: 1 for a unit every major puts in Year 1, Semester 1,
@@ -112,27 +113,50 @@ function firstSemesterUnits(planner: DbPlanner): Set<string> {
   return codes;
 }
 
-/** Bachelor of Computer Science planners, the course class estimation covers. */
-function isComputerSciencePlanner(planner: DbPlanner): boolean {
-  return /computer science/i.test((planner as { course?: { name?: string } | null }).course?.name ?? '');
+/** The course a planner belongs to, as the planners name it. */
+export function courseOf(planner: { course?: { name?: string | null } | null }): string {
+  return planner.course?.name?.trim() || 'Unknown course';
+}
+
+export interface CourseIntakeUnits extends NewIntakeUnits {
+  course: string;
 }
 
 /**
- * The units to put the new-student figure onto: every Computer Science major's Year 1, Semester 1 units.
+ * Each course's Year 1, Semester 1 units: where that course's new students go.
  *
- * In every intake loaded so far the five majors share the same first semester, so every unit gets the full
- * new-student count. Should a future planner differ, a unit only some majors take gets the matching share
- * rather than being dropped, which would undercount it, or counted in full, which would overcount it.
+ * One result per course, because new students are entered per course. Business students do not start in
+ * Computer Science units, so one number spread over every course's first semester would put each course's
+ * intake into the others' classes. Within a course, a unit every major starts with gets the full count; a
+ * unit only some majors take gets that share, rather than being dropped (undercounting it) or counted in
+ * full (overcounting it). In every Computer Science intake loaded so far, all five majors share the same
+ * first semester.
  */
-export async function resolveNewIntakeUnits(
+export async function resolveNewIntakeByCourse(
   targetYear: number,
   targetTerm: 1 | 2,
-): Promise<NewIntakeUnits> {
+): Promise<CourseIntakeUnits[]> {
   const all = await plannerRepository.getAllPlannersWithUnits();
-  const computerScience = all.filter(isComputerSciencePlanner);
-  // Every loaded planner is Computer Science today. Should none be named that way, using them all beats
-  // placing new students nowhere, and the warning below says it happened.
-  const planners = computerScience.length > 0 ? computerScience : all;
+
+  const byCourse = new Map<string, DbPlanner[]>();
+  for (const planner of all) {
+    const course = courseOf(planner as { course?: { name?: string | null } | null });
+    if (!byCourse.has(course)) byCourse.set(course, []);
+    byCourse.get(course)!.push(planner);
+  }
+
+  return [...byCourse.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([course, planners]) => ({ course, ...firstSemesterOf(planners, targetYear, targetTerm, course) }));
+}
+
+/** Year 1, Semester 1 across one course's planners for the intake matching the target semester. */
+function firstSemesterOf(
+  planners: DbPlanner[],
+  targetYear: number,
+  targetTerm: 1 | 2,
+  course: string,
+): NewIntakeUnits {
   const picked = pickPlanners(planners, targetYear, targetTerm);
 
   if (!picked) {
@@ -141,14 +165,11 @@ export async function resolveNewIntakeUnits(
       shares: {},
       basedOnIntakeYear: targetYear,
       basedOnIntakeSemester: targetTerm,
-      warnings: ['No planners are loaded, so no units could be worked out for new students.'],
+      warnings: [`No ${course} planners are loaded, so no units could be worked out for its new students.`],
     };
   }
 
-  const warnings = [...picked.warnings];
-  if (computerScience.length === 0 && all.length > 0) {
-    warnings.push('No planner is named as Bachelor of Computer Science, so every loaded planner was used.');
-  }
+  const warnings = picked.warnings.map((warning) => `${course}: ${warning}`);
 
   const perPlanner = picked.chosen.map(firstSemesterUnits);
   const counts = new Map<string, number>();
@@ -162,13 +183,13 @@ export async function resolveNewIntakeUnits(
   const partial = Object.entries(shares).filter(([, share]) => share < 1).map(([code]) => code).sort();
   if (counts.size === 0) {
     warnings.push(
-      `The ${picked.year} semester ${picked.semester} planners have no Year 1, Semester 1 units, so the `
-      + 'new-student figure has nowhere to go and is not counted.',
+      `${course}: the ${picked.year} semester ${picked.semester} planners have no Year 1, Semester 1 units, so `
+      + 'its new students have nowhere to go and are not counted.',
     );
   } else if (partial.length > 0) {
     warnings.push(
-      `Not every major takes ${partial.join(', ')} in Year 1, Semester 1, so ${partial.length === 1 ? 'it gets' : 'they get'} `
-      + 'only the share of new students matching the majors that do.',
+      `${course}: not every major takes ${partial.join(', ')} in Year 1, Semester 1, so `
+      + `${partial.length === 1 ? 'it gets' : 'they get'} only the share of new students matching the majors that do.`,
     );
   }
 

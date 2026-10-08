@@ -8,6 +8,7 @@ import ui from './components/ui.module.css';
 import { DataTable } from './components/DataTable';
 import { Step, Tabs, Figure } from './components/Layout';
 import { DEFAULT_CLASS_ESTIMATION_CONFIG } from '../../../../core/shared/types/classEstimation';
+import { NEW_INTAKE_KEY, parseNewIntakeTotal } from '../../../../core/services/classEstimation/newIntakeSetting';
 import type { EstimationPreview } from '../../../../core/services/classEstimation/estimationPreview';
 import { describeAcademicNow } from '../../../../core/services/classEstimation/academicCalendar';
 import {
@@ -113,7 +114,6 @@ const PHASE_LABEL: Record<string, string> = {
 
 /** Where the HoD's retention figure is kept, allowlisted in web/app/api/config/route.ts. */
 const RETENTION_KEY = 'class_estimation_retention_rate';
-const NEW_INTAKE_KEY = 'class_estimation_new_intake';
 
 let _logKey = 0;
 
@@ -214,6 +214,8 @@ export default function ClassEstimationPage() {
   const [retention, setRetention] = useState(remembered?.retention ?? '85');
   const [retentionSaved, setRetentionSaved] = useState(false);
   // Brand-new students the HoD expects. They are not in the portal, so there is nothing to derive it from.
+  // New first-year students. The course they belong to is not asked for: it is detected from the students
+  // loaded, since each Head of Department imports only their own course.
   const [newIntake, setNewIntake] = useState(remembered?.newIntake ?? '0');
   const [runs, setRuns] = useState<SavedRun[]>([]);
   const [resultsTab, setResultsTab] = useState<ResultsTab>(remembered?.resultsTab ?? 'units');
@@ -308,9 +310,8 @@ export default function ClassEstimationPage() {
     fetch(`/api/config?key=${NEW_INTAKE_KEY}`)
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (typeof data?.value !== 'string' || data.value.trim() === '') return;
-        const stored = Number(data.value);
-        if (Number.isInteger(stored) && stored >= 0) setNewIntake(String(stored));
+        const stored = parseNewIntakeTotal(data?.value);
+        if (stored !== null) setNewIntake(String(stored));
       })
       .catch(() => { /* never set, so zero stands */ });
   }, []);
@@ -544,10 +545,11 @@ export default function ClassEstimationPage() {
         .then((res) => setRetentionSaved(res.ok))
         .catch(() => setRetentionSaved(false));
 
-      const intake = Number(newIntake);
+      // An empty box is 0 here, unlike the returning rate: no new students is a real answer.
+      const intake = newIntake.trim() === '' ? 0 : Number(newIntake);
       if (!Number.isInteger(intake) || intake < 0) {
         setPreviewStatus('error');
-        setPreviewError('New students must be a whole number, 0 or more.');
+        setPreviewError('New first-year students must be a whole number, 0 or more.');
         return;
       }
 
@@ -903,11 +905,21 @@ export default function ClassEstimationPage() {
               onChange={(e) => setRetention(e.target.value)} disabled={previewStatus === 'loading' || isRunning} />
           </div>
           <div className={styles.rangeField}>
-            <label className={styles.rangeLabel} title="Students starting the course next semester. They are not in the portal yet, so the number is entered here and added in full to the Year 1, Semester 1 units of the Computer Science planners. Credit-transfer students are placed by hand.">
+            <label
+              className={styles.rangeLabel}
+              title="Students starting the course next semester. They are not in the portal yet, so the number is entered here. It goes in full onto the Year 1, Semester 1 units of the course the loaded students belong to, which is worked out from their units. Credit-transfer students are placed by hand."
+            >
               New first-year students
             </label>
-            <input className={styles.rangeInput} type="number" min={0} value={newIntake}
-              onChange={(e) => setNewIntake(e.target.value)} disabled={previewStatus === 'loading' || isRunning} />
+            <input
+              className={styles.rangeInput}
+              type="number"
+              min={0}
+              value={newIntake}
+              placeholder="0"
+              onChange={(e) => setNewIntake(e.target.value)}
+              disabled={previewStatus === 'loading' || isRunning}
+            />
           </div>
           <button className={styles.btnPrimary} disabled={previewStatus === 'loading' || isRunning || loadedCount === 0} onClick={runPreview}>
             {previewStatus === 'loading' ? 'Estimating…' : preview ? 'Estimate again' : 'Run estimate'}
@@ -928,6 +940,32 @@ export default function ClassEstimationPage() {
               <Figure value={needsLook.toLocaleString()} label="Need a look"
                 note={needsLook > 0 ? 'see the Students tab' : 'every student was estimated'} tone={needsLook > 0 ? 'warn' : undefined} />
             </div>
+
+            {/* Which course this batch was worked out to be, and how sure, since nothing in a DPA names it. */}
+            <div className={styles.courseLine}>
+              {s.course.course ? (
+                <>
+                  <span className={styles.courseLabel}>Course</span>
+                  <strong>{s.course.course}</strong>
+                  <span className={styles.muted}>
+                    worked out from the units of {s.course.agreeing.toLocaleString()} of {s.course.students.toLocaleString()} students
+                    {s.course.undetermined > 0 && `; ${s.course.undetermined.toLocaleString()} had no units to go on and follow the batch`}
+                  </span>
+                </>
+              ) : (
+                <span className={styles.warn}>
+                  The loaded students do not point at any one course, so they were matched against every planner and
+                  new first-year students could not be placed.
+                </span>
+              )}
+            </div>
+            {Object.keys(s.course.elsewhere).length > 0 && (
+              <div className={styles.errorBox} style={{ marginTop: 8 }}>
+                This batch looks mixed:{' '}
+                {Object.entries(s.course.elsewhere).map(([name, n]) => `${n.toLocaleString()} student(s) look like ${name}`).join(', ')}.
+                {' '}They were estimated as {s.course.course} students. Check the import holds only one course.
+              </div>
+            )}
 
             <Tabs<ResultsTab>
               active={resultsTab}
@@ -969,9 +1007,9 @@ export default function ClassEstimationPage() {
                 />
                 {(s.newIntakeCount > 0 || s.newIntake.warnings.length > 0) && (
                   <div className={styles.previewNotes}>
-                    {s.newIntakeCount > 0 && (
+                    {s.newIntakeCount > 0 && s.newIntake.course && (
                       <div>
-                        {s.newIntakeCount} new first-year students added to the Year 1, Semester 1 units:{' '}
+                        {s.newIntakeCount} new {shortCourseName(s.newIntake.course)} first-years added to the Year 1, Semester 1 units:{' '}
                         {s.newIntake.units.map((code) => (s.unitNames?.[code] ? `${code} ${s.unitNames[code]}` : code)).join(', ') || 'none found'}.
                       </div>
                     )}
@@ -1162,6 +1200,11 @@ export default function ClassEstimationPage() {
 }
 
 // ── Pieces used above ────────────────────────────────────────────────────────
+
+/** "Bachelor of Computer Science" as "Computer Science", to keep the per-course labels short. */
+function shortCourseName(course: string): string {
+  return course.replace(/^Bachelor of\s+/i, '').trim() || course;
+}
 
 /** A unit code with its name beside it, quieter, when the planners give one. */
 function UnitName({ code, names }: { code: string; names?: Record<string, string> }) {

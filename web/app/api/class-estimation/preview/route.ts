@@ -8,17 +8,14 @@ import {
   parseStoredRetentionRate,
 } from '../../../../../core/services/classEstimation/retention';
 import { prisma } from '../../../../../core/db/client';
+import { NEW_INTAKE_KEY, parseNewIntakeTotal } from '../../../../../core/services/classEstimation/newIntakeSetting';
 
 const RETENTION_KEY = 'class_estimation_retention_rate';
-const NEW_INTAKE_KEY = 'class_estimation_new_intake';
-
-/** The HoD's saved new-intake figure, or 0 if they have never set one. */
+/** The saved new first-year students figure, or 0 if never set. */
 async function storedNewIntake(): Promise<number> {
   try {
     const row = await prisma.systemConfig.findUnique({ where: { key: NEW_INTAKE_KEY } });
-    if (!row || typeof row.value !== 'string' || row.value.trim() === '') return 0;
-    const stored = Number(row.value);
-    return Number.isInteger(stored) && stored >= 0 ? stored : 0;
+    return parseNewIntakeTotal(row?.value) ?? 0;
   } catch {
     return 0;
   }
@@ -70,7 +67,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'retentionRate must be a number from 0 to 1' }, { status: 400 });
   }
 
-  // Brand-new students, who are not in the portal yet, so the figure is typed rather than derived.
+  // New first-year students, who are not in the portal yet, so the figure is typed rather than derived. They go
+  // onto the Year 1, Semester 1 units of the course detected from the loaded students.
   const intakeParam = searchParams.get('newIntake');
   const newIntakeCount = intakeParam !== null ? Number(intakeParam) : await storedNewIntake();
   if (!Number.isInteger(newIntakeCount) || newIntakeCount < 0) {

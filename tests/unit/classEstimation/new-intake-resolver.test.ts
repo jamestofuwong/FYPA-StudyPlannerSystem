@@ -12,7 +12,7 @@
 // intake begins in. The target semester only decides which intake's planners are read.
 // ============================================================
 
-import { resolveNewIntakeUnits } from '@core/services/classEstimation/newIntakeResolver';
+import { resolveNewIntakeByCourse } from '@core/services/classEstimation/newIntakeResolver';
 import * as plannerRepository from '@core/db/repositories/plannerRepository';
 
 jest.mock('@core/db/repositories/plannerRepository');
@@ -37,6 +37,12 @@ function planner(
       unit: { unit_code: code },
     })),
   };
+}
+
+/** The one course's result, for the cases that load a single course. */
+async function resolveNewIntakeUnits(year: number, term: 1 | 2) {
+  const [only] = await resolveNewIntakeByCourse(year, term);
+  return only ?? { codes: [], shares: {}, warnings: ['No planners are loaded'], basedOnIntakeYear: year, basedOnIntakeSemester: term };
 }
 
 const y1s1 = (code: string) => [code, 1, 1] as [string, number, number];
@@ -77,27 +83,36 @@ describe('resolveNewIntakeUnits', () => {
     expect(result.warnings.some((w) => /AI_ONLY/.test(w) && /share/i.test(w))).toBe(true);
   });
 
-  test('only Computer Science planners are read', async () => {
+  // Each course's new students start in that course's own units, so courses are kept apart rather than
+  // spread over one another's first semester.
+  test('each course gets its own first-semester units', async () => {
     getAllPlannersWithUnits.mockResolvedValue([
-      planner(2027, 3, [y1s1('COS10009')]),
-      planner(2027, 3, [y1s1('ENG10001')], 'Bachelor of Engineering'),
+      planner(2027, 3, [y1s1('COS10009'), y1s1('COS10003')]),
+      planner(2027, 3, [y1s1('COS10009'), y1s1('COS10003')]),
+      planner(2027, 3, [y1s1('BUS10001'), y1s1('ACC10002')], 'Bachelor of Business'),
     ] as never);
 
-    const result = await resolveNewIntakeUnits(2027, 1);
+    const result = await resolveNewIntakeByCourse(2027, 1);
 
-    expect(result.codes).toEqual(['COS10009']);
-    expect(result.shares).toEqual({ COS10009: 1 });
+    expect(result.map((r) => r.course)).toEqual(['Bachelor of Business', 'Bachelor of Computer Science']);
+    expect(result[0].codes).toEqual(['ACC10002', 'BUS10001']);
+    expect(result[1].codes).toEqual(['COS10003', 'COS10009']);
+    // Shares are worked out inside each course, so neither course dilutes the other.
+    expect(result[1].shares).toEqual({ COS10003: 1, COS10009: 1 });
   });
 
-  test('with no planner named Computer Science, every planner is used and that is said', async () => {
+  test('each course falls back to its own most recent intake', async () => {
     getAllPlannersWithUnits.mockResolvedValue([
-      planner(2027, 3, [y1s1('X10001')], 'Some Other Degree'),
+      planner(2026, 3, [y1s1('COS_2026')]),
+      planner(2025, 3, [y1s1('BUS_2025')], 'Bachelor of Business'),
     ] as never);
 
-    const result = await resolveNewIntakeUnits(2027, 1);
+    const result = await resolveNewIntakeByCourse(2027, 1);
+    const byCourse = new Map(result.map((r) => [r.course, r]));
 
-    expect(result.codes).toEqual(['X10001']);
-    expect(result.warnings.some((w) => /Computer Science/.test(w))).toBe(true);
+    expect(byCourse.get('Bachelor of Computer Science')!.basedOnIntakeYear).toBe(2026);
+    expect(byCourse.get('Bachelor of Business')!.basedOnIntakeYear).toBe(2025);
+    expect(byCourse.get('Bachelor of Business')!.warnings.every((w) => w.startsWith('Bachelor of Business:'))).toBe(true);
   });
 
   test('later years are never a new student\'s first semester', async () => {
@@ -194,13 +209,9 @@ describe('resolveNewIntakeUnits', () => {
 
   // ---- Nothing to work with ----------------------------------------------------------------------
 
-  test('no planners at all is reported, not returned as an empty success', async () => {
+  test('no planners at all gives no courses to place new students in', async () => {
     getAllPlannersWithUnits.mockResolvedValue([] as never);
-
-    const result = await resolveNewIntakeUnits(2027, 1);
-
-    expect(result.codes).toEqual([]);
-    expect(result.warnings.some((w) => /No planners are loaded/.test(w))).toBe(true);
+    expect(await resolveNewIntakeByCourse(2027, 1)).toEqual([]);
   });
 
   test('majors with entirely different first semesters split the new students between them', async () => {

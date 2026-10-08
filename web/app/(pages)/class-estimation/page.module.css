@@ -880,3 +880,21 @@
   margin-left: 6px;
   color: var(--text-secondary);
 }
+
+/* The course the batch was worked out to be, under the headline figures. */
+.courseLine {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.courseLabel {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}

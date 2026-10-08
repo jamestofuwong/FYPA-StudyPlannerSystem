@@ -17,6 +17,11 @@ import { getPrescribedPoolCodes, getFreeElectivePoolCodes } from '../matching/pl
 import type { MatchingServiceResult } from '../matching/matchingService';
 import type { CandidateUnit } from '../../shared/types/classEstimation';
 
+/** The course a planner belongs to, for keeping the shared-core fallback inside one course. */
+function courseName(planner: unknown): string {
+  return ((planner as { course?: { name?: string | null } | null }).course?.name ?? '').trim();
+}
+
 export interface CandidateResolution {
   plannerId: string;
   candidates: CandidateUnit[];
@@ -122,9 +127,20 @@ export async function resolveCommonCoreUnits(
 
   const completed = new Set(completedUnitCodes.map((code) => code.trim().toUpperCase()));
 
-  // A unit is only proposed if EVERY candidate planner still wants it from this student. One planner having
-  // already had it satisfied, or not requiring it at all, is enough to leave it out.
-  const owedByAll = ranked
+  // Only planners of the student's own course. Every planner for the intake is a candidate, Business ones
+  // too once they are loaded, and Business and Computer Science share no core units, so intersecting across
+  // both would leave a first-year with nothing predicted at all. The best-scoring planner decides the course:
+  // a first-year transcript is far closer to its own course's planners than to another course's.
+  const course = courseName(planner);
+  const sameCourse: typeof ranked = [];
+  for (const record of ranked) {
+    const candidate = await getCachedPlannerById(record.plannerID);
+    if (candidate && courseName(candidate) === course) sameCourse.push(record);
+  }
+
+  // A unit is only proposed if EVERY candidate planner in that course still wants it from this student. One
+  // planner having already had it satisfied, or not requiring it at all, is enough to leave it out.
+  const owedByAll = sameCourse
     .map((record) => new Set(record.missingCore.map((code) => code.trim().toUpperCase())))
     .reduce((shared, next) => new Set([...shared].filter((code) => next.has(code))));
 
