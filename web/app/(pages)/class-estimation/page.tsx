@@ -79,6 +79,7 @@ type SavedRun = {
 type SavedRunDetail = SavedRun & {
   units: Array<{
     unitCode: string;
+    unitName?: string;
     fromNamedPicks: number;
     fromElectives: number;
     fromNewIntake: number;
@@ -1284,12 +1285,12 @@ function SavedRunUnits({ id }: { id: string }) {
       <DataTable
         rows={units}
         rowKey={(unit) => unit.unitCode}
-        searchText={(unit) => unit.unitCode}
+        searchText={(unit) => `${unit.unitCode} ${unit.unitName ?? ''}`}
         searchPlaceholder="Find a unit"
         pageSize={10}
         initialSort={{ key: 'headcount', direction: 'desc' }}
         columns={[
-          { key: 'code', label: 'Unit', width: 'minmax(90px, 1fr)', render: (unit) => <span className={styles.mono}>{unit.unitCode}</span>, sortValue: (unit) => unit.unitCode },
+          { key: 'code', label: 'Unit', width: 'minmax(220px, 2.2fr)', render: (unit) => <UnitName code={unit.unitCode} names={unit.unitName ? { [unit.unitCode]: unit.unitName } : undefined} />, sortValue: (unit) => unit.unitCode },
           { key: 'named', label: 'Required', width: '90px', align: 'right', render: (unit) => unit.fromNamedPicks || '–', sortValue: (unit) => unit.fromNamedPicks },
           { key: 'elective', label: 'Elective', width: '90px', align: 'right', render: (unit) => (unit.fromElectives > 0 ? unit.fromElectives.toFixed(1) : '–'), sortValue: (unit) => unit.fromElectives },
           { key: 'new', label: 'New', width: '70px', align: 'right', render: (unit) => unit.fromNewIntake || '–', sortValue: (unit) => unit.fromNewIntake },

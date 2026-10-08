@@ -34,6 +34,7 @@ type SavedRun = {
 
 type RunUnit = {
   unitCode: string;
+  unitName?: string;
   fromNamedPicks: number;
   fromElectives: number;
   fromNewIntake: number;
@@ -226,14 +227,19 @@ export default function ClassEstimationReportPage() {
             <DataTable
               rows={run.units}
               rowKey={(unit) => unit.unitCode}
-              searchText={(unit) => unit.unitCode}
-              searchPlaceholder="Find a unit"
+              searchText={(unit) => `${unit.unitCode} ${unit.unitName ?? ''}`}
+              searchPlaceholder="Find a unit by code or name"
               pageSize={20}
               initialSort={{ key: 'students', direction: 'desc' }}
               columns={[
                 {
-                  key: 'unit', label: 'Unit', width: 'minmax(100px, 0.8fr)',
-                  render: (unit) => <span className={styles.code}>{unit.unitCode}</span>,
+                  key: 'unit', label: 'Unit', width: 'minmax(240px, 1.6fr)',
+                  render: (unit) => (
+                    <span title={unit.unitName ? `${unit.unitCode} ${unit.unitName}` : unit.unitCode}>
+                      <span className={styles.code}>{unit.unitCode}</span>
+                      {unit.unitName && <span className={styles.unitName}> {unit.unitName}</span>}
+                    </span>
+                  ),
                   sortValue: (unit) => unit.unitCode,
                 },
                 {

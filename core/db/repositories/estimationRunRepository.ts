@@ -15,6 +15,12 @@ import { prisma } from '../client';
 
 export interface EstimationRunUnitRecord {
   unitCode: string;
+  /**
+   * The unit's name as the catalogue has it now, looked up when the run is read rather than stored with it.
+   * Empty when the unit is no longer in the catalogue. Only ever used for display, so a later rename showing
+   * on an old run is harmless; the figures themselves are what the run saved.
+   */
+  unitName?: string;
   fromNamedPicks: number;
   fromElectives: number;
   fromNewIntake: number;
@@ -142,8 +148,17 @@ export async function getEstimationRun(id: string): Promise<EstimationRunDetail 
   });
   if (!run) return null;
 
+  // One query for every name in the run. unit_code is stored as text, not a link, so a unit removed from the
+  // catalogue since simply comes back without a name and the run still reads.
+  const catalogue = await prisma.unit.findMany({
+    where: { unit_code: { in: run.units.map((unit) => unit.unit_code) } },
+    select: { unit_code: true, unit_name: true },
+  });
+  const nameOf = new Map(catalogue.map((unit) => [unit.unit_code, unit.unit_name]));
+
   const units: EstimationRunUnitRecord[] = run.units.map((unit) => ({
     unitCode: unit.unit_code,
+    unitName: nameOf.get(unit.unit_code) ?? '',
     fromNamedPicks: toNumber(unit.from_named_picks),
     fromElectives: toNumber(unit.from_electives),
     fromNewIntake: toNumber(unit.from_new_intake),
