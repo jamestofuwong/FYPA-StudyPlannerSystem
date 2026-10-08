@@ -63,13 +63,14 @@ function semesterLabel(run: EstimationRunDetail): string {
  */
 function buildProjectionSheet(run: EstimationRunDetail): XLSX.WorkSheet {
   const rows: unknown[][] = [
-    [`Projected enrolment, ${semesterLabel(run)}`, '', '', '', ''],
-    ['Unit', 'Required', 'Elective', 'New students', 'Projected headcount'],
+    [`Projected enrolment, ${run.course ? `${run.course}, ` : ''}${semesterLabel(run)}`, '', '', '', '', ''],
+    ['Unit', 'Unit name', 'Required', 'Elective', 'New students', 'Projected headcount'],
   ];
 
   for (const unit of run.units) {
     rows.push([
       unit.unitCode,
+      unit.unitName ?? '',
       unit.fromNamedPicks || '',
       unit.fromElectives > 0 ? Number(unit.fromElectives.toFixed(2)) : '',
       unit.fromNewIntake || '',
@@ -78,7 +79,7 @@ function buildProjectionSheet(run: EstimationRunDetail): XLSX.WorkSheet {
   }
 
   rows.push([]);
-  rows.push(['Total', '', '', '', run.units.reduce((sum, unit) => sum + unit.headcount, 0)]);
+  rows.push(['Total', '', '', '', '', run.units.reduce((sum, unit) => sum + unit.headcount, 0)]);
   rows.push([]);
   rows.push(['Required counts students whose planner says they still owe the unit.']);
   rows.push(['Elective counts shares of a student spread across the options they could pick, so it is fractional.']);
@@ -86,19 +87,19 @@ function buildProjectionSheet(run: EstimationRunDetail): XLSX.WorkSheet {
   rows.push(['Each unit is rounded on its own, so the column may not add up to the total exactly.']);
 
   const sheet = XLSX.utils.aoa_to_sheet(rows);
-  sheet['!cols'] = [{ wch: 14 }, { wch: 11 }, { wch: 11 }, { wch: 14 }, { wch: 20 }];
-  sheet['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 4 } }];
+  sheet['!cols'] = [{ wch: 14 }, { wch: 42 }, { wch: 11 }, { wch: 11 }, { wch: 14 }, { wch: 20 }];
+  sheet['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 5 } }];
 
-  applyRow(sheet, 0, 5, S.title);
-  applyRow(sheet, 1, 5, S.header);
+  applyRow(sheet, 0, 6, S.title);
+  applyRow(sheet, 1, 6, S.header);
 
   run.units.forEach((unit, index) => {
     const row = index + 2;
-    applyRow(sheet, row, 5, unit.headcount === 0 ? S.rowNone : index % 2 === 0 ? S.row : S.rowAlt);
+    applyRow(sheet, row, 6, unit.headcount === 0 ? S.rowNone : index % 2 === 0 ? S.row : S.rowAlt);
   });
 
   const totalRow = run.units.length + 3;
-  applyRow(sheet, totalRow, 5, S.label);
+  applyRow(sheet, totalRow, 6, S.label);
   for (let row = totalRow + 2; row <= totalRow + 5; row++) applyRow(sheet, row, 1, S.note);
 
   return sheet;
@@ -116,6 +117,7 @@ function buildDetailsSheet(run: EstimationRunDetail): XLSX.WorkSheet {
 
   const rows: unknown[][] = [
     ['How this estimate was produced', ''],
+    ['Course', run.course ?? 'Not recorded'],
     ['Semester estimated', semesterLabel(run)],
     ['Produced on', run.createdAt.toLocaleString()],
     ['Label', run.label ?? ''],
@@ -126,7 +128,7 @@ function buildDetailsSheet(run: EstimationRunDetail): XLSX.WorkSheet {
     ['Where the transcripts came from', sourceLabels[run.source] ?? run.source],
     ['', ''],
     ['Students assumed returning', `${(run.retentionRate * 100).toFixed(0)}%`],
-    ['New students expected', run.newIntake],
+    ['New first-year students', run.newIntake],
     ['Units per student per semester', run.loadCap],
     ['', ''],
     ['Students with no detected major are estimated from the units every major shares, since first-year'],
@@ -140,12 +142,12 @@ function buildDetailsSheet(run: EstimationRunDetail): XLSX.WorkSheet {
   sheet['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 1 } }];
 
   applyRow(sheet, 0, 2, S.title);
-  for (const row of [1, 2, 3, 5, 6, 7, 8, 10, 11, 12]) {
+  for (const row of [1, 2, 3, 4, 6, 7, 8, 9, 11, 12, 13]) {
     applyRow(sheet, row, 2, S.row);
     const address = XLSX.utils.encode_cell({ r: row, c: 0 });
     if (sheet[address]) (sheet[address] as { s?: unknown }).s = S.label;
   }
-  for (let row = 14; row <= 17; row++) applyRow(sheet, row, 1, S.note);
+  for (let row = 15; row <= 18; row++) applyRow(sheet, row, 1, S.note);
 
   return sheet;
 }

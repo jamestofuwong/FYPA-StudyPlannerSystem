@@ -19,6 +19,7 @@ type SavedRun = {
   id: string;
   createdAt: string;
   label: string | null;
+  course: string | null;
   targetYear: number;
   targetSemester: number;
   loadCap: number;
@@ -34,6 +35,7 @@ type SavedRun = {
 
 type RunUnit = {
   unitCode: string;
+  unitName?: string;
   fromNamedPicks: number;
   fromElectives: number;
   fromNewIntake: number;
@@ -51,6 +53,11 @@ const SOURCE_LABELS: Record<string, string> = {
   mixed: 'More than one source',
   none: 'No students',
 };
+
+/** Cuts a long label down for places that cannot wrap it, such as a dropdown option. */
+function shorten(text: string, max: number): string {
+  return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text;
+}
 
 export default function ClassEstimationReportPage() {
   const [runs, setRuns] = useState<SavedRun[]>([]);
@@ -146,7 +153,7 @@ export default function ClassEstimationReportPage() {
             <div className={styles.metaTop}>
               <div>
                 <div className={styles.sectionTitle}>
-                  Semester {run.targetSemester}, {run.targetYear}
+                  {run.course ? `${run.course} · ` : ''}Semester {run.targetSemester}, {run.targetYear}
                 </div>
                 <div className={styles.metaWhen}>
                   {run.label ? `${run.label} · ` : ''}
@@ -164,7 +171,8 @@ export default function ClassEstimationReportPage() {
                     {runs.map((option) => (
                       <option key={option.id} value={option.id}>
                         {new Date(option.createdAt).toLocaleDateString()}
-                        {option.label ? ` · ${option.label}` : ''}
+                        {option.course ? ` · ${option.course.replace(/^Bachelor of\s+/i, '')}` : ''}
+                        {option.label ? ` · ${shorten(option.label, 40)}` : ''}
                         {` · S${option.targetSemester} ${option.targetYear}`}
                       </option>
                     ))}
@@ -206,7 +214,12 @@ export default function ClassEstimationReportPage() {
                 {run.newIntake.toLocaleString()} new students. Each student is expected to take up to{' '}
                 {run.loadCap} units.
               </div>
-              <div>{SOURCE_LABELS[run.source] ?? run.source}</div>
+              <div>
+                {SOURCE_LABELS[run.source] ?? run.source}
+                {run.course
+                  ? `, worked out to be ${run.course} students from the units on their transcripts.`
+                  : '. This estimate was saved before the course was recorded.'}
+              </div>
               {run.commonCoreCount > 0 && (
                 <div>
                   {run.commonCoreCount.toLocaleString()} students are early enough in the course that their
@@ -226,14 +239,19 @@ export default function ClassEstimationReportPage() {
             <DataTable
               rows={run.units}
               rowKey={(unit) => unit.unitCode}
-              searchText={(unit) => unit.unitCode}
-              searchPlaceholder="Find a unit"
+              searchText={(unit) => `${unit.unitCode} ${unit.unitName ?? ''}`}
+              searchPlaceholder="Find a unit by code or name"
               pageSize={20}
               initialSort={{ key: 'students', direction: 'desc' }}
               columns={[
                 {
-                  key: 'unit', label: 'Unit', width: 'minmax(100px, 0.8fr)',
-                  render: (unit) => <span className={styles.code}>{unit.unitCode}</span>,
+                  key: 'unit', label: 'Unit', width: 'minmax(240px, 1.6fr)',
+                  render: (unit) => (
+                    <span title={unit.unitName ? `${unit.unitCode} ${unit.unitName}` : unit.unitCode}>
+                      <span className={styles.code}>{unit.unitCode}</span>
+                      {unit.unitName && <span className={styles.unitName}> {unit.unitName}</span>}
+                    </span>
+                  ),
                   sortValue: (unit) => unit.unitCode,
                 },
                 {

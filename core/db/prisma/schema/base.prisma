@@ -262,6 +262,11 @@ model EstimationRun {
   retention_rate Decimal @db.Decimal(4, 3)
   new_intake     Int
 
+  /// The course the students were detected to belong to, e.g. "Bachelor of Computer Science". Text rather
+  /// than a link to courses, like unit_code below, so a course renamed later does not rewrite history.
+  /// Null on estimates saved before courses were recorded.
+  course        String? @db.VarChar(255)
+
   /// Where the transcripts came from: portal, import, mock, or mixed.
   source        String @db.VarChar(20)
   student_count Int

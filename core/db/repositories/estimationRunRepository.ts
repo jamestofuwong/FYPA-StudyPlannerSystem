@@ -15,6 +15,12 @@ import { prisma } from '../client';
 
 export interface EstimationRunUnitRecord {
   unitCode: string;
+  /**
+   * The unit's name as the catalogue has it now, looked up when the run is read rather than stored with it.
+   * Empty when the unit is no longer in the catalogue. Only ever used for display, so a later rename showing
+   * on an old run is harmless; the figures themselves are what the run saved.
+   */
+  unitName?: string;
   fromNamedPicks: number;
   fromElectives: number;
   fromNewIntake: number;
@@ -24,6 +30,8 @@ export interface EstimationRunUnitRecord {
 
 export interface EstimationRunInput {
   label?: string | null;
+  /** The course the batch was detected to belong to, or null if none was found. */
+  course?: string | null;
   targetYear: number;
   targetSemester: 1 | 2;
   loadCap: number;
@@ -41,6 +49,8 @@ export interface EstimationRunSummary {
   id: string;
   createdAt: Date;
   label: string | null;
+  /** Null on estimates saved before courses were recorded. */
+  course: string | null;
   targetYear: number;
   targetSemester: number;
   loadCap: number;
@@ -74,6 +84,7 @@ export async function saveEstimationRun(input: EstimationRunInput): Promise<stri
     const created = await tx.estimationRun.create({
       data: {
         label: input.label?.trim() || null,
+        course: input.course?.trim() || null,
         target_year: input.targetYear,
         target_semester: input.targetSemester,
         load_cap: input.loadCap,
@@ -120,6 +131,7 @@ export async function listEstimationRuns(limit = 50): Promise<EstimationRunSumma
     id: run.id,
     createdAt: run.created_at,
     label: run.label,
+    course: run.course,
     targetYear: run.target_year,
     targetSemester: run.target_semester,
     loadCap: run.load_cap,
@@ -142,8 +154,17 @@ export async function getEstimationRun(id: string): Promise<EstimationRunDetail 
   });
   if (!run) return null;
 
+  // One query for every name in the run. unit_code is stored as text, not a link, so a unit removed from the
+  // catalogue since simply comes back without a name and the run still reads.
+  const catalogue = await prisma.unit.findMany({
+    where: { unit_code: { in: run.units.map((unit) => unit.unit_code) } },
+    select: { unit_code: true, unit_name: true },
+  });
+  const nameOf = new Map(catalogue.map((unit) => [unit.unit_code, unit.unit_name]));
+
   const units: EstimationRunUnitRecord[] = run.units.map((unit) => ({
     unitCode: unit.unit_code,
+    unitName: nameOf.get(unit.unit_code) ?? '',
     fromNamedPicks: toNumber(unit.from_named_picks),
     fromElectives: toNumber(unit.from_electives),
     fromNewIntake: toNumber(unit.from_new_intake),
@@ -155,6 +176,7 @@ export async function getEstimationRun(id: string): Promise<EstimationRunDetail 
     id: run.id,
     createdAt: run.created_at,
     label: run.label,
+    course: run.course,
     targetYear: run.target_year,
     targetSemester: run.target_semester,
     loadCap: run.load_cap,

@@ -63,6 +63,7 @@ type SavedRun = {
   id: string;
   createdAt: string;
   label: string | null;
+  course: string | null;
   targetYear: number;
   targetSemester: number;
   loadCap: number;
@@ -79,6 +80,7 @@ type SavedRun = {
 type SavedRunDetail = SavedRun & {
   units: Array<{
     unitCode: string;
+    unitName?: string;
     fromNamedPicks: number;
     fromElectives: number;
     fromNewIntake: number;
@@ -974,14 +976,8 @@ export default function ClassEstimationPage() {
                     },
                   ]}
                 />
-                {(s.newIntakeCount > 0 || s.newIntake.warnings.length > 0) && (
+                {s.newIntake.warnings.length > 0 && (
                   <div className={styles.previewNotes}>
-                    {s.newIntakeCount > 0 && s.newIntake.course && (
-                      <div>
-                        {s.newIntakeCount} new {shortCourseName(s.newIntake.course)} first-years added to the Year 1, Semester 1 units:{' '}
-                        {s.newIntake.units.map((code) => (s.unitNames?.[code] ? `${code} ${s.unitNames[code]}` : code)).join(', ') || 'none found'}.
-                      </div>
-                    )}
                     {s.newIntake.warnings.map((warning) => <div key={warning}>⚠ {warning}</div>)}
                   </div>
                 )}
@@ -1117,7 +1113,7 @@ export default function ClassEstimationPage() {
       <Step
         number={3}
         title="Save the estimate"
-        explainer="Saving records the per-unit figures and the settings behind them, never any student's details, so the Head of Department view and the Excel download can use it later."
+        explainer="Save records of the per-unit figures and their settings."
         done={runs.length > 0}
       >
         <p className={styles.hintText}>
@@ -1127,7 +1123,7 @@ export default function ClassEstimationPage() {
           <div className={styles.rangeField} style={{ flex: 1, minWidth: 180 }}>
             <label className={styles.rangeLabel}>Label (optional)</label>
             <input className={styles.rangeInput} type="text" placeholder="e.g. before the FTES change" value={runLabel}
-              onChange={(e) => setRunLabel(e.target.value)} disabled={savingRun} />
+              maxLength={60} onChange={(e) => setRunLabel(e.target.value)} disabled={savingRun} />
           </div>
           <button className={styles.btnPrimary} disabled={savingRun || loadedCount === 0} onClick={saveRun}>
             {savingRun ? 'Saving…' : 'Save this estimate'}
@@ -1140,11 +1136,12 @@ export default function ClassEstimationPage() {
             <DataTable
               rows={runs}
               rowKey={(run) => run.id}
-              searchText={(run) => `${run.label ?? ''} ${new Date(run.createdAt).toLocaleString()} ${run.source}`}
+              searchText={(run) => `${run.label ?? ''} ${run.course ?? ''} ${new Date(run.createdAt).toLocaleString()} ${run.source}`}
               searchPlaceholder="Find a saved estimate"
               pageSize={5}
               columns={[
-                { key: 'when', label: 'Saved', width: 'minmax(150px, 1.4fr)', render: (run) => <>{new Date(run.createdAt).toLocaleString()}{run.label ? <span className={styles.muted}> · {run.label}</span> : null}</>, sortValue: (run) => run.createdAt },
+                { key: 'when', label: 'Saved', width: 'minmax(150px, 1.4fr)', render: (run) => <>{new Date(run.createdAt).toLocaleString()}{run.label ? <span className={styles.muted} style={{ overflowWrap: 'anywhere' }}> · {run.label}</span> : null}</>, sortValue: (run) => run.createdAt },
+                { key: 'course', label: 'Course', width: 'minmax(130px, 1fr)', render: (run) => (run.course ? shortCourseName(run.course) : <span className={styles.muted}>Not recorded</span>), sortValue: (run) => run.course ?? '' },
                 { key: 'term', label: 'For', width: '80px', render: (run) => `S${run.targetSemester} ${run.targetYear}`, sortValue: (run) => run.targetYear * 10 + run.targetSemester },
                 { key: 'students', label: 'Students', width: '90px', align: 'right', render: (run) => `${run.studentCount.toLocaleString()}${run.newIntake ? ` +${run.newIntake}` : ''}`, sortValue: (run) => run.studentCount },
                 { key: 'returning', label: 'Returning', width: '90px', align: 'right', render: (run) => `${(run.retentionRate * 100).toFixed(0)}%`, sortValue: (run) => run.retentionRate },
@@ -1284,12 +1281,12 @@ function SavedRunUnits({ id }: { id: string }) {
       <DataTable
         rows={units}
         rowKey={(unit) => unit.unitCode}
-        searchText={(unit) => unit.unitCode}
+        searchText={(unit) => `${unit.unitCode} ${unit.unitName ?? ''}`}
         searchPlaceholder="Find a unit"
         pageSize={10}
         initialSort={{ key: 'headcount', direction: 'desc' }}
         columns={[
-          { key: 'code', label: 'Unit', width: 'minmax(90px, 1fr)', render: (unit) => <span className={styles.mono}>{unit.unitCode}</span>, sortValue: (unit) => unit.unitCode },
+          { key: 'code', label: 'Unit', width: 'minmax(220px, 2.2fr)', render: (unit) => <UnitName code={unit.unitCode} names={unit.unitName ? { [unit.unitCode]: unit.unitName } : undefined} />, sortValue: (unit) => unit.unitCode },
           { key: 'named', label: 'Required', width: '90px', align: 'right', render: (unit) => unit.fromNamedPicks || '–', sortValue: (unit) => unit.fromNamedPicks },
           { key: 'elective', label: 'Elective', width: '90px', align: 'right', render: (unit) => (unit.fromElectives > 0 ? unit.fromElectives.toFixed(1) : '–'), sortValue: (unit) => unit.fromElectives },
           { key: 'new', label: 'New', width: '70px', align: 'right', render: (unit) => unit.fromNewIntake || '–', sortValue: (unit) => unit.fromNewIntake },

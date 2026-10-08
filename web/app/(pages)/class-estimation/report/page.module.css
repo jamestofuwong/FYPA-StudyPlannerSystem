@@ -143,6 +143,7 @@
 
 .metaTop {
   display: flex;
+  min-width: 0;
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
@@ -151,6 +152,7 @@
 
 .metaWhen {
   margin-top: 4px;
+  overflow-wrap: anywhere;
   font-size: 12px;
   color: var(--text-muted);
 }
@@ -163,6 +165,7 @@
 }
 
 .runSelect {
+  max-width: 100%;
   background: var(--button-bg);
   border: 1px solid var(--panel-border);
   border-radius: 6px;
@@ -305,4 +308,10 @@
 .basis {
   font-size: 12px;
   color: var(--text-muted);
+}
+
+/* A unit's name beside its code, quieter than the code. */
+.unitName {
+  margin-left: 6px;
+  color: var(--text-secondary);
 }
