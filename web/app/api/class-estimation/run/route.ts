@@ -1,9 +1,6 @@
 import { type NextRequest } from 'next/server';
 import { runScrapeForStudents } from '../../../../../core/services/classEstimation/scrapeOrchestrator';
-import {
-  resolvePortalSource,
-  defaultPortalSourceId,
-} from '../../../../../core/services/classEstimation/sources/resolvePortalSource';
+import { realPortalSource } from '../../../../../core/services/classEstimation/sources/realPortalSource';
 
 // Force dynamic so Next.js never caches this streaming response.
 export const dynamic = 'force-dynamic';
@@ -11,12 +8,10 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
 
-  // Which transcript source to read. Defaults to the live portal; "mock" serves generated students and
-  // needs no login, which is how the flow gets exercised without portal access.
-  const source = resolvePortalSource(searchParams.get('source'), {
-    count: parseInt(searchParams.get('mockCount') ?? '', 10) || undefined,
-    seed: parseInt(searchParams.get('mockSeed') ?? '', 10) || undefined,
-  });
+  // Always the live student portal. The generated-student source used during development is no longer
+  // reachable from the app: a released build must never be able to estimate from students who do not exist.
+  // It stays in core/services/classEstimation/sources for the test suite and the backtest script.
+  const source = realPortalSource;
 
   const readiness = await source.readiness();
   if (!readiness.ready) {
@@ -106,12 +101,4 @@ export async function GET(req: NextRequest) {
       Connection: 'keep-alive',
     },
   });
-}
-
-/** What the source picker offers, and which one a run would use if none is chosen. */
-export async function OPTIONS() {
-  const { availablePortalSources } = await import(
-    '../../../../../core/services/classEstimation/sources/resolvePortalSource'
-  );
-  return Response.json({ sources: availablePortalSources(), default: defaultPortalSourceId() });
 }

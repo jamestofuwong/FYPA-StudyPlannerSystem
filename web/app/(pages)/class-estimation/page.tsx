@@ -26,10 +26,10 @@ type SessionStatus = 'idle' | 'login-pending' | 'logged-in' | 'login-error';
 type RunStatus = 'idle' | 'running' | 'done' | 'error';
 
 /**
- * Where transcripts come from. Portal and mock both run the scrape flow, mock without a login. Imported
+ * Where transcripts come from. The portal runs the scrape flow and needs a login. Imported
  * reads DPA files instead, which is the path demonstrated to the panel, since scraping is not shown there.
  */
-type SourceId = 'portal' | 'mock' | 'import';
+type SourceId = 'portal' | 'import';
 
 type SourceOption = { id: SourceId; label: string; requiresLogin: boolean; hint: string };
 
@@ -127,6 +127,7 @@ const DEFAULT_LOAD_CAP = DEFAULT_CLASS_ESTIMATION_CONFIG.loadCap;
 const SOURCE_NAMES: Record<string, string> = {
   portal: 'the portal',
   import: 'DPA files',
+  // Kept for estimates saved during development from generated students, which may still be listed.
   mock: 'generated test data',
   mixed: 'several sources',
 };
@@ -235,8 +236,7 @@ export default function ClassEstimationPage() {
   const [previewError, setPreviewError] = useState<string | null>(remembered?.previewError ?? null);
   const [copied, setCopied] = useState(false);
 
-  const [source, setSource] = useState<SourceId>(remembered?.source ?? 'portal');
-  const [mockAvailable, setMockAvailable] = useState(false);
+  const [source, setSource] = useState<SourceId>(remembered?.source === 'import' ? 'import' : 'portal');
   const [files, setFiles] = useState<File[]>(remembered?.files ?? []);
   const [dragging, setDragging] = useState(false);
   const [importStatus, setImportStatus] = useState<'idle' | 'working' | 'done' | 'error'>(
@@ -276,20 +276,6 @@ export default function ClassEstimationPage() {
     poll();
     const id = setInterval(poll, 3000);
     return () => clearInterval(id);
-  }, []);
-
-  // Which sources this build offers. Mock is hidden in a production build, so the picker has to ask rather
-  // than assume it is available.
-  useEffect(() => {
-    fetch('/api/class-estimation/run', { method: 'OPTIONS' })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (!data?.sources) return;
-        setMockAvailable(data.sources.some((s: { id: string }) => s.id === 'mock'));
-        // Only a first visit takes the environment's default; a returning one keeps the source it was on.
-        if (data.default === 'mock' && !remembered) setSource('mock');
-      })
-      .catch(() => { /* leave the picker on portal only */ });
   }, []);
 
   useEffect(() => {
@@ -458,8 +444,7 @@ export default function ClassEstimationPage() {
     const params = new URLSearchParams();
     if (minId.trim()) params.set('minId', minId.trim());
     if (maxId.trim()) params.set('maxId', maxId.trim());
-    // Only portal and mock run a scrape. Imported records are already in the store.
-    if (source === 'mock') params.set('source', 'mock');
+    // Only the portal runs a scrape. Imported records are already in the store.
     const qs = params.toString();
     const es = new EventSource(`/api/class-estimation/run${qs ? `?${qs}` : ''}`);
     esRef.current = es;
@@ -584,19 +569,12 @@ export default function ClassEstimationPage() {
   const isLoggedIn = sessionStatus === 'logged-in';
   const isRunning  = runStatus === 'running';
 
-  // Mock is only listed when the build actually offers it, so a production panel can never be pointed at
-  // generated students. Only the portal option needs a login, which is the whole reason the other two exist.
+  // Two ways in: the live portal, which needs a login, and DPA files exported from it, which do not.
   const sourceOptions: SourceOption[] = [
     {
       id: 'portal', label: 'Portal', requiresLogin: true,
       hint: 'Reads live transcripts from the student portal. Needs a portal login.',
     },
-    ...(mockAvailable
-      ? [{
-          id: 'mock' as const, label: 'Mock Portal', requiresLogin: false,
-          hint: 'Generated students built from the planners in this system. No login needed.',
-        }]
-      : []),
     {
       id: 'import', label: 'Imported DPA', requiresLogin: false,
       hint: 'Reads DPA files exported from the portal, a folder at a time.',
@@ -785,26 +763,17 @@ export default function ClassEstimationPage() {
           </div>
         )}
 
-        {/* Portal or generated students */}
-        {source !== 'import' && (
+        {/* The live portal */}
+        {source === 'portal' && (
           <div className={styles.subPanel}>
-            {source === 'mock' ? (
-              <div className={styles.statusRow}>
-                <span className={styles.statusDot} style={{ background: 'var(--accent-green)' }} />
-                <span style={{ fontSize: 12, color: 'var(--accent-green)' }}>
-                  Ready · generated test students built from the planners in this system, no login needed
-                </span>
-              </div>
-            ) : (
-              <div className={styles.statusRow}>
-                <span className={styles.statusDot} style={{ background: isLoggedIn ? 'var(--accent-green)' : 'var(--text-muted)' }} />
-                <span style={{ fontSize: 12, color: isLoggedIn ? 'var(--accent-green)' : 'var(--text-muted)' }}>
-                  {isLoggedIn
-                    ? `Connected · ${studentCount.toLocaleString()} students available`
-                    : 'Not connected. Log in to the portal with the button in the top bar first.'}
-                </span>
-              </div>
-            )}
+            <div className={styles.statusRow}>
+              <span className={styles.statusDot} style={{ background: isLoggedIn ? 'var(--accent-green)' : 'var(--text-muted)' }} />
+              <span style={{ fontSize: 12, color: isLoggedIn ? 'var(--accent-green)' : 'var(--text-muted)' }}>
+                {isLoggedIn
+                  ? `Connected · ${studentCount.toLocaleString()} students available`
+                  : 'Not connected. Log in to the portal with the button in the top bar first.'}
+              </span>
+            </div>
 
             <div className={styles.rangeRow}>
               <div className={styles.rangeField}>
@@ -1221,15 +1190,14 @@ type StudentResult = EstimationPreview['students'][number];
 
 /**
  * The student's ID, plus their name only when it says something the ID does not. Imported DPA files carry no
- * name, so the name falls back to the ID, and generated students are named after theirs; showing both
- * printed the same number twice.
+ * name, so the name falls back to the ID, and showing both printed the same number twice.
  */
 function studentLabel(student: StudentResult): ReactNode {
   const name = student.name?.trim() ?? '';
   const nameAddsSomething = name !== '' && !name.includes(student.studentId);
   return nameAddsSomething
     ? <>{student.studentId} <span className={styles.muted}>{name}</span></>
-    : <>{student.studentId}{/^mock/i.test(name) && <span className={styles.muted}> · generated</span>}</>;
+    : <>{student.studentId}</>;
 }
 
 /** How a student was estimated, in a few words. */
