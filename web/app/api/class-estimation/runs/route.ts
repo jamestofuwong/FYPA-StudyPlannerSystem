@@ -20,11 +20,11 @@ import {
   listEstimationRuns,
 } from '../../../../../core/db/repositories/estimationRunRepository';
 import { prisma } from '../../../../../core/db/client';
+import { NEW_INTAKE_KEY, parseNewIntakeTotal } from '../../../../../core/services/classEstimation/newIntakeSetting';
 
 export const dynamic = 'force-dynamic';
 
 const RETENTION_KEY = 'class_estimation_retention_rate';
-const NEW_INTAKE_KEY = 'class_estimation_new_intake';
 
 async function storedNumber(key: string): Promise<string | null> {
   try {
@@ -74,8 +74,7 @@ export async function POST(req: NextRequest) {
     parseStoredRetentionRate(await storedNumber(RETENTION_KEY))
     ?? DEFAULT_CLASS_ESTIMATION_CONFIG.retentionRate;
 
-  const storedIntake = Number(await storedNumber(NEW_INTAKE_KEY));
-  const newIntakeCount = Number.isInteger(storedIntake) && storedIntake >= 0 ? storedIntake : 0;
+  const newIntakeCount = parseNewIntakeTotal(await storedNumber(NEW_INTAKE_KEY)) ?? 0;
 
   try {
     const preview = await runEstimationPreview(records, {

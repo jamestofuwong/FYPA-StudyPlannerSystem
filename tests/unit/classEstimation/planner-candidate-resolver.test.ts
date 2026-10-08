@@ -218,6 +218,26 @@ describe('resolveCommonCoreUnits', () => {
     } as never;
   }
 
+  // Once other courses' planners are loaded, every planner for the intake is a candidate, Business included.
+  // Business and Computer Science share no core units, so intersecting across both would leave a first-year
+  // with nothing predicted. Only planners of the best match's own course are intersected.
+  test('only planners of the same course as the student are intersected', async () => {
+    const courseOf = (id: string) => (id.startsWith('bus') ? 'Bachelor of Business' : 'Bachelor of Computer Science');
+    getPlannerById.mockImplementation(async (id: string) =>
+      ({ units: [], elective_groups: [], course: { name: courseOf(id) } }) as never);
+
+    const result = await resolveCommonCoreUnits(
+      noMajorResult([
+        { plannerID: 'cs-ai',    missingCore: ['COS10009', 'COS10025'] },
+        { plannerID: 'cs-cyber', missingCore: ['COS10009', 'COS10025'] },
+        { plannerID: 'bus-acc',  missingCore: ['BUS10001'] },
+      ]),
+      [],
+    );
+
+    expect(result?.candidates.map((c) => c.code)).toEqual(['COS10009', 'COS10025']);
+  });
+
   test('proposes only the units every candidate planner still wants', async () => {
     getPlannerById.mockResolvedValue({ units: [], elective_groups: [] } as never);
 

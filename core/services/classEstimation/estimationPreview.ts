@@ -23,7 +23,9 @@ import { rankAndCapUnits } from './unitRanker';
 import { buildElectivePopularity, splitElectivePicks } from './electiveSplitter';
 import { groupIdenticalStudents, groupingKeyFor, summariseGrouping, type GroupingStats } from './studentGrouping';
 import { aggregate, totalsFor, type AggregatedUnit, type AggregationTotals } from './aggregationService';
-import { resolveNewIntakeUnits } from './newIntakeResolver';
+import { resolveNewIntakeByCourse } from './newIntakeResolver';
+import { detectBatchCourse, type CourseDetection } from './courseDetector';
+import { courseOf } from './newIntakeResolver';
 import type {
   CandidateUnit,
   ElectiveExpectation,
@@ -90,6 +92,11 @@ export interface StudentPreview {
 }
 
 export interface PreviewSummary {
+  /**
+   * Unit code to unit name, for every unit in the loaded planners, so the page can show what a code is
+   * without a second request. Read off the planners this run already loaded.
+   */
+  unitNames: Record<string, string>;
   targetTerm: 1 | 2;
   loadCap: number;
   students: number;
@@ -135,13 +142,17 @@ export interface PreviewSummary {
   totals: AggregationTotals;
   retentionRate: number;
   newIntakeCount: number;
-  /** The units the new-intake figure was put onto, and anything a reader should know about them. */
+  /** Where the new students were put, and anything a reader should know about it. */
   newIntake: {
+    /** The detected course whose Year 1, Semester 1 units they went onto, or null when none was found. */
+    course: string | null;
     units: string[];
     basedOnIntakeYear: number;
     basedOnIntakeSemester: 1 | 2;
     warnings: string[];
   };
+  /** The course this batch was worked out to belong to, from its students' units. See courseDetector.ts. */
+  course: CourseDetection;
   /** How many students the estimator could not tell apart, and how much work that saved. */
   grouping: GroupingStats;
 }
@@ -156,7 +167,10 @@ export interface PreviewOptions {
   /** The calendar year of the semester being estimated, needed to pick the right planners for new intake. */
   targetYear: number;
   loadCap: number;
-  /** The HoD's own count of new students expected to arrive. Not discounted by retention. */
+  /**
+   * New first-year students, placed on the Year 1, Semester 1 units of the course detected from the batch.
+   * Not discounted by retention.
+   */
   newIntakeCount: number;
   /** Share of students expected back next semester. See retention.ts for why it is one flat figure. */
   retentionRate: number;
@@ -179,6 +193,19 @@ function withOwnIdentity(computed: StudentPreview, record: EstimationRecord): St
     creditsScraped: record.scraped?.creditsCompleted ?? 0,
     mappingWarnings: record.mappingWarnings,
   };
+}
+
+/** Every unit name the planners hold, slotted or in an elective group, keyed by code. */
+function unitNamesFrom(planners: Awaited<ReturnType<typeof plannerRepository.getAllPlannersWithUnits>>): Record<string, string> {
+  const names: Record<string, string> = {};
+  const add = (unit: { unit_code: string; unit_name: string } | null | undefined) => {
+    if (unit?.unit_code && unit.unit_name && !names[unit.unit_code]) names[unit.unit_code] = unit.unit_name;
+  };
+  for (const planner of planners) {
+    for (const templateUnit of planner.units) add(templateUnit.unit);
+    for (const group of planner.elective_groups) for (const member of group.units) add(member.unit);
+  }
+  return names;
 }
 
 /**
@@ -260,7 +287,14 @@ export async function runEstimationPreview(
 
   const dbPlanners = await plannerRepository.getAllPlannersWithUnits();
   if (dbPlanners.length === 0) throw new Error('No planner templates are loaded, import or sync a planner first');
-  const planners = buildPlannerTemplatesForMatching(dbPlanners);
+
+  // A batch is one course's students, imported by that course's Head of Department. The course is read off the
+  // units on their transcripts, and students are then matched only against that course's planners, so nobody
+  // is compared with another faculty's majors and a student who has passed nothing yet cannot land in the
+  // wrong course. With no course found, every planner is used, as before courses existed.
+  const course = detectBatchCourse(records, dbPlanners);
+  const coursePlanners = course.course ? dbPlanners.filter((planner) => courseOf(planner) === course.course) : dbPlanners;
+  const planners = buildPlannerTemplatesForMatching(coursePlanners);
   const unitMasterTable = await buildUnitMasterTable();
 
   // Elective weighting is cohort-wide, so it is counted once over every record before any student is run,
@@ -288,12 +322,25 @@ export async function runEstimationPreview(
   // Only worth a database read when there is an intake figure to place. Its warnings matter even when the
   // figure is zero though, so the lookup still runs: a reader should learn the target intake has no planners
   // loaded before they type a number, not after.
-  const newIntakeUnits = await resolveNewIntakeUnits(targetYear, targetTerm);
+  // New first-year students go onto the detected course's Year 1, Semester 1 units.
+  const intakeByCourse = await resolveNewIntakeByCourse(targetYear, targetTerm);
+  const intake = intakeByCourse.find((entry) => entry.course === course.course) ?? null;
+  const intakeWarnings = intake ? [...intake.warnings] : [];
+  if (newIntakeCount > 0 && !intake) {
+    intakeWarnings.push(
+      course.course
+        ? `No planner for ${course.course} has a Year 1, Semester 1 to put new students in, so they are not counted.`
+        : 'The students loaded do not point at any one course, so there is no first semester to put new students '
+          + 'in and they are not counted.',
+    );
+  }
+  const placedCount = intake ? Math.max(0, newIntakeCount) : 0;
 
   const projectedByUnit = aggregate({
     continuing: contributionsByUnit(students),
-    newIntakeUnits: newIntakeUnits.codes,
-    newIntakeCount,
+    newIntakeUnits: intake?.codes ?? [],
+    newIntakeShares: intake?.shares,
+    newIntakeCount: placedCount,
     retentionRate,
   });
 
@@ -333,16 +380,19 @@ export async function runEstimationPreview(
       .sort((a, b) => b.students - a.students || a.code.localeCompare(b.code)),
     electiveSeatsByUnit: sumElectiveSeats(students),
     electiveSeatsUnplaced: students.reduce((sum, s) => sum + s.electiveSeats.unplaced, 0),
+    unitNames: unitNamesFrom(dbPlanners),
     projectedByUnit,
     totals: totalsFor(projectedByUnit),
     retentionRate,
-    newIntakeCount,
+    newIntakeCount: placedCount,
     newIntake: {
-      units: newIntakeUnits.codes,
-      basedOnIntakeYear: newIntakeUnits.basedOnIntakeYear,
-      basedOnIntakeSemester: newIntakeUnits.basedOnIntakeSemester,
-      warnings: newIntakeUnits.warnings,
+      course: intake?.course ?? null,
+      units: intake?.codes ?? [],
+      basedOnIntakeYear: intake?.basedOnIntakeYear ?? targetYear,
+      basedOnIntakeSemester: intake?.basedOnIntakeSemester ?? targetTerm,
+      warnings: intakeWarnings,
     },
+    course,
     grouping: summariseGrouping(groups),
   };
 

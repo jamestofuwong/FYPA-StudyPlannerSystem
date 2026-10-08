@@ -363,6 +363,74 @@ describe('runEstimationPreview', () => {
     expect(named!.continuingBeforeRetention).toBe(1);
   });
 
+  // ====== More than one course =================================================================
+  //
+  // Each Head of Department imports only their own course, and the course is worked out from the units.
+  // With a Business planner loaded beside the Computer Science one, a Computer Science batch must be matched
+  // only against Computer Science planners, and its new first-years must go onto Computer Science units.
+  describe('with a second course loaded', () => {
+    function twoCourses() {
+      const cs = { ...plannerFixture(), course: { name: 'Bachelor of Computer Science' } };
+      const business = {
+        ...plannerFixture(),
+        id: 'bus1',
+        major: { name: 'Accounting' },
+        course: { name: 'Bachelor of Business' },
+        units: [
+          { category: 'core', year_level: 1, semester: 1, unit: dbUnit('BUS10001', [1, 2]) },
+          { category: 'major_core', year_level: 1, semester: 2, unit: dbUnit('ACC10002', [1, 2]) },
+        ],
+        elective_groups: [],
+      };
+      getAllPlannersWithUnits.mockResolvedValue([cs, business] as never);
+      getPlannerById.mockImplementation(async (id: string) => (id === 'bus1' ? business : cs) as never);
+    }
+
+    test('the batch is detected as its own course and matched only against it', async () => {
+      twoCourses();
+      const { students, summary } = await runEstimationPreview(
+        [record('S1', scrapedStudent()), record('S2', scrapedStudent())],
+        { targetTerm: 2, targetYear: 2027, loadCap: 4, retentionRate: 1, newIntakeCount: 0 },
+      );
+
+      expect(summary.course.course).toBe('Bachelor of Computer Science');
+      expect(summary.course.agreeing).toBe(2);
+      expect(students.every((s) => s.planner === null || s.planner.id === 'p1')).toBe(true);
+      expect(summary.projectedByUnit.some((u) => u.code.startsWith('BUS') || u.code.startsWith('ACC'))).toBe(false);
+    });
+
+    test('new first-years go onto the first semester of the detected course, not the other one', async () => {
+      twoCourses();
+      const { summary } = await runEstimationPreview(
+        [record('S1', scrapedStudent())],
+        { targetTerm: 1, targetYear: 2024, loadCap: 4, retentionRate: 1, newIntakeCount: 60 },
+      );
+
+      expect(summary.newIntake.course).toBe('Bachelor of Computer Science');
+      expect(summary.newIntake.units).toEqual(['COS10009']);
+      expect(summary.projectedByUnit.find((u) => u.code === 'BUS10001')).toBeUndefined();
+      expect(summary.projectedByUnit.find((u) => u.code === 'COS10009')!.fromNewIntake).toBe(60);
+    });
+
+    test('a Business batch puts its new first-years on Business units', async () => {
+      twoCourses();
+      const businessStudent = scrapedStudent({
+        courseList: [
+          { courseId: 'BUS10001', courseTitle: 'BUS10001', level: '', credits: 12.5, creditsEarned: 12.5, status: 'Complete', grade: 'D', term: '2024_FEB_S1' },
+        ] as never,
+      });
+      const { summary } = await runEstimationPreview(
+        [record('B1', businessStudent)],
+        { targetTerm: 1, targetYear: 2024, loadCap: 4, retentionRate: 1, newIntakeCount: 40 },
+      );
+
+      expect(summary.course.course).toBe('Bachelor of Business');
+      expect(summary.newIntake.units).toEqual(['BUS10001']);
+      expect(summary.projectedByUnit.find((u) => u.code === 'BUS10001')!.fromNewIntake).toBe(40);
+      expect(summary.projectedByUnit.find((u) => u.code === 'COS10009')?.fromNewIntake ?? 0).toBe(0);
+    });
+  });
+
   test('loadCap drops the later-slotted core units and says how many', async () => {
     const { students } = await runEstimationPreview([record('S1', scrapedStudent())], { targetTerm: 2, targetYear: 2027, loadCap: 1, retentionRate: 1, newIntakeCount: 0 });
     expect(students[0].picked.map((u) => u.code)).toEqual(['COS30008']);

@@ -8,6 +8,7 @@ import ui from './components/ui.module.css';
 import { DataTable } from './components/DataTable';
 import { Step, Tabs, Figure } from './components/Layout';
 import { DEFAULT_CLASS_ESTIMATION_CONFIG } from '../../../../core/shared/types/classEstimation';
+import { NEW_INTAKE_KEY, parseNewIntakeTotal } from '../../../../core/services/classEstimation/newIntakeSetting';
 import type { EstimationPreview } from '../../../../core/services/classEstimation/estimationPreview';
 import { describeAcademicNow } from '../../../../core/services/classEstimation/academicCalendar';
 import {
@@ -25,10 +26,10 @@ type SessionStatus = 'idle' | 'login-pending' | 'logged-in' | 'login-error';
 type RunStatus = 'idle' | 'running' | 'done' | 'error';
 
 /**
- * Where transcripts come from. Portal and mock both run the scrape flow, mock without a login. Imported
+ * Where transcripts come from. The portal runs the scrape flow and needs a login. Imported
  * reads DPA files instead, which is the path demonstrated to the panel, since scraping is not shown there.
  */
-type SourceId = 'portal' | 'mock' | 'import';
+type SourceId = 'portal' | 'import';
 
 type SourceOption = { id: SourceId; label: string; requiresLogin: boolean; hint: string };
 
@@ -113,7 +114,6 @@ const PHASE_LABEL: Record<string, string> = {
 
 /** Where the HoD's retention figure is kept, allowlisted in web/app/api/config/route.ts. */
 const RETENTION_KEY = 'class_estimation_retention_rate';
-const NEW_INTAKE_KEY = 'class_estimation_new_intake';
 
 let _logKey = 0;
 
@@ -127,6 +127,7 @@ const DEFAULT_LOAD_CAP = DEFAULT_CLASS_ESTIMATION_CONFIG.loadCap;
 const SOURCE_NAMES: Record<string, string> = {
   portal: 'the portal',
   import: 'DPA files',
+  // Kept for estimates saved during development from generated students, which may still be listed.
   mock: 'generated test data',
   mixed: 'several sources',
 };
@@ -214,6 +215,8 @@ export default function ClassEstimationPage() {
   const [retention, setRetention] = useState(remembered?.retention ?? '85');
   const [retentionSaved, setRetentionSaved] = useState(false);
   // Brand-new students the HoD expects. They are not in the portal, so there is nothing to derive it from.
+  // New first-year students. The course they belong to is not asked for: it is detected from the students
+  // loaded, since each Head of Department imports only their own course.
   const [newIntake, setNewIntake] = useState(remembered?.newIntake ?? '0');
   const [runs, setRuns] = useState<SavedRun[]>([]);
   const [resultsTab, setResultsTab] = useState<ResultsTab>(remembered?.resultsTab ?? 'units');
@@ -233,8 +236,7 @@ export default function ClassEstimationPage() {
   const [previewError, setPreviewError] = useState<string | null>(remembered?.previewError ?? null);
   const [copied, setCopied] = useState(false);
 
-  const [source, setSource] = useState<SourceId>(remembered?.source ?? 'portal');
-  const [mockAvailable, setMockAvailable] = useState(false);
+  const [source, setSource] = useState<SourceId>(remembered?.source === 'import' ? 'import' : 'portal');
   const [files, setFiles] = useState<File[]>(remembered?.files ?? []);
   const [dragging, setDragging] = useState(false);
   const [importStatus, setImportStatus] = useState<'idle' | 'working' | 'done' | 'error'>(
@@ -276,20 +278,6 @@ export default function ClassEstimationPage() {
     return () => clearInterval(id);
   }, []);
 
-  // Which sources this build offers. Mock is hidden in a production build, so the picker has to ask rather
-  // than assume it is available.
-  useEffect(() => {
-    fetch('/api/class-estimation/run', { method: 'OPTIONS' })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (!data?.sources) return;
-        setMockAvailable(data.sources.some((s: { id: string }) => s.id === 'mock'));
-        // Only a first visit takes the environment's default; a returning one keeps the source it was on.
-        if (data.default === 'mock' && !remembered) setSource('mock');
-      })
-      .catch(() => { /* leave the picker on portal only */ });
-  }, []);
-
   useEffect(() => {
     // Coming back to the page, the fields already hold what was last typed, which may be newer than what
     // was saved: saving only happens on a run. Loading the saved figures over them would undo that typing.
@@ -308,9 +296,8 @@ export default function ClassEstimationPage() {
     fetch(`/api/config?key=${NEW_INTAKE_KEY}`)
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (typeof data?.value !== 'string' || data.value.trim() === '') return;
-        const stored = Number(data.value);
-        if (Number.isInteger(stored) && stored >= 0) setNewIntake(String(stored));
+        const stored = parseNewIntakeTotal(data?.value);
+        if (stored !== null) setNewIntake(String(stored));
       })
       .catch(() => { /* never set, so zero stands */ });
   }, []);
@@ -457,8 +444,7 @@ export default function ClassEstimationPage() {
     const params = new URLSearchParams();
     if (minId.trim()) params.set('minId', minId.trim());
     if (maxId.trim()) params.set('maxId', maxId.trim());
-    // Only portal and mock run a scrape. Imported records are already in the store.
-    if (source === 'mock') params.set('source', 'mock');
+    // Only the portal runs a scrape. Imported records are already in the store.
     const qs = params.toString();
     const es = new EventSource(`/api/class-estimation/run${qs ? `?${qs}` : ''}`);
     esRef.current = es;
@@ -544,10 +530,11 @@ export default function ClassEstimationPage() {
         .then((res) => setRetentionSaved(res.ok))
         .catch(() => setRetentionSaved(false));
 
-      const intake = Number(newIntake);
+      // An empty box is 0 here, unlike the returning rate: no new students is a real answer.
+      const intake = newIntake.trim() === '' ? 0 : Number(newIntake);
       if (!Number.isInteger(intake) || intake < 0) {
         setPreviewStatus('error');
-        setPreviewError('New students must be a whole number, 0 or more.');
+        setPreviewError('New first-year students must be a whole number, 0 or more.');
         return;
       }
 
@@ -582,19 +569,12 @@ export default function ClassEstimationPage() {
   const isLoggedIn = sessionStatus === 'logged-in';
   const isRunning  = runStatus === 'running';
 
-  // Mock is only listed when the build actually offers it, so a production panel can never be pointed at
-  // generated students. Only the portal option needs a login, which is the whole reason the other two exist.
+  // Two ways in: the live portal, which needs a login, and DPA files exported from it, which do not.
   const sourceOptions: SourceOption[] = [
     {
       id: 'portal', label: 'Portal', requiresLogin: true,
       hint: 'Reads live transcripts from the student portal. Needs a portal login.',
     },
-    ...(mockAvailable
-      ? [{
-          id: 'mock' as const, label: 'Mock Portal', requiresLogin: false,
-          hint: 'Generated students built from the planners in this system. No login needed.',
-        }]
-      : []),
     {
       id: 'import', label: 'Imported DPA', requiresLogin: false,
       hint: 'Reads DPA files exported from the portal, a folder at a time.',
@@ -783,26 +763,17 @@ export default function ClassEstimationPage() {
           </div>
         )}
 
-        {/* Portal or generated students */}
-        {source !== 'import' && (
+        {/* The live portal */}
+        {source === 'portal' && (
           <div className={styles.subPanel}>
-            {source === 'mock' ? (
-              <div className={styles.statusRow}>
-                <span className={styles.statusDot} style={{ background: 'var(--accent-green)' }} />
-                <span style={{ fontSize: 12, color: 'var(--accent-green)' }}>
-                  Ready · generated test students built from the planners in this system, no login needed
-                </span>
-              </div>
-            ) : (
-              <div className={styles.statusRow}>
-                <span className={styles.statusDot} style={{ background: isLoggedIn ? 'var(--accent-green)' : 'var(--text-muted)' }} />
-                <span style={{ fontSize: 12, color: isLoggedIn ? 'var(--accent-green)' : 'var(--text-muted)' }}>
-                  {isLoggedIn
-                    ? `Connected · ${studentCount.toLocaleString()} students available`
-                    : 'Not connected. Log in to the portal with the button in the top bar first.'}
-                </span>
-              </div>
-            )}
+            <div className={styles.statusRow}>
+              <span className={styles.statusDot} style={{ background: isLoggedIn ? 'var(--accent-green)' : 'var(--text-muted)' }} />
+              <span style={{ fontSize: 12, color: isLoggedIn ? 'var(--accent-green)' : 'var(--text-muted)' }}>
+                {isLoggedIn
+                  ? `Connected · ${studentCount.toLocaleString()} students available`
+                  : 'Not connected. Log in to the portal with the button in the top bar first.'}
+              </span>
+            </div>
 
             <div className={styles.rangeRow}>
               <div className={styles.rangeField}>
@@ -903,11 +874,21 @@ export default function ClassEstimationPage() {
               onChange={(e) => setRetention(e.target.value)} disabled={previewStatus === 'loading' || isRunning} />
           </div>
           <div className={styles.rangeField}>
-            <label className={styles.rangeLabel} title="Brand-new first-year students. They are not in the portal yet, so this is entered by hand and placed on the units every first-semester student takes.">
-              New students expected
+            <label
+              className={styles.rangeLabel}
+              title="Students starting the course next semester. They are not in the portal yet, so the number is entered here. It goes in full onto the Year 1, Semester 1 units of the course the loaded students belong to, which is worked out from their units. Credit-transfer students are placed by hand."
+            >
+              New first-year students
             </label>
-            <input className={styles.rangeInput} type="number" min={0} value={newIntake}
-              onChange={(e) => setNewIntake(e.target.value)} disabled={previewStatus === 'loading' || isRunning} />
+            <input
+              className={styles.rangeInput}
+              type="number"
+              min={0}
+              value={newIntake}
+              placeholder="0"
+              onChange={(e) => setNewIntake(e.target.value)}
+              disabled={previewStatus === 'loading' || isRunning}
+            />
           </div>
           <button className={styles.btnPrimary} disabled={previewStatus === 'loading' || isRunning || loadedCount === 0} onClick={runPreview}>
             {previewStatus === 'loading' ? 'Estimating…' : preview ? 'Estimate again' : 'Run estimate'}
@@ -928,6 +909,32 @@ export default function ClassEstimationPage() {
               <Figure value={needsLook.toLocaleString()} label="Need a look"
                 note={needsLook > 0 ? 'see the Students tab' : 'every student was estimated'} tone={needsLook > 0 ? 'warn' : undefined} />
             </div>
+
+            {/* Which course this batch was worked out to be, and how sure, since nothing in a DPA names it. */}
+            <div className={styles.courseLine}>
+              {s.course.course ? (
+                <>
+                  <span className={styles.courseLabel}>Course</span>
+                  <strong>{s.course.course}</strong>
+                  <span className={styles.muted}>
+                    worked out from the units of {s.course.agreeing.toLocaleString()} of {s.course.students.toLocaleString()} students
+                    {s.course.undetermined > 0 && `; ${s.course.undetermined.toLocaleString()} had no units to go on and follow the batch`}
+                  </span>
+                </>
+              ) : (
+                <span className={styles.warn}>
+                  The loaded students do not point at any one course, so they were matched against every planner and
+                  new first-year students could not be placed.
+                </span>
+              )}
+            </div>
+            {Object.keys(s.course.elsewhere).length > 0 && (
+              <div className={styles.errorBox} style={{ marginTop: 8 }}>
+                This batch looks mixed:{' '}
+                {Object.entries(s.course.elsewhere).map(([name, n]) => `${n.toLocaleString()} student(s) look like ${name}`).join(', ')}.
+                {' '}They were estimated as {s.course.course} students. Check the import holds only one course.
+              </div>
+            )}
 
             <Tabs<ResultsTab>
               active={resultsTab}
@@ -951,11 +958,11 @@ export default function ClassEstimationPage() {
                 <DataTable
                   rows={s.projectedByUnit}
                   rowKey={(unit) => unit.code}
-                  searchText={(unit) => unit.code}
-                  searchPlaceholder="Find a unit"
+                  searchText={(unit) => `${unit.code} ${s.unitNames?.[unit.code] ?? ''}`}
+                  searchPlaceholder="Find a unit by code or name"
                   initialSort={{ key: 'headcount', direction: 'desc' }}
                   columns={[
-                    { key: 'code', label: 'Unit', width: 'minmax(90px, 1fr)', render: (unit) => <span className={styles.mono}>{unit.code}</span>, sortValue: (unit) => unit.code },
+                    { key: 'code', label: 'Unit', width: 'minmax(220px, 2.2fr)', render: (unit) => <UnitName code={unit.code} names={s.unitNames} />, sortValue: (unit) => unit.code },
                     { key: 'named', label: 'Required', hint: 'Students whose planner says they still owe this unit', width: '90px', align: 'right', render: (unit) => unit.fromNamedPicks || '–', sortValue: (unit) => unit.fromNamedPicks },
                     { key: 'elective', label: 'Elective', hint: 'Shares of students who could choose this as an elective', width: '90px', align: 'right', render: (unit) => (unit.fromElectives > 0 ? unit.fromElectives.toFixed(1) : '–'), sortValue: (unit) => unit.fromElectives },
                     { key: 'new', label: 'New', hint: 'New first-year students, entered by hand', width: '70px', align: 'right', render: (unit) => unit.fromNewIntake || '–', sortValue: (unit) => unit.fromNewIntake },
@@ -969,7 +976,12 @@ export default function ClassEstimationPage() {
                 />
                 {(s.newIntakeCount > 0 || s.newIntake.warnings.length > 0) && (
                   <div className={styles.previewNotes}>
-                    {s.newIntakeCount > 0 && <div>{s.newIntakeCount} new students placed on {s.newIntake.units.join(', ') || 'no units'}.</div>}
+                    {s.newIntakeCount > 0 && s.newIntake.course && (
+                      <div>
+                        {s.newIntakeCount} new {shortCourseName(s.newIntake.course)} first-years added to the Year 1, Semester 1 units:{' '}
+                        {s.newIntake.units.map((code) => (s.unitNames?.[code] ? `${code} ${s.unitNames[code]}` : code)).join(', ') || 'none found'}.
+                      </div>
+                    )}
                     {s.newIntake.warnings.map((warning) => <div key={warning}>⚠ {warning}</div>)}
                   </div>
                 )}
@@ -986,11 +998,11 @@ export default function ClassEstimationPage() {
                 <DataTable
                   rows={s.electiveSeatsByUnit}
                   rowKey={(unit) => unit.code}
-                  searchText={(unit) => unit.code}
+                  searchText={(unit) => `${unit.code} ${s.unitNames?.[unit.code] ?? ''}`}
                   searchPlaceholder="Find an elective"
                   initialSort={{ key: 'expected', direction: 'desc' }}
                   columns={[
-                    { key: 'code', label: 'Unit', width: 'minmax(90px, 1fr)', render: (unit) => <span className={styles.mono}>{unit.code}</span>, sortValue: (unit) => unit.code },
+                    { key: 'code', label: 'Unit', width: 'minmax(220px, 2.2fr)', render: (unit) => <UnitName code={unit.code} names={s.unitNames} />, sortValue: (unit) => unit.code },
                     { key: 'type', label: 'Type', width: '110px', render: (unit) => ELECTIVE_TYPE[unit.category] ?? unit.category, sortValue: (unit) => unit.category },
                     { key: 'popularity', label: 'Taken by', hint: 'Current students who have already passed this unit, which is what the shares are weighted by', width: '90px', align: 'right', render: (unit) => unit.popularity, sortValue: (unit) => unit.popularity },
                     { key: 'expected', label: 'Expected', width: '90px', align: 'right', render: (unit) => <strong className={styles.headcount}>{unit.expectedSeats.toFixed(1)}</strong>, sortValue: (unit) => unit.expectedSeats },
@@ -1158,19 +1170,34 @@ export default function ClassEstimationPage() {
 
 // ── Pieces used above ────────────────────────────────────────────────────────
 
+/** "Bachelor of Computer Science" as "Computer Science", to keep the per-course labels short. */
+function shortCourseName(course: string): string {
+  return course.replace(/^Bachelor of\s+/i, '').trim() || course;
+}
+
+/** A unit code with its name beside it, quieter, when the planners give one. */
+function UnitName({ code, names }: { code: string; names?: Record<string, string> }) {
+  const name = names?.[code];
+  return (
+    <span title={name ? `${code} ${name}` : code}>
+      <span className={styles.mono}>{code}</span>
+      {name && <span className={styles.unitName}> {name}</span>}
+    </span>
+  );
+}
+
 type StudentResult = EstimationPreview['students'][number];
 
 /**
  * The student's ID, plus their name only when it says something the ID does not. Imported DPA files carry no
- * name, so the name falls back to the ID, and generated students are named after theirs; showing both
- * printed the same number twice.
+ * name, so the name falls back to the ID, and showing both printed the same number twice.
  */
 function studentLabel(student: StudentResult): ReactNode {
   const name = student.name?.trim() ?? '';
   const nameAddsSomething = name !== '' && !name.includes(student.studentId);
   return nameAddsSomething
     ? <>{student.studentId} <span className={styles.muted}>{name}</span></>
-    : <>{student.studentId}{/^mock/i.test(name) && <span className={styles.muted}> · generated</span>}</>;
+    : <>{student.studentId}</>;
 }
 
 /** How a student was estimated, in a few words. */
