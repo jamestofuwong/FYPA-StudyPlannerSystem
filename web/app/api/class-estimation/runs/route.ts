@@ -87,6 +87,7 @@ export async function POST(req: NextRequest) {
 
     const id = await saveEstimationRun({
       label: body.label ?? null,
+      course: preview.summary.course.course,
       targetYear: academicNow.next.year,
       targetSemester: academicNow.next.semester,
       loadCap: DEFAULT_CLASS_ESTIMATION_CONFIG.loadCap,

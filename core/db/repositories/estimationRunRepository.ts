@@ -30,6 +30,8 @@ export interface EstimationRunUnitRecord {
 
 export interface EstimationRunInput {
   label?: string | null;
+  /** The course the batch was detected to belong to, or null if none was found. */
+  course?: string | null;
   targetYear: number;
   targetSemester: 1 | 2;
   loadCap: number;
@@ -47,6 +49,8 @@ export interface EstimationRunSummary {
   id: string;
   createdAt: Date;
   label: string | null;
+  /** Null on estimates saved before courses were recorded. */
+  course: string | null;
   targetYear: number;
   targetSemester: number;
   loadCap: number;
@@ -80,6 +84,7 @@ export async function saveEstimationRun(input: EstimationRunInput): Promise<stri
     const created = await tx.estimationRun.create({
       data: {
         label: input.label?.trim() || null,
+        course: input.course?.trim() || null,
         target_year: input.targetYear,
         target_semester: input.targetSemester,
         load_cap: input.loadCap,
@@ -126,6 +131,7 @@ export async function listEstimationRuns(limit = 50): Promise<EstimationRunSumma
     id: run.id,
     createdAt: run.created_at,
     label: run.label,
+    course: run.course,
     targetYear: run.target_year,
     targetSemester: run.target_semester,
     loadCap: run.load_cap,
@@ -170,6 +176,7 @@ export async function getEstimationRun(id: string): Promise<EstimationRunDetail 
     id: run.id,
     createdAt: run.created_at,
     label: run.label,
+    course: run.course,
     targetYear: run.target_year,
     targetSemester: run.target_semester,
     loadCap: run.load_cap,

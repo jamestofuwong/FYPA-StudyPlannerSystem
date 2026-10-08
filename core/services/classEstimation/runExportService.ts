@@ -63,7 +63,7 @@ function semesterLabel(run: EstimationRunDetail): string {
  */
 function buildProjectionSheet(run: EstimationRunDetail): XLSX.WorkSheet {
   const rows: unknown[][] = [
-    [`Projected enrolment, ${semesterLabel(run)}`, '', '', '', '', ''],
+    [`Projected enrolment, ${run.course ? `${run.course}, ` : ''}${semesterLabel(run)}`, '', '', '', '', ''],
     ['Unit', 'Unit name', 'Required', 'Elective', 'New students', 'Projected headcount'],
   ];
 
@@ -117,6 +117,7 @@ function buildDetailsSheet(run: EstimationRunDetail): XLSX.WorkSheet {
 
   const rows: unknown[][] = [
     ['How this estimate was produced', ''],
+    ['Course', run.course ?? 'Not recorded'],
     ['Semester estimated', semesterLabel(run)],
     ['Produced on', run.createdAt.toLocaleString()],
     ['Label', run.label ?? ''],
@@ -127,7 +128,7 @@ function buildDetailsSheet(run: EstimationRunDetail): XLSX.WorkSheet {
     ['Where the transcripts came from', sourceLabels[run.source] ?? run.source],
     ['', ''],
     ['Students assumed returning', `${(run.retentionRate * 100).toFixed(0)}%`],
-    ['New students expected', run.newIntake],
+    ['New first-year students', run.newIntake],
     ['Units per student per semester', run.loadCap],
     ['', ''],
     ['Students with no detected major are estimated from the units every major shares, since first-year'],
@@ -141,12 +142,12 @@ function buildDetailsSheet(run: EstimationRunDetail): XLSX.WorkSheet {
   sheet['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 1 } }];
 
   applyRow(sheet, 0, 2, S.title);
-  for (const row of [1, 2, 3, 5, 6, 7, 8, 10, 11, 12]) {
+  for (const row of [1, 2, 3, 4, 6, 7, 8, 9, 11, 12, 13]) {
     applyRow(sheet, row, 2, S.row);
     const address = XLSX.utils.encode_cell({ r: row, c: 0 });
     if (sheet[address]) (sheet[address] as { s?: unknown }).s = S.label;
   }
-  for (let row = 14; row <= 17; row++) applyRow(sheet, row, 1, S.note);
+  for (let row = 15; row <= 18; row++) applyRow(sheet, row, 1, S.note);
 
   return sheet;
 }

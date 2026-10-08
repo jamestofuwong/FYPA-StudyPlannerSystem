@@ -19,6 +19,7 @@ type SavedRun = {
   id: string;
   createdAt: string;
   label: string | null;
+  course: string | null;
   targetYear: number;
   targetSemester: number;
   loadCap: number;
@@ -147,7 +148,7 @@ export default function ClassEstimationReportPage() {
             <div className={styles.metaTop}>
               <div>
                 <div className={styles.sectionTitle}>
-                  Semester {run.targetSemester}, {run.targetYear}
+                  {run.course ? `${run.course} · ` : ''}Semester {run.targetSemester}, {run.targetYear}
                 </div>
                 <div className={styles.metaWhen}>
                   {run.label ? `${run.label} · ` : ''}
@@ -165,6 +166,7 @@ export default function ClassEstimationReportPage() {
                     {runs.map((option) => (
                       <option key={option.id} value={option.id}>
                         {new Date(option.createdAt).toLocaleDateString()}
+                        {option.course ? ` · ${option.course.replace(/^Bachelor of\s+/i, '')}` : ''}
                         {option.label ? ` · ${option.label}` : ''}
                         {` · S${option.targetSemester} ${option.targetYear}`}
                       </option>
@@ -207,7 +209,12 @@ export default function ClassEstimationReportPage() {
                 {run.newIntake.toLocaleString()} new students. Each student is expected to take up to{' '}
                 {run.loadCap} units.
               </div>
-              <div>{SOURCE_LABELS[run.source] ?? run.source}</div>
+              <div>
+                {SOURCE_LABELS[run.source] ?? run.source}
+                {run.course
+                  ? `, worked out to be ${run.course} students from the units on their transcripts.`
+                  : '. This estimate was saved before the course was recorded.'}
+              </div>
               {run.commonCoreCount > 0 && (
                 <div>
                   {run.commonCoreCount.toLocaleString()} students are early enough in the course that their
