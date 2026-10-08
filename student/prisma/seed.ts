@@ -1,5 +1,13 @@
-import { prisma } from '../lib/prisma'
+import { PrismaClient } from '@prisma/client'
+import { PrismaPg } from '@prisma/adapter-pg'
 import { hashPassword } from '../lib/cms/auth'
+
+// The seed runs under Node via tsx, so it must not import the Next.js-only
+// Prisma singleton guarded by the server-only package.
+const connectionString = process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL!
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({ connectionString }),
+})
 
 // ─── CMS User ────────────────────────────────────────────────────────────────
 
@@ -65,6 +73,32 @@ async function seedContent() {
     { code: 'COS30033', name: 'Computer Networks',                 year_level: 3, availability: [3, 8] },
     { code: 'COS30041', name: 'Digital Forensics',                 year_level: 3, availability: [8] },
     { code: 'SWE30011', name: 'Software Testing and Quality',      year_level: 3, availability: [3] },
+    // Cybersecurity planner units adapted from the main runtime seed.
+    { code: 'COS10003', name: 'Computer and Logic Essentials',     year_level: 1, availability: [3, 8] },
+    { code: 'COS10004', name: 'Computer Systems',                  year_level: 2, availability: [3, 8] },
+    { code: 'COS10022', name: 'Introduction to Data Science',      year_level: 1, availability: [3, 8] },
+    { code: 'COS10025', name: 'Technology in an Indigenous Context Project', year_level: 1, availability: [3, 8] },
+    { code: 'COS20028', name: 'Big Data Architecture and Application', year_level: 2, availability: [8] },
+    { code: 'COS20030', name: 'Malware Analysis',                  year_level: 3, availability: [8] },
+    { code: 'COS20031', name: 'Database Design Project',           year_level: 2, availability: [3, 8] },
+    { code: 'COS20083', name: 'Advanced Data Analytics',            year_level: 2, availability: [3, 8] },
+    { code: 'COS30015', name: 'IT Security',                       year_level: 2, availability: [3, 8] },
+    { code: 'COS30020', name: 'Advanced Web Development',          year_level: 3, availability: [8] },
+    { code: 'COS30047', name: 'Security Operations Centre',        year_level: 3, availability: [3, 8] },
+    { code: 'COS10082', name: 'Applied Analytics in Business',     year_level: 1, availability: [8] },
+    { code: 'INF10024', name: 'Business Digitalisation',           year_level: 1, availability: [3, 8] },
+    { code: 'ICT20016', name: 'Work-Integrated Learning',           year_level: 2, availability: [6, 11] },
+    { code: 'MPU3143',  name: 'Malay Language Communication 2',    year_level: 2, availability: [3, 8] },
+    { code: 'MPU3183',  name: 'Penghayatan Etika dan Peradaban',  year_level: 2, availability: [3, 8] },
+    { code: 'MPU3193',  name: 'Philosophy and Current Issues',    year_level: 1, availability: [3, 8] },
+    { code: 'MPU3212',  name: 'Bahasa Kebangsaan A (Malaysian students who do not have SPM Bahasa Melayu credit)', year_level: 1, availability: [6, 11] },
+    { code: 'MPU3273',  name: 'Integrity and Anti-Corruption',    year_level: 1, availability: [3, 8] },
+    { code: 'SWE30003', name: 'Software Architecture and Design',  year_level: 3, availability: [3, 8] },
+    { code: 'SWE30009', name: 'Software Testing and Reliability',  year_level: 3, availability: [8] },
+    { code: 'TNE10005', name: 'Network Administration',           year_level: 2, availability: [3] },
+    { code: 'TNE10006', name: 'Networks and Switching',            year_level: 1, availability: [3, 8] },
+    { code: 'TNE20003', name: 'Internet and Cybersecurity for Engineering Applications', year_level: 2, availability: [3] },
+    { code: 'TNE30009', name: 'Network Security & Resilience',     year_level: 2, availability: [8] },
   ]
 
   const unitMap = new Map<string, string>() // code → id
@@ -104,6 +138,12 @@ async function seedContent() {
     ['COS30033', 'COS20007'],
     ['COS30041', 'COS10009'],
     ['SWE30011', 'COS20007'],
+    // Simple requisite relationships from the Cybersecurity planner.
+    ['COS20030', 'TNE10006'],
+    ['COS30047', 'TNE30009'],
+    ['COS30019', 'COS20007'],
+    ['SWE30009', 'COS20007'],
+    ['TNE30009', 'TNE10006'],
   ]
 
   // Co-requisites: must be enrolled in the same semester
@@ -149,8 +189,7 @@ async function seedContent() {
     data: { course_id: bcs.id, name: 'Artificial Intelligence' },
   })
 
-  // (second major stub for the planner builder dropdown)
-  await prisma.major.create({
+  const cyberMajor = await prisma.major.create({
     data: { course_id: bcs.id, name: 'Cybersecurity' },
   })
 
@@ -354,6 +393,111 @@ async function seedContent() {
   }
 
   console.log('Created Planner 2: BCS Artificial Intelligence (August 2024)')
+
+  // ── Planner 3: BCS Cybersecurity, March 2025 ─────────────────────────────
+  // Adapted from the main runtime seed; year/semester four represents the
+  // source planner's winter-term placement.
+  const planner3 = await prisma.plannerTemplate.create({
+    data: {
+      course_id: bcs.id,
+      major_id: cyberMajor.id,
+      intake_month: 3,
+      intake_year: 2025,
+      duration_years: 3,
+    },
+  })
+
+  const cybersecuritySemesters = [
+    {
+      year_number: 1, sem_number: 1,
+      units: [
+        { code: 'COS10009', category: 'core' as const },
+        { code: 'COS10026', category: 'core' as const },
+        { code: 'COS10025', category: 'core' as const },
+        { code: 'COS10003', category: 'prescribed_elective' as const },
+        { code: 'MPU3273', category: 'mpu' as const },
+      ],
+    },
+    {
+      year_number: 1, sem_number: 4,
+      units: [{ code: 'MPU3212', category: 'mpu' as const }],
+    },
+    {
+      year_number: 1, sem_number: 2,
+      units: [
+        { code: 'COS20007', category: 'core' as const },
+        { code: 'TNE10006', category: 'core' as const },
+        { code: 'COS20019', category: 'major_core' as const },
+        { code: null, category: 'elective' as const },
+        { code: 'MPU3193', category: 'mpu' as const },
+      ],
+    },
+    {
+      year_number: 2, sem_number: 1,
+      units: [
+        { code: 'TNE20003', category: 'major_core' as const },
+        { code: 'COS20031', category: 'major_core' as const },
+        { code: 'COS30015', category: 'major_core' as const },
+        { code: null, category: 'elective' as const },
+        { code: 'MPU3183', category: 'mpu' as const },
+        { code: 'MPU3143', category: 'mpu' as const },
+      ],
+    },
+    {
+      year_number: 2, sem_number: 2,
+      units: [
+        { code: 'COS10004', category: 'core' as const },
+        { code: 'COS30049', category: 'major_core' as const },
+        { code: 'TNE30009', category: 'major_core' as const },
+        { code: 'COS30019', category: 'prescribed_elective' as const },
+        { code: 'ICT20016', category: 'wil' as const },
+      ],
+    },
+    {
+      year_number: 3, sem_number: 1,
+      units: [
+        { code: 'COS40005', category: 'core' as const },
+        { code: 'SWE30003', category: 'major_core' as const },
+        { code: null, category: 'elective' as const },
+      ],
+    },
+    {
+      year_number: 3, sem_number: 2,
+      units: [
+        { code: 'COS40006', category: 'core' as const },
+        { code: 'COS20030', category: 'major_core' as const },
+        { code: null, category: 'elective' as const },
+      ],
+    },
+  ]
+
+  for (const sem of cybersecuritySemesters) {
+    const semester = await prisma.semester.create({
+      data: { template_id: planner3.id, year_number: sem.year_number, sem_number: sem.sem_number },
+    })
+    await prisma.semesterUnit.createMany({
+      data: sem.units.map((u, index) => ({
+        semester_id: semester.id,
+        unit_id: u.code ? unitMap.get(u.code) ?? null : null,
+        category: u.category,
+        is_elective_slot: u.code === null,
+        position: index + 1,
+      })),
+    })
+  }
+
+  const cybersecurityElectiveCodes = [
+    'SWE30009', 'COS30047', 'COS30045', 'COS30020', 'TNE10005',
+    'COS30018', 'INF10024', 'COS10022', 'COS10082', 'COS20083', 'COS20028',
+  ]
+  await prisma.electivePoolUnit.createMany({
+    data: cybersecurityElectiveCodes.flatMap(code => {
+      const unitId = unitMap.get(code)
+      return unitId ? [{ template_id: planner3.id, unit_id: unitId }] : []
+    }),
+  })
+
+  console.log('Created Planner 3: BCS Cybersecurity (March 2025)')
 
   // ── Help content ──────────────────────────────────────────────────────────
 
