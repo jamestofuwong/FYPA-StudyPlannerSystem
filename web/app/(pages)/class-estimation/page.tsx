@@ -1123,7 +1123,7 @@ export default function ClassEstimationPage() {
           <div className={styles.rangeField} style={{ flex: 1, minWidth: 180 }}>
             <label className={styles.rangeLabel}>Label (optional)</label>
             <input className={styles.rangeInput} type="text" placeholder="e.g. before the FTES change" value={runLabel}
-              onChange={(e) => setRunLabel(e.target.value)} disabled={savingRun} />
+              maxLength={60} onChange={(e) => setRunLabel(e.target.value)} disabled={savingRun} />
           </div>
           <button className={styles.btnPrimary} disabled={savingRun || loadedCount === 0} onClick={saveRun}>
             {savingRun ? 'Saving…' : 'Save this estimate'}
@@ -1140,7 +1140,7 @@ export default function ClassEstimationPage() {
               searchPlaceholder="Find a saved estimate"
               pageSize={5}
               columns={[
-                { key: 'when', label: 'Saved', width: 'minmax(150px, 1.4fr)', render: (run) => <>{new Date(run.createdAt).toLocaleString()}{run.label ? <span className={styles.muted}> · {run.label}</span> : null}</>, sortValue: (run) => run.createdAt },
+                { key: 'when', label: 'Saved', width: 'minmax(150px, 1.4fr)', render: (run) => <>{new Date(run.createdAt).toLocaleString()}{run.label ? <span className={styles.muted} style={{ overflowWrap: 'anywhere' }}> · {run.label}</span> : null}</>, sortValue: (run) => run.createdAt },
                 { key: 'course', label: 'Course', width: 'minmax(130px, 1fr)', render: (run) => (run.course ? shortCourseName(run.course) : <span className={styles.muted}>Not recorded</span>), sortValue: (run) => run.course ?? '' },
                 { key: 'term', label: 'For', width: '80px', render: (run) => `S${run.targetSemester} ${run.targetYear}`, sortValue: (run) => run.targetYear * 10 + run.targetSemester },
                 { key: 'students', label: 'Students', width: '90px', align: 'right', render: (run) => `${run.studentCount.toLocaleString()}${run.newIntake ? ` +${run.newIntake}` : ''}`, sortValue: (run) => run.studentCount },

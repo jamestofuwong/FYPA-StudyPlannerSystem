@@ -54,6 +54,11 @@ const SOURCE_LABELS: Record<string, string> = {
   none: 'No students',
 };
 
+/** Cuts a long label down for places that cannot wrap it, such as a dropdown option. */
+function shorten(text: string, max: number): string {
+  return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text;
+}
+
 export default function ClassEstimationReportPage() {
   const [runs, setRuns] = useState<SavedRun[]>([]);
   const [run, setRun] = useState<SavedRunDetail | null>(null);
@@ -167,7 +172,7 @@ export default function ClassEstimationReportPage() {
                       <option key={option.id} value={option.id}>
                         {new Date(option.createdAt).toLocaleDateString()}
                         {option.course ? ` · ${option.course.replace(/^Bachelor of\s+/i, '')}` : ''}
-                        {option.label ? ` · ${option.label}` : ''}
+                        {option.label ? ` · ${shorten(option.label, 40)}` : ''}
                         {` · S${option.targetSemester} ${option.targetYear}`}
                       </option>
                     ))}
