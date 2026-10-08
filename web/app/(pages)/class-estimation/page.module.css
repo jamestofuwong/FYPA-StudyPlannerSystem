@@ -874,3 +874,9 @@
   border-color: var(--accent-blue);
   color: var(--accent-blue);
 }
+
+/* A unit's name beside its code: quieter than the code, cut with an ellipsis when the column is narrow. */
+.unitName {
+  margin-left: 6px;
+  color: var(--text-secondary);
+}

@@ -90,6 +90,11 @@ export interface StudentPreview {
 }
 
 export interface PreviewSummary {
+  /**
+   * Unit code to unit name, for every unit in the loaded planners, so the page can show what a code is
+   * without a second request. Read off the planners this run already loaded.
+   */
+  unitNames: Record<string, string>;
   targetTerm: 1 | 2;
   loadCap: number;
   students: number;
@@ -179,6 +184,19 @@ function withOwnIdentity(computed: StudentPreview, record: EstimationRecord): St
     creditsScraped: record.scraped?.creditsCompleted ?? 0,
     mappingWarnings: record.mappingWarnings,
   };
+}
+
+/** Every unit name the planners hold, slotted or in an elective group, keyed by code. */
+function unitNamesFrom(planners: Awaited<ReturnType<typeof plannerRepository.getAllPlannersWithUnits>>): Record<string, string> {
+  const names: Record<string, string> = {};
+  const add = (unit: { unit_code: string; unit_name: string } | null | undefined) => {
+    if (unit?.unit_code && unit.unit_name && !names[unit.unit_code]) names[unit.unit_code] = unit.unit_name;
+  };
+  for (const planner of planners) {
+    for (const templateUnit of planner.units) add(templateUnit.unit);
+    for (const group of planner.elective_groups) for (const member of group.units) add(member.unit);
+  }
+  return names;
 }
 
 /**
@@ -293,6 +311,7 @@ export async function runEstimationPreview(
   const projectedByUnit = aggregate({
     continuing: contributionsByUnit(students),
     newIntakeUnits: newIntakeUnits.codes,
+    newIntakeShares: newIntakeUnits.shares,
     newIntakeCount,
     retentionRate,
   });
@@ -333,6 +352,7 @@ export async function runEstimationPreview(
       .sort((a, b) => b.students - a.students || a.code.localeCompare(b.code)),
     electiveSeatsByUnit: sumElectiveSeats(students),
     electiveSeatsUnplaced: students.reduce((sum, s) => sum + s.electiveSeats.unplaced, 0),
+    unitNames: unitNamesFrom(dbPlanners),
     projectedByUnit,
     totals: totalsFor(projectedByUnit),
     retentionRate,

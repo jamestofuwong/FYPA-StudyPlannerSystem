@@ -8,9 +8,8 @@
 // fall back and say so. Silently returning no units would drop the new-intake figure from the estimate
 // entirely and the total would just look a bit low.
 //
-// Slot semesters count from the planner's own intake, not the calendar, and twenty of the forty-five loaded
-// planners are September intakes. Comparing a raw slot number against the target term would give every one
-// of those cohorts the wrong semester's units.
+// And a new student always starts in Year 1, Semester 1 of their planner, whatever calendar semester their
+// intake begins in. The target semester only decides which intake's planners are read.
 // ============================================================
 
 import { resolveNewIntakeUnits } from '@core/services/classEstimation/newIntakeResolver';
@@ -25,10 +24,12 @@ function planner(
   intakeYear: number,
   intakeMonth: number,
   units: Array<[string, number, number] | [string, number, number, string]>,
+  course = 'Bachelor of Computer Science',
 ) {
   return {
     intake_year: intakeYear,
     intake_month: intakeMonth,
+    course: { name: course },
     units: units.map(([code, yearLevel, semester, category]) => ({
       category: category ?? 'core',
       year_level: yearLevel,
@@ -53,22 +54,50 @@ describe('resolveNewIntakeUnits', () => {
     const result = await resolveNewIntakeUnits(2027, 1);
 
     expect(result.codes).toEqual(['COS10003', 'COS10009']);
+    // Every major has both, so each gets the full new-student count.
+    expect(result.shares).toEqual({ COS10003: 1, COS10009: 1 });
     expect(result.basedOnIntakeYear).toBe(2027);
     expect(result.warnings).toEqual([]);
   });
 
-  // A unit only one major puts in year 1 semester 1 cannot be charged to students who have not picked that
-  // major, so it is left out and the omission is reported.
-  test('a unit only some majors take is left out, and said so', async () => {
+  // A new student has not picked a major. A unit in only some majors' first semester is counted for that share
+  // of the new students: dropping it would undercount it, counting it in full would overcount it.
+  test('a unit only some majors take gets their share of the new students, and is reported', async () => {
     getAllPlannersWithUnits.mockResolvedValue([
       planner(2027, 3, [y1s1('SHARED'), y1s1('AI_ONLY')]),
       planner(2027, 3, [y1s1('SHARED')]),
+      planner(2027, 3, [y1s1('SHARED')]),
+      planner(2027, 3, [y1s1('SHARED'), y1s1('AI_ONLY')]),
     ] as never);
 
     const result = await resolveNewIntakeUnits(2027, 1);
 
-    expect(result.codes).toEqual(['SHARED']);
-    expect(result.warnings.some((w) => /extra units/i.test(w))).toBe(true);
+    expect(result.codes).toEqual(['AI_ONLY', 'SHARED']);
+    expect(result.shares).toEqual({ SHARED: 1, AI_ONLY: 0.5 });
+    expect(result.warnings.some((w) => /AI_ONLY/.test(w) && /share/i.test(w))).toBe(true);
+  });
+
+  test('only Computer Science planners are read', async () => {
+    getAllPlannersWithUnits.mockResolvedValue([
+      planner(2027, 3, [y1s1('COS10009')]),
+      planner(2027, 3, [y1s1('ENG10001')], 'Bachelor of Engineering'),
+    ] as never);
+
+    const result = await resolveNewIntakeUnits(2027, 1);
+
+    expect(result.codes).toEqual(['COS10009']);
+    expect(result.shares).toEqual({ COS10009: 1 });
+  });
+
+  test('with no planner named Computer Science, every planner is used and that is said', async () => {
+    getAllPlannersWithUnits.mockResolvedValue([
+      planner(2027, 3, [y1s1('X10001')], 'Some Other Degree'),
+    ] as never);
+
+    const result = await resolveNewIntakeUnits(2027, 1);
+
+    expect(result.codes).toEqual(['X10001']);
+    expect(result.warnings.some((w) => /Computer Science/.test(w))).toBe(true);
   });
 
   test('later years are never a new student\'s first semester', async () => {
@@ -97,26 +126,28 @@ describe('resolveNewIntakeUnits', () => {
     expect((await resolveNewIntakeUnits(2027, 1)).codes).toEqual(['COS10009']);
   });
 
-  // ---- The intake conversion --------------------------------------------------------------------
+  // ---- Always Year 1, Semester 1 ------------------------------------------------------------------
 
-  // A September cohort's "semester 1" is calendar semester 2, so their first semester belongs to a calendar
-  // semester 2 estimate, not a semester 1 one.
-  test('a September intake\'s first semester counts as calendar semester 2', async () => {
+  // The target semester picks the intake: February and March planners for semester 1, September planners
+  // for semester 2. Either way a new student starts in Year 1, Semester 1 of that planner.
+  test('semester 2 reads the September intake, and still its Year 1, Semester 1', async () => {
     getAllPlannersWithUnits.mockResolvedValue([
+      planner(2027, 3, [y1s1('MARCH_FIRST'), y1s2('MARCH_SECOND')]),
       planner(2027, 9, [y1s1('SEPT_FIRST'), y1s2('SEPT_SECOND')]),
     ] as never);
 
+    expect((await resolveNewIntakeUnits(2027, 1)).codes).toEqual(['MARCH_FIRST']);
     expect((await resolveNewIntakeUnits(2027, 2)).codes).toEqual(['SEPT_FIRST']);
-    expect((await resolveNewIntakeUnits(2027, 1)).codes).toEqual(['SEPT_SECOND']);
   });
 
-  test('a February intake\'s first semester counts as calendar semester 1', async () => {
+  // Falling back to the other semester's intake still means that intake's first semester, never its Year 1,
+  // Semester 2: a new student does not start halfway through their first year.
+  test('a fallback to the other intake still takes Year 1, Semester 1', async () => {
     getAllPlannersWithUnits.mockResolvedValue([
       planner(2027, 2, [y1s1('FEB_FIRST'), y1s2('FEB_SECOND')]),
     ] as never);
 
-    expect((await resolveNewIntakeUnits(2027, 1)).codes).toEqual(['FEB_FIRST']);
-    expect((await resolveNewIntakeUnits(2027, 2)).codes).toEqual(['FEB_SECOND']);
+    expect((await resolveNewIntakeUnits(2027, 2)).codes).toEqual(['FEB_FIRST']);
   });
 
   // ---- Falling back ------------------------------------------------------------------------------
@@ -172,13 +203,21 @@ describe('resolveNewIntakeUnits', () => {
     expect(result.warnings.some((w) => /No planners are loaded/.test(w))).toBe(true);
   });
 
-  // If the majors share nothing, the new-intake figure has nowhere to go. Saying so beats a total that is
-  // quietly short by the whole new cohort.
-  test('majors sharing no first-semester units is reported', async () => {
+  test('majors with entirely different first semesters split the new students between them', async () => {
     getAllPlannersWithUnits.mockResolvedValue([
       planner(2027, 3, [y1s1('A_ONLY')]),
       planner(2027, 3, [y1s1('B_ONLY')]),
     ] as never);
+
+    const result = await resolveNewIntakeUnits(2027, 1);
+
+    expect(result.shares).toEqual({ A_ONLY: 0.5, B_ONLY: 0.5 });
+  });
+
+  // No first-semester units at all means the figure has nowhere to go. Saying so beats a total that is
+  // quietly short by the whole new cohort.
+  test('planners with no Year 1, Semester 1 units are reported', async () => {
+    getAllPlannersWithUnits.mockResolvedValue([planner(2027, 3, [y1s2('LATER')])] as never);
 
     const result = await resolveNewIntakeUnits(2027, 1);
 

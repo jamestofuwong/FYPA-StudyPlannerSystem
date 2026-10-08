@@ -903,8 +903,8 @@ export default function ClassEstimationPage() {
               onChange={(e) => setRetention(e.target.value)} disabled={previewStatus === 'loading' || isRunning} />
           </div>
           <div className={styles.rangeField}>
-            <label className={styles.rangeLabel} title="Brand-new first-year students. They are not in the portal yet, so this is entered by hand and placed on the units every first-semester student takes.">
-              New students expected
+            <label className={styles.rangeLabel} title="Students starting the course next semester. They are not in the portal yet, so the number is entered here and added in full to the Year 1, Semester 1 units of the Computer Science planners. Credit-transfer students are placed by hand.">
+              New first-year students
             </label>
             <input className={styles.rangeInput} type="number" min={0} value={newIntake}
               onChange={(e) => setNewIntake(e.target.value)} disabled={previewStatus === 'loading' || isRunning} />
@@ -951,11 +951,11 @@ export default function ClassEstimationPage() {
                 <DataTable
                   rows={s.projectedByUnit}
                   rowKey={(unit) => unit.code}
-                  searchText={(unit) => unit.code}
-                  searchPlaceholder="Find a unit"
+                  searchText={(unit) => `${unit.code} ${s.unitNames?.[unit.code] ?? ''}`}
+                  searchPlaceholder="Find a unit by code or name"
                   initialSort={{ key: 'headcount', direction: 'desc' }}
                   columns={[
-                    { key: 'code', label: 'Unit', width: 'minmax(90px, 1fr)', render: (unit) => <span className={styles.mono}>{unit.code}</span>, sortValue: (unit) => unit.code },
+                    { key: 'code', label: 'Unit', width: 'minmax(220px, 2.2fr)', render: (unit) => <UnitName code={unit.code} names={s.unitNames} />, sortValue: (unit) => unit.code },
                     { key: 'named', label: 'Required', hint: 'Students whose planner says they still owe this unit', width: '90px', align: 'right', render: (unit) => unit.fromNamedPicks || '–', sortValue: (unit) => unit.fromNamedPicks },
                     { key: 'elective', label: 'Elective', hint: 'Shares of students who could choose this as an elective', width: '90px', align: 'right', render: (unit) => (unit.fromElectives > 0 ? unit.fromElectives.toFixed(1) : '–'), sortValue: (unit) => unit.fromElectives },
                     { key: 'new', label: 'New', hint: 'New first-year students, entered by hand', width: '70px', align: 'right', render: (unit) => unit.fromNewIntake || '–', sortValue: (unit) => unit.fromNewIntake },
@@ -969,7 +969,12 @@ export default function ClassEstimationPage() {
                 />
                 {(s.newIntakeCount > 0 || s.newIntake.warnings.length > 0) && (
                   <div className={styles.previewNotes}>
-                    {s.newIntakeCount > 0 && <div>{s.newIntakeCount} new students placed on {s.newIntake.units.join(', ') || 'no units'}.</div>}
+                    {s.newIntakeCount > 0 && (
+                      <div>
+                        {s.newIntakeCount} new first-year students added to the Year 1, Semester 1 units:{' '}
+                        {s.newIntake.units.map((code) => (s.unitNames?.[code] ? `${code} ${s.unitNames[code]}` : code)).join(', ') || 'none found'}.
+                      </div>
+                    )}
                     {s.newIntake.warnings.map((warning) => <div key={warning}>⚠ {warning}</div>)}
                   </div>
                 )}
@@ -986,11 +991,11 @@ export default function ClassEstimationPage() {
                 <DataTable
                   rows={s.electiveSeatsByUnit}
                   rowKey={(unit) => unit.code}
-                  searchText={(unit) => unit.code}
+                  searchText={(unit) => `${unit.code} ${s.unitNames?.[unit.code] ?? ''}`}
                   searchPlaceholder="Find an elective"
                   initialSort={{ key: 'expected', direction: 'desc' }}
                   columns={[
-                    { key: 'code', label: 'Unit', width: 'minmax(90px, 1fr)', render: (unit) => <span className={styles.mono}>{unit.code}</span>, sortValue: (unit) => unit.code },
+                    { key: 'code', label: 'Unit', width: 'minmax(220px, 2.2fr)', render: (unit) => <UnitName code={unit.code} names={s.unitNames} />, sortValue: (unit) => unit.code },
                     { key: 'type', label: 'Type', width: '110px', render: (unit) => ELECTIVE_TYPE[unit.category] ?? unit.category, sortValue: (unit) => unit.category },
                     { key: 'popularity', label: 'Taken by', hint: 'Current students who have already passed this unit, which is what the shares are weighted by', width: '90px', align: 'right', render: (unit) => unit.popularity, sortValue: (unit) => unit.popularity },
                     { key: 'expected', label: 'Expected', width: '90px', align: 'right', render: (unit) => <strong className={styles.headcount}>{unit.expectedSeats.toFixed(1)}</strong>, sortValue: (unit) => unit.expectedSeats },
@@ -1157,6 +1162,17 @@ export default function ClassEstimationPage() {
 }
 
 // ── Pieces used above ────────────────────────────────────────────────────────
+
+/** A unit code with its name beside it, quieter, when the planners give one. */
+function UnitName({ code, names }: { code: string; names?: Record<string, string> }) {
+  const name = names?.[code];
+  return (
+    <span title={name ? `${code} ${name}` : code}>
+      <span className={styles.mono}>{code}</span>
+      {name && <span className={styles.unitName}> {name}</span>}
+    </span>
+  );
+}
 
 type StudentResult = EstimationPreview['students'][number];
 

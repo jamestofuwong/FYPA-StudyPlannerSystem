@@ -91,6 +91,18 @@ describe('aggregate', () => {
     for (const unit of units) expect(unit.fromNewIntake).toBe(60);
   });
 
+  test('a unit only some majors start with gets its share of the new students', async () => {
+    const units = run({
+      newIntakeUnits: ['SHARED', 'SOME'],
+      newIntakeShares: { SHARED: 1, SOME: 0.6 },
+      newIntakeCount: 60,
+    });
+    const byCode = new Map(units.map((u) => [u.code, u]));
+
+    expect(byCode.get('SHARED')!.fromNewIntake).toBe(60);
+    expect(byCode.get('SOME')!.fromNewIntake).toBeCloseTo(36, 10);
+  });
+
   // A duplicated code in the unit list must not charge the intake twice.
   test('a repeated new-intake unit is only counted once', () => {
     const units = run({ newIntakeUnits: ['COS10009', 'COS10009'], newIntakeCount: 60 });

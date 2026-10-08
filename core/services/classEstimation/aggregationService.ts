@@ -41,6 +41,11 @@ export interface AggregationInput {
   newIntakeUnits: string[];
   /** The HoD's own count of new students expected to arrive. Not discounted, see the note above. */
   newIntakeCount: number;
+  /**
+   * Share of the new students expected in each unit, from newIntakeResolver. A unit left out counts in
+   * full, which is every Year 1, Semester 1 unit in the planners loaded so far.
+   */
+  newIntakeShares?: Record<string, number>;
   retentionRate: number;
 }
 
@@ -66,7 +71,7 @@ export function roundHeadcount(projected: number): number {
 }
 
 export function aggregate(input: AggregationInput): AggregatedUnit[] {
-  const { continuing, newIntakeUnits, newIntakeCount, retentionRate } = input;
+  const { continuing, newIntakeUnits, newIntakeCount, retentionRate, newIntakeShares = {} } = input;
 
   const byCode = new Map<string, { fromNamedPicks: number; fromElectives: number; fromNewIntake: number }>();
 
@@ -89,7 +94,7 @@ export function aggregate(input: AggregationInput): AggregatedUnit[] {
   if (intake > 0) {
     // De-duplicated: the same unit appearing twice in the list must not double the intake on it.
     for (const code of new Set(newIntakeUnits)) {
-      entryFor(code).fromNewIntake += intake;
+      entryFor(code).fromNewIntake += intake * (newIntakeShares[code] ?? 1);
     }
   }
 
