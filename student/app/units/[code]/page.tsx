@@ -9,18 +9,13 @@ interface Props {
   params: Promise<{ code: string }>
 }
 
-function unitYear(code: string): number {
-  const match = code.match(/\d/)
-  return match ? parseInt(match[0]) : 0
-}
-
 export default async function UnitDetailPage({ params }: Props) {
   const { code } = await params
   const unit = await getCachedUnit(code)
 
   if (!unit) notFound()
 
-  const year = unitYear(unit.code)
+  const year = unit.yearLevel ?? 0
 
   return (
     <div className={styles.page}>

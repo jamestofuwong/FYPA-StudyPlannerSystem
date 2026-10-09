@@ -12,11 +12,6 @@ interface Props {
 const PAGE_SIZE = 15
 const LEVELS = [1, 2, 3, 4]
 
-function unitLevel(code: string): number {
-  const match = code.match(/\d/)
-  return match ? parseInt(match[0]) : 0
-}
-
 function pageRange(current: number, total: number): (number | '…')[] {
   if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
   if (current <= 4) return [1, 2, 3, 4, 5, '…', total]
@@ -33,7 +28,7 @@ export default function UnitCatalog({ units }: Props) {
   const filtered = useMemo(() => {
     let result = units
     if (activeLevel !== null) {
-      result = result.filter(u => unitLevel(u.code) === activeLevel)
+      result = result.filter(u => u.yearLevel === activeLevel)
     }
     const q = query.trim().toLowerCase()
     if (q) {
