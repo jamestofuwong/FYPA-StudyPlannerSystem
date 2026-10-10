@@ -2,6 +2,7 @@
 
 import type { MouseEvent } from 'react'
 import type { SemesterBlock } from '@student/lib/types'
+import { formatRequisiteGroups } from '@student/lib/requisites'
 import { usePendingNavigation } from '@student/components/common/PendingNavigation'
 import styles from './SemesterTable.module.css'
 
@@ -128,9 +129,7 @@ export default function SemesterTable({ block, periodLabel, completedCodes }: Pr
                 <td className={styles.cellPrereq}>
                   {clickable ? (
                     <a href={href} className={styles.unitLink} onClick={event => onUnitLinkClick(event, href)}>
-                      {unit.prerequisites && unit.prerequisites.length > 0
-                        ? unit.prerequisites.join(', ')
-                        : 'Nil'}
+                      {formatRequisiteGroups(unit.requisiteGroups) ?? unit.prerequisites?.join(', ') ?? 'Nil'}
                       <span className={styles.viewHint} aria-hidden="true">
                         {completed ? 'Completed' : 'View unit'}
                         {pending ? (
@@ -141,9 +140,7 @@ export default function SemesterTable({ block, periodLabel, completedCodes }: Pr
                       </span>
                     </a>
                   ) : (
-                    unit.prerequisites && unit.prerequisites.length > 0
-                      ? unit.prerequisites.join(', ')
-                      : 'Nil'
+                    formatRequisiteGroups(unit.requisiteGroups) ?? unit.prerequisites?.join(', ') ?? 'Nil'
                   )}
                 </td>
               </tr>

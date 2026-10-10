@@ -1,27 +1,7 @@
 import { prisma } from './prisma'
+import { requisiteUnitCodes, toRequisiteGroups } from './requisites'
+import { termLabel } from './term-labels'
 import type { UnitDetail, UnitListing } from './types'
-
-const TERM_LABELS: Record<number, string> = {
-  1: 'Semester 1',
-  2: 'Semester 2',
-  3: 'Summer Term',
-  4: 'Winter Term',
-}
-
-type RequisiteGroupForDisplay = {
-  conditions: {
-    requisite_type: string | null
-    unit: { unit_code: string } | null
-  }[]
-}
-
-function requisiteCodes(groups: RequisiteGroupForDisplay[], type: string): string[] {
-  return groups.flatMap(group =>
-    group.conditions
-      .filter(condition => condition.requisite_type === type && condition.unit)
-      .map(condition => condition.unit!.unit_code),
-  )
-}
 
 export async function getUnits(): Promise<UnitListing[]> {
   const units = await prisma.unit.findMany({
@@ -39,16 +19,20 @@ export async function getUnits(): Promise<UnitListing[]> {
     },
   })
 
-  return units.map(u => ({
-    code: u.unit_code,
-    name: u.unit_name,
-    creditPoints: Number(u.credit_points),
-    yearLevel: u.year_level,
-    prerequisites: requisiteCodes(u.requisite_groups, 'prerequisite'),
-    corequisites: requisiteCodes(u.requisite_groups, 'corequisite'),
-    antirequisites: requisiteCodes(u.requisite_groups, 'antirequisite'),
-    availability: u.offerings.map(o => TERM_LABELS[o.offered_in] ?? `Term ${o.offered_in}`),
-  }))
+  return units.map(u => {
+    const requisiteGroups = toRequisiteGroups(u.requisite_groups)
+    return {
+      code: u.unit_code,
+      name: u.unit_name,
+      creditPoints: Number(u.credit_points),
+      yearLevel: u.year_level,
+      requisiteGroups,
+      prerequisites: requisiteUnitCodes(requisiteGroups, 'prerequisite'),
+      corequisites: requisiteUnitCodes(requisiteGroups, 'corequisite'),
+      antirequisites: requisiteUnitCodes(requisiteGroups, 'antirequisite'),
+      availability: u.offerings.map(o => termLabel(o.offered_in)),
+    }
+  })
 }
 
 export async function getUnit(code: string): Promise<UnitDetail | null> {
@@ -72,16 +56,18 @@ export async function getUnit(code: string): Promise<UnitDetail | null> {
 
   if (!u) return null
 
+  const requisiteGroups = toRequisiteGroups(u.requisite_groups)
   return {
     code: u.unit_code,
     name: u.unit_name,
     creditPoints: Number(u.credit_points),
     yearLevel: u.year_level,
     overview: u.overview ?? '',
-    prerequisites: requisiteCodes(u.requisite_groups, 'prerequisite'),
-    corequisites: requisiteCodes(u.requisite_groups, 'corequisite'),
-    antirequisites: requisiteCodes(u.requisite_groups, 'antirequisite'),
-    availability: u.offerings.map(o => TERM_LABELS[o.offered_in] ?? `Term ${o.offered_in}`),
+    requisiteGroups,
+    prerequisites: requisiteUnitCodes(requisiteGroups, 'prerequisite'),
+    corequisites: requisiteUnitCodes(requisiteGroups, 'corequisite'),
+    antirequisites: requisiteUnitCodes(requisiteGroups, 'antirequisite'),
+    availability: u.offerings.map(o => termLabel(o.offered_in)),
     learningOutcomes: u.learning_outcomes.map(lo => lo.description),
     content: u.content_topics.map(t => t.topic),
     assessment: u.assessments.map(a => ({

@@ -1,3 +1,5 @@
+import type { RequisiteGroup } from './requisites'
+
 export type UnitCategory =
   | 'core'
   | 'major_core'
@@ -16,6 +18,7 @@ export interface Unit {
   yearLevel: number
   semester: number
   isElectiveSlot: boolean
+  requisiteGroups?: RequisiteGroup[]
   prerequisites?: string[]
   availability?: string[]
   sourceMajorName?: string | null
@@ -36,6 +39,7 @@ export interface UnitListing {
   prerequisites?: string[]
   corequisites?: string[]
   antirequisites?: string[]
+  requisiteGroups?: RequisiteGroup[]
   availability?: string[]
 }
 
@@ -61,7 +65,7 @@ export interface PlannerSummary {
   intakeMonth: number
   intakeLabel: string
   // NOTE: Course.code is not configurable via CMS (CMS only sets course name).
-  // ⚠️  MISMATCH: DB has Course.code (optional) but CMS cannot set it.
+  // MISMATCH: DB has Course.code (optional) but CMS cannot set it.
   durationYears: number
   totalUnits: number
 }
@@ -69,10 +73,10 @@ export interface PlannerSummary {
 export interface PlannerDetail extends PlannerSummary {
   semesters: SemesterBlock[]
   requirements: {
-    core: { count: number | null }
-    major: { count: number | null }
-    elective: { count: number | null }
-    wil: { count: number | null }
+    core: { count: number | null; creditPoints?: number | null }
+    major: { count: number | null; creditPoints?: number | null }
+    elective: { count: number | null; creditPoints?: number | null }
+    wil: { count: number | null; creditPoints?: number | null }
   }
   electivePool: Unit[]
 }

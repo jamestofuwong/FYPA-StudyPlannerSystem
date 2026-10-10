@@ -1,5 +1,7 @@
 import 'server-only'
 import { prisma } from './prisma'
+import { requisiteUnitCodes, toRequisiteGroups } from './requisites'
+import { termLabel } from './term-labels'
 import type { PlannerDetail, PlannerSummary, SemesterBlock, Unit, UnitCategory } from './types'
 
 export interface PlannerMajorOption {
@@ -25,21 +27,8 @@ const MONTH_NAMES = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ]
 
-type UnitWithPrerequisites = {
-  requisite_groups: {
-    conditions: {
-      requisite_type: string | null
-      unit: { unit_code: string } | null
-    }[]
-  }[]
-}
-
-function prerequisiteCodes(unit: UnitWithPrerequisites | null | undefined): string[] {
-  return unit?.requisite_groups.flatMap(group =>
-    group.conditions
-      .filter(condition => condition.requisite_type === 'prerequisite' && condition.unit)
-      .map(condition => condition.unit!.unit_code),
-  ) ?? []
+function unitRequisites(unit: { requisite_groups: Parameters<typeof toRequisiteGroups>[0] } | null | undefined) {
+  return toRequisiteGroups(unit?.requisite_groups ?? [])
 }
 
 function intakeLabel(month: number | null, year: number): string {
@@ -122,7 +111,6 @@ export async function getPlannerById(id: string): Promise<PlannerDetail | null> 
               requisite_groups: {
                 include: {
                   conditions: {
-                    where: { requisite_type: 'prerequisite' },
                     include: { unit: { select: { unit_code: true } } },
                   },
                 },
@@ -140,7 +128,6 @@ export async function getPlannerById(id: string): Promise<PlannerDetail | null> 
                   requisite_groups: {
                     include: {
                       conditions: {
-                        where: { requisite_type: 'prerequisite' },
                         include: { unit: { select: { unit_code: true } } },
                       },
                     },
@@ -163,10 +150,11 @@ export async function getPlannerById(id: string): Promise<PlannerDetail | null> 
       semesterMap.set(key, {
         year: tu.year_level,
         semester: tu.semester,
-        label: `Semester ${tu.semester}`,
+        label: termLabel(tu.semester),
         units: [],
       })
     }
+    const requisiteGroups = unitRequisites(tu.unit)
     semesterMap.get(key)!.units.push({
       id: tu.id,
       code: tu.unit?.unit_code ?? 'ELECTIVE',
@@ -176,18 +164,14 @@ export async function getPlannerById(id: string): Promise<PlannerDetail | null> 
       yearLevel: tu.unit?.year_level ?? tu.year_level,
       semester: tu.semester,
       isElectiveSlot: !tu.unit,
-      prerequisites: prerequisiteCodes(tu.unit),
+      requisiteGroups,
+      prerequisites: requisiteUnitCodes(requisiteGroups, 'prerequisite'),
       sourceMajorName: tu.category === 'major_core' ? t.major?.name ?? null : null,
     })
   }
 
   const semesters = [...semesterMap.values()].sort((a, b) => a.year - b.year || a.semester - b.semester)
   const allUnits = semesters.flatMap(s => s.units)
-  const countCat = (cat: string) => {
-    const n = allUnits.filter(u => u.category === cat).length
-    return n > 0 ? n : null
-  }
-
   return {
     id: t.id,
     courseName: t.course.name,
@@ -199,30 +183,27 @@ export async function getPlannerById(id: string): Promise<PlannerDetail | null> 
     totalUnits: allUnits.length,
     semesters,
     requirements: {
-      core: { count: countCat('core') },
-      major: { count: countCat('major_core') },
-      elective: {
-        count: (() => {
-          const n = allUnits.filter(
-            u => u.category === 'elective' || u.category === 'prescribed_elective',
-          ).length
-          return n > 0 ? n : null
-        })(),
-      },
-      wil: { count: countCat('wil') },
+      core: { count: t.core_count, creditPoints: t.core_cp },
+      major: { count: t.major_count, creditPoints: t.major_cp },
+      elective: { count: t.elective_count, creditPoints: t.elective_cp },
+      wil: { count: t.wil_count, creditPoints: t.wil_cp },
     },
     electivePool: t.elective_groups.flatMap(group =>
-      group.units.map((egu): Unit => ({
-        id: egu.unit.id,
-        code: egu.unit.unit_code,
-        name: egu.unit.unit_name,
-        category: 'elective',
-        creditPoints: Number(egu.unit.credit_points),
-        yearLevel: egu.unit.year_level,
-        semester: 0,
-        isElectiveSlot: false,
-        prerequisites: prerequisiteCodes(egu.unit),
-      })),
+      group.units.map((egu): Unit => {
+        const requisiteGroups = unitRequisites(egu.unit)
+        return {
+          id: egu.unit.id,
+          code: egu.unit.unit_code,
+          name: egu.unit.unit_name,
+          category: 'elective',
+          creditPoints: Number(egu.unit.credit_points),
+          yearLevel: egu.unit.year_level,
+          semester: 0,
+          isElectiveSlot: false,
+          requisiteGroups,
+          prerequisites: requisiteUnitCodes(requisiteGroups, 'prerequisite'),
+        }
+      }),
     ),
   }
 }

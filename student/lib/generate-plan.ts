@@ -5,6 +5,7 @@ import { toSchedulableUnit } from '@core/shared/scheduling/schedulableUnit'
 import type { GenerationInput, GenerationResult } from './plan-builder'
 import { getPlannerById } from './planners'
 import { prisma } from './prisma'
+import { requisiteUnitCodes, toRequisiteGroups } from './requisites'
 import type { SemesterBlock, Unit } from './types'
 
 /**
@@ -80,6 +81,7 @@ function templateUnitToDisplayUnit(
   sourceMajorName?: string | null,
 ): Unit | null {
   if (!slot.unit) return null
+  const requisiteGroups = toRequisiteGroups(slot.unit.requisite_groups)
   return {
     id: slot.id,
     code: slot.unit.unit_code,
@@ -89,11 +91,8 @@ function templateUnitToDisplayUnit(
     yearLevel: slot.unit.year_level ?? 1,
     semester: 0,
     isElectiveSlot: false,
-    prerequisites: slot.unit.requisite_groups.flatMap(group =>
-      group.conditions
-        .filter(condition => condition.requisite_type === 'prerequisite' && condition.unit)
-        .map(condition => condition.unit!.unit_code),
-    ),
+    requisiteGroups,
+    prerequisites: requisiteUnitCodes(requisiteGroups, 'prerequisite'),
     sourceMajorName: sourceMajorName ?? null,
   }
 }
@@ -122,9 +121,7 @@ export async function generatePlanOnServer({
       if (!slot.unit) continue
       const code = slot.unit.unit_code.trim().toUpperCase()
 
-      // Finished units stay out of the plan. Their place in the template does
-      // not decide the start year — a year-2 unit taken in the student's
-      // first semester must not push the plan to year 3.
+      // Finished units stay out of the plan. Their place in the template does not decide the start year — a year-2 unit taken in the student's first semester must not push the plan to year 3.
       if (completedCodes.has(code)) continue
 
       const schedulable = templateUnitToSchedulable(slot)
@@ -192,8 +189,7 @@ export async function generatePlanOnServer({
 
   const start = startAfterCompletedSemesters(completedSemesters)
 
-  // The advisor dashboard anchors on Current units before completed ones. There
-  // is no enrolment status here, only completed codes, so that branch does not apply.
+  // The advisor dashboard anchors on Current units before completed ones. There is no enrolment status here, only completed codes, so that branch does not apply.
   const intakeSemester: 1 | 2 = config.intakeMonth >= 7 ? 2 : 1
 
   const result = buildCustomPlan(
@@ -202,8 +198,7 @@ export async function generatePlanOnServer({
     start.year,
     start.semester,
     intakeSemester,
-    // No grade data reaches this app, only completed codes, so no unit can be
-    // known to be a Conceded Pass
+    // No grade data reaches this app, only completed codes, so no unit can be known to be a Conceded Pass
     [],
   )
 
@@ -217,8 +212,7 @@ export async function generatePlanOnServer({
   const semesters: SemesterBlock[] = result.semesters.map(bucket => ({
     year: bucket.year,
     semester: bucket.semester,
-    // The template may call this slot "Winter Term". The generated plan uses
-    // the semester number the student is continuing from.
+    // The template may call this slot "Winter Term". The generated plan uses the semester number the student is continuing from.
     label: `Semester ${bucket.semester}`,
     units: bucket.units.map((scheduled): Unit => {
       const plannerUnit = unitMetadataByCode.get(scheduled.code.trim().toUpperCase())

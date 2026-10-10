@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client'
+import { Prisma, PrismaClient } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { hashPassword } from '../lib/cms/auth'
 
@@ -8,11 +8,8 @@ const prisma = new PrismaClient({
 })
 
 
-// -----------------------------------------------------------------------------
-// Complex requisite groups and requirement totals remain intentionally excluded.
-// -----------------------------------------------------------------------------
-
 type UnitCategory = 'core' | 'major_core' | 'prescribed_elective' | 'elective' | 'wil' | 'mpu'
+type RequisiteType = 'prerequisite' | 'corequisite' | 'antirequisite'
 
 type SourceUnit = {
   code: string
@@ -43,6 +40,27 @@ type SourceElectiveGroup = {
   intakeYear: number
   intakeMonth: number
   units: string[]
+}
+
+type SourceRequisiteCondition =
+  | { type: 'unit'; unitCode: string; requisiteType?: RequisiteType }
+  | { type: 'credit_points'; creditPoints: number; requisiteType?: RequisiteType }
+  | { type: 'external'; externalRequisite: string; requisiteType?: RequisiteType }
+
+type SourceRequisiteRule = {
+  targetCode: string
+  groups: SourceRequisiteCondition[][]
+}
+
+type PlannerRequirementTotals = {
+  core_count: number
+  core_cp: number
+  major_count: number
+  major_cp: number
+  elective_count: number
+  elective_cp: number
+  wil_count: number | null
+  wil_cp: number | null
 }
 
 const SOURCE_COURSE = {
@@ -2727,11 +2745,124 @@ const SOURCE_SIMPLE_REQUISITES = {
   [string, string][]
 >
 
-const UNSUPPORTED_COMPLEX_REQUISITES = {
-  creditPointRules: 3,
-  andGroups: 9,
-  orGroups: 4,
-  mixedGroups: 5,
+// Conditions in one group are AND; groups for one target unit are OR.
+const SOURCE_COMPLEX_REQUISITES: SourceRequisiteRule[] = [
+  { targetCode: 'COS20019', groups: [[{ type: 'credit_points', creditPoints: 50 }]] },
+  { targetCode: 'COS40005', groups: [[{ type: 'credit_points', creditPoints: 175 }]] },
+  { targetCode: 'ICT30005', groups: [[{ type: 'credit_points', creditPoints: 200 }]] },
+
+  { targetCode: 'COS20028', groups: [[
+    { type: 'unit', unitCode: 'COS10022', requisiteType: 'prerequisite' },
+    { type: 'unit', unitCode: 'COS20007', requisiteType: 'prerequisite' },
+  ]] },
+  { targetCode: 'COS20083', groups: [[
+    { type: 'unit', unitCode: 'COS10022', requisiteType: 'prerequisite' },
+    { type: 'unit', unitCode: 'COS10009', requisiteType: 'prerequisite' },
+  ]] },
+  { targetCode: 'COS30015', groups: [[
+    { type: 'unit', unitCode: 'COS10009', requisiteType: 'prerequisite' },
+    { type: 'unit', unitCode: 'COS10026', requisiteType: 'prerequisite' },
+    { type: 'unit', unitCode: 'TNE10006', requisiteType: 'prerequisite' },
+  ]] },
+  { targetCode: 'COS30020', groups: [[
+    { type: 'unit', unitCode: 'COS10009', requisiteType: 'prerequisite' },
+    { type: 'unit', unitCode: 'COS10026', requisiteType: 'prerequisite' },
+  ]] },
+  { targetCode: 'COS30041', groups: [[
+    { type: 'unit', unitCode: 'COS20007', requisiteType: 'prerequisite' },
+    { type: 'unit', unitCode: 'COS10011', requisiteType: 'prerequisite' },
+  ]] },
+  { targetCode: 'COS30043', groups: [[
+    { type: 'unit', unitCode: 'COS20007', requisiteType: 'prerequisite' },
+    { type: 'unit', unitCode: 'COS10026', requisiteType: 'prerequisite' },
+  ]] },
+  { targetCode: 'COS30081', groups: [[
+    { type: 'unit', unitCode: 'COS20015', requisiteType: 'prerequisite' },
+    { type: 'unit', unitCode: 'COS30019', requisiteType: 'prerequisite' },
+  ]] },
+  { targetCode: 'SWE30011', groups: [[
+    { type: 'unit', unitCode: 'COS10011', requisiteType: 'prerequisite' },
+    { type: 'unit', unitCode: 'COS20007', requisiteType: 'prerequisite' },
+  ]] },
+  { targetCode: 'SWE30012', groups: [[
+    { type: 'unit', unitCode: 'SWE30011', requisiteType: 'prerequisite' },
+    { type: 'unit', unitCode: 'COS20007', requisiteType: 'prerequisite' },
+  ]] },
+
+  { targetCode: 'COS20031', groups: [
+    [{ type: 'unit', unitCode: 'COS10009', requisiteType: 'prerequisite' }],
+    [{ type: 'unit', unitCode: 'COS10026', requisiteType: 'prerequisite' }],
+  ] },
+  { targetCode: 'COS30049', groups: [
+    [{ type: 'unit', unitCode: 'COS10009', requisiteType: 'prerequisite' }],
+    [{ type: 'unit', unitCode: 'COS10026', requisiteType: 'prerequisite' }],
+  ] },
+  { targetCode: 'COS30082', groups: [
+    [{ type: 'unit', unitCode: 'COS30018', requisiteType: 'prerequisite' }],
+    [{ type: 'unit', unitCode: 'COS30019', requisiteType: 'prerequisite' }],
+  ] },
+  { targetCode: 'SWE40006', groups: [
+    [{ type: 'unit', unitCode: 'COS20031', requisiteType: 'prerequisite' }],
+    [{ type: 'unit', unitCode: 'SWE30003', requisiteType: 'prerequisite' }],
+  ] },
+
+  { targetCode: 'COS40007', groups: [[
+    { type: 'credit_points', creditPoints: 100 },
+    { type: 'unit', unitCode: 'COS10009', requisiteType: 'prerequisite' },
+  ]] },
+  { targetCode: 'SWE30003', groups: [[
+    { type: 'credit_points', creditPoints: 150 },
+    { type: 'unit', unitCode: 'COS20007', requisiteType: 'prerequisite' },
+  ]] },
+  { targetCode: 'INF30020', groups: [
+    [
+      { type: 'credit_points', creditPoints: 100 },
+      { type: 'unit', unitCode: 'INF10003', requisiteType: 'prerequisite' },
+    ],
+    [
+      { type: 'credit_points', creditPoints: 100 },
+      { type: 'unit', unitCode: 'COS20007', requisiteType: 'prerequisite' },
+    ],
+    [
+      { type: 'credit_points', creditPoints: 100 },
+      { type: 'unit', unitCode: 'SWE20004', requisiteType: 'prerequisite' },
+    ],
+  ] },
+]
+
+const SOURCE_UNIT_REPLACEMENTS = [
+  { oldCode: 'MPU3143', replacementCode: 'MPU3142' },
+  { oldCode: 'MPU3183', replacementCode: 'MPU3182' },
+  { oldCode: 'MPU3193', replacementCode: 'MPU3192' },
+  { oldCode: 'MPU3273', replacementCode: 'MPU3272' },
+] as const
+
+const BIG_DATA_ANALYTICS_MINOR = {
+  name: 'Big Data Analytics',
+  unitCodes: ['COS10022', 'COS10082', 'COS20083', 'COS20028'],
+} as const
+
+const PLANNER_REQUIREMENT_TOTALS: Record<'legacy' | 'current', PlannerRequirementTotals> = {
+  legacy: {
+    core_count: 8,
+    core_cp: 100,
+    major_count: 8,
+    major_cp: 100,
+    elective_count: 8,
+    elective_cp: 100,
+    wil_count: null,
+    wil_cp: null,
+  },
+  current: {
+    core_count: 8,
+    core_cp: 100,
+    major_count: 8,
+    major_cp: 100,
+    elective_count: 6,
+    elective_cp: 75,
+    wil_count: 1,
+    wil_cp: 25,
+  },
 }
 
 const STUDENT_DEFAULT_CREDIT_POINTS = 12.5
@@ -2768,6 +2899,44 @@ function studentAvailabilityMonths(offeredIn: number[]) {
 function compatibilityYearLevel(unit: SourceUnit) {
   // Unit year level is placement-specific in the main schema; use the lowest source placement only because the current Student Unit model requires one.
   return unit.compatibilityYearLevel ?? 1
+}
+
+function plannerRequirementTotals(intakeYear: number): PlannerRequirementTotals {
+  if (intakeYear >= 2022 && intakeYear <= 2024) return PLANNER_REQUIREMENT_TOTALS.legacy
+  if (intakeYear === 2025 || intakeYear === 2026) return PLANNER_REQUIREMENT_TOTALS.current
+  throw new Error(`No source requirement totals for intake year ${intakeYear}`)
+}
+
+function isBigDataAnalyticsMinorEligible(planner: SourcePlanner) {
+  return planner.courseCode === 'BA-CS' &&
+    planner.major !== 'Data Science' &&
+    (planner.placements.some(placement => placement.category === 'elective') ||
+      planner.electiveSlots.length > 0)
+}
+
+function sourceRequisiteRules(): SourceRequisiteRule[] {
+  const simpleRules = Object.entries(SOURCE_SIMPLE_REQUISITES).flatMap(([requisiteType, pairs]) =>
+    pairs.map(([targetCode, unitCode]) => ({
+      targetCode,
+      groups: [[{
+        type: 'unit' as const,
+        unitCode,
+        requisiteType: requisiteType as RequisiteType,
+      }]],
+    })),
+  )
+  return [...simpleRules, ...SOURCE_COMPLEX_REQUISITES]
+}
+
+function sourceConditionFingerprint(condition: SourceRequisiteCondition): string {
+  const requisiteType = condition.requisiteType ?? ''
+  if (condition.type === 'unit') return `unit|${requisiteType}|${condition.unitCode}`
+  if (condition.type === 'credit_points') return `credit_points|${requisiteType}|${condition.creditPoints}`
+  return `external|${requisiteType}|${condition.externalRequisite}`
+}
+
+function sourceGroupFingerprint(targetCode: string, conditions: SourceRequisiteCondition[]): string {
+  return `${targetCode}|${conditions.map(sourceConditionFingerprint).sort().join('&')}`
 }
 
 function validateSourceData() {
@@ -2811,20 +2980,31 @@ function validateSourceData() {
     }
   }
 
-  for (const [type, pairs] of Object.entries(SOURCE_SIMPLE_REQUISITES)) {
-    for (const [unitCode, requisiteCode] of pairs) {
-      if (!unitCodes.has(unitCode) || !unitCodes.has(requisiteCode)) {
-        throw new Error(`Invalid ${type} requisite: ${unitCode} -> ${requisiteCode}`)
+  for (const rule of sourceRequisiteRules()) {
+    if (!unitCodes.has(rule.targetCode)) {
+      throw new Error(`Requisite rule has unknown target unit: ${rule.targetCode}`)
+    }
+    for (const group of rule.groups) {
+      if (group.length === 0) throw new Error(`Requisite rule has an empty group: ${rule.targetCode}`)
+      for (const condition of group) {
+        if (condition.type === 'unit' && !unitCodes.has(condition.unitCode)) {
+          throw new Error(`Requisite rule has unknown unit: ${rule.targetCode} -> ${condition.unitCode}`)
+        }
       }
     }
   }
 
-  const unsupportedCount = Object.values(UNSUPPORTED_COMPLEX_REQUISITES)
-    .reduce((sum, count) => sum + count, 0)
-  console.warn(
-    `Main-seed complex requisite rules not represented by current Student schema: ${unsupportedCount}`,
-    UNSUPPORTED_COMPLEX_REQUISITES,
-  )
+  for (const { oldCode, replacementCode } of SOURCE_UNIT_REPLACEMENTS) {
+    if (!unitCodes.has(oldCode) || !unitCodes.has(replacementCode)) {
+      throw new Error(`Invalid unit replacement: ${oldCode} -> ${replacementCode}`)
+    }
+  }
+
+  for (const code of BIG_DATA_ANALYTICS_MINOR.unitCodes) {
+    if (!unitCodes.has(code)) throw new Error(`Minor references unknown unit: ${code}`)
+  }
+
+  for (const planner of SOURCE_PLANNERS) plannerRequirementTotals(planner.intakeYear)
 }
 
 
@@ -2952,69 +3132,171 @@ async function createAcademicContent() {
     }
   }
 
-  for (const [requisite_type, pairs] of Object.entries(SOURCE_SIMPLE_REQUISITES)) {
-    for (const [unitCode, requisiteCode] of pairs) {
-      await prisma.unitRequisiteGroup.create({
-        data: {
-          unit_id: unitMap.get(unitCode)!,
-          conditions: {
-            create: {
-              type: 'unit',
-              requisite_type,
-              unit_id: unitMap.get(requisiteCode)!,
-            },
-          },
-        },
-      })
-    }
-  }
-
   console.log(`Created ${SOURCE_UNITS.length} source units`)
   console.log(`Created ${SOURCE_MAJORS.length} source majors`)
   console.log(`Created ${SOURCE_PLANNERS.length} source planner templates`)
   console.log(`Created ${semesterCount} semesters and ${semesterUnitCount} semester placements`)
   console.log(`Created ${electivePoolCount} direct elective-pool memberships`)
-  console.log(`Created ${SOURCE_SIMPLE_REQUISITES.prerequisite.length} simple prerequisites`)
-  console.log(`Created ${SOURCE_SIMPLE_REQUISITES.corequisite.length} simple corequisites`)
-  console.log(`Created ${SOURCE_SIMPLE_REQUISITES.antirequisite.length} simple antirequisites`)
   return true
 }
 
-async function seedMissingRequisites() {
-  if (await prisma.unitRequisiteGroup.count() > 0) {
-    console.log('Simple requisites already seeded, skipping.')
-    return
-  }
-
-  const units = await prisma.unit.findMany({
-    select: { id: true, unit_code: true },
-  })
-  const unitMap = new Map(units.map(unit => [unit.unit_code, unit.id]))
-  let created = 0
-
-  for (const [requisite_type, pairs] of Object.entries(SOURCE_SIMPLE_REQUISITES)) {
-    for (const [unitCode, requisiteCode] of pairs) {
-      const unitId = unitMap.get(unitCode)
-      const requisiteUnitId = unitMap.get(requisiteCode)
-      if (!unitId || !requisiteUnitId) continue
-
-      await prisma.unitRequisiteGroup.create({
-        data: {
-          unit_id: unitId,
-          conditions: {
-            create: {
-              type: 'unit',
-              requisite_type,
-              unit_id: requisiteUnitId,
-            },
-          },
-        },
-      })
-      created += 1
+function requisiteConditionData(
+  condition: SourceRequisiteCondition,
+  unitMap: Map<string, string>,
+): Prisma.UnitRequisiteConditionUncheckedCreateWithoutGroupInput {
+  if (condition.type === 'unit') {
+    const unitId = unitMap.get(condition.unitCode)
+    if (!unitId) throw new Error(`Missing requisite unit: ${condition.unitCode}`)
+    return {
+      type: 'unit',
+      unit_id: unitId,
+      requisite_type: condition.requisiteType ?? null,
     }
   }
 
-  console.log(`Created ${created} missing simple requisite groups`)
+  if (condition.type === 'credit_points') {
+    return {
+      type: 'credit_points',
+      credit_points: condition.creditPoints,
+      requisite_type: condition.requisiteType ?? null,
+    }
+  }
+
+  return {
+    type: 'external',
+    external_requisite: condition.externalRequisite,
+    requisite_type: condition.requisiteType ?? null,
+  }
+}
+
+function storedGroupFingerprint(group: {
+  unit: { unit_code: string }
+  conditions: Array<{
+    type: string
+    requisite_type: string | null
+    credit_points: Prisma.Decimal | null
+    external_requisite: string | null
+    unit: { unit_code: string } | null
+  }>
+}): string {
+  const conditions = group.conditions.map(condition => {
+    const requisiteType = condition.requisite_type ?? ''
+    if (condition.type === 'unit') return `unit|${requisiteType}|${condition.unit?.unit_code ?? ''}`
+    if (condition.type === 'credit_points') return `credit_points|${requisiteType}|${condition.credit_points ?? ''}`
+    return `external|${requisiteType}|${condition.external_requisite ?? ''}`
+  })
+  return `${group.unit.unit_code}|${conditions.sort().join('&')}`
+}
+
+async function seedSourceRequisiteGroups(unitMap: Map<string, string>) {
+  const existingGroups = await prisma.unitRequisiteGroup.findMany({
+    include: {
+      unit: { select: { unit_code: true } },
+      conditions: {
+        include: { unit: { select: { unit_code: true } } },
+      },
+    },
+  })
+  const existing = new Set(existingGroups.map(storedGroupFingerprint))
+  let createdGroups = 0
+
+  for (const rule of sourceRequisiteRules()) {
+    const targetId = unitMap.get(rule.targetCode)
+    if (!targetId) throw new Error(`Missing requisite target unit: ${rule.targetCode}`)
+
+    for (const conditions of rule.groups) {
+      const fingerprint = sourceGroupFingerprint(rule.targetCode, conditions)
+      if (existing.has(fingerprint)) continue
+
+      await prisma.unitRequisiteGroup.create({
+        data: {
+          unit_id: targetId,
+          conditions: {
+            create: conditions.map(condition => requisiteConditionData(condition, unitMap)),
+          },
+        },
+      })
+      existing.add(fingerprint)
+      createdGroups += 1
+    }
+  }
+
+  const expectedGroups = sourceRequisiteRules().reduce((total, rule) => total + rule.groups.length, 0)
+  console.log(`Ensured ${expectedGroups} source requisite groups (${createdGroups} created this run)`)
+}
+
+async function applyAcademicExtensions() {
+  const units = await prisma.unit.findMany({ select: { id: true, unit_code: true } })
+  const unitMap = new Map(units.map(unit => [unit.unit_code, unit.id]))
+
+  for (const { oldCode, replacementCode } of SOURCE_UNIT_REPLACEMENTS) {
+    const oldUnitId = unitMap.get(oldCode)
+    const replacementUnitId = unitMap.get(replacementCode)
+    if (!oldUnitId || !replacementUnitId) {
+      throw new Error(`Cannot apply unit replacement: ${oldCode} -> ${replacementCode}`)
+    }
+    await prisma.unit.update({
+      where: { id: oldUnitId },
+      data: { is_active: false, replaced_by_unit_id: replacementUnitId },
+    })
+  }
+
+  const templates = await prisma.plannerTemplate.findMany({
+    include: {
+      course: { select: { code: true } },
+      major: { select: { name: true } },
+    },
+  })
+  const templateByKey = new Map(
+    templates
+      .filter(template => template.course.code && template.major?.name)
+      .map(template => [
+        plannerKey(template.course.code!, template.major!.name, template.intake_year, template.intake_month ?? 0),
+        template,
+      ]),
+  )
+
+  for (const planner of SOURCE_PLANNERS) {
+    const key = plannerKey(planner.courseCode, planner.major, planner.intakeYear, planner.intakeMonth)
+    const template = templateByKey.get(key)
+    if (!template) throw new Error(`Missing planner template for source totals: ${key}`)
+    await prisma.plannerTemplate.update({
+      where: { id: template.id },
+      data: plannerRequirementTotals(planner.intakeYear),
+    })
+  }
+
+  const eligibleMinorPlanners = SOURCE_PLANNERS.filter(isBigDataAnalyticsMinorEligible)
+  for (const planner of eligibleMinorPlanners) {
+    const key = plannerKey(planner.courseCode, planner.major, planner.intakeYear, planner.intakeMonth)
+    const template = templateByKey.get(key)
+    if (!template) throw new Error(`Missing planner template for source minor: ${key}`)
+
+    const existingMinor = await prisma.minor.findUnique({
+      where: {
+        planner_template_id_name: {
+          planner_template_id: template.id,
+          name: BIG_DATA_ANALYTICS_MINOR.name,
+        },
+      },
+    })
+    const minor = existingMinor ?? await prisma.minor.create({
+      data: { planner_template_id: template.id, name: BIG_DATA_ANALYTICS_MINOR.name },
+    })
+    await prisma.minorUnit.createMany({
+      data: BIG_DATA_ANALYTICS_MINOR.unitCodes.map(code => {
+        const unitId = unitMap.get(code)
+        if (!unitId) throw new Error(`Missing minor unit: ${code}`)
+        return { minor_id: minor.id, unit_id: unitId }
+      }),
+      skipDuplicates: true,
+    })
+  }
+
+  await seedSourceRequisiteGroups(unitMap)
+  console.log(`Ensured ${SOURCE_UNIT_REPLACEMENTS.length} inactive replacement units`)
+  console.log(`Ensured requirement totals for ${SOURCE_PLANNERS.length} planner templates`)
+  console.log(`Ensured ${eligibleMinorPlanners.length} Big Data Analytics minors with ${eligibleMinorPlanners.length * BIG_DATA_ANALYTICS_MINOR.unitCodes.length} memberships`)
 }
 
 // -----------------------------------------------------------------------------
@@ -3108,8 +3390,8 @@ async function seedHelpContent() {
 
 async function main() {
   await seedCmsUser()
-  const academicSeeded = await createAcademicContent()
-  if (!academicSeeded) await seedMissingRequisites()
+  await createAcademicContent()
+  await applyAcademicExtensions()
   await seedHelpContent()
 }
 

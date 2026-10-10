@@ -1,6 +1,7 @@
 'use client'
 
 import type { Unit } from '@student/lib/types'
+import { formatRequisiteGroups } from '@student/lib/requisites'
 import { usePendingNavigation } from '@student/components/common/PendingNavigation'
 import styles from './ElectivePool.module.css'
 
@@ -40,7 +41,7 @@ function UnitRow({ unit, onClick, pending }: { unit: Unit; onClick: () => void; 
       <span className={styles.cellCode}>{unit.code}</span>
       <span className={styles.cellName}>{unit.name}</span>
       <span className={styles.cellPrereq}>
-        {unit.prerequisites?.join(', ') ?? 'Nil'}
+        {formatRequisiteGroups(unit.requisiteGroups) ?? unit.prerequisites?.join(', ') ?? 'Nil'}
         <span className={styles.viewHint} aria-hidden="true">
           View unit
           {pending ? <span className={styles.inlineSpinner} /> : <span>→</span>}

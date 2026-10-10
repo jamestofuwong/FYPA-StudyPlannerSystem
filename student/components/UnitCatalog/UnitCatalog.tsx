@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import type { UnitListing } from '@student/lib/types'
+import { formatRequisiteGroups } from '@student/lib/requisites'
 import { usePendingNavigation } from '@student/components/common/PendingNavigation'
 import styles from './UnitCatalog.module.css'
 
@@ -152,9 +153,7 @@ export default function UnitCatalog({ units }: Props) {
                     <td className={styles.cellCode}>{unit.code}</td>
                     <td className={styles.cellName}>{unit.name}</td>
                     <td className={styles.cellPrereq}>
-                      {unit.prerequisites && unit.prerequisites.length > 0
-                        ? unit.prerequisites.join(', ')
-                        : 'Nil'}
+                      {formatRequisiteGroups(unit.requisiteGroups) ?? unit.prerequisites?.join(', ') ?? 'Nil'}
                     </td>
                     <td className={styles.cellAvail}>
                       <span className={styles.availText}>

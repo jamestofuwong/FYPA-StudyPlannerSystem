@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import Nav from '@student/components/Nav/Nav'
 import { getCachedUnit } from '@student/lib/catalog'
-import RequisiteUnitLink from './RequisiteUnitLink'
+import RequisiteExpression from './RequisiteExpression'
 import styles from './page.module.css'
 
 interface Props {
@@ -16,7 +16,6 @@ export default async function UnitDetailPage({ params }: Props) {
   if (!unit) notFound()
 
   const year = unit.yearLevel ?? 0
-
   return (
     <div className={styles.page}>
       <Nav />
@@ -163,15 +162,13 @@ export default async function UnitDetailPage({ params }: Props) {
                       </span>
                     </span>
                   </div>
-                  {unit.prerequisites && unit.prerequisites.length > 0 ? (
-                    <ul className={styles.reqList}>
-                      {unit.prerequisites.map(c => (
-                        <li key={c}>
-                          <RequisiteUnitLink code={c} />
-                        </li>
-                      ))}
-                    </ul>
-                  ) : <p className={styles.reqNone}>None</p>}
+                  <p className={styles.reqNone}>
+                    <RequisiteExpression
+                      groups={unit.requisiteGroups}
+                      type="prerequisite"
+                      fallbackCodes={unit.prerequisites}
+                    />
+                  </p>
                 </div>
 
                 {/* Co-requisite */}
@@ -185,15 +182,13 @@ export default async function UnitDetailPage({ params }: Props) {
                       </span>
                     </span>
                   </div>
-                  {unit.corequisites && unit.corequisites.length > 0 ? (
-                    <ul className={styles.reqList}>
-                      {unit.corequisites.map(c => (
-                        <li key={c}>
-                          <RequisiteUnitLink code={c} />
-                        </li>
-                      ))}
-                    </ul>
-                  ) : <p className={styles.reqNone}>None</p>}
+                  <p className={styles.reqNone}>
+                    <RequisiteExpression
+                      groups={unit.requisiteGroups}
+                      type="corequisite"
+                      fallbackCodes={unit.corequisites}
+                    />
+                  </p>
                 </div>
 
                 {/* Anti-requisite */}
@@ -207,15 +202,13 @@ export default async function UnitDetailPage({ params }: Props) {
                       </span>
                     </span>
                   </div>
-                  {unit.antirequisites && unit.antirequisites.length > 0 ? (
-                    <ul className={styles.reqList}>
-                      {unit.antirequisites.map(c => (
-                        <li key={c}>
-                          <RequisiteUnitLink code={c} />
-                        </li>
-                      ))}
-                    </ul>
-                  ) : <p className={styles.reqNone}>None</p>}
+                  <p className={styles.reqNone}>
+                    <RequisiteExpression
+                      groups={unit.requisiteGroups}
+                      type="antirequisite"
+                      fallbackCodes={unit.antirequisites}
+                    />
+                  </p>
                 </div>
 
               </div>

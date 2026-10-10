@@ -147,7 +147,7 @@ export default async function PlannerDetailPage({ params }: Props) {
                 <div className={`${styles.reqRow} ${styles.reqRowCore}`}>
                   <span className={styles.reqLabel}>Core Units</span>
                   <span className={styles.reqDetail}>
-                    <strong>{core.count}</strong> units · <strong>{core.count * 12.5}</strong> cp
+                    <strong>{core.count}</strong> units{core.creditPoints != null && <> · <strong>{core.creditPoints}</strong> cp</>}
                   </span>
                 </div>
               )}
@@ -155,7 +155,7 @@ export default async function PlannerDetailPage({ params }: Props) {
                 <div className={`${styles.reqRow} ${styles.reqRowMajor}`}>
                   <span className={styles.reqLabel}>Major Core</span>
                   <span className={styles.reqDetail}>
-                    <strong>{major.count}</strong> units · <strong>{major.count * 12.5}</strong> cp
+                    <strong>{major.count}</strong> units{major.creditPoints != null && <> · <strong>{major.creditPoints}</strong> cp</>}
                   </span>
                 </div>
               )}
@@ -163,7 +163,7 @@ export default async function PlannerDetailPage({ params }: Props) {
                 <div className={`${styles.reqRow} ${styles.reqRowElective}`}>
                   <span className={styles.reqLabel}>Elective</span>
                   <span className={styles.reqDetail}>
-                    <strong>{elective.count}</strong> units · <strong>{elective.count * 12.5}</strong> cp
+                    <strong>{elective.count}</strong> units{elective.creditPoints != null && <> · <strong>{elective.creditPoints}</strong> cp</>}
                   </span>
                 </div>
               )}
@@ -171,7 +171,7 @@ export default async function PlannerDetailPage({ params }: Props) {
                 <div className={`${styles.reqRow} ${styles.reqRowWil}`}>
                   <span className={styles.reqLabel}>WIL</span>
                   <span className={styles.reqDetail}>
-                    <strong>{wil.count}</strong> {wil.count === 1 ? 'unit' : 'units'} · <strong>{wil.count * 12.5}</strong> cp
+                    <strong>{wil.count}</strong> {wil.count === 1 ? 'unit' : 'units'}{wil.creditPoints != null && <> · <strong>{wil.creditPoints}</strong> cp</>}
                   </span>
                 </div>
               )}
