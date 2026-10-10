@@ -4,9 +4,8 @@ import styles from './CategoryLegend.module.css'
 const ITEMS = [
   { id: 'core', label: 'Core', swatch: 'core' },
   { id: 'major_core', label: 'Major', swatch: 'major' },
-  { id: 'double_major', label: 'Second Major', swatch: 'major' },
   { id: 'elective', label: 'Elective', swatch: 'elective' },
-  { id: 'prescribed_elective', label: 'Prescribed elective', swatch: 'elective' },
+  { id: 'prescribed_elective', label: 'Prescribed elective', swatch: 'asterisk' },
   { id: 'wil', label: 'WIL', swatch: 'wil' },
   { id: 'mpu', label: 'MPU', swatch: 'mpu' },
   { id: 'slot', label: 'Open elective slot', swatch: 'slot' },

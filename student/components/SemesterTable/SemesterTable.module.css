@@ -9,8 +9,13 @@
 .table {
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
   font-size: var(--font-size-sm);
 }
+
+.colCode { width: 18%; }
+.colName { width: 52%; }
+.colPrereq { width: 30%; }
 
 /* Dark charcoal semester header */
 .semesterHeaderRow th {
@@ -82,6 +87,14 @@
 .cellCodeSlot { color: var(--color-text-secondary); }
 
 .cellName { color: var(--color-text-primary); }
+
+.majorTag {
+  margin-left: 6px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+}
 
 .asterisk {
   color: var(--color-accent);

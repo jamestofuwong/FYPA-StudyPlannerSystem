@@ -25,6 +25,17 @@ function rowClass(category: string, isSlot: boolean): string {
   }
 }
 
+function majorAbbrev(name: string | null | undefined): string | null {
+  if (!name) return null
+  const cleaned = name.trim()
+  if (!cleaned) return null
+  if (/artificial intelligence/i.test(cleaned)) return 'AI'
+  if (/cyber\s*security|cybersecurity/i.test(cleaned)) return 'Cybersecurity'
+  const words = cleaned.match(/[A-Za-z0-9]+/g) ?? []
+  if (words.length <= 1) return cleaned
+  return words.map(word => word[0]).join('').toUpperCase()
+}
+
 export default function SemesterTable({ block, periodLabel, completedCodes }: Props) {
   const navigation = usePendingNavigation('Loading unit details...')
   const headerText = periodLabel
@@ -50,6 +61,11 @@ export default function SemesterTable({ block, periodLabel, completedCodes }: Pr
   return (
     <div className={styles.wrap}>
       <table className={styles.table}>
+        <colgroup>
+          <col className={styles.colCode} />
+          <col className={styles.colName} />
+          <col className={styles.colPrereq} />
+        </colgroup>
         <thead>
           <tr className={styles.semesterHeaderRow}>
             <th colSpan={3}>{headerText}</th>
@@ -66,6 +82,7 @@ export default function SemesterTable({ block, periodLabel, completedCodes }: Pr
             const completed = completedCodes != null && clickable && completedCodes.has(unit.code)
             const href = `/units/${unit.code}`
             const pending = navigation.activePendingHref === href
+            const majorTag = majorAbbrev(unit.sourceMajorName)
 
             return (
               <tr
@@ -97,6 +114,9 @@ export default function SemesterTable({ block, periodLabel, completedCodes }: Pr
                   {clickable ? (
                     <a href={href} className={styles.unitLink} onClick={event => onUnitLinkClick(event, href)}>
                       {unit.name}
+                      {majorTag && (
+                        <span className={styles.majorTag}>({majorTag})</span>
+                      )}
                       {unit.category === 'prescribed_elective' && (
                         <span className={styles.asterisk}>*</span>
                       )}

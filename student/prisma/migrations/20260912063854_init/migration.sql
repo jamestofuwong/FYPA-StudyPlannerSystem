@@ -1,16 +1,16 @@
--- CreateEnum
-CREATE TYPE "unit_category" AS ENUM ('core', 'major_core', 'prescribed_elective', 'elective', 'wil', 'mpu');
+-- CreateSchema
+CREATE SCHEMA IF NOT EXISTS "public";
 
 -- CreateEnum
-CREATE TYPE "requisite_type" AS ENUM ('prerequisite', 'corequisite', 'antirequisite');
+CREATE TYPE "unit_category" AS ENUM ('core', 'major_core', 'prescribed_elective', 'elective', 'wil', 'mpu');
 
 -- CreateTable
 CREATE TABLE "courses" (
     "id" UUID NOT NULL DEFAULT gen_random_uuid(),
-    "name" VARCHAR(255) NOT NULL,
     "code" VARCHAR(50),
+    "name" VARCHAR(255) NOT NULL,
     "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMPTZ NOT NULL,
+    "updated_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "courses_pkey" PRIMARY KEY ("id")
 );
@@ -21,9 +21,56 @@ CREATE TABLE "majors" (
     "course_id" UUID NOT NULL,
     "name" VARCHAR(255) NOT NULL,
     "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMPTZ NOT NULL,
+    "updated_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "majors_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "units" (
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "unit_code" VARCHAR(20) NOT NULL,
+    "unit_name" VARCHAR(255) NOT NULL,
+    "is_active" BOOLEAN NOT NULL DEFAULT true,
+    "replaced_by_unit_id" UUID,
+    "credit_points" DECIMAL(5,1) NOT NULL DEFAULT 12.5,
+    "year_level" SMALLINT NOT NULL DEFAULT 1,
+    "overview" TEXT,
+    "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "units_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "unit_offerings" (
+    "unit_id" UUID NOT NULL,
+    "offered_in" SMALLINT NOT NULL,
+    "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "unit_offerings_pkey" PRIMARY KEY ("unit_id","offered_in")
+);
+
+-- CreateTable
+CREATE TABLE "unit_requisite_groups" (
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "unit_id" UUID NOT NULL,
+
+    CONSTRAINT "unit_requisite_groups_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "unit_requisite_conditions" (
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "group_id" UUID NOT NULL,
+    "type" VARCHAR(20) NOT NULL,
+    "unit_id" UUID,
+    "credit_points" DECIMAL(5,1),
+    "requisite_type" VARCHAR(20),
+    "external_requisite" VARCHAR(255),
+
+    CONSTRAINT "unit_requisite_conditions_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -31,80 +78,73 @@ CREATE TABLE "planner_templates" (
     "id" UUID NOT NULL DEFAULT gen_random_uuid(),
     "course_id" UUID NOT NULL,
     "major_id" UUID,
-    "intake_month" SMALLINT NOT NULL,
     "intake_year" SMALLINT NOT NULL,
-    "duration_years" SMALLINT NOT NULL DEFAULT 3,
+    "intake_month" SMALLINT,
+    "course_type" VARCHAR(50) NOT NULL DEFAULT 'bachelor',
+    "duration_semesters" SMALLINT NOT NULL DEFAULT 6,
+    "core_count" SMALLINT,
+    "core_cp" SMALLINT,
+    "major_count" SMALLINT,
+    "major_cp" SMALLINT,
+    "elective_count" SMALLINT,
+    "elective_cp" SMALLINT,
+    "wil_count" SMALLINT,
+    "wil_cp" SMALLINT,
     "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMPTZ NOT NULL,
+    "updated_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "planner_templates_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
-CREATE TABLE "semesters" (
+CREATE TABLE "template_units" (
     "id" UUID NOT NULL DEFAULT gen_random_uuid(),
-    "template_id" UUID NOT NULL,
-    "year_number" SMALLINT NOT NULL,
-    "sem_number" SMALLINT NOT NULL,
-    "label" VARCHAR(100),
-    "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMPTZ NOT NULL,
-
-    CONSTRAINT "semesters_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "semester_units" (
-    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
-    "semester_id" UUID NOT NULL,
+    "planner_template_id" UUID NOT NULL,
     "unit_id" UUID,
     "category" "unit_category" NOT NULL,
-    "is_elective_slot" BOOLEAN NOT NULL DEFAULT false,
-    "position" SMALLINT NOT NULL,
-    "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMPTZ NOT NULL,
-
-    CONSTRAINT "semester_units_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "elective_pool_units" (
-    "template_id" UUID NOT NULL,
-    "unit_id" UUID NOT NULL,
-
-    CONSTRAINT "elective_pool_units_pkey" PRIMARY KEY ("template_id","unit_id")
-);
-
--- CreateTable
-CREATE TABLE "units" (
-    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
-    "code" VARCHAR(20) NOT NULL,
-    "name" VARCHAR(255) NOT NULL,
-    "credit_points" DECIMAL(5,1) NOT NULL DEFAULT 12.5,
     "year_level" SMALLINT NOT NULL,
-    "overview" TEXT,
+    "semester" SMALLINT NOT NULL,
     "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMPTZ NOT NULL,
+    "updated_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    CONSTRAINT "units_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "template_units_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
-CREATE TABLE "unit_availability" (
-    "unit_id" UUID NOT NULL,
-    "month" SMALLINT NOT NULL,
-
-    CONSTRAINT "unit_availability_pkey" PRIMARY KEY ("unit_id","month")
-);
-
--- CreateTable
-CREATE TABLE "unit_requisites" (
+CREATE TABLE "elective_groups" (
     "id" UUID NOT NULL DEFAULT gen_random_uuid(),
-    "unit_id" UUID NOT NULL,
-    "requisite_type" "requisite_type" NOT NULL,
-    "requisite_unit_id" UUID NOT NULL,
+    "planner_template_id" UUID NOT NULL,
+    "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    CONSTRAINT "unit_requisites_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "elective_groups_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "elective_group_units" (
+    "elective_group_id" UUID NOT NULL,
+    "unit_id" UUID NOT NULL,
+
+    CONSTRAINT "elective_group_units_pkey" PRIMARY KEY ("elective_group_id","unit_id")
+);
+
+-- CreateTable
+CREATE TABLE "minors" (
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "planner_template_id" UUID NOT NULL,
+    "name" VARCHAR(255) NOT NULL,
+    "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "minors_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "minor_units" (
+    "minor_id" UUID NOT NULL,
+    "unit_id" UUID NOT NULL,
+
+    CONSTRAINT "minor_units_pkey" PRIMARY KEY ("minor_id","unit_id")
 );
 
 -- CreateTable
@@ -114,7 +154,7 @@ CREATE TABLE "unit_learning_outcomes" (
     "ulo_number" SMALLINT NOT NULL,
     "description" TEXT NOT NULL,
     "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMPTZ NOT NULL,
+    "updated_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "unit_learning_outcomes_pkey" PRIMARY KEY ("id")
 );
@@ -126,7 +166,7 @@ CREATE TABLE "unit_content_topics" (
     "position" SMALLINT NOT NULL,
     "topic" VARCHAR(500) NOT NULL,
     "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMPTZ NOT NULL,
+    "updated_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "unit_content_topics_pkey" PRIMARY KEY ("id")
 );
@@ -141,7 +181,7 @@ CREATE TABLE "unit_assessments" (
     "ulos" INTEGER[],
     "position" SMALLINT NOT NULL,
     "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMPTZ NOT NULL,
+    "updated_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "unit_assessments_pkey" PRIMARY KEY ("id")
 );
@@ -153,7 +193,7 @@ CREATE TABLE "faq_items" (
     "answer" TEXT NOT NULL,
     "position" SMALLINT NOT NULL,
     "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMPTZ NOT NULL,
+    "updated_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "faq_items_pkey" PRIMARY KEY ("id")
 );
@@ -193,9 +233,32 @@ CREATE TABLE "heads_of_department" (
     "email" VARCHAR(255) NOT NULL,
     "position" SMALLINT NOT NULL,
     "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMPTZ NOT NULL,
+    "updated_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "heads_of_department_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "cms_users" (
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "email" VARCHAR(255) NOT NULL,
+    "password_hash" TEXT NOT NULL,
+    "name" VARCHAR(255) NOT NULL,
+    "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "cms_users_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "cms_refresh_tokens" (
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "user_id" UUID NOT NULL,
+    "token_hash" TEXT NOT NULL,
+    "expires_at" TIMESTAMPTZ NOT NULL,
+    "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "cms_refresh_tokens_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateIndex
@@ -205,16 +268,16 @@ CREATE UNIQUE INDEX "courses_code_key" ON "courses"("code");
 CREATE UNIQUE INDEX "majors_course_id_name_key" ON "majors"("course_id", "name");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "planner_templates_course_id_major_id_intake_month_intake_ye_key" ON "planner_templates"("course_id", "major_id", "intake_month", "intake_year");
+CREATE UNIQUE INDEX "units_unit_code_key" ON "units"("unit_code");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "semesters_template_id_year_number_sem_number_key" ON "semesters"("template_id", "year_number", "sem_number");
+CREATE UNIQUE INDEX "planner_templates_course_id_major_id_intake_year_intake_mon_key" ON "planner_templates"("course_id", "major_id", "intake_year", "intake_month");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "units_code_key" ON "units"("code");
+CREATE UNIQUE INDEX "template_units_planner_template_id_unit_id_key" ON "template_units"("planner_template_id", "unit_id");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "unit_requisites_unit_id_requisite_type_requisite_unit_id_key" ON "unit_requisites"("unit_id", "requisite_type", "requisite_unit_id");
+CREATE UNIQUE INDEX "minors_planner_template_id_name_key" ON "minors"("planner_template_id", "name");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "unit_learning_outcomes_unit_id_ulo_number_key" ON "unit_learning_outcomes"("unit_id", "ulo_number");
@@ -222,8 +285,26 @@ CREATE UNIQUE INDEX "unit_learning_outcomes_unit_id_ulo_number_key" ON "unit_lea
 -- CreateIndex
 CREATE UNIQUE INDEX "unit_content_topics_unit_id_position_key" ON "unit_content_topics"("unit_id", "position");
 
+-- CreateIndex
+CREATE UNIQUE INDEX "cms_users_email_key" ON "cms_users"("email");
+
 -- AddForeignKey
-ALTER TABLE "majors" ADD CONSTRAINT "majors_course_id_fkey" FOREIGN KEY ("course_id") REFERENCES "courses"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "majors" ADD CONSTRAINT "majors_course_id_fkey" FOREIGN KEY ("course_id") REFERENCES "courses"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "units" ADD CONSTRAINT "units_replaced_by_unit_id_fkey" FOREIGN KEY ("replaced_by_unit_id") REFERENCES "units"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "unit_offerings" ADD CONSTRAINT "unit_offerings_unit_id_fkey" FOREIGN KEY ("unit_id") REFERENCES "units"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "unit_requisite_groups" ADD CONSTRAINT "unit_requisite_groups_unit_id_fkey" FOREIGN KEY ("unit_id") REFERENCES "units"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "unit_requisite_conditions" ADD CONSTRAINT "unit_requisite_conditions_group_id_fkey" FOREIGN KEY ("group_id") REFERENCES "unit_requisite_groups"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "unit_requisite_conditions" ADD CONSTRAINT "unit_requisite_conditions_unit_id_fkey" FOREIGN KEY ("unit_id") REFERENCES "units"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "planner_templates" ADD CONSTRAINT "planner_templates_course_id_fkey" FOREIGN KEY ("course_id") REFERENCES "courses"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -232,28 +313,28 @@ ALTER TABLE "planner_templates" ADD CONSTRAINT "planner_templates_course_id_fkey
 ALTER TABLE "planner_templates" ADD CONSTRAINT "planner_templates_major_id_fkey" FOREIGN KEY ("major_id") REFERENCES "majors"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "semesters" ADD CONSTRAINT "semesters_template_id_fkey" FOREIGN KEY ("template_id") REFERENCES "planner_templates"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "template_units" ADD CONSTRAINT "template_units_planner_template_id_fkey" FOREIGN KEY ("planner_template_id") REFERENCES "planner_templates"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "semester_units" ADD CONSTRAINT "semester_units_semester_id_fkey" FOREIGN KEY ("semester_id") REFERENCES "semesters"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "template_units" ADD CONSTRAINT "template_units_unit_id_fkey" FOREIGN KEY ("unit_id") REFERENCES "units"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "semester_units" ADD CONSTRAINT "semester_units_unit_id_fkey" FOREIGN KEY ("unit_id") REFERENCES "units"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "elective_groups" ADD CONSTRAINT "elective_groups_planner_template_id_fkey" FOREIGN KEY ("planner_template_id") REFERENCES "planner_templates"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "elective_pool_units" ADD CONSTRAINT "elective_pool_units_template_id_fkey" FOREIGN KEY ("template_id") REFERENCES "planner_templates"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "elective_group_units" ADD CONSTRAINT "elective_group_units_elective_group_id_fkey" FOREIGN KEY ("elective_group_id") REFERENCES "elective_groups"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "elective_pool_units" ADD CONSTRAINT "elective_pool_units_unit_id_fkey" FOREIGN KEY ("unit_id") REFERENCES "units"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "elective_group_units" ADD CONSTRAINT "elective_group_units_unit_id_fkey" FOREIGN KEY ("unit_id") REFERENCES "units"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "unit_availability" ADD CONSTRAINT "unit_availability_unit_id_fkey" FOREIGN KEY ("unit_id") REFERENCES "units"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "minors" ADD CONSTRAINT "minors_planner_template_id_fkey" FOREIGN KEY ("planner_template_id") REFERENCES "planner_templates"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "unit_requisites" ADD CONSTRAINT "unit_requisites_unit_id_fkey" FOREIGN KEY ("unit_id") REFERENCES "units"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "minor_units" ADD CONSTRAINT "minor_units_minor_id_fkey" FOREIGN KEY ("minor_id") REFERENCES "minors"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "unit_requisites" ADD CONSTRAINT "unit_requisites_requisite_unit_id_fkey" FOREIGN KEY ("requisite_unit_id") REFERENCES "units"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "minor_units" ADD CONSTRAINT "minor_units_unit_id_fkey" FOREIGN KEY ("unit_id") REFERENCES "units"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "unit_learning_outcomes" ADD CONSTRAINT "unit_learning_outcomes_unit_id_fkey" FOREIGN KEY ("unit_id") REFERENCES "units"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -263,3 +344,6 @@ ALTER TABLE "unit_content_topics" ADD CONSTRAINT "unit_content_topics_unit_id_fk
 
 -- AddForeignKey
 ALTER TABLE "unit_assessments" ADD CONSTRAINT "unit_assessments_unit_id_fkey" FOREIGN KEY ("unit_id") REFERENCES "units"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "cms_refresh_tokens" ADD CONSTRAINT "cms_refresh_tokens_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "cms_users"("id") ON DELETE CASCADE ON UPDATE CASCADE;

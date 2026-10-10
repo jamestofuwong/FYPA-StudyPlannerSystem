@@ -7,23 +7,6 @@ import { getPlannerById } from './planners'
 import { prisma } from './prisma'
 import type { SemesterBlock, Unit } from './types'
 
-// This schema records unit availability as calendar months, while the scheduler
-// works in terms (1 = Semester 1, 2 = Semester 2, 3 = summer, 4 = winter).
-// February is read as Semester 1 rather than summer, matching the intake rule
-// below and the Semester 1 intakes stored as month 2. Months outside these
-// windows leave the unit with no offering data, which the scheduler treats as
-// unrestricted.
-const MONTH_TO_TERM: Record<number, number> = {
-  2: 1, 3: 1, 4: 1,
-  8: 2, 9: 2, 10: 2,
-  11: 3, 12: 3, 1: 3,
-  5: 4, 6: 4, 7: 4,
-}
-
-function offeringTermsFromMonths(months: number[]): number[] {
-  return months.map((month) => MONTH_TO_TERM[month]).filter((term): term is number => term !== undefined)
-}
-
 /**
  * Study years have two semesters. After N finished semesters the next slot is:
  * 0 → year 1 semester 1, 1 → year 1 semester 2, 2 → year 2 semester 1.
@@ -45,16 +28,17 @@ async function loadPlannerTemplateForGeneration(id: string) {
   return prisma.plannerTemplate.findUnique({
     where: { id },
     include: {
-      semesters: {
-        orderBy: [{ year_number: 'asc' }, { sem_number: 'asc' }],
+      units: {
+        orderBy: [{ year_level: 'asc' }, { semester: 'asc' }, { created_at: 'asc' }],
         include: {
-          units: {
-            orderBy: { position: 'asc' },
+          unit: {
             include: {
-              unit: {
+              offerings: true,
+              requisite_groups: {
                 include: {
-                  availability: true,
-                  requisites: { include: { requisite_unit: { select: { code: true } } } },
+                  conditions: {
+                    include: { unit: { select: { unit_code: true } } },
+                  },
                 },
               },
             },
@@ -66,7 +50,7 @@ async function loadPlannerTemplateForGeneration(id: string) {
 }
 
 type PlannerTemplateForGeneration = NonNullable<Awaited<ReturnType<typeof loadPlannerTemplateForGeneration>>>
-type TemplateUnitForGeneration = PlannerTemplateForGeneration['semesters'][number]['units'][number]
+type TemplateUnitForGeneration = PlannerTemplateForGeneration['units'][number]
 
 function templateUnitToSchedulable(
   slot: TemplateUnitForGeneration,
@@ -74,17 +58,19 @@ function templateUnitToSchedulable(
 ): SchedulableUnit | null {
   if (!slot.unit) return null
   return toSchedulableUnit({
-    code: slot.unit.code,
-    name: slot.unit.name,
+    code: slot.unit.unit_code,
+    name: slot.unit.unit_name,
     category,
-    offeringTerms: offeringTermsFromMonths(slot.unit.availability.map(a => a.month)),
-    requisiteGroups: [
-      slot.unit.requisites.map(r => ({
-        type: 'unit' as const,
-        unitCode: r.requisite_unit.code,
-        requisiteType: r.requisite_type,
-      })),
-    ],
+    offeringTerms: slot.unit.offerings.map(o => o.offered_in),
+    requisiteGroups: slot.unit.requisite_groups.map(group =>
+      group.conditions
+        .filter(condition => condition.unit)
+        .map(condition => ({
+          type: 'unit' as const,
+          unitCode: condition.unit!.unit_code,
+          requisiteType: condition.requisite_type ?? 'prerequisite',
+        })),
+    ),
   })
 }
 
@@ -96,16 +82,18 @@ function templateUnitToDisplayUnit(
   if (!slot.unit) return null
   return {
     id: slot.id,
-    code: slot.unit.code,
-    name: slot.unit.name,
+    code: slot.unit.unit_code,
+    name: slot.unit.unit_name,
     category: category as Unit['category'],
     creditPoints: Number(slot.unit.credit_points),
     yearLevel: slot.unit.year_level ?? 1,
     semester: 0,
     isElectiveSlot: false,
-    prerequisites: slot.unit.requisites
-      .filter(r => r.requisite_type === 'prerequisite')
-      .map(r => r.requisite_unit.code),
+    prerequisites: slot.unit.requisite_groups.flatMap(group =>
+      group.conditions
+        .filter(condition => condition.requisite_type === 'prerequisite' && condition.unit)
+        .map(condition => condition.unit!.unit_code),
+    ),
     sourceMajorName: sourceMajorName ?? null,
   }
 }
@@ -129,11 +117,10 @@ export async function generatePlanOnServer({
   const unitMetadataByCode = new Map<string, Unit>()
   const plannedCodes = new Set(completedCodes)
 
-  for (const semester of template.semesters) {
-    for (const slot of semester.units) {
+  for (const slot of template.units) {
       // An elective slot has no unit, so there is nothing to schedule or match
       if (!slot.unit) continue
-      const code = slot.unit.code.trim().toUpperCase()
+      const code = slot.unit.unit_code.trim().toUpperCase()
 
       // Finished units stay out of the plan. Their place in the template does
       // not decide the start year — a year-2 unit taken in the student's
@@ -151,7 +138,6 @@ export async function generatePlanOnServer({
         slot.category === 'major_core' ? planner.majorName : null,
       )
       if (displayUnit) unitMetadataByCode.set(code, displayUnit)
-    }
   }
 
   const warnings: string[] = []
@@ -165,16 +151,17 @@ export async function generatePlanOnServer({
       },
       include: {
         major: true,
-        semesters: {
-          orderBy: [{ year_number: 'asc' }, { sem_number: 'asc' }],
+        units: {
+          orderBy: [{ year_level: 'asc' }, { semester: 'asc' }, { created_at: 'asc' }],
           include: {
-            units: {
-              orderBy: { position: 'asc' },
+            unit: {
               include: {
-                unit: {
+                offerings: true,
+                requisite_groups: {
                   include: {
-                    availability: true,
-                    requisites: { include: { requisite_unit: { select: { code: true } } } },
+                    conditions: {
+                      include: { unit: { select: { unit_code: true } } },
+                    },
                   },
                 },
               },
@@ -187,10 +174,9 @@ export async function generatePlanOnServer({
     if (!secondMajorTemplate) {
       warnings.push('No Program Study Planner is available for the selected second major and intake. The generated plan uses your primary major only.')
     } else {
-      for (const semester of secondMajorTemplate.semesters) {
-        for (const slot of semester.units) {
+      for (const slot of secondMajorTemplate.units) {
           if (!slot.unit || slot.category !== 'major_core') continue
-          const code = slot.unit.code.trim().toUpperCase()
+          const code = slot.unit.unit_code.trim().toUpperCase()
           if (plannedCodes.has(code)) continue
 
           const schedulable = templateUnitToSchedulable(slot, 'double_major')
@@ -200,7 +186,6 @@ export async function generatePlanOnServer({
           }
           const displayUnit = templateUnitToDisplayUnit(slot, 'double_major', secondMajorTemplate.major?.name ?? null)
           if (displayUnit) unitMetadataByCode.set(code, displayUnit)
-        }
       }
     }
   }

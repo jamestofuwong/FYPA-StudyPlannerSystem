@@ -33,6 +33,22 @@
 .elective { background: var(--color-cat-elective-bg); border-color: var(--color-cat-elective-border); }
 .wil      { background: var(--color-cat-wil-bg);      border-color: var(--color-cat-wil-border); }
 .mpu      { background: var(--color-cat-mpu-bg);      border-color: var(--color-cat-mpu-border); }
+.asterisk {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border-color: transparent;
+  color: var(--color-accent);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-bold);
+}
+
+.asterisk::before {
+  content: "*";
+  line-height: 1;
+}
+
 .slot {
   background: var(--color-cat-slot-bg);
   border: 1px dashed var(--color-cat-slot-border);

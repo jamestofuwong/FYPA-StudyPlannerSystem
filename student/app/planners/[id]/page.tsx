@@ -16,6 +16,7 @@ const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Se
 const STOP_WORDS = new Set(['of', 'the', 'and', 'in', 'for', 'a'])
 
 function courseAbbrev(name: string): string {
+  if (/bachelor\s+of\s+computer\s+science/i.test(name)) return 'BA-CS'
   const words = name.split(/\s+/).filter(w => !STOP_WORDS.has(w.toLowerCase()))
   if (words.length === 0) return name.slice(0, 3).toUpperCase()
   const parts = words.map(w => w[0].toUpperCase())
@@ -72,6 +73,9 @@ export default async function PlannerDetailPage({ params }: Props) {
 
         {/* Breadcrumb */}
         <nav className={styles.breadcrumb} aria-label="Breadcrumb">
+          <Link href="/" className={styles.backButton} aria-label="Back to planners">
+            ‹
+          </Link>
           <Link href="/" className={styles.breadcrumbLink}>Study Planners</Link>
           <span className={styles.breadcrumbSep}>/</span>
           <span className={styles.breadcrumbCurrent}>

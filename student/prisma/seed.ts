@@ -2864,13 +2864,13 @@ async function createAcademicContent() {
   for (const unit of SOURCE_UNITS) {
     const created = await prisma.unit.create({
       data: {
-        code: unit.code,
-        name: unit.name,
+        unit_code: unit.code,
+        unit_name: unit.name,
         // The main seed has no per-unit credit-point field.
         credit_points: STUDENT_DEFAULT_CREDIT_POINTS,
         year_level: compatibilityYearLevel(unit),
-        availability: {
-          create: studentAvailabilityMonths(unit.offeredIn).map(month => ({ month })),
+        offerings: {
+          create: unit.offeredIn.map(offered_in => ({ offered_in })),
         },
       },
     })
@@ -2900,8 +2900,7 @@ async function createAcademicContent() {
         major_id: majorId,
         intake_month: planner.intakeMonth,
         intake_year: planner.intakeYear,
-        // Main templates represent a three-year/six-semester degree.
-        duration_years: 3,
+        duration_semesters: 6,
       },
     })
 
@@ -2925,23 +2924,15 @@ async function createAcademicContent() {
       return ay - by || at - bt
     })) {
       const [year, term] = key.split('|').map(Number)
-      const semester = await prisma.semester.create({
-        data: {
-          template_id: createdPlanner.id,
-          year_number: year,
-          sem_number: term,
-          label: termLabel(term),
-        },
-      })
       semesterCount += 1
 
-      await prisma.semesterUnit.createMany({
+      await prisma.templateUnit.createMany({
         data: items.map((item, index) => ({
-          semester_id: semester.id,
+          planner_template_id: createdPlanner.id,
           unit_id: item.code ? unitMap.get(item.code) ?? null : null,
           category: item.category,
-          is_elective_slot: !item.code,
-          position: index + 1,
+          year_level: year,
+          semester: term,
         })),
       })
       semesterUnitCount += items.length
@@ -2949,23 +2940,34 @@ async function createAcademicContent() {
 
     const group = sourceElectiveGroupFor(planner)
     if (group) {
+      const electiveGroup = await prisma.electiveGroup.create({
+        data: { planner_template_id: createdPlanner.id },
+      })
       const poolRows = [...new Set(group.units)].map(code => ({
-        template_id: createdPlanner.id,
+        elective_group_id: electiveGroup.id,
         unit_id: unitMap.get(code)!,
       }))
-      await prisma.electivePoolUnit.createMany({ data: poolRows })
+      await prisma.electiveGroupUnit.createMany({ data: poolRows })
       electivePoolCount += poolRows.length
     }
   }
 
-  const requisiteRows = Object.entries(SOURCE_SIMPLE_REQUISITES).flatMap(([requisite_type, pairs]) =>
-    pairs.map(([unitCode, requisiteCode]) => ({
-      unit_id: unitMap.get(unitCode)!,
-      requisite_type: requisite_type as 'prerequisite' | 'corequisite' | 'antirequisite',
-      requisite_unit_id: unitMap.get(requisiteCode)!,
-    })),
-  )
-  await prisma.unitRequisite.createMany({ data: requisiteRows })
+  for (const [requisite_type, pairs] of Object.entries(SOURCE_SIMPLE_REQUISITES)) {
+    for (const [unitCode, requisiteCode] of pairs) {
+      await prisma.unitRequisiteGroup.create({
+        data: {
+          unit_id: unitMap.get(unitCode)!,
+          conditions: {
+            create: {
+              type: 'unit',
+              requisite_type,
+              unit_id: unitMap.get(requisiteCode)!,
+            },
+          },
+        },
+      })
+    }
+  }
 
   console.log(`Created ${SOURCE_UNITS.length} source units`)
   console.log(`Created ${SOURCE_MAJORS.length} source majors`)
@@ -2976,6 +2978,43 @@ async function createAcademicContent() {
   console.log(`Created ${SOURCE_SIMPLE_REQUISITES.corequisite.length} simple corequisites`)
   console.log(`Created ${SOURCE_SIMPLE_REQUISITES.antirequisite.length} simple antirequisites`)
   return true
+}
+
+async function seedMissingRequisites() {
+  if (await prisma.unitRequisiteGroup.count() > 0) {
+    console.log('Simple requisites already seeded, skipping.')
+    return
+  }
+
+  const units = await prisma.unit.findMany({
+    select: { id: true, unit_code: true },
+  })
+  const unitMap = new Map(units.map(unit => [unit.unit_code, unit.id]))
+  let created = 0
+
+  for (const [requisite_type, pairs] of Object.entries(SOURCE_SIMPLE_REQUISITES)) {
+    for (const [unitCode, requisiteCode] of pairs) {
+      const unitId = unitMap.get(unitCode)
+      const requisiteUnitId = unitMap.get(requisiteCode)
+      if (!unitId || !requisiteUnitId) continue
+
+      await prisma.unitRequisiteGroup.create({
+        data: {
+          unit_id: unitId,
+          conditions: {
+            create: {
+              type: 'unit',
+              requisite_type,
+              unit_id: requisiteUnitId,
+            },
+          },
+        },
+      })
+      created += 1
+    }
+  }
+
+  console.log(`Created ${created} missing simple requisite groups`)
 }
 
 // -----------------------------------------------------------------------------
@@ -3016,38 +3055,48 @@ async function seedHelpContent() {
     },
   ]
 
-  await prisma.faqItem.createMany({ data: faqItems })
-  console.log(`Created ${faqItems.length} FAQ items`)
+  if (await prisma.faqItem.count() === 0) {
+    await prisma.faqItem.createMany({ data: faqItems })
+    console.log(`Created ${faqItems.length} FAQ items`)
+  } else {
+    console.log('FAQ items already seeded, skipping.')
+  }
 
-  await prisma.generalEnquiries.create({
-    data: {
-      venue_name: 'Student HQ',
-      location: 'A001 - A002',
-      hours: 'Mon - Fri, 9:00 am - 5:00 pm',
-      closed_note: 'Closed on weekends and public holidays',
-    },
-  })
+  if (await prisma.generalEnquiries.count() === 0) {
+    await prisma.generalEnquiries.create({
+      data: {
+        venue_name: 'Student HQ',
+        location: 'A001 - A002',
+        hours: 'Mon - Fri, 9:00 am - 5:00 pm',
+        closed_note: 'Closed on weekends and public holidays',
+      },
+    })
+  }
 
-  await prisma.itHelpDesk.create({
-    data: {
-      telephone: '+6082 255000',
-      email: 'servicedesk@swinburne.edu.my',
-      location: 'G003',
-      hours_mon_thu: '8:30 am - 5:30 pm',
-      hours_fri: '8:30 am - 12:00 pm, 2:00 pm - 5:30 pm',
-      closed_note: 'Closed on weekends and public holidays',
-    },
-  })
+  if (await prisma.itHelpDesk.count() === 0) {
+    await prisma.itHelpDesk.create({
+      data: {
+        telephone: '+6082 255000',
+        email: 'servicedesk@swinburne.edu.my',
+        location: 'G003',
+        hours_mon_thu: '8:30 am - 5:30 pm',
+        hours_fri: '8:30 am - 12:00 pm, 2:00 pm - 5:30 pm',
+        closed_note: 'Closed on weekends and public holidays',
+      },
+    })
+  }
 
-  await prisma.headOfDepartment.create({
-    data: {
-      faculty: 'Faculty of Engineering, Computing and Science',
-      department: 'Department of Computing',
-      name: 'Head of Department',
-      email: 'hod-computing@swinburne.edu.my',
-      position: 1,
-    },
-  })
+  if (await prisma.headOfDepartment.count() === 0) {
+    await prisma.headOfDepartment.create({
+      data: {
+        faculty: 'Faculty of Engineering, Computing and Science',
+        department: 'Department of Computing',
+        name: 'Head of Department',
+        email: 'hod-computing@swinburne.edu.my',
+        position: 1,
+      },
+    })
+  }
 
   console.log('Created help content (FAQ, contacts, HOD)')
   console.log('Content seeded successfully.')
@@ -3060,7 +3109,8 @@ async function seedHelpContent() {
 async function main() {
   await seedCmsUser()
   const academicSeeded = await createAcademicContent()
-  if (academicSeeded) await seedHelpContent()
+  if (!academicSeeded) await seedMissingRequisites()
+  await seedHelpContent()
 }
 
 main().catch(console.error).finally(() => prisma.$disconnect())

@@ -65,9 +65,9 @@ export default async function PlannersPage() {
               <td className={styles.td}>{planner.course.name}</td>
               <td className={styles.td}>{planner.major?.name ?? '—'}</td>
               <td className={styles.td}>
-                {MONTH_NAMES[planner.intake_month] ?? `Month ${planner.intake_month}`} {planner.intake_year}
+                {planner.intake_month ? MONTH_NAMES[planner.intake_month] ?? `Month ${planner.intake_month}` : 'No month'} {planner.intake_year}
               </td>
-              <td className={styles.td}>{planner.duration_years} years</td>
+              <td className={styles.td}>{Math.ceil(planner.duration_semesters / 2)} years</td>
               <td className={styles.td}>
                 <div className={styles.rowActions}>
                   <Link href={`/cms/planners/${planner.id}`} className={styles.btnSecondary}>Edit</Link>

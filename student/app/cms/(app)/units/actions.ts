@@ -23,32 +23,44 @@ interface UnitFormData {
 export async function saveUnit(data: UnitFormData) {
   const parsed = UnitSchema.safeParse(data)
   if (!parsed.success) {
-    throw new Error(parsed.error.errors[0]?.message ?? 'Invalid unit data')
+    throw new Error(parsed.error.issues[0]?.message ?? 'Invalid unit data')
   }
   const d = parsed.data
   const session = await getSession()
 
   if (d.id) {
     await prisma.$transaction([
-      prisma.unitAvailability.deleteMany({ where: { unit_id: d.id } }),
+      prisma.unitOffering.deleteMany({ where: { unit_id: d.id } }),
       prisma.unitLearningOutcome.deleteMany({ where: { unit_id: d.id } }),
       prisma.unitContentTopic.deleteMany({ where: { unit_id: d.id } }),
       prisma.unitAssessment.deleteMany({ where: { unit_id: d.id } }),
-      prisma.unitRequisite.deleteMany({ where: { unit_id: d.id } }),
+      prisma.unitRequisiteGroup.deleteMany({ where: { unit_id: d.id } }),
     ])
     await prisma.unit.update({
       where: { id: d.id },
       data: {
-        code: d.code,
-        name: d.name,
+        unit_code: d.code,
+        unit_name: d.name,
         credit_points: d.credit_points,
         year_level: d.year_level,
         overview: d.overview || null,
-        availability: { create: d.availability.map(month => ({ month })) },
+        offerings: { create: d.availability.map(month => ({ offered_in: month })) },
         learning_outcomes: { create: d.learning_outcomes },
         content_topics: { create: d.content_topics },
         assessments: { create: d.assessments },
-        requisites: { create: d.requisites.map(r => ({ requisite_type: r.requisite_type, requisite_unit_id: r.requisite_unit_id })) },
+        requisite_groups: {
+          create: d.requisites.length > 0
+            ? [{
+                conditions: {
+                  create: d.requisites.map(r => ({
+                    type: 'unit',
+                    requisite_type: r.requisite_type,
+                    unit_id: r.requisite_unit_id,
+                  })),
+                },
+              }]
+            : [],
+        },
       },
     })
     console.info(`[CMS] unit:updated code=${d.code} id=${d.id} by=${session?.email ?? 'unknown'}`)
@@ -59,16 +71,28 @@ export async function saveUnit(data: UnitFormData) {
   } else {
     const unit = await prisma.unit.create({
       data: {
-        code: d.code,
-        name: d.name,
+        unit_code: d.code,
+        unit_name: d.name,
         credit_points: d.credit_points,
         year_level: d.year_level,
         overview: d.overview || null,
-        availability: { create: d.availability.map(month => ({ month })) },
+        offerings: { create: d.availability.map(month => ({ offered_in: month })) },
         learning_outcomes: { create: d.learning_outcomes },
         content_topics: { create: d.content_topics },
         assessments: { create: d.assessments },
-        requisites: { create: d.requisites.map(r => ({ requisite_type: r.requisite_type, requisite_unit_id: r.requisite_unit_id })) },
+        requisite_groups: {
+          create: d.requisites.length > 0
+            ? [{
+                conditions: {
+                  create: d.requisites.map(r => ({
+                    type: 'unit',
+                    requisite_type: r.requisite_type,
+                    unit_id: r.requisite_unit_id,
+                  })),
+                },
+              }]
+            : [],
+        },
       },
     })
     console.info(`[CMS] unit:created code=${d.code} id=${unit.id} by=${session?.email ?? 'unknown'}`)

@@ -1,6 +1,6 @@
 import 'server-only'
 import { prisma } from './prisma'
-import type { PlannerSummary, PlannerDetail, SemesterBlock, Unit, UnitCategory } from './types'
+import type { PlannerDetail, PlannerSummary, SemesterBlock, Unit, UnitCategory } from './types'
 
 export interface PlannerMajorOption {
   majorId: string | null
@@ -20,6 +20,32 @@ export interface PlannerCourseOption {
   secondMajors: PlannerSecondMajorOption[]
 }
 
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+]
+
+type UnitWithPrerequisites = {
+  requisite_groups: {
+    conditions: {
+      requisite_type: string | null
+      unit: { unit_code: string } | null
+    }[]
+  }[]
+}
+
+function prerequisiteCodes(unit: UnitWithPrerequisites | null | undefined): string[] {
+  return unit?.requisite_groups.flatMap(group =>
+    group.conditions
+      .filter(condition => condition.requisite_type === 'prerequisite' && condition.unit)
+      .map(condition => condition.unit!.unit_code),
+  ) ?? []
+}
+
+function intakeLabel(month: number | null, year: number): string {
+  return month ? `${MONTH_NAMES[month - 1] ?? `Month ${month}`} ${year}` : `${year}`
+}
+
 export async function getPlannerOptions(): Promise<PlannerCourseOption[]> {
   const templates = await prisma.plannerTemplate.findMany({
     include: {
@@ -36,7 +62,7 @@ export async function getPlannerOptions(): Promise<PlannerCourseOption[]> {
 
   for (const t of templates) {
     const comboKey = `${t.course_id}-${t.major_id ?? 'null'}`
-    if (seen.has(comboKey)) continue // keep only the most recent intake per course+major
+    if (seen.has(comboKey)) continue
     seen.add(comboKey)
 
     if (!courseMap.has(t.course_id)) {
@@ -60,34 +86,26 @@ export async function getPlannerOptions(): Promise<PlannerCourseOption[]> {
   return [...courseMap.values()]
 }
 
-const MONTH_NAMES = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
-]
-
 export async function getPlanners(): Promise<PlannerSummary[]> {
   const templates = await prisma.plannerTemplate.findMany({
     include: {
       course: true,
       major: true,
-      semesters: { select: { _count: { select: { units: true } } } },
+      _count: { select: { units: true } },
     },
     orderBy: [{ intake_year: 'desc' }, { intake_month: 'asc' }],
   })
 
-  return templates.map(t => {
-    const totalUnits = t.semesters.reduce((sum, s) => sum + s._count.units, 0)
-    return {
-      id: t.id,
-      courseName: t.course.name,
-      majorName: t.major?.name ?? null,
-      intakeYear: t.intake_year,
-      intakeMonth: t.intake_month,
-      intakeLabel: `${MONTH_NAMES[t.intake_month - 1]} ${t.intake_year}`,
-      durationYears: t.duration_years,
-      totalUnits,
-    }
-  })
+  return templates.map(t => ({
+    id: t.id,
+    courseName: t.course.name,
+    majorName: t.major?.name ?? null,
+    intakeYear: t.intake_year,
+    intakeMonth: t.intake_month ?? 0,
+    intakeLabel: intakeLabel(t.intake_month, t.intake_year),
+    durationYears: Math.ceil(t.duration_semesters / 2),
+    totalUnits: t._count.units,
+  }))
 }
 
 export async function getPlannerById(id: string): Promise<PlannerDetail | null> {
@@ -96,31 +114,38 @@ export async function getPlannerById(id: string): Promise<PlannerDetail | null> 
     include: {
       course: true,
       major: true,
-      semesters: {
-        orderBy: [{ year_number: 'asc' }, { sem_number: 'asc' }],
-        include: {
-          units: {
-            orderBy: { position: 'asc' },
-            include: {
-                unit: {
-                  include: {
-                    requisites: {
-                      where: { requisite_type: 'prerequisite' },
-                      include: { requisite_unit: { select: { code: true } } },
-                    },
-                  },
-                },
-              },
-          },
-        },
-      },
-      elective_pool: {
+      units: {
+        orderBy: [{ year_level: 'asc' }, { semester: 'asc' }, { created_at: 'asc' }],
         include: {
           unit: {
             include: {
-              requisites: {
-                where: { requisite_type: 'prerequisite' },
-                include: { requisite_unit: { select: { code: true } } },
+              requisite_groups: {
+                include: {
+                  conditions: {
+                    where: { requisite_type: 'prerequisite' },
+                    include: { unit: { select: { unit_code: true } } },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      elective_groups: {
+        include: {
+          units: {
+            include: {
+              unit: {
+                include: {
+                  requisite_groups: {
+                    include: {
+                      conditions: {
+                        where: { requisite_type: 'prerequisite' },
+                        include: { unit: { select: { unit_code: true } } },
+                      },
+                    },
+                  },
+                },
               },
             },
           },
@@ -131,24 +156,32 @@ export async function getPlannerById(id: string): Promise<PlannerDetail | null> 
 
   if (!t) return null
 
-  const semesters: SemesterBlock[] = t.semesters.map(s => ({
-    year: s.year_number,
-    semester: s.sem_number,
-    label: s.label ?? `Semester ${s.sem_number}`,
-    units: s.units.map((su): Unit => ({
-      id: su.id,
-      code: su.unit?.code ?? 'ELECTIVE',
-      name: su.unit?.name ?? 'Free Elective Slot',
-      category: su.category as UnitCategory,
-      creditPoints: su.unit ? Number(su.unit.credit_points) : 12.5,
-      yearLevel: su.unit?.year_level ?? s.year_number,
-      semester: s.sem_number,
-      isElectiveSlot: su.is_elective_slot,
-      prerequisites: su.unit?.requisites.map(r => r.requisite_unit.code) ?? [],
-      sourceMajorName: su.category === 'major_core' ? t.major?.name ?? null : null,
-    })),
-  }))
+  const semesterMap = new Map<string, SemesterBlock>()
+  for (const tu of t.units) {
+    const key = `${tu.year_level}-${tu.semester}`
+    if (!semesterMap.has(key)) {
+      semesterMap.set(key, {
+        year: tu.year_level,
+        semester: tu.semester,
+        label: `Semester ${tu.semester}`,
+        units: [],
+      })
+    }
+    semesterMap.get(key)!.units.push({
+      id: tu.id,
+      code: tu.unit?.unit_code ?? 'ELECTIVE',
+      name: tu.unit?.unit_name ?? 'Free Elective Slot',
+      category: tu.category as UnitCategory,
+      creditPoints: tu.unit ? Number(tu.unit.credit_points) : 12.5,
+      yearLevel: tu.unit?.year_level ?? tu.year_level,
+      semester: tu.semester,
+      isElectiveSlot: !tu.unit,
+      prerequisites: prerequisiteCodes(tu.unit),
+      sourceMajorName: tu.category === 'major_core' ? t.major?.name ?? null : null,
+    })
+  }
 
+  const semesters = [...semesterMap.values()].sort((a, b) => a.year - b.year || a.semester - b.semester)
   const allUnits = semesters.flatMap(s => s.units)
   const countCat = (cat: string) => {
     const n = allUnits.filter(u => u.category === cat).length
@@ -160,9 +193,9 @@ export async function getPlannerById(id: string): Promise<PlannerDetail | null> 
     courseName: t.course.name,
     majorName: t.major?.name ?? null,
     intakeYear: t.intake_year,
-    intakeMonth: t.intake_month,
-    intakeLabel: `${MONTH_NAMES[t.intake_month - 1]} ${t.intake_year}`,
-    durationYears: t.duration_years,
+    intakeMonth: t.intake_month ?? 0,
+    intakeLabel: intakeLabel(t.intake_month, t.intake_year),
+    durationYears: Math.ceil(t.duration_semesters / 2),
     totalUnits: allUnits.length,
     semesters,
     requirements: {
@@ -178,16 +211,18 @@ export async function getPlannerById(id: string): Promise<PlannerDetail | null> 
       },
       wil: { count: countCat('wil') },
     },
-    electivePool: t.elective_pool.map((ep): Unit => ({
-      id: ep.unit.id,
-      code: ep.unit.code,
-      name: ep.unit.name,
-      category: 'elective',
-      creditPoints: Number(ep.unit.credit_points),
-      yearLevel: ep.unit.year_level,
-      semester: 0,
-      isElectiveSlot: false,
-      prerequisites: ep.unit.requisites.map(r => r.requisite_unit.code),
-    })),
+    electivePool: t.elective_groups.flatMap(group =>
+      group.units.map((egu): Unit => ({
+        id: egu.unit.id,
+        code: egu.unit.unit_code,
+        name: egu.unit.unit_name,
+        category: 'elective',
+        creditPoints: Number(egu.unit.credit_points),
+        yearLevel: egu.unit.year_level,
+        semester: 0,
+        isElectiveSlot: false,
+        prerequisites: prerequisiteCodes(egu.unit),
+      })),
+    ),
   }
 }

@@ -10,7 +10,7 @@ export async function saveFaqItems(
 ) {
   const parsed = FaqListSchema.safeParse(items)
   if (!parsed.success) {
-    throw new Error(parsed.error.errors[0]?.message ?? 'Invalid FAQ data')
+    throw new Error(parsed.error.issues[0]?.message ?? 'Invalid FAQ data')
   }
   const data = parsed.data
 

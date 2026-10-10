@@ -35,7 +35,7 @@ interface PlannerFormData {
 export async function savePlanner(data: PlannerFormData) {
   const parsed = PlannerSchema.safeParse(data)
   if (!parsed.success) {
-    throw new Error(parsed.error.errors[0]?.message ?? 'Invalid planner data')
+    throw new Error(parsed.error.issues[0]?.message ?? 'Invalid planner data')
   }
   const d = parsed.data
   const session = await getSession()
@@ -69,9 +69,8 @@ export async function savePlanner(data: PlannerFormData) {
   let plannerId = d.id
 
   if (plannerId) {
-    // Clear semesters (cascades to semester_units) and elective pool
-    await prisma.semester.deleteMany({ where: { template_id: plannerId } })
-    await prisma.electivePoolUnit.deleteMany({ where: { template_id: plannerId } })
+    await prisma.templateUnit.deleteMany({ where: { planner_template_id: plannerId } })
+    await prisma.electiveGroup.deleteMany({ where: { planner_template_id: plannerId } })
 
     await prisma.plannerTemplate.update({
       where: { id: plannerId },
@@ -80,7 +79,7 @@ export async function savePlanner(data: PlannerFormData) {
         major_id: majorId,
         intake_month: d.intake_month,
         intake_year: d.intake_year,
-        duration_years: d.duration_years,
+        duration_semesters: d.duration_years * 2,
       },
     })
   } else {
@@ -90,34 +89,33 @@ export async function savePlanner(data: PlannerFormData) {
         major_id: majorId,
         intake_month: d.intake_month,
         intake_year: d.intake_year,
-        duration_years: d.duration_years,
+        duration_semesters: d.duration_years * 2,
       },
     })
     plannerId = planner.id
   }
 
-  // Recreate semesters
+  // Recreate planner unit placements in the same shape as the main app.
   for (const sem of d.semesters) {
-    const semester = await prisma.semester.create({
-      data: { template_id: plannerId, year_number: sem.year_number, sem_number: sem.sem_number, label: sem.label },
-    })
     if (sem.units.length > 0) {
-      await prisma.semesterUnit.createMany({
+      await prisma.templateUnit.createMany({
         data: sem.units.map(u => ({
-          semester_id: semester.id,
+          planner_template_id: plannerId!,
           unit_id: u.unit_id,
           category: u.category,
-          is_elective_slot: u.is_elective_slot,
-          position: u.position,
+          year_level: sem.year_number,
+          semester: sem.sem_number,
         })),
       })
     }
   }
 
-  // Recreate elective pool
   if (d.elective_pool.length > 0) {
-    await prisma.electivePoolUnit.createMany({
-      data: d.elective_pool.map(unit_id => ({ template_id: plannerId!, unit_id })),
+    const group = await prisma.electiveGroup.create({
+      data: { planner_template_id: plannerId! },
+    })
+    await prisma.electiveGroupUnit.createMany({
+      data: d.elective_pool.map(unit_id => ({ elective_group_id: group.id, unit_id })),
     })
   }
 
