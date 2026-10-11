@@ -85,3 +85,18 @@ export function formatRequisiteGroups(
     })
     .join(' / ')
 }
+
+export function formatPrerequisiteText(
+  groups: RequisiteGroup[] | undefined,
+  prerequisites: string[] | undefined,
+): string {
+  const groupedText = formatRequisiteGroups(groups, 'prerequisite')
+  if (groupedText) return groupedText
+
+  const prerequisiteText = (prerequisites ?? [])
+    .map(code => code.trim())
+    .filter(Boolean)
+    .join(', ')
+
+  return prerequisiteText || 'Nil'
+}
