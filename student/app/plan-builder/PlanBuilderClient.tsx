@@ -5,6 +5,7 @@ import { generatePlan } from '@student/lib/plan-builder'
 import type { GenerationResult } from '@student/lib/plan-builder'
 import type { PlannerCourseOption } from '@student/lib/planners'
 import type { SemesterBlock, UnitListing } from '@student/lib/types'
+import { formatRequisiteGroups, type RequisiteGroup } from '@student/lib/requisites'
 import SemesterTable from '@student/components/SemesterTable/SemesterTable'
 import ElectivePool from '@student/components/ElectivePool/ElectivePool'
 import CategoryLegend, { categoriesInPlan } from '@student/components/CategoryLegend/CategoryLegend'
@@ -36,6 +37,86 @@ function missingPrerequisites(prerequisites: string[] | undefined, completed: Se
   return (prerequisites ?? [])
     .map(code => code.trim().toUpperCase())
     .filter(code => code && !completed.has(code))
+}
+
+function completedCreditPointsBefore(
+  semesters: { unitCodes: string[] }[],
+  index: number,
+  units: UnitListing[],
+): number {
+  const creditPointsByCode = new Map(units.map(unit => [unit.code.trim().toUpperCase(), unit.creditPoints]))
+  return semesters
+    .slice(0, index)
+    .flatMap(semester => semester.unitCodes)
+    .map(code => creditPointsByCode.get(code.trim().toUpperCase()) ?? 0)
+    .reduce((total, points) => total + points, 0)
+}
+
+function missingRequisiteGroupReasons(
+  groups: RequisiteGroup[] | undefined,
+  completedCodes: Set<string>,
+  completedCreditPoints: number,
+): string[] {
+  const prerequisiteGroups = (groups ?? [])
+    .map(group => group.filter(condition => (condition.requisiteType ?? 'prerequisite') === 'prerequisite'))
+    .filter(group => group.length > 0)
+
+  if (prerequisiteGroups.length === 0) return []
+
+  const groupResults = prerequisiteGroups.map(group => {
+    const missing: string[] = []
+    const satisfied = group.every(condition => {
+      if (condition.type === 'unit' && condition.unitCode) {
+        const code = condition.unitCode.trim().toUpperCase()
+        if (completedCodes.has(code)) return true
+        missing.push(code)
+        return false
+      }
+      if (condition.type === 'credit_points' && condition.creditPoints != null) {
+        if (completedCreditPoints >= condition.creditPoints) return true
+        missing.push(`${condition.creditPoints} cp`)
+        return false
+      }
+      return true
+    })
+    return { satisfied, missing }
+  })
+
+  if (groupResults.some(result => result.satisfied)) return []
+  return [...groupResults].sort((a, b) => a.missing.length - b.missing.length)[0]?.missing ?? []
+}
+
+function prerequisiteBlockReasons(
+  unit: UnitListing | undefined,
+  completedCodes: Set<string>,
+  completedCreditPoints: number,
+): string[] {
+  const groupedReasons = missingRequisiteGroupReasons(unit?.requisiteGroups, completedCodes, completedCreditPoints)
+  if (groupedReasons.length > 0) return groupedReasons
+  return missingPrerequisites(unit?.prerequisites, completedCodes)
+}
+
+function prerequisiteRequirementText(unit: UnitListing): string | null {
+  const creditPointRequirements = [
+    ...new Set(
+      (unit.requisiteGroups ?? [])
+        .flatMap(group => group)
+        .filter(condition =>
+          (condition.requisiteType ?? 'prerequisite') === 'prerequisite' &&
+          condition.type === 'credit_points' &&
+          condition.creditPoints != null,
+        )
+        .map(condition => condition.creditPoints!)
+        .filter(points => Number.isFinite(points) && points > 0),
+    ),
+  ].sort((a, b) => a - b)
+
+  if (creditPointRequirements.length > 0) {
+    return creditPointRequirements.map(points => `${points} cp`).join(' / ')
+  }
+
+  return formatRequisiteGroups(unit.requisiteGroups, 'prerequisite') ??
+    (unit.prerequisites && unit.prerequisites.length > 0 ? unit.prerequisites.join(', ') : null)
 }
 
 /** Units listed in earlier semesters only. A prerequisite in this semester does not unlock another unit here. */
@@ -73,7 +154,7 @@ interface CompletedSemester {
 
 const DRAFT_KEY = 'plan-builder-draft'
 const RESULT_CACHE_KEY = 'plan-builder-result-cache'
-const RESULT_CACHE_VERSION = 3
+const RESULT_CACHE_VERSION = 6
 
 interface PlanBuilderDraft {
   selectedCourseId: string
@@ -367,7 +448,11 @@ export default function PlanBuilderClient({
       const index = prev.findIndex(semester => semester.id === semId)
       if (index < 0) return prev
       const unit = units.find(item => item.code === code)
-      const missing = missingPrerequisites(unit?.prerequisites, completedCodesBefore(prev, index))
+      const missing = prerequisiteBlockReasons(
+        unit,
+        completedCodesBefore(prev, index),
+        completedCreditPointsBefore(prev, index, units),
+      )
       if (missing.length > 0) return prev
       return prev.map(semester =>
         semester.id === semId ? { ...semester, unitCodes: [...semester.unitCodes, code] } : semester,
@@ -393,11 +478,9 @@ export default function PlanBuilderClient({
   }
 
   function renderAddOption(unit: UnitListing, semesterId: string, semesterIndex: number) {
-    const missing = missingPrerequisites(
-      unit.prerequisites,
-      completedCodesBefore(completedSemesters, semesterIndex),
-    )
+    const missing = addBlockReasons(unit, semesterIndex)
     const blocked = missing.length > 0
+    const requirement = prerequisiteRequirementText(unit)
     return (
       <li
         key={unit.code}
@@ -414,12 +497,27 @@ export default function PlanBuilderClient({
         <span className={styles.addDropdownName}>
           <span className={styles.addDropdownNameText}>{unit.name}</span>
         </span>
-        {blocked ? (
-          <span className={styles.addDropdownNeed}>Pre-requisites: {missing.join(', ')}</span>
-        ) : (
-          <span className={styles.addDropdownPlus} aria-hidden="true">+</span>
-        )}
+        <span className={styles.addDropdownMeta}>
+          {requirement && (
+            <span className={styles.addDropdownRequirement}>
+              Required: <span className={styles.addDropdownRequirementValue}>{requirement}</span>
+            </span>
+          )}
+          {blocked && !requirement ? (
+            <span className={styles.addDropdownNeed}>{missing.join(', ')}</span>
+          ) : !blocked ? (
+            <span className={styles.addDropdownPlus} aria-hidden="true">+</span>
+          ) : null}
+        </span>
       </li>
+    )
+  }
+
+  function addBlockReasons(unit: UnitListing, semesterIndex: number) {
+    return prerequisiteBlockReasons(
+      unit,
+      completedCodesBefore(completedSemesters, semesterIndex),
+      completedCreditPointsBefore(completedSemesters, semesterIndex, units),
     )
   }
 
@@ -638,6 +736,12 @@ export default function PlanBuilderClient({
         <div className={styles.completedTablesWrap}>
           {completedSemesters.map((sem, idx) => {
             const isAddActive = activeAddSem === sem.id
+            const visibleAddUnits = courseName
+              ? [...suggestedAddUnits, ...otherAddUnits]
+              : filteredAddUnits
+            const selectableAddUnits = visibleAddUnits.filter(unit => addBlockReasons(unit, idx).length === 0)
+            const lockedAddUnits = visibleAddUnits.filter(unit => addBlockReasons(unit, idx).length > 0)
+            const showDropdownSections = selectableAddUnits.length > 0 && lockedAddUnits.length > 0
             return (
               <div key={sem.id} className={styles.completedTable}>
 
@@ -699,22 +803,22 @@ export default function PlanBuilderClient({
                       aria-label="Filter units to add"
                     />
 
-                    {filteredAddUnits.length > 0 ? (
+                    {visibleAddUnits.length > 0 ? (
                       <ul className={styles.addDropdown} role="listbox" aria-label="Units you can add">
-                        {courseName && suggestedAddUnits.length > 0 && otherAddUnits.length > 0 && (
-                          <li className={styles.addDropdownGroup} role="presentation">Suggested for your course</li>
+                        {showDropdownSections && (
+                          <li className={styles.addDropdownGroup} role="presentation">Available units</li>
                         )}
-                        {(courseName ? suggestedAddUnits : filteredAddUnits).map(unit =>
+                        {selectableAddUnits.map(unit =>
                           renderAddOption(unit, sem.id, idx),
                         )}
-                        {otherAddUnits.length > 0 && suggestedAddUnits.length > 0 && (
+                        {lockedAddUnits.length > 0 && (
                           <>
-                            <li className={styles.addDropdownGroup} role="presentation">Other units</li>
-                            {otherAddUnits.map(unit => renderAddOption(unit, sem.id, idx))}
+                            {showDropdownSections && (
+                              <li className={styles.addDropdownGroup} role="presentation">Locked by prerequisites</li>
+                            )}
+                            {lockedAddUnits.map(unit => renderAddOption(unit, sem.id, idx))}
                           </>
                         )}
-                        {otherAddUnits.length > 0 && suggestedAddUnits.length === 0 &&
-                          otherAddUnits.map(unit => renderAddOption(unit, sem.id, idx))}
                       </ul>
                     ) : (
                       <div className={styles.addDropdownEmpty}>

@@ -1,10 +1,13 @@
 import Nav from '@student/components/Nav/Nav'
 import UnitCatalog from '@student/components/UnitCatalog/UnitCatalog'
-import { getCachedUnits } from '@student/lib/catalog'
+import { getCachedPlannerYearLevels, getCachedUnits } from '@student/lib/catalog'
 import styles from './page.module.css'
 
 export default async function UnitsPage() {
-  const units = await getCachedUnits()
+  const [units, yearLevels] = await Promise.all([
+    getCachedUnits(),
+    getCachedPlannerYearLevels(),
+  ])
 
   return (
     <div className={styles.page}>
@@ -18,7 +21,7 @@ export default async function UnitsPage() {
           </p>
         </div>
 
-        <UnitCatalog units={units} />
+        <UnitCatalog units={units} yearLevels={yearLevels} />
 
       </main>
     </div>

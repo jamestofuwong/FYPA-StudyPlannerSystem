@@ -8,10 +8,41 @@ import styles from './UnitCatalog.module.css'
 
 interface Props {
   units: UnitListing[]
+  yearLevels: number[]
 }
 
 const PAGE_SIZE = 15
-const LEVELS = [1, 2, 3, 4]
+
+function formatAvailability(availability: string[] | undefined): string {
+  if (!availability || availability.length === 0) return '—'
+
+  const semesterNums: string[] = []
+  const others: string[] = []
+
+  for (const term of availability) {
+    const semester = term.match(/^Semester (\d+)$/)
+    if (semester) {
+      semesterNums.push(semester[1])
+      continue
+    }
+    if (term === 'Summer Term') {
+      others.push('Summer')
+      continue
+    }
+    if (term === 'Winter Term') {
+      others.push('Winter')
+      continue
+    }
+    others.push(term)
+  }
+
+  const parts: string[] = []
+  if (semesterNums.length > 0) {
+    parts.push(`Semester ${semesterNums.join(' & ')}`)
+  }
+  parts.push(...others)
+  return parts.join(', ')
+}
 
 function pageRange(current: number, total: number): (number | '…')[] {
   if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
@@ -20,7 +51,7 @@ function pageRange(current: number, total: number): (number | '…')[] {
   return [1, '…', current - 1, current, current + 1, '…', total]
 }
 
-export default function UnitCatalog({ units }: Props) {
+export default function UnitCatalog({ units, yearLevels }: Props) {
   const navigation = usePendingNavigation('Loading unit details...')
   const [query, setQuery]           = useState('')
   const [activeLevel, setActiveLevel] = useState<number | null>(null)
@@ -91,7 +122,7 @@ export default function UnitCatalog({ units }: Props) {
                 setPage(1)
               }}
             >All</button>
-            {LEVELS.map(level => (
+            {yearLevels.map(level => (
               <button
                 key={level}
                 type="button"
@@ -157,9 +188,7 @@ export default function UnitCatalog({ units }: Props) {
                     </td>
                     <td className={styles.cellAvail}>
                       <span className={styles.availText}>
-                        {unit.availability && unit.availability.length > 0
-                          ? unit.availability.join(' · ')
-                          : '—'}
+                        {formatAvailability(unit.availability)}
                       </span>
                       <span className={styles.viewHint} aria-hidden="true">
                         View unit

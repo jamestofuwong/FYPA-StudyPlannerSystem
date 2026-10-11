@@ -45,9 +45,22 @@ export function requisiteUnitCodes(groups: RequisiteGroup[] | undefined, type: R
   )
 }
 
+export function requisiteCreditPoints(groups: RequisiteGroup[] | undefined, type: RequisiteType): number[] {
+  return (groups ?? []).flatMap(group =>
+    group
+      .filter(condition =>
+        normaliseRequisiteType(condition.requisiteType) === type &&
+        condition.type === 'credit_points' &&
+        condition.creditPoints != null,
+      )
+      .map(condition => condition.creditPoints!)
+      .filter(points => Number.isFinite(points) && points > 0),
+  )
+}
+
 function conditionText(condition: RequisiteCondition): string | null {
   if (condition.type === 'unit' && condition.unitCode) return condition.unitCode
-  if (condition.type === 'credit_points' && condition.creditPoints != null) return `${condition.creditPoints}cp`
+  if (condition.type === 'credit_points' && condition.creditPoints != null) return `${condition.creditPoints} cp`
   if (condition.type === 'external' && condition.externalRequisite) return condition.externalRequisite
   return null
 }

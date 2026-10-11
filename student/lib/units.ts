@@ -35,6 +35,16 @@ export async function getUnits(): Promise<UnitListing[]> {
   })
 }
 
+export async function getPlannerYearLevels(): Promise<number[]> {
+  const years = await prisma.templateUnit.findMany({
+    distinct: ['year_level'],
+    select: { year_level: true },
+    orderBy: { year_level: 'asc' },
+  })
+
+  return years.map(year => year.year_level)
+}
+
 export async function getUnit(code: string): Promise<UnitDetail | null> {
   const u = await prisma.unit.findUnique({
     where: { unit_code: code.toUpperCase() },

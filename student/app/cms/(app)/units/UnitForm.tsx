@@ -289,7 +289,7 @@ export default function UnitForm({ unit, allUnits }: Props) {
             <input className={styles.input} value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Advanced Software Engineering" />
           </div>
           <div className={styles.field}>
-            <label className={styles.label}>Credit Points</label>
+            <label className={styles.label}>CP</label>
             <input className={styles.input} type="number" step="0.1" min={0} value={creditPoints} onChange={e => setCreditPoints(e.target.value)} style={{ maxWidth: 160 }} />
           </div>
           <div className={styles.field}>

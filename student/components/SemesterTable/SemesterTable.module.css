@@ -139,6 +139,7 @@
 
 .clickable:hover .viewHint { opacity: 1; }
 .rowPending .viewHint { opacity: 1; }
+.completedHint { opacity: 1; }
 
 /* Per-category gradient end colours */
 .rowCore     .viewHint { background: linear-gradient(to right, transparent, var(--color-cat-core-bg) 45%); }
@@ -151,13 +152,6 @@
 /* Completed row state */
 .rowCompleted td { opacity: 0.6; }
 .rowCompleted:hover td { opacity: 0.8; }
-
-.completedCheck {
-  color: #16a34a;
-  font-weight: var(--font-weight-bold);
-  margin-right: 5px;
-  font-size: var(--font-size-xs);
-}
 
 /* Override viewHint text colour for completed rows */
 .rowCompleted .viewHint { color: #16a34a; }

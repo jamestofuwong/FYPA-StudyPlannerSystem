@@ -140,7 +140,7 @@ export default async function PlannerDetailPage({ params }: Props) {
             <div className={styles.sidebarCard}>
               <div className={styles.sidebarTitle}>Course Information</div>
               <div className={styles.totalUnits}>{planner.totalUnits} units total</div>
-              <div className={styles.totalCp}>{totalCp} credit points</div>
+              <div className={styles.totalCp}>{totalCp} cp</div>
               <hr className={styles.divider} />
 
               {core.count !== null && (

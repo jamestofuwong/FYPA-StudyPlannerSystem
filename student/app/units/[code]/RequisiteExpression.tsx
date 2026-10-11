@@ -12,7 +12,7 @@ function conditionText(condition: RequisiteCondition) {
     return <RequisiteUnitLink code={condition.unitCode} />
   }
   if (condition.type === 'credit_points' && condition.creditPoints != null) {
-    return `${condition.creditPoints}cp`
+    return `${condition.creditPoints} cp`
   }
   if (condition.type === 'external' && condition.externalRequisite) {
     return condition.externalRequisite

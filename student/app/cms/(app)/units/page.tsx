@@ -37,7 +37,7 @@ export default async function UnitsPage() {
             <th className={styles.th}>Code</th>
             <th className={styles.th}>Name</th>
             <th className={styles.th}>Year</th>
-            <th className={styles.th}>Credit Points</th>
+            <th className={styles.th}>CP</th>
             <th className={styles.th}>Actions</th>
           </tr>
         </thead>

@@ -2929,7 +2929,7 @@ function sourceRequisiteRules(): SourceRequisiteRule[] {
 }
 
 function sourceConditionFingerprint(condition: SourceRequisiteCondition): string {
-  const requisiteType = condition.requisiteType ?? ''
+  const requisiteType = condition.requisiteType ?? 'prerequisite'
   if (condition.type === 'unit') return `unit|${requisiteType}|${condition.unitCode}`
   if (condition.type === 'credit_points') return `credit_points|${requisiteType}|${condition.creditPoints}`
   return `external|${requisiteType}|${condition.externalRequisite}`
@@ -3180,9 +3180,9 @@ function storedGroupFingerprint(group: {
   }>
 }): string {
   const conditions = group.conditions.map(condition => {
-    const requisiteType = condition.requisite_type ?? ''
+    const requisiteType = condition.requisite_type ?? 'prerequisite'
     if (condition.type === 'unit') return `unit|${requisiteType}|${condition.unit?.unit_code ?? ''}`
-    if (condition.type === 'credit_points') return `credit_points|${requisiteType}|${condition.credit_points ?? ''}`
+    if (condition.type === 'credit_points') return `credit_points|${requisiteType}|${Number(condition.credit_points ?? 0)}`
     return `external|${requisiteType}|${condition.external_requisite ?? ''}`
   })
   return `${group.unit.unit_code}|${conditions.sort().join('&')}`

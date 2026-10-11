@@ -104,7 +104,6 @@ export default function SemesterTable({ block, periodLabel, completedCodes }: Pr
                       aria-label={`View ${unit.name}`}
                       onClick={event => onUnitLinkClick(event, href)}
                     >
-                      {completed && <span className={styles.completedCheck} aria-hidden="true">Completed</span>}
                       {unit.code}
                     </a>
                   ) : (
@@ -130,7 +129,10 @@ export default function SemesterTable({ block, periodLabel, completedCodes }: Pr
                   {clickable ? (
                     <a href={href} className={styles.unitLink} onClick={event => onUnitLinkClick(event, href)}>
                       {formatRequisiteGroups(unit.requisiteGroups) ?? unit.prerequisites?.join(', ') ?? 'Nil'}
-                      <span className={styles.viewHint} aria-hidden="true">
+                      <span
+                        className={`${styles.viewHint} ${completed ? styles.completedHint : ''}`}
+                        aria-hidden="true"
+                      >
                         {completed ? 'Completed' : 'View unit'}
                         {pending ? (
                           <span className={styles.inlineSpinner} />

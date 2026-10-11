@@ -65,14 +65,49 @@ function templateUnitToSchedulable(
     offeringTerms: slot.unit.offerings.map(o => o.offered_in),
     requisiteGroups: slot.unit.requisite_groups.map(group =>
       group.conditions
-        .filter(condition => condition.unit)
         .map(condition => ({
-          type: 'unit' as const,
-          unitCode: condition.unit!.unit_code,
+          type: condition.type,
+          unitCode: condition.unit?.unit_code,
+          creditPoints: condition.credit_points == null ? null : Number(condition.credit_points),
           requisiteType: condition.requisite_type ?? 'prerequisite',
         })),
     ),
+    creditPoints: Number(slot.unit.credit_points),
   })
+}
+
+async function loadUnitMetadataByCodes(codes: Set<string>): Promise<Map<string, Unit>> {
+  if (codes.size === 0) return new Map()
+
+  const units = await prisma.unit.findMany({
+    where: { unit_code: { in: [...codes] } },
+    include: {
+      requisite_groups: {
+        include: {
+          conditions: {
+            include: { unit: { select: { unit_code: true } } },
+          },
+        },
+      },
+    },
+  })
+
+  return new Map(units.map(unit => {
+    const requisiteGroups = toRequisiteGroups(unit.requisite_groups)
+    return [unit.unit_code.trim().toUpperCase(), {
+      id: unit.id,
+      code: unit.unit_code,
+      name: unit.unit_name,
+      category: 'elective' as Unit['category'],
+      creditPoints: Number(unit.credit_points),
+      yearLevel: unit.year_level ?? 1,
+      semester: 0,
+      isElectiveSlot: false,
+      requisiteGroups,
+      prerequisites: requisiteUnitCodes(requisiteGroups, 'prerequisite'),
+      sourceMajorName: null,
+    }]
+  }))
 }
 
 function templateUnitToDisplayUnit(
@@ -97,6 +132,40 @@ function templateUnitToDisplayUnit(
   }
 }
 
+function completedSemesterBlocks(
+  completedSemesters: { unitCodes: string[] }[],
+  unitMetadataByCode: Map<string, Unit>,
+): SemesterBlock[] {
+  return completedSemesters.flatMap((semester, index): SemesterBlock[] => {
+    const unitCodes = semester.unitCodes.map(code => code.trim().toUpperCase()).filter(Boolean)
+    if (unitCodes.length === 0) return []
+
+    const year = Math.floor(index / 2) + 1
+    const semesterNumber = index % 2 === 0 ? 1 : 2
+    return [{
+      year,
+      semester: semesterNumber,
+      label: `Semester ${semesterNumber}`,
+      units: unitCodes.map((code): Unit => {
+        const unit = unitMetadataByCode.get(code)
+        return {
+          id: unit?.id ?? `completed-${index}-${code}`,
+          code,
+          name: unit?.name ?? code,
+          category: unit?.category ?? 'elective',
+          creditPoints: unit?.creditPoints ?? 12.5,
+          yearLevel: unit?.yearLevel ?? year,
+          semester: semesterNumber,
+          isElectiveSlot: false,
+          requisiteGroups: unit?.requisiteGroups,
+          prerequisites: unit?.prerequisites ?? [],
+          sourceMajorName: unit?.sourceMajorName ?? null,
+        }
+      }),
+    }]
+  })
+}
+
 export async function generatePlanOnServer({
   config,
   completedSemesters,
@@ -107,19 +176,26 @@ export async function generatePlanOnServer({
   const completedCodes = new Set(
     completedSemesters.flatMap(semester => semester.unitCodes).map(c => c.trim().toUpperCase()).filter(Boolean),
   )
+  const completedUnitMetadataByCode = await loadUnitMetadataByCodes(completedCodes)
 
   // Requisites and availability are not on PlannerDetail, so read them separately
   const template = await loadPlannerTemplateForGeneration(config.plannerId)
   if (!template) return null
 
   const remainingUnits: SchedulableUnit[] = []
-  const unitMetadataByCode = new Map<string, Unit>()
+  const unitMetadataByCode = new Map<string, Unit>(completedUnitMetadataByCode)
   const plannedCodes = new Set(completedCodes)
 
   for (const slot of template.units) {
       // An elective slot has no unit, so there is nothing to schedule or match
       if (!slot.unit) continue
       const code = slot.unit.unit_code.trim().toUpperCase()
+      const displayUnit = templateUnitToDisplayUnit(
+        slot,
+        slot.category,
+        slot.category === 'major_core' ? planner.majorName : null,
+      )
+      if (displayUnit) unitMetadataByCode.set(code, displayUnit)
 
       // Finished units stay out of the plan. Their place in the template does not decide the start year — a year-2 unit taken in the student's first semester must not push the plan to year 3.
       if (completedCodes.has(code)) continue
@@ -129,12 +205,6 @@ export async function generatePlanOnServer({
         remainingUnits.push(schedulable)
         plannedCodes.add(code)
       }
-      const displayUnit = templateUnitToDisplayUnit(
-        slot,
-        slot.category,
-        slot.category === 'major_core' ? planner.majorName : null,
-      )
-      if (displayUnit) unitMetadataByCode.set(code, displayUnit)
   }
 
   const warnings: string[] = []
@@ -174,6 +244,9 @@ export async function generatePlanOnServer({
       for (const slot of secondMajorTemplate.units) {
           if (!slot.unit || slot.category !== 'major_core') continue
           const code = slot.unit.unit_code.trim().toUpperCase()
+          const displayUnit = templateUnitToDisplayUnit(slot, 'double_major', secondMajorTemplate.major?.name ?? null)
+          if (displayUnit) unitMetadataByCode.set(code, displayUnit)
+
           if (plannedCodes.has(code)) continue
 
           const schedulable = templateUnitToSchedulable(slot, 'double_major')
@@ -181,8 +254,6 @@ export async function generatePlanOnServer({
             remainingUnits.push(schedulable)
             plannedCodes.add(code)
           }
-          const displayUnit = templateUnitToDisplayUnit(slot, 'double_major', secondMajorTemplate.major?.name ?? null)
-          if (displayUnit) unitMetadataByCode.set(code, displayUnit)
       }
     }
   }
@@ -209,7 +280,7 @@ export async function generatePlanOnServer({
       }
     }
   }
-  const semesters: SemesterBlock[] = result.semesters.map(bucket => ({
+  const scheduledSemesters: SemesterBlock[] = result.semesters.map(bucket => ({
     year: bucket.year,
     semester: bucket.semester,
     // The template may call this slot "Winter Term". The generated plan uses the semester number the student is continuing from.
@@ -225,11 +296,16 @@ export async function generatePlanOnServer({
         yearLevel: plannerUnit?.yearLevel ?? bucket.year,
         semester: bucket.semester,
         isElectiveSlot: plannerUnit?.isElectiveSlot ?? false,
+        requisiteGroups: plannerUnit?.requisiteGroups,
         prerequisites: plannerUnit?.prerequisites ?? [],
         sourceMajorName: plannerUnit?.sourceMajorName ?? null,
       }
     }),
   }))
+  const semesters: SemesterBlock[] = [
+    ...completedSemesterBlocks(completedSemesters, unitMetadataByCode),
+    ...scheduledSemesters,
+  ]
 
   return {
     semesters,
