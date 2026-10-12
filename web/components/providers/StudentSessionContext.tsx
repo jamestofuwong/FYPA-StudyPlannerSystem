@@ -7,6 +7,7 @@ import {
 import type { ScrapedStudent } from '../../../core/shared/types/student';
 import type {
   CustomSemesterBucket,
+  PlanWarning,
   SchedulableUnit,
 } from '../../../core/services/scheduling/customPlannerScheduler';
 import type { CategoryRequirement } from '../../../core/shared/scheduling/planValidator';
@@ -14,6 +15,30 @@ import type { CategoryRequirement } from '../../../core/shared/scheduling/planVa
 type LoadedStudent = { student: ScrapedStudent; studentId: string };
 type DataSource = 'scrape' | 'import_xlsx' | 'import_manual' | 'import_paste';
 type CustomPlanStart = { year: number; semester: 1 | 2 };
+
+/**
+ * A plan restored from an exported file, with no real student behind it.
+ * Kept separate from scrapedStudent/dashboardData/studentLoaded so the
+ * dashboard (and every other page) never mistakes it for a real student;
+ * only the pathway page's own substitution point reads this.
+ */
+export type RestoredSession = {
+  scrapedStudent: LoadedStudent;
+  dashboardData: any;
+  /** ISO date the source file was exported on, for the "snapshot" banner. */
+  exportDate: string;
+  /** Which file format this session was restored from, for the banner's wording only. */
+  source: 'excel' | 'pdf';
+  /**
+   * Same kind as customPlanStart and /api/custom-planner's own
+   * startYear/startSemester: a slot "year of study" counter, not a
+   * calendar year/term. Regenerate must send these explicitly, since a
+   * restored session's synthetic transcript has no terms for
+   * resolveNextStudyTerm to derive them from.
+   */
+  startYear: number;
+  startSemester: 1 | 2;
+};
 
 export type StudentSessionState = {
   scrapedStudent: LoadedStudent | null;
@@ -36,6 +61,8 @@ export type StudentSessionState = {
   setCustomPlanStart: Dispatch<SetStateAction<CustomPlanStart | null>>;
   retakeUnitCodes: Set<string>;
   setRetakeUnitCodes: Dispatch<SetStateAction<Set<string>>>;
+  concededPassRetakeWarnings: PlanWarning[];
+  setConcededPassRetakeWarnings: Dispatch<SetStateAction<PlanWarning[]>>;
   injectedMinors: Set<string>;
   setInjectedMinors: Dispatch<SetStateAction<Set<string>>>;
   /** Offering and requisite data for every unit the plan could contain. */
@@ -82,6 +109,13 @@ export type StudentSessionState = {
   removedUnitSlots: Record<string, { year: number; semester: 1 | 2 }>;
   setRemovedUnitSlots: React.Dispatch<React.SetStateAction<Record<string, { year: number; semester: 1 | 2 }>>>;
 
+  customMpuList: { code: string; name: string }[] | null;
+  setCustomMpuList: React.Dispatch<React.SetStateAction<{ code: string; name: string }[] | null>>;
+  allDatabaseMpus: { code: string; name: string }[];
+  setAllDatabaseMpus: React.Dispatch<React.SetStateAction<{ code: string; name: string }[]>>;
+
+  restoredSession: RestoredSession | null;
+  setRestoredSession: Dispatch<SetStateAction<RestoredSession | null>>;
 };
 
 const StudentSessionContext = createContext<StudentSessionState | null>(null);
@@ -100,6 +134,9 @@ export function StudentSessionProvider({ children }: { children: ReactNode }) {
   const [customPlanStart, setCustomPlanStart] = useState<CustomPlanStart | null>(null);
   // Units in the generated pathway that are repeat attempts after a failed grade
   const [retakeUnitCodes, setRetakeUnitCodes] = useState<Set<string>>(new Set());
+  // Why a retake was substituted for a Conceded Pass that blocked a prerequisite,
+  // set once at generation time, alongside retakeUnitCodes; see generateCustomPlan.
+  const [concededPassRetakeWarnings, setConcededPassRetakeWarnings] = useState<PlanWarning[]>([]);
   const [injectedMinors, setInjectedMinors] = useState<Set<string>>(new Set());
   const [planUnits, setPlanUnits] = useState<SchedulableUnit[]>([]);
   const [planIntakeSemester, setPlanIntakeSemester] = useState<1 | 2>(1);
@@ -116,6 +153,9 @@ export function StudentSessionProvider({ children }: { children: ReactNode }) {
   const [breakMilestones, setBreakMilestones] = useState<any[]>([]);
   const [customWilSlot, setCustomWilSlot] = useState<string | null>(null);
   const [removedUnitSlots, setRemovedUnitSlots] = useState<Record<string, { year: number; semester: 1 | 2 }>>({});
+  const [customMpuList, setCustomMpuList] = useState<{ code: string; name: string }[] | null>(null);
+  const [allDatabaseMpus, setAllDatabaseMpus] = useState<{ code: string; name: string }[]>([]);
+  const [restoredSession, setRestoredSession] = useState<RestoredSession | null>(null);
 
 
   // Switching planner discards the custom plan built for the previous one. This runs
@@ -126,6 +166,7 @@ export function StudentSessionProvider({ children }: { children: ReactNode }) {
     setCustomPlan(null);
     setCustomPlanStart(null);
     setRetakeUnitCodes(new Set());
+    setConcededPassRetakeWarnings([]);
     setInjectedMinors(new Set());
     setPlanUnits([]);
     setPlanIntakeSemester(1);
@@ -137,6 +178,8 @@ export function StudentSessionProvider({ children }: { children: ReactNode }) {
     setIsPlanEdited(false);
     setAvailableDoubleMajors([]);
     setSelectedDoubleMajorId(null);
+    setCustomMpuList(null);
+    setRestoredSession(null);
   }, [selectedPlannerIdx, dashboardData, manualPlanner]);
 
   return (
@@ -152,6 +195,7 @@ export function StudentSessionProvider({ children }: { children: ReactNode }) {
         customPlan, setCustomPlan,
         customPlanStart, setCustomPlanStart,
         retakeUnitCodes, setRetakeUnitCodes,
+        concededPassRetakeWarnings, setConcededPassRetakeWarnings,
         injectedMinors, setInjectedMinors,
         planUnits, setPlanUnits,
         planIntakeSemester, setPlanIntakeSemester,
@@ -167,7 +211,9 @@ export function StudentSessionProvider({ children }: { children: ReactNode }) {
         breakMilestones, setBreakMilestones,
         customWilSlot, setCustomWilSlot,
         removedUnitSlots, setRemovedUnitSlots,
-
+        customMpuList, setCustomMpuList,
+        allDatabaseMpus, setAllDatabaseMpus,
+        restoredSession, setRestoredSession,
       }}
     >
       {children}

@@ -365,6 +365,20 @@ export async function POST(req: NextRequest) {
     const plannerMpuUnits = planner.units
       .filter((tu) => tu.unit !== null && tu.category === 'mpu')
       .map((tu) => toSchedulable(tu.unit!, 'mpu'));
+    
+    // Query all MPU units from the entire database for the advisor add dropdown
+    const allDatabaseMpus = await prisma.unit.findMany({
+      where: {
+        unit_code: { startsWith: 'MPU' },
+      },
+      select: {
+        unit_code: true,
+        unit_name: true,
+      },
+      orderBy: {
+        unit_code: 'asc',
+      },
+    });
 
     // The pool is returned so the page can validate edits and offer the same
     // units in its add-unit picker, without asking for them again.
@@ -373,6 +387,10 @@ export async function POST(req: NextRequest) {
       data: result,
       units: remainingUnits,
       mpuUnits: plannerMpuUnits,
+      allMpuUnits: allDatabaseMpus.map((u) => ({
+        code: u.unit_code.trim().toUpperCase(),
+        name: u.unit_name,
+      })),
       startYear,
       startSemester,
       intakeSemester,
