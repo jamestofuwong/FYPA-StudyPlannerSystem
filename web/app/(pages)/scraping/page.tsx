@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import styles from './page.module.css';
 import type { ScrapedStudent } from '../../../../core/shared/types/student';
+import { fs, labelCase, radius, tracking } from '../../../styles/tokens';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -264,29 +265,29 @@ export default function ScrapingPage() {
                   boxShadow: sessionStatus === 'login-pending'
                     ? `0 0 6px ${statusColour(sessionStatus)}` : 'none',
                 }} />
-                <span style={{ fontSize: 12, color: statusColour(sessionStatus) }}>
+                <span style={{ fontSize: fs(12), color: statusColour(sessionStatus) }}>
                   {statusLabel(sessionStatus)}
                 </span>
               </div>
             </div>
 
             {sessionStatus === 'login-pending' && (
-              <div style={{ fontSize: 12, color: 'var(--accent-yellow)', marginBottom: 10 }}>
+              <div style={{ fontSize: fs(12), color: 'var(--accent-yellow)', marginBottom: 10 }}>
                 A browser window has opened — complete the Microsoft SSO login there.
                 This page will update automatically when done.
               </div>
             )}
 
             {sessionStatus === 'login-error' && sessionError && (
-              <div style={{ fontSize: 12, color: 'var(--accent-red)', marginBottom: 10,
-                padding: '6px 10px', background: 'rgba(244,135,113,0.08)',
-                border: '1px solid rgba(244,135,113,0.3)', borderRadius: 3 }}>
+              <div style={{ fontSize: fs(12), color: 'var(--accent-red)', marginBottom: 10,
+                padding: '6px 10px', background: 'rgba(var(--tint-red, 244,135,113),0.08)',
+                border: '1px solid rgba(var(--tint-red, 244,135,113),0.3)', borderRadius: radius(3) }}>
                 {sessionError}
               </div>
             )}
 
             {sessionStatus === 'logged-in' && (
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>
+              <div style={{ fontSize: fs(12), color: 'var(--text-muted)', marginBottom: 10 }}>
                 {studentCount > 0
                   ? `${studentCount.toLocaleString()} students loaded in memory`
                   : 'Loading student list…'}
@@ -296,7 +297,7 @@ export default function ScrapingPage() {
             {sessionStatus !== 'logged-in' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 8,
-                  fontSize: 12, color: 'var(--text-muted)', cursor: 'pointer' }}>
+                  fontSize: fs(12), color: 'var(--text-muted)', cursor: 'pointer' }}>
                   <input
                     type="checkbox"
                     checked={keepOpen}
@@ -306,7 +307,7 @@ export default function ScrapingPage() {
                   Keep browser open after login (debug)
                 </label>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 8,
-                  fontSize: 12, color: 'var(--text-muted)', cursor: 'pointer' }}>
+                  fontSize: fs(12), color: 'var(--text-muted)', cursor: 'pointer' }}>
                   <input
                     type="checkbox"
                     checked={manualMode}
@@ -322,16 +323,16 @@ export default function ScrapingPage() {
             {manualMode && sessionStatus === 'login-pending' && (
               <div style={{ marginBottom: 10 }}>
                 {/* Step progress */}
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8,
+                <div style={{ fontSize: fs(11), color: 'var(--text-muted)', marginBottom: 8,
                   fontFamily: 'var(--font-mono)', padding: '6px 10px',
-                  background: 'var(--surface-bg)', borderRadius: 3 }}>
+                  background: 'var(--surface-bg)', borderRadius: radius(3) }}>
                   Step {manualStep}/5 — {MANUAL_STEP_LABELS[manualStep]}
                 </div>
 
                 {manualStepError && (
-                  <div style={{ fontSize: 11, color: 'var(--accent-red)', marginBottom: 8,
-                    padding: '6px 10px', background: 'rgba(244,135,113,0.08)',
-                    border: '1px solid rgba(244,135,113,0.3)', borderRadius: 3 }}>
+                  <div style={{ fontSize: fs(11), color: 'var(--accent-red)', marginBottom: 8,
+                    padding: '6px 10px', background: 'rgba(var(--tint-red, 244,135,113),0.08)',
+                    border: '1px solid rgba(var(--tint-red, 244,135,113),0.3)', borderRadius: radius(3) }}>
                     {manualStepError}
                   </div>
                 )}
@@ -350,7 +351,7 @@ export default function ScrapingPage() {
                         key={step}
                         className={isDone ? styles.btnSecondary : styles.btnSuccess}
                         style={{
-                          textAlign: 'left', padding: '7px 12px', fontSize: 12,
+                          textAlign: 'left', padding: '7px 12px', fontSize: fs(12),
                           opacity: isDone ? 0.5 : isNext ? 1 : 0.35,
                         }}
                         disabled={!isNext || isLoading}
@@ -388,7 +389,7 @@ export default function ScrapingPage() {
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
                 <div className={styles.cardTitle}>
                   Student List
-                  <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--text-muted)',
+                  <span style={{ marginLeft: 8, fontSize: fs(11), color: 'var(--text-muted)',
                     fontFamily: 'var(--font-mono)', fontWeight: 400 }}>
                     {allStudents.length.toLocaleString()} students
                   </span>
@@ -425,7 +426,7 @@ export default function ScrapingPage() {
                           <td>
                             <button
                               className={styles.btnSecondary}
-                              style={{ padding: '3px 10px', fontSize: 11 }}
+                              style={{ padding: '3px 10px', fontSize: fs(11) }}
                               onClick={() => handleSelectStudent(s)}
                             >
                               Select
@@ -444,7 +445,7 @@ export default function ScrapingPage() {
                     })
                   : allStudents;
                 return filtered.length > 200 ? (
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8, textAlign: 'center' }}>
+                  <div style={{ fontSize: fs(11), color: 'var(--text-muted)', marginTop: 8, textAlign: 'center' }}>
                     Showing 200 of {filtered.length.toLocaleString()} — use the filter to narrow results
                   </div>
                 ) : null;
@@ -472,7 +473,7 @@ export default function ScrapingPage() {
           )}
 
           {loadingEnrollments && (
-            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
+            <div style={{ fontSize: fs(12), color: 'var(--text-muted)', marginBottom: 12 }}>
               Loading enrollments…
             </div>
           )}
@@ -496,15 +497,15 @@ export default function ScrapingPage() {
           )}
 
           {loadingAudit && (
-            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
+            <div style={{ fontSize: fs(12), color: 'var(--text-muted)', marginBottom: 12 }}>
               Loading degree audit…
             </div>
           )}
 
           {auditError && (
-            <div style={{ fontSize: 12, color: 'var(--accent-red)', marginBottom: 12,
-              padding: '8px 12px', background: 'rgba(244,135,113,0.08)',
-              border: '1px solid rgba(244,135,113,0.3)', borderRadius: 4 }}>
+            <div style={{ fontSize: fs(12), color: 'var(--accent-red)', marginBottom: 12,
+              padding: '8px 12px', background: 'rgba(var(--tint-red, 244,135,113),0.08)',
+              border: '1px solid rgba(var(--tint-red, 244,135,113),0.3)', borderRadius: radius(4) }}>
               {auditError}
             </div>
           )}
@@ -533,7 +534,7 @@ export default function ScrapingPage() {
                 </div>
                 <div className={`${styles.statCard} ${styles.orange}`}>
                   <div className={styles.statLabel}>Cum GPA</div>
-                  <div className={styles.statValue} style={{ fontSize: 22 }}>
+                  <div className={styles.statValue} style={{ fontSize: fs(22) }}>
                     {student.cgpa.toFixed(2)}
                   </div>
                   <div className={styles.statSub}>{student.gradeLevel}</div>
@@ -591,9 +592,9 @@ export default function ScrapingPage() {
                         <tr>
                           <td colSpan={7} style={{
                             padding: '6px 12px', background: 'var(--surface-bg)',
-                            fontFamily: 'var(--font-mono)', fontSize: 10,
+                            fontFamily: 'var(--font-mono)', fontSize: fs(10),
                             color: 'var(--accent-blue)', fontWeight: 600,
-                            letterSpacing: '1px', textTransform: 'uppercase',
+                            letterSpacing: tracking('1px'), textTransform: labelCase,
                           }}>
                             {term}
                           </td>
@@ -616,7 +617,7 @@ export default function ScrapingPage() {
                               </span>
                             </td>
                             <td><code className={styles.code}>{c.grade || '—'}</code></td>
-                            <td style={{ fontFamily: 'var(--font-mono)', fontSize: 10,
+                            <td style={{ fontFamily: 'var(--font-mono)', fontSize: fs(10),
                               color: 'var(--text-muted)' }}>{c.term}</td>
                           </tr>
                         ))}
@@ -641,14 +642,14 @@ export default function ScrapingPage() {
               </div>
               <div className={`${styles.statCard} ${styles.green}`} style={{ margin: 0 }}>
                 <div className={styles.statLabel}>Cum GPA</div>
-                <div className={styles.statValue} style={{ fontSize: 20 }}>
+                <div className={styles.statValue} style={{ fontSize: fs(20) }}>
                   {student ? student.cgpa.toFixed(2) : '—'}
                 </div>
                 <div className={styles.statSub}>current student</div>
               </div>
               <div className={`${styles.statCard} ${styles.yellow}`} style={{ margin: 0 }}>
                 <div className={styles.statLabel}>Status</div>
-                <div className={styles.statValue} style={{ fontSize: 14, paddingTop: 4 }}>
+                <div className={styles.statValue} style={{ fontSize: fs(14), paddingTop: 4 }}>
                   {student?.status ?? statusLabel(sessionStatus)}
                 </div>
                 <div className={styles.statSub}>
@@ -669,15 +670,15 @@ export default function ScrapingPage() {
                 ] as const).map(row => (
                   <div key={row.label} style={{ marginBottom: 10 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between',
-                      fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>
+                      fontSize: fs(11), color: 'var(--text-muted)', marginBottom: 3 }}>
                       <span>{row.label}</span>
                       <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
                         {row.val}
                       </span>
                     </div>
-                    <div style={{ background: '#1a1a1a', borderRadius: 2, height: 5, overflow: 'hidden' }}>
+                    <div style={{ background: '#1a1a1a', borderRadius: radius(2), height: 5, overflow: 'hidden' }}>
                       <div style={{
-                        height: '100%', borderRadius: 2,
+                        height: '100%', borderRadius: radius(2),
                         background: row.colour,
                         width: `${Math.min(100, (row.val / (student.creditsRequired || 1)) * 100)}%`,
                       }} />

@@ -15,10 +15,10 @@
 /* App name / logo */
 .appName {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--text-body-sm, 12px);
   font-weight: 500;
   color: var(--text-logo);
-  letter-spacing: 0.5px;
+  letter-spacing: var(--label-tracking, 0.5px);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -29,11 +29,11 @@
   width: 18px;
   height: 18px;
   background: var(--active-highlight);
-  border-radius: 3px;
+  border-radius: var(--radius-sm, 3px);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 10px;
+  font-size: var(--text-caption, 10px);
   font-weight: 700;
   color: white;
   flex-shrink: 0;
@@ -53,8 +53,8 @@
 
 .navItem {
   padding: 4px 10px;
-  border-radius: 3px;
-  font-size: 12px;
+  border-radius: var(--radius-sm, 3px);
+  font-size: var(--text-body-sm, 12px);
   cursor: pointer;
   color: var(--text-primary);
   transition: background 0.15s;
@@ -77,13 +77,13 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
+  font-size: var(--text-body-sm, 12px);
   color: var(--text-primary);
 }
 
 .userEmail {
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--text-body-sm, 12px);
 }
 
 .userAvatar {
@@ -94,7 +94,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 10px;
+  font-size: var(--text-caption, 10px);
   font-weight: 600;
   color: white;
   flex-shrink: 0;
@@ -130,11 +130,11 @@
 
 .loginBtn {
   padding: 3px 10px;
-  border-radius: 3px;
-  font-size: 11px;
+  border-radius: var(--radius-sm, 3px);
+  font-size: var(--text-small, 11px);
   cursor: pointer;
   color: white;
-  background: var(--accent-blue);
+  background: var(--interactive, var(--accent-blue));
   border: none;
   font-family: var(--font-sans);
   transition: opacity 0.15s;
@@ -147,8 +147,8 @@
 
 .logoutBtn {
   padding: 3px 10px;
-  border-radius: 3px;
-  font-size: 11px;
+  border-radius: var(--radius-sm, 3px);
+  font-size: var(--text-small, 11px);
   cursor: pointer;
   color: var(--text-muted);
   background: rgba(255, 255, 255, 0.06);
@@ -159,9 +159,9 @@
 }
 
 .logoutBtn:hover {
-  background: rgba(244, 135, 113, 0.12);
+  background: rgba(var(--tint-red, 244, 135, 113), 0.12);
   color: var(--accent-red);
-  border-color: rgba(244, 135, 113, 0.3);
+  border-color: rgba(var(--tint-red, 244, 135, 113), 0.3);
 }
 
 .notifDot {
@@ -177,8 +177,8 @@
   align-items: center;
   gap: 6px;
   padding: 3px 10px;
-  border-radius: 3px;
-  font-size: 11px;
+  border-radius: var(--radius-sm, 3px);
+  font-size: var(--text-small, 11px);
   color: var(--text-muted);
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.08);

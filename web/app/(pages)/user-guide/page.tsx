@@ -12,7 +12,7 @@ export default function UserGuide() {
     <div className={styles.container}>
       <header className={styles.header}>
         <h1 className={styles.title}>
-          <BookOpen size={40} color="#3b82f6" /> User Documentation
+          <BookOpen size={40} color="var(--guide-icon, #3b82f6)" /> User Documentation
         </h1>
         <p className={styles.subtitle}>
           Master the Study Planner System's automated features.
@@ -31,11 +31,11 @@ export default function UserGuide() {
         </div>
 
         <div className={styles.card}>
-          <h2 className={styles.cardHeader} style={{ color: '#c084fc' }}>
+          <h2 className={styles.cardHeader} style={{ color: 'var(--guide-ai, #c084fc)' }}>
             <Bot /> 2. Automated OCR Extraction (Optional)
           </h2>
           <p className={styles.cardContent}>
-            Want to save time? Our intelligent Python-based OCR engine automatically parses your uploaded PDF transcripts. If you choose this automated feature, ensure the status bar displays <strong style={{ color: '#4ade80' }}>"Python OCR Engine Active"</strong>. Otherwise, you can safely skip this and manually input your progress!
+            Want to save time? Our intelligent Python-based OCR engine automatically parses your uploaded PDF transcripts. If you choose this automated feature, ensure the status bar displays <strong style={{ color: 'var(--guide-ok, #4ade80)' }}>"Python OCR Engine Active"</strong>. Otherwise, you can safely skip this and manually input your progress!
           </p>
         </div>
 
@@ -110,7 +110,7 @@ export default function UserGuide() {
               <div className={styles.itemContent}>
                 <h4>Import Your Transcript</h4>
                 <ul className={styles.subList}>
-                  <li><strong>Prerequisite:</strong> Ensure the status bar reads <span style={{color: '#4ade80'}}>"Python OCR Engine Active"</span>.</li>
+                  <li><strong>Prerequisite:</strong> Ensure the status bar reads <span style={{color: 'var(--guide-ok, #4ade80)'}}>"Python OCR Engine Active"</span>.</li>
                   <li><strong>Navigate:</strong> Open the Data Import page from the left Explorer.</li>
                   <li><strong>Action:</strong> Upload your PDF to allow the system to extract your academic history and securely save it to your local database.</li>
                 </ul>

@@ -13,7 +13,7 @@
 .modal {
   background: var(--surface-bg);
   border: 1px solid var(--panel-border);
-  border-radius: 6px;
+  border-radius: var(--radius-md, 6px);
   width: 360px;
   max-width: calc(100vw - 32px);
   display: flex;
@@ -31,19 +31,19 @@
 }
 
 .title {
-  font-size: 13px;
+  font-size: var(--text-body, 13px);
   font-weight: 600;
-  letter-spacing: 0.02em;
+  letter-spacing: var(--label-tracking, 0.02em);
 }
 
 .closeBtn {
   background: none;
   border: none;
   color: var(--text-muted);
-  font-size: 14px;
+  font-size: var(--text-body-lg, 14px);
   cursor: pointer;
   padding: 2px 6px;
-  border-radius: 3px;
+  border-radius: var(--radius-sm, 3px);
   line-height: 1;
   transition: color 0.15s, background 0.15s;
 }
@@ -61,7 +61,7 @@
 }
 
 .subtitle {
-  font-size: 12px;
+  font-size: var(--text-body-sm, 12px);
   color: var(--text-muted);
 }
 
@@ -69,19 +69,19 @@
   background: none;
   border: 1px solid var(--panel-border);
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: var(--text-small, 11px);
   font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  letter-spacing: var(--label-tracking, 0.05em);
+  text-transform: var(--label-case, uppercase);
   padding: 5px 10px;
-  border-radius: 3px;
+  border-radius: var(--radius-sm, 3px);
   cursor: pointer;
   align-self: flex-start;
   transition: color 0.15s, border-color 0.15s;
 }
 .selectAll:hover {
   color: var(--text-primary);
-  border-color: var(--accent-blue);
+  border-color: var(--interactive, var(--accent-blue));
 }
 
 /* Section list */
@@ -97,17 +97,17 @@
   gap: 10px;
   cursor: pointer;
   padding: 8px 10px;
-  border-radius: 4px;
+  border-radius: var(--radius-md, 4px);
   border: 1px solid var(--panel-border);
   background: var(--card-bg);
   transition: border-color 0.15s;
 }
 .sectionRow:hover {
-  border-color: var(--accent-blue);
+  border-color: var(--interactive, var(--accent-blue));
 }
 
 .checkbox {
-  accent-color: var(--accent-blue);
+  accent-color: var(--interactive, var(--accent-blue));
   width: 14px;
   height: 14px;
   cursor: pointer;
@@ -115,7 +115,7 @@
 }
 
 .sectionLabel {
-  font-size: 12px;
+  font-size: var(--text-body-sm, 12px);
   font-weight: 500;
   user-select: none;
 }
@@ -133,10 +133,10 @@
   background: none;
   border: 1px solid var(--panel-border);
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--text-body-sm, 12px);
   font-weight: 500;
   padding: 6px 14px;
-  border-radius: 3px;
+  border-radius: var(--radius-sm, 3px);
   cursor: pointer;
   transition: color 0.15s, border-color 0.15s;
 }
@@ -150,13 +150,13 @@
 }
 
 .exportBtn {
-  background: var(--accent-blue);
-  border: 1px solid var(--accent-blue);
+  background: var(--interactive, var(--accent-blue));
+  border: 1px solid var(--interactive, var(--accent-blue));
   color: #fff;
-  font-size: 12px;
+  font-size: var(--text-body-sm, 12px);
   font-weight: 600;
   padding: 6px 16px;
-  border-radius: 3px;
+  border-radius: var(--radius-sm, 3px);
   cursor: pointer;
   transition: opacity 0.15s;
 }

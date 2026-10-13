@@ -53,10 +53,11 @@
 
 .card {
     background-color: color-mix(in srgb, var(--panel-bg) 86%, transparent);
-    padding: 1.5rem;
-    border-radius: 1rem;
+    padding: var(--card-pad, 1.5rem);
+    border-radius: var(--radius-card, 1rem);
     border: 1px solid var(--panel-border);
     transition: border-color 0.2s ease;
+    box-shadow: var(--shadow-card, none);
 }
 
 
@@ -97,13 +98,14 @@
 
 
 .sectionTitle {
-    font-size: 1.5rem;
-    font-weight: 700;
-    color: var(--text-primary);
+    font-size: var(--section-title-size, 1.5rem);
+    font-weight: var(--section-title-weight, 700);
+    color: var(--section-title-color, var(--text-primary));
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    margin-bottom: 1.5rem;
+    margin-bottom: var(--section-title-space, 1.5rem);
+    font-family: var(--font-display, inherit);
 }
 
 

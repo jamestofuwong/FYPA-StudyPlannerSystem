@@ -21,7 +21,7 @@
   max-height: calc(100vh - 80px);
   background: var(--panel-bg);
   border: 1px solid var(--panel-border);
-  border-radius: 6px;
+  border-radius: var(--radius-md, 6px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -49,7 +49,7 @@
 
 .title {
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: var(--text-body-sm, 12px);
   font-weight: 500;
   color: var(--text-primary);
   white-space: nowrap;
@@ -57,15 +57,15 @@
 
 .statusPill {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--text-caption, 10px);
   padding: 2px 9px;
-  border-radius: 10px;
+  border-radius: var(--radius-lg, 10px);
   white-space: nowrap;
 }
 
 .pillConnecting {
   color: var(--text-muted);
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(var(--overlay-rgb, 255, 255, 255), 0.06);
 }
 
 .pillSigningIn {
@@ -75,7 +75,7 @@
 
 .pillDone {
   color: var(--accent-green);
-  background: rgba(78, 201, 176, 0.12);
+  background: rgba(var(--tint-green, 78, 201, 176), 0.12);
 }
 
 .closeBtn {
@@ -83,17 +83,17 @@
   background: none;
   border: none;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--text-body-sm, 12px);
   cursor: pointer;
   padding: 4px 8px;
-  border-radius: 3px;
+  border-radius: var(--radius-sm, 3px);
   line-height: 1;
   transition: background 0.15s, color 0.15s;
   font-family: var(--font-mono);
 }
 
 .closeBtn:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(var(--overlay-rgb, 255, 255, 255), 0.08);
   color: var(--text-primary);
 }
 

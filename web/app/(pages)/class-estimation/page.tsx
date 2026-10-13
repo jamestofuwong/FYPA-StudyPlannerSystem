@@ -16,6 +16,8 @@ import {
   parseTypedRetentionPercent,
   retentionRateToPercent,
 } from '../../../../core/services/classEstimation/retention';
+import { fs } from '../../../styles/tokens';
+import { useDesign } from '../../../styles/themeProvider';
 
 /** What /api/class-estimation/preview returns: the preview itself plus the semester it was run for. */
 type PreviewResponse = EstimationPreview & {
@@ -569,6 +571,8 @@ export default function ClassEstimationPage() {
   };
 
   const isLoggedIn = sessionStatus === 'logged-in';
+  // Meadow moves the portal login button from the top bar into the sidebar.
+  const loginButtonPlace = useDesign() === 'meadow' ? 'sidebar' : 'top bar';
   const isRunning  = runStatus === 'running';
 
   // Two ways in: the live portal, which needs a login, and DPA files exported from it, which do not.
@@ -770,10 +774,10 @@ export default function ClassEstimationPage() {
           <div className={styles.subPanel}>
             <div className={styles.statusRow}>
               <span className={styles.statusDot} style={{ background: isLoggedIn ? 'var(--accent-green)' : 'var(--text-muted)' }} />
-              <span style={{ fontSize: 12, color: isLoggedIn ? 'var(--accent-green)' : 'var(--text-muted)' }}>
+              <span style={{ fontSize: fs(12), color: isLoggedIn ? 'var(--accent-green)' : 'var(--text-muted)' }}>
                 {isLoggedIn
                   ? `Connected · ${studentCount.toLocaleString()} students available`
-                  : 'Not connected. Log in to the portal with the button in the top bar first.'}
+                  : `Not connected. Log in to the portal with the button in the ${loginButtonPlace} first.`}
               </span>
             </div>
 

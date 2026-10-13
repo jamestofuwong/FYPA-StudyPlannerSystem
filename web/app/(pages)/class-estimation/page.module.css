@@ -1,7 +1,7 @@
 .panel {
   height: 100%;
   overflow-y: auto;
-  padding: 20px 24px;
+  padding: var(--panel-pad-y, 20px) max(var(--panel-pad-x, 24px), calc((100% - var(--panel-max, 100%)) / 2));
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -21,7 +21,7 @@
 }
 
 .title {
-  font-size: 18px;
+  font-size: var(--text-heading, 18px);
   font-weight: 600;
   color: var(--text-primary);
   margin: 0 0 4px;
@@ -29,7 +29,7 @@
 }
 
 .subtitle {
-  font-size: 12px;
+  font-size: var(--text-body-sm, 12px);
   color: var(--text-muted);
   margin: 0;
 }
@@ -39,19 +39,21 @@
 .card {
   background: var(--card-bg);
   border: 1px solid var(--panel-border);
-  border-radius: 4px;
-  padding: 16px;
+  border-radius: var(--radius-card, 4px);
+  padding: var(--card-pad, 16px);
+  box-shadow: var(--shadow-card, none);
 }
 
 .sectionTitle {
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-muted);
-  margin-bottom: 12px;
+  font-size: var(--section-title-size, 11px);
+  font-weight: var(--section-title-weight, 600);
+  text-transform: var(--label-case, uppercase);
+  letter-spacing: var(--label-tracking, 0.08em);
+  color: var(--section-title-color, var(--text-muted));
+  margin-bottom: var(--section-title-space, 12px);
   padding-bottom: 6px;
   border-bottom: 1px solid var(--panel-border);
+  font-family: var(--font-display, inherit);
 }
 
 /* ── Session status ───────────────────────────────────────────────────────────── */
@@ -72,7 +74,7 @@
 }
 
 .hintText {
-  font-size: 12px;
+  font-size: var(--text-body-sm, 12px);
   color: var(--text-muted);
   margin: 8px 0 0;
 }
@@ -93,7 +95,7 @@
 }
 
 .rangeLabel {
-  font-size: 11px;
+  font-size: var(--text-small, 11px);
   color: var(--text-muted);
   font-weight: 500;
 }
@@ -102,9 +104,9 @@
   padding: 5px 8px;
   background: var(--surface-bg);
   border: 1px solid var(--panel-border);
-  border-radius: 3px;
+  border-radius: var(--radius-sm, 3px);
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: var(--text-body-sm, 12px);
   font-family: var(--font-mono);
   width: 100%;
   box-sizing: border-box;
@@ -112,7 +114,7 @@
 }
 
 .rangeInput:focus {
-  border-color: var(--accent-blue);
+  border-color: var(--interactive, var(--accent-blue));
 }
 
 .rangeInput:disabled {
@@ -136,16 +138,17 @@
 /* ── Buttons ─────────────────────────────────────────────────────────────────── */
 
 .btnPrimary {
-  padding: 6px 18px;
-  background: var(--accent-blue);
-  color: #fff;
+  padding: var(--btn-pad, 6px 18px);
+  background: var(--interactive, var(--accent-blue));
+  color: var(--on-accent, #fff);
   border: none;
-  border-radius: 3px;
-  font-size: 12px;
-  font-weight: 600;
+  border-radius: var(--radius-control, 3px);
+  font-size: var(--text-body-sm, 12px);
+  font-weight: var(--btn-weight, 600);
   cursor: pointer;
   font-family: var(--font-sans);
   transition: filter 0.15s;
+  min-height: var(--control-height, auto);
 }
 
 .btnPrimary:hover:not(:disabled) {
@@ -158,20 +161,21 @@
 }
 
 .btnDanger {
-  padding: 6px 18px;
+  padding: var(--btn-pad, 6px 18px);
   background: transparent;
   color: var(--accent-red);
   border: 1px solid var(--accent-red);
-  border-radius: 3px;
-  font-size: 12px;
-  font-weight: 600;
+  border-radius: var(--radius-control, 3px);
+  font-size: var(--text-body-sm, 12px);
+  font-weight: var(--btn-weight, 600);
   cursor: pointer;
   font-family: var(--font-sans);
   transition: background 0.15s;
+  min-height: var(--control-height, auto);
 }
 
 .btnDanger:hover {
-  background: rgba(244, 135, 113, 0.1);
+  background: rgba(var(--tint-red, 244, 135, 113), 0.1);
 }
 
 /* ── Progress bar ────────────────────────────────────────────────────────────── */
@@ -179,16 +183,16 @@
 .progressWrap {
   height: 6px;
   background: var(--surface-bg);
-  border-radius: 3px;
+  border-radius: var(--radius-sm, 3px);
   overflow: hidden;
   margin-bottom: 8px;
 }
 
 .progressFill {
   height: 100%;
-  border-radius: 3px;
+  border-radius: var(--radius-sm, 3px);
   transition: width 0.25s ease;
-  background: var(--accent-blue);
+  background: var(--interactive, var(--accent-blue));
 }
 
 /* Animated stripes while running */
@@ -214,7 +218,7 @@
 .progressLabel {
   display: flex;
   justify-content: space-between;
-  font-size: 11px;
+  font-size: var(--text-small, 11px);
   color: var(--text-muted);
   font-family: var(--font-mono);
   margin-bottom: 10px;
@@ -226,7 +230,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
+  font-size: var(--text-body-sm, 12px);
   color: var(--text-muted);
   margin-top: 2px;
 }
@@ -236,7 +240,7 @@
   width: 11px;
   height: 11px;
   border: 2px solid var(--surface-bg);
-  border-top-color: var(--accent-blue);
+  border-top-color: var(--interactive, var(--accent-blue));
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
   flex-shrink: 0;
@@ -260,10 +264,10 @@
 .errorBox {
   margin-top: 10px;
   padding: 8px 10px;
-  background: rgba(244, 135, 113, 0.08);
-  border: 1px solid rgba(244, 135, 113, 0.3);
-  border-radius: 3px;
-  font-size: 12px;
+  background: rgba(var(--tint-red, 244, 135, 113), 0.08);
+  border: 1px solid rgba(var(--tint-red, 244, 135, 113), 0.3);
+  border-radius: var(--radius-sm, 3px);
+  font-size: var(--text-body-sm, 12px);
   color: var(--accent-red);
 }
 
@@ -282,21 +286,21 @@
   gap: 4px;
   padding: 12px 8px;
   background: var(--surface-bg);
-  border-radius: 4px;
+  border-radius: var(--radius-md, 4px);
 }
 
 .summaryValue {
-  font-size: 26px;
+  font-size: var(--text-display, 26px);
   font-weight: 700;
   font-family: var(--font-mono);
   line-height: 1;
 }
 
 .summaryLabel {
-  font-size: 10px;
+  font-size: var(--text-caption, 10px);
   color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  text-transform: var(--label-case, uppercase);
+  letter-spacing: var(--label-tracking, 0.06em);
 }
 
 /* ── Log ─────────────────────────────────────────────────────────────────────── */
@@ -305,7 +309,7 @@
   max-height: 340px;
   overflow-y: auto;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--text-small, 11px);
   display: flex;
   flex-direction: column;
   gap: 1px;
@@ -318,7 +322,7 @@
   align-items: flex-start;
   gap: 8px;
   padding: 2px 6px;
-  border-radius: 2px;
+  border-radius: var(--radius-sm, 2px);
   color: var(--text-muted);
   line-height: 1.5;
 }
@@ -345,20 +349,21 @@
 /* ── Pipeline preview ────────────────────────────────────────────────────────── */
 
 .btnSecondary {
-  padding: 6px 18px;
+  padding: var(--btn-pad, 6px 18px);
   background: transparent;
   color: var(--text-primary);
   border: 1px solid var(--panel-border);
-  border-radius: 3px;
-  font-size: 12px;
-  font-weight: 600;
+  border-radius: var(--radius-control, 3px);
+  font-size: var(--text-body-sm, 12px);
+  font-weight: var(--btn-weight, 600);
   cursor: pointer;
   font-family: var(--font-sans);
   transition: border-color 0.15s;
+  min-height: var(--control-height, auto);
 }
 
 .btnSecondary:hover {
-  border-color: var(--accent-blue);
+  border-color: var(--interactive, var(--accent-blue));
 }
 
 /* The target semester is derived from the date and displayed, not chosen, so this states it and why. */
@@ -370,25 +375,25 @@
   margin: 12px 0;
   padding: 10px 12px;
   border: 1px solid var(--panel-border);
-  border-radius: 6px;
+  border-radius: var(--radius-md, 6px);
   background: var(--surface-bg);
 }
 
 .targetLabel {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  font-size: var(--text-small, 11px);
+  text-transform: var(--label-case, uppercase);
+  letter-spacing: var(--label-tracking, 0.04em);
   color: var(--text-muted);
 }
 
 .targetValue {
-  font-size: 13px;
+  font-size: var(--text-body, 13px);
   font-weight: 600;
   color: var(--text-primary);
 }
 
 .targetReason {
-  font-size: 11px;
+  font-size: var(--text-small, 11px);
   color: var(--text-muted);
 }
 
@@ -397,7 +402,7 @@
   flex-direction: column;
   gap: 3px;
   margin-top: 14px;
-  font-size: 11px;
+  font-size: var(--text-small, 11px);
   font-family: var(--font-mono);
   color: var(--text-muted);
   line-height: 1.5;
@@ -416,8 +421,8 @@
 
 .previewRow {
   background: var(--surface-bg);
-  border-radius: 3px;
-  font-size: 12px;
+  border-radius: var(--radius-sm, 3px);
+  font-size: var(--text-body-sm, 12px);
   color: var(--text-primary);
 }
 
@@ -432,7 +437,7 @@
 .previewMeta {
   color: var(--text-muted);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--text-small, 11px);
   text-align: right;
 }
 
@@ -440,7 +445,7 @@
   margin: 0;
   padding: 8px 10px 10px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--text-small, 11px);
   color: var(--text-muted);
   overflow-x: auto;
 }
@@ -462,20 +467,20 @@
   padding: 8px 10px;
   background: var(--panel-bg, transparent);
   border: 1px solid var(--panel-border);
-  border-radius: 4px;
+  border-radius: var(--radius-md, 4px);
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--text-body-sm, 12px);
   color: var(--text-primary);
   text-align: left;
 }
 
 .sourceOption:hover:not(:disabled) {
-  border-color: var(--accent-blue);
+  border-color: var(--interactive, var(--accent-blue));
 }
 
 .sourceOptionActive {
-  border-color: var(--accent-blue);
-  box-shadow: inset 0 0 0 1px var(--accent-blue);
+  border-color: var(--interactive, var(--accent-blue));
+  box-shadow: inset 0 0 0 1px var(--interactive, var(--accent-blue));
 }
 
 .sourceOption:disabled {
@@ -484,7 +489,7 @@
 }
 
 .sourceOptionHint {
-  font-size: 10px;
+  font-size: var(--text-caption, 10px);
   color: var(--text-muted);
 }
 
@@ -492,17 +497,17 @@
 
 .dropZone {
   border: 1px dashed var(--panel-border);
-  border-radius: 4px;
+  border-radius: var(--radius-md, 4px);
   padding: 20px;
   text-align: center;
-  font-size: 12px;
+  font-size: var(--text-body-sm, 12px);
   color: var(--text-muted);
   cursor: pointer;
   transition: border-color 0.15s, background 0.15s;
 }
 
 .dropZoneActive {
-  border-color: var(--accent-blue);
+  border-color: var(--interactive, var(--accent-blue));
   background: rgba(88, 166, 255, 0.06);
   color: var(--text-primary);
 }
@@ -520,11 +525,11 @@
   display: flex;
   align-items: baseline;
   gap: 8px;
-  font-size: 11px;
+  font-size: var(--text-small, 11px);
   font-family: var(--font-mono, monospace);
   padding: 4px 6px;
-  border-radius: 3px;
-  background: rgba(255, 255, 255, 0.02);
+  border-radius: var(--radius-sm, 3px);
+  background: rgba(var(--overlay-rgb, 255, 255, 255), 0.02);
 }
 
 .fileRowOk { color: var(--accent-green); }
@@ -538,14 +543,14 @@
 
 .fileNote {
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: var(--text-caption, 10px);
 }
 
 .storedBadge {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
+  font-size: var(--text-small, 11px);
   color: var(--text-muted);
   margin-top: 8px;
 }
@@ -563,10 +568,10 @@
   align-items: baseline;
   flex-wrap: wrap;
   gap: 8px;
-  font-size: 11px;
+  font-size: var(--text-small, 11px);
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  text-transform: var(--label-case, uppercase);
+  letter-spacing: var(--label-tracking, 0.04em);
   color: var(--text-secondary);
   margin-bottom: 10px;
 }
@@ -575,7 +580,7 @@
   display: flex;
   flex-direction: column;
   border: 1px solid var(--panel-border);
-  border-radius: 6px;
+  border-radius: var(--radius-md, 6px);
   overflow: hidden;
 }
 
@@ -585,7 +590,7 @@
   gap: 8px;
   align-items: center;
   padding: 6px 10px;
-  font-size: 12px;
+  font-size: var(--text-body-sm, 12px);
 }
 
 .electiveRow:nth-child(even) {
@@ -594,9 +599,9 @@
 
 .electiveHead {
   background: var(--surface-bg);
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  font-size: var(--text-caption, 10px);
+  text-transform: var(--label-case, uppercase);
+  letter-spacing: var(--label-tracking, 0.04em);
   color: var(--text-muted);
 }
 
@@ -610,7 +615,7 @@
 }
 
 .electiveNote {
-  font-size: 11px;
+  font-size: var(--text-small, 11px);
   font-weight: 400;
   text-transform: none;
   letter-spacing: 0;
@@ -620,7 +625,7 @@
 .electiveSeats {
   font-family: var(--font-mono);
   text-align: right;
-  color: var(--accent-blue);
+  color: var(--interactive, var(--accent-blue));
 }
 
 /* The projected table carries a new-intake column the elective one does not. */
@@ -634,8 +639,8 @@
   border: none;
   padding: 0;
   font-family: var(--font-sans);
-  font-size: 12px;
-  color: var(--accent-blue);
+  font-size: var(--text-body-sm, 12px);
+  color: var(--interactive, var(--accent-blue));
   cursor: pointer;
   text-align: left;
 }
@@ -652,7 +657,7 @@
   border: none;
   padding: 0 0 0 12px;
   font-family: var(--font-sans);
-  font-size: 11px;
+  font-size: var(--text-small, 11px);
   color: var(--text-muted);
   cursor: pointer;
 }
@@ -667,19 +672,19 @@
   align-items: center;
   flex-shrink: 0;
   padding: 8px 14px;
-  border: 1px solid var(--accent-blue);
-  border-radius: 6px;
+  border: 1px solid var(--interactive, var(--accent-blue));
+  border-radius: var(--radius-md, 6px);
   background: var(--active-bg);
-  font-size: 13px;
+  font-size: var(--text-body, 13px);
   font-weight: 700;
-  color: var(--accent-blue);
+  color: var(--interactive, var(--accent-blue));
   text-decoration: none;
   white-space: nowrap;
   transition: background 0.15s, color 0.15s;
 }
 
 .reportLink:hover {
-  background: var(--accent-blue);
+  background: var(--interactive, var(--accent-blue));
   color: #fff;
 }
 
@@ -697,13 +702,13 @@
 .progressHead {
   display: flex;
   justify-content: space-between;
-  font-size: 12px;
+  font-size: var(--text-body-sm, 12px);
   color: var(--text-secondary);
 }
 
 .tabIntro {
   margin: 0 0 10px;
-  font-size: 12px;
+  font-size: var(--text-body-sm, 12px);
   line-height: 1.55;
   color: var(--text-secondary);
 }
@@ -729,7 +734,7 @@
 }
 
 .headcount {
-  color: var(--accent-blue);
+  color: var(--interactive, var(--accent-blue));
   font-weight: 600;
 }
 
@@ -746,7 +751,7 @@
   border-radius: 14px;
   padding: 4px 10px;
   font-family: var(--font-sans);
-  font-size: 11px;
+  font-size: var(--text-small, 11px);
   background: none;
   color: var(--text-secondary);
   cursor: pointer;
@@ -759,13 +764,13 @@
 }
 
 .chip:hover {
-  border-color: var(--accent-blue);
+  border-color: var(--interactive, var(--accent-blue));
 }
 
 .chipActive {
-  border-color: var(--accent-blue);
+  border-color: var(--interactive, var(--accent-blue));
   background: var(--active-bg);
-  color: var(--accent-blue);
+  color: var(--interactive, var(--accent-blue));
   font-weight: 600;
 }
 
@@ -784,7 +789,7 @@
 
 .rawToggle summary {
   cursor: pointer;
-  font-size: 11px;
+  font-size: var(--text-small, 11px);
   color: var(--text-muted);
 }
 
@@ -797,7 +802,7 @@
 
 .checksHeading {
   margin: 6px 0 0;
-  font-size: 12px;
+  font-size: var(--text-body-sm, 12px);
   font-weight: 600;
   color: var(--text-secondary);
 }
@@ -817,23 +822,23 @@
   gap: 2px;
   padding: 10px 12px;
   border: 1px solid var(--panel-border);
-  border-radius: 6px;
+  border-radius: var(--radius-md, 6px);
   background: var(--surface-bg);
 }
 
 .funnel strong {
-  font-size: 18px;
+  font-size: var(--text-heading, 18px);
   color: var(--text-primary);
 }
 
 .funnel span {
-  font-size: 12px;
+  font-size: var(--text-body-sm, 12px);
   color: var(--text-secondary);
 }
 
 .funnel em {
   font-style: normal;
-  font-size: 11px;
+  font-size: var(--text-small, 11px);
   color: var(--text-muted);
 }
 
@@ -849,7 +854,7 @@
 
 .logDetails > summary {
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--text-body-sm, 12px);
   color: var(--text-secondary);
 }
 
@@ -865,14 +870,14 @@
   border-radius: 12px;
   padding: 3px 10px;
   font-family: var(--font-sans);
-  font-size: 11px;
+  font-size: var(--text-small, 11px);
   color: var(--text-secondary);
   cursor: pointer;
 }
 
 .logScope .scopeActive {
-  border-color: var(--accent-blue);
-  color: var(--accent-blue);
+  border-color: var(--interactive, var(--accent-blue));
+  color: var(--interactive, var(--accent-blue));
 }
 
 /* A unit's name beside its code: quieter than the code, cut with an ellipsis when the column is narrow. */
@@ -888,13 +893,13 @@
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 12px;
-  font-size: 12px;
+  font-size: var(--text-body-sm, 12px);
   color: var(--text-primary);
 }
 
 .courseLabel {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  font-size: var(--text-small, 11px);
+  text-transform: var(--label-case, uppercase);
+  letter-spacing: var(--label-tracking, 0.04em);
   color: var(--text-muted);
 }

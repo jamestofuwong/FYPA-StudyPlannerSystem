@@ -12,6 +12,7 @@ import type {
 
 import CourseListTable, { getSemesterOrder, getSemesterLabel } from '../../../components/planner/CourseListTable';
 import PlannerHeader from '../../../components/planner/PlannerHeader';
+import { fs } from '../../../styles/tokens';
 
 type ImportHistoryItem = {
   id: string;
@@ -788,7 +789,7 @@ function parseIntakeMonth(intake: string): number {
 
           {/* Parsing spinner */}
           {isParsing && !planner && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 0', color: 'var(--text-muted)', fontSize: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 0', color: 'var(--text-muted)', fontSize: fs(12) }}>
               <div className={styles.spinner} />
               Parsing PDF...
             </div>

@@ -1,21 +1,25 @@
 "use client";
 
 import { createContext, useContext, useEffect, useRef, useState } from "react";
-import { themes } from "./theme";
+import { paletteFor, type DesignMode, type ThemeColors } from "./theme";
 
 type ThemeMode = "light" | "dark" | "portal";
 export type ThemePreference = "system" | "light" | "dark" | "portal";
+export type { DesignMode };
 
 interface ThemeContextType {
   mode: ThemeMode;
   preference: ThemePreference;
   setPreference: (p: ThemePreference) => void;
-  theme: typeof themes.light;
+  design: DesignMode;
+  setDesign: (d: DesignMode) => void;
+  theme: ThemeColors;
 }
 
 const ThemeContext = createContext<ThemeContextType | null>(null);
 
 const STORAGE_KEY = "themePreference";
+const DESIGN_STORAGE_KEY = "designPreference";
 
 async function detectSystemTheme(): Promise<ThemeMode> {
   if (
@@ -36,13 +40,16 @@ async function detectSystemTheme(): Promise<ThemeMode> {
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [mode, setMode] = useState<ThemeMode>("light");
   const [preference, setPreferenceState] = useState<ThemePreference>("system");
+  const [design, setDesignState] = useState<DesignMode>("classic");
   const preferenceRef = useRef<ThemePreference>("system");
 
-  const applyTheme = (theme: ThemeMode) => {
+  const applyTheme = (theme: ThemeMode, activeDesign: DesignMode) => {
     const root = document.documentElement;
     root.dataset.theme = theme;
+    // Meadow's type, spacing and shape tokens hang off this attribute (styles/meadow.css).
+    root.dataset.design = activeDesign;
 
-    const palette = themes[theme];
+    const palette = paletteFor(activeDesign, theme);
 
     root.style.setProperty("--sidebar-bg", palette.sidebarBg);
     root.style.setProperty("--sidebar-search-bg", palette.sidebarSearchBg);
@@ -87,8 +94,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
-    applyTheme(mode);
-  }, [mode]);
+    applyTheme(mode, design);
+  }, [mode, design]);
+
+  const setDesign = (d: DesignMode) => {
+    setDesignState(d);
+    localStorage.setItem(DESIGN_STORAGE_KEY, d);
+  };
 
   const setPreference = (p: ThemePreference) => {
     preferenceRef.current = p;
@@ -105,6 +117,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     let cleanup = () => {};
 
     const initTheme = async () => {
+      if (localStorage.getItem(DESIGN_STORAGE_KEY) === "meadow") setDesignState("meadow");
+
       const saved = localStorage.getItem(STORAGE_KEY) as ThemePreference | null;
       const pref: ThemePreference =
         saved === "light" || saved === "dark" || saved === "system" || saved === "portal"
@@ -149,7 +163,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <ThemeContext.Provider
-      value={{ mode, preference, setPreference, theme: themes[mode] }}
+      value={{ mode, preference, setPreference, design, setDesign, theme: paletteFor(design, mode) }}
     >
       {children}
     </ThemeContext.Provider>
@@ -160,4 +174,11 @@ export function useTheme() {
   const context = useContext(ThemeContext);
   if (!context) throw new Error("useTheme must be inside ThemeProvider");
   return context;
+}
+
+// Layout components read the active design to pick their Meadow markup.
+// Outside a ThemeProvider (e.g. a component rendered on its own in a test)
+// this falls back to the classic design instead of throwing.
+export function useDesign(): DesignMode {
+  return useContext(ThemeContext)?.design ?? "classic";
 }

@@ -2,21 +2,23 @@
 /* SECTION TITLES */
 /* ================================================================================================================== */
 .sectionTitle {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 1.5px;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  margin-bottom: 12px;
+  font-size: var(--section-title-size, 11px);
+  font-weight: var(--section-title-weight, 600);
+  letter-spacing: var(--label-tracking, 1.5px);
+  text-transform: var(--label-case, uppercase);
+  color: var(--section-title-color, var(--text-muted));
+  margin-bottom: var(--section-title-space, 12px);
   display: flex;
   align-items: center;
   gap: 8px;
+  font-family: var(--font-display, inherit);
 }
 .sectionTitle::after {
   content: '';
   flex: 1;
   height: 1px;
   background: var(--panel-border);
+  display: var(--section-title-rule, block);
 }
 
 
@@ -25,19 +27,19 @@
 /* ================================================================================================================== */
 .badge { 
   display: inline-block; 
-  padding: 2px 7px; 
-  border-radius: 3px; 
-  font-size: 10px; 
+  padding: var(--badge-pad, 2px 7px); 
+  border-radius: var(--radius-badge, 3px); 
+  font-size: var(--text-caption, 10px); 
   font-weight: 600; 
-  letter-spacing: 0.5px; 
+  letter-spacing: var(--label-tracking, 0.5px); 
   font-family: var(--font-mono); 
 }
-.badgeBlue   { background: rgba(86,156,214,0.2);  color: var(--accent-blue);   border: 1px solid rgba(86,156,214,0.3); }
-.badgeGreen  { background: rgba(78,201,176,0.2);  color: var(--accent-green);  border: 1px solid rgba(78,201,176,0.3); }
-.badgeYellow { background: rgba(220,220,170,0.15); color: var(--accent-yellow); border: 1px solid rgba(220,220,170,0.25); }
-.badgeOrange { background: rgba(206,145,120,0.2); color: var(--accent-orange); border: 1px solid rgba(206,145,120,0.3); }
-.badgeRed    { background: rgba(244,135,113,0.2); color: var(--accent-red);    border: 1px solid rgba(244,135,113,0.3); }
-.badgePurple { background: rgba(180,130,220,0.2); color: var(--accent-purple);  border: 1px solid rgba(180,130,220,0.3); }
+.badgeBlue   { background: rgba(var(--tint-blue, 86, 156, 214), 0.2);  color: var(--accent-blue);   border: 1px solid rgba(var(--tint-blue, 86, 156, 214), 0.3); }
+.badgeGreen  { background: rgba(var(--tint-green, 78, 201, 176), 0.2);  color: var(--accent-green);  border: 1px solid rgba(var(--tint-green, 78, 201, 176), 0.3); }
+.badgeYellow { background: rgba(var(--tint-yellow, 220, 220, 170), 0.15); color: var(--accent-yellow); border: 1px solid rgba(var(--tint-yellow, 220, 220, 170), 0.25); }
+.badgeOrange { background: rgba(var(--tint-orange, 206, 145, 120), 0.2); color: var(--accent-orange); border: 1px solid rgba(var(--tint-orange, 206, 145, 120), 0.3); }
+.badgeRed    { background: rgba(var(--tint-red, 244, 135, 113), 0.2); color: var(--accent-red);    border: 1px solid rgba(var(--tint-red, 244, 135, 113), 0.3); }
+.badgePurple { background: rgba(var(--tint-purple, 180, 130, 220), 0.2); color: var(--accent-purple);  border: 1px solid rgba(var(--tint-purple, 180, 130, 220), 0.3); }
 .badgeSelect {
   appearance: none;
   -webkit-appearance: none;
@@ -51,7 +53,7 @@
   background: var(--card-bg);
   color: var(--text-primary);
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: var(--text-body-sm, 12px);
   padding: 4px 8px;
 }
 
@@ -62,13 +64,13 @@
 .tableWrap { 
   overflow-x: visible;
   border: 1px solid var(--panel-border); 
-  border-radius: 4px; 
+  border-radius: var(--radius-md, 4px); 
   margin-bottom: 16px; 
 }
 .table { 
   width: 100%; 
   border-collapse: collapse; 
-  font-size: 12px; 
+  font-size: var(--text-body-sm, 12px); 
   table-layout: fixed;
 }
 .table thead tr { 
@@ -78,12 +80,12 @@
   z-index: 1; 
 }
 .table thead th { 
-  padding: 8px 12px; 
+  padding: var(--cell-pad, 8px 12px); 
   text-align: left; 
-  color: var(--accent-blue); 
+  color: var(--table-head-color, var(--accent-blue)); 
   font-family: var(--font-mono); 
-  font-size: 11px; 
-  font-weight: 500; 
+  font-size: var(--text-small, 11px); 
+  font-weight: var(--table-head-weight, 500); 
   border-bottom: 1px solid var(--panel-border); 
   white-space: nowrap;
  
@@ -96,11 +98,11 @@
   background: var(--row-alt); 
 }
 .table tbody tr:hover { 
-  background: rgba(0,122,204,0.1); 
+  background: rgba(var(--tint-highlight, 0, 122, 204), 0.1); 
   
 }
 .table tbody td { 
-  padding: 7px 12px; 
+  padding: var(--cell-pad, 7px 12px); 
   color: var(--text-primary);
 
 }
@@ -122,9 +124,9 @@
   font-family: var(--font-mono); 
   background: var(--surface-bg); 
   padding: 1px 5px; 
-  border-radius: 2px; 
-  font-size: 11px; 
-  color: var(--accent-orange); 
+  border-radius: var(--radius-sm, 2px); 
+  font-size: var(--text-small, 11px); 
+  color: var(--code-color, var(--accent-orange)); 
 }
 
 
@@ -142,19 +144,19 @@
   margin-bottom: 6px;
 }
 .termLabel {
-  font-size: 10px;
+  font-size: var(--text-caption, 10px);
   font-weight: 600;
-  letter-spacing: 1.2px;
-  text-transform: uppercase;
+  letter-spacing: var(--label-tracking, 1.2px);
+  text-transform: var(--label-case, uppercase);
   color: var(--accent-blue);
   font-family: var(--font-mono);
   white-space: nowrap;
 }
 .termLabelEmpty {
-  font-size: 10px;
+  font-size: var(--text-caption, 10px);
   font-weight: 600;
-  letter-spacing: 1.2px;
-  text-transform: uppercase;
+  letter-spacing: var(--label-tracking, 1.2px);
+  text-transform: var(--label-case, uppercase);
   color: var(--text-muted);
   font-family: var(--font-mono);
   white-space: nowrap;
@@ -166,9 +168,9 @@
 }
 .termEmpty {
   border: 1px dashed var(--panel-border);
-  border-radius: 4px;
+  border-radius: var(--radius-md, 4px);
   padding: 12px 16px;
-  font-size: 11px;
+  font-size: var(--text-small, 11px);
   color: var(--text-muted);
   font-family: var(--font-mono);
 }
@@ -186,10 +188,10 @@
 /* Minor Label */
 /* ================================================================================================================== */
 .minorLabel {
-  font-size: 10px;
+  font-size: var(--text-caption, 10px);
   font-weight: 600;
-  letter-spacing: 1.2px;
-  text-transform: uppercase;
+  letter-spacing: var(--label-tracking, 1.2px);
+  text-transform: var(--label-case, uppercase);
   color: var(--accent-blue);
   font-family: var(--font-mono);
   white-space: normal;
@@ -209,9 +211,9 @@
   border: 1px solid transparent;
   color: var(--text-primary);
   padding: 3px 6px;
-  font-size: 12px;
+  font-size: var(--text-body-sm, 12px);
   font-family: var(--font-sans);
-  border-radius: 2px;
+  border-radius: var(--radius-sm, 2px);
   outline: none;
   transition: border-color 0.15s;
   white-space: normal;
@@ -233,9 +235,9 @@
   border: 1px solid transparent;
   color: var(--text-primary);
   padding: 3px 6px;
-  font-size: 12px;
+  font-size: var(--text-body-sm, 12px);
   font-family: var(--font-sans);
-  border-radius: 2px;
+  border-radius: var(--radius-sm, 2px);
   outline: none;
   resize: none;
   overflow-y: hidden;
@@ -265,28 +267,28 @@
   background: transparent;
   border: 1px dashed var(--panel-border);
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--text-body-sm, 12px);
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: var(--radius-md, 4px);
   transition: all 0.15s;
 }
 .addUnitBtn:hover {
-  border-color: var(--accent-blue);
-  color: var(--accent-blue);
-  background: rgba(0,122,204,0.05);
+  border-color: var(--interactive, var(--accent-blue));
+  color: var(--interactive, var(--accent-blue));
+  background: rgba(var(--tint-highlight, 0, 122, 204), 0.05);
 }
 .deleteBtn {
   background: transparent;
-  border: 1px solid rgba(244,135,113,0.3);
+  border: 1px solid rgba(var(--tint-red, 244, 135, 113), 0.3);
   color: var(--accent-red);
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--text-body-sm, 12px);
   padding: 2px 5px;
-  border-radius: 3px;
+  border-radius: var(--radius-sm, 3px);
   transition: all 0.15s;
 }
 .deleteBtn:hover {
-  background: rgba(244,135,113,0.2);
+  background: rgba(var(--tint-red, 244, 135, 113), 0.2);
   color: var(--accent-red);
 }
 
@@ -306,17 +308,17 @@
   gap: 4px;
   padding: 10px 12px;
   border: 1px solid var(--panel-border);
-  border-radius: 4px;
+  border-radius: var(--radius-md, 4px);
   background: var(--panel-bg);
 }
 .summaryLabel {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
+  font-size: var(--text-caption, 10px);
+  text-transform: var(--label-case, uppercase);
+  letter-spacing: var(--label-tracking, 0.8px);
   color: var(--text-muted);
 }
 .summaryValue {
-  font-size: 12px;
+  font-size: var(--text-body-sm, 12px);
   color: var(--text-primary);
 }
 .summaryEditRow {
@@ -325,11 +327,11 @@
   gap: 4px;
 }
 .editSeparator {
-  font-size: 12px;
+  font-size: var(--text-body-sm, 12px);
   color: var(--text-muted);
 }
 .editUnit {
-  font-size: 11px;
+  font-size: var(--text-small, 11px);
   color: var(--text-muted);
 }
 .editInput[type="number"]::-webkit-outer-spin-button,

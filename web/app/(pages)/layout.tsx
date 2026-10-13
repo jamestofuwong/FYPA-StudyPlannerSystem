@@ -15,10 +15,14 @@ import { PortalAuthProvider } from '../../components/providers/PortalAuthContext
 import { ScraperProvider } from '../../components/providers/ScraperContext';
 import { StudentSessionProvider } from '../../components/providers/StudentSessionContext';
 import { panelFromPathname, panelToPath, type PanelId } from '../../lib/navigation';
+import { useDesign } from '../../styles/themeProvider';
+import { fs, radius } from '../../styles/tokens';
 
 export default function AppLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
+  // Meadow moves the portal login into the sidebar and drops the status bar.
+  const isMeadow = useDesign() === 'meadow';
 
   const activePanel = useMemo(() => panelFromPathname(pathname), [pathname]);
   const [openTabs, setOpenTabs] = useState<PanelId[]>([activePanel]);
@@ -117,7 +121,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       <StudentSessionProvider>
       <ToastProvider>
         <div className={styles.shell}>
-          <TopBar />
+          {!isMeadow && <TopBar />}
           <UpdateBanner />
           <div className={styles.body}>
             <Sidebar
@@ -137,7 +141,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
               <div className={styles.panels}>{children}</div>
             </div>
           </div>
-          <StatusBar activePanel={activePanel} />
+          {!isMeadow && <StatusBar activePanel={activePanel} />}
         </div>
         <PortalLoginModal />
         {/* Shutdown overlay — shown while services are stopping */}
@@ -149,11 +153,11 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             alignItems: 'center', justifyContent: 'center',
             gap: 16,
           }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--fg-muted, #858585)', marginBottom: 4 }}>
+            <div style={{ fontSize: fs(13), fontWeight: 600, color: 'var(--fg-muted, #858585)', marginBottom: 4 }}>
               Shutting down…
             </div>
-            <div style={{ width: 160, height: 3, background: 'var(--border, #333)', borderRadius: 2, overflow: 'hidden' }}>
-              <div style={{ width: '40%', height: '100%', background: 'var(--accent-blue, #569cd6)', borderRadius: 2,
+            <div style={{ width: 160, height: 3, background: 'var(--border, #333)', borderRadius: radius(2), overflow: 'hidden' }}>
+              <div style={{ width: '40%', height: '100%', background: 'var(--accent-blue, #569cd6)', borderRadius: radius(2),
                 animation: 'db-pulse 1.2s ease-in-out infinite alternate' }} />
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
@@ -162,9 +166,9 @@ export default function AppLayout({ children }: { children: ReactNode }) {
                 { key: 'database', label: 'Database' },
                 { key: 'ollama',   label: 'AI engine' },
               ].map(({ key, label }) => (
-                <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--fg-muted, #858585)' }}>
+                <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: fs(12), color: 'var(--fg-muted, #858585)' }}>
                   {shutdownDone[key]
-                    ? <span style={{ color: 'var(--accent-green, #4ec9b0)', fontSize: 11 }}>✓</span>
+                    ? <span style={{ color: 'var(--accent-green, #4ec9b0)', fontSize: fs(11) }}>✓</span>
                     : <span style={{ display: 'inline-block', width: 10, height: 10, border: '2px solid var(--accent-blue, #569cd6)',
                         borderTopColor: 'transparent', borderRadius: '50%',
                         animation: 'spin 0.8s linear infinite' }} />
@@ -188,9 +192,9 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             alignItems: 'center', justifyContent: 'center',
             gap: 12,
           }}>
-            <div style={{ fontSize: 13, color: 'var(--fg-muted, #858585)' }}>Starting database…</div>
-            <div style={{ width: 160, height: 3, background: 'var(--border, #333)', borderRadius: 2, overflow: 'hidden' }}>
-              <div style={{ width: '40%', height: '100%', background: 'var(--accent-blue, #569cd6)', borderRadius: 2,
+            <div style={{ fontSize: fs(13), color: 'var(--fg-muted, #858585)' }}>Starting database…</div>
+            <div style={{ width: 160, height: 3, background: 'var(--border, #333)', borderRadius: radius(2), overflow: 'hidden' }}>
+              <div style={{ width: '40%', height: '100%', background: 'var(--accent-blue, #569cd6)', borderRadius: radius(2),
                 animation: 'db-pulse 1.2s ease-in-out infinite alternate' }} />
             </div>
           </div>

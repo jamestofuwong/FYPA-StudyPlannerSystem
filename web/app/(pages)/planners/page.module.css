@@ -21,11 +21,12 @@
 
 .searchInput {
   flex: 1;
-  padding: 8px;
+  padding: var(--input-pad, 8px);
   background-color: var(--sidebar-bg);
   border: 1px solid var(--panel-border);
   color: var(--text-primary);
-  border-radius: 4px;
+  border-radius: var(--radius-control, 4px);
+  min-height: var(--input-height, auto);
 }
 
 .searchInput::placeholder {
@@ -33,13 +34,15 @@
 }
 
 .btnPrimary {
-  padding: 8px 12px;
+  padding: var(--btn-pad, 8px 12px);
   background-color: var(--active-highlight);
-  color: #fff;
+  color: var(--on-accent, #fff);
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-control, 4px);
   cursor: pointer;
   transition: background-color 0.2s;
+  min-height: var(--control-height, auto);
+  font-weight: var(--btn-weight, normal);
 }
 
 .btnPrimary:hover {
@@ -54,13 +57,15 @@
 }
 
 .btnDanger {
-  padding: 8px 12px;
+  padding: var(--btn-pad, 8px 12px);
   background: var(--accent-red);
-  color: #fff;
+  color: var(--on-accent, #fff);
   border: 1px solid var(--accent-red);
-  border-radius: 4px;
+  border-radius: var(--radius-control, 4px);
   cursor: pointer;
   transition: opacity 0.2s;
+  min-height: var(--control-height, auto);
+  font-weight: var(--btn-weight, normal);
 }
 
 .btnDanger:hover:not(:disabled) {
@@ -68,16 +73,18 @@
 }
 
 .btnSecondary {
-  padding: 8px 12px;
+  padding: var(--btn-pad, 8px 12px);
   background: transparent;
   color: var(--text-secondary);
   border: 1px solid var(--panel-border);
-  border-radius: 4px;
+  border-radius: var(--radius-control, 4px);
   cursor: pointer;
+  min-height: var(--control-height, auto);
+  font-weight: var(--btn-weight, normal);
 }
 
 .btnSecondary:hover:not(:disabled) {
-  border-color: var(--accent-blue);
+  border-color: var(--interactive, var(--accent-blue));
   color: var(--text-primary);
 }
 
@@ -110,7 +117,7 @@
 }
 
 .itemMeta {
-  font-size: 11px;
+  font-size: var(--text-small, 11px);
   color: var(--text-secondary);
   font-family: monospace;
 }
@@ -138,7 +145,7 @@
   padding: 10px 14px;
   cursor: pointer;
   font-weight: 600;
-  font-size: 13px;
+  font-size: var(--text-body, 13px);
   border-bottom: 1px solid var(--panel-border);
   background: var(--surface-bg);
 }
@@ -148,7 +155,7 @@
 }
 
 .courseArrow {
-  font-size: 10px;
+  font-size: var(--text-caption, 10px);
   width: 14px;
 }
 
@@ -157,7 +164,7 @@
 }
 
 .courseCount {
-  font-size: 11px;
+  font-size: var(--text-small, 11px);
   color: var(--text-muted);
   font-family: var(--font-mono);
 }
@@ -168,10 +175,10 @@
   gap: 8px;
   padding: 8px 14px 8px 28px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--text-body-sm, 12px);
   font-weight: 500;
   border-bottom: 1px solid var(--sidebar-border);
-  background: rgba(255,255,255,0.02);
+  background: rgba(var(--overlay-rgb, 255, 255, 255), 0.02);
 }
 
 .yearGroup:hover {
@@ -179,7 +186,7 @@
 }
 
 .yearArrow {
-  font-size: 9px;
+  font-size: var(--text-tiny, 9px);
   width: 12px;
 }
 
@@ -189,7 +196,7 @@
 }
 
 .yearCount {
-  font-size: 10px;
+  font-size: var(--text-caption, 10px);
   color: var(--text-muted);
   font-family: var(--font-mono);
 }
@@ -225,7 +232,7 @@
   max-width: calc(100vw - 32px);
   padding: 20px;
   border: 1px solid var(--panel-border);
-  border-radius: 6px;
+  border-radius: var(--radius-md, 6px);
   background: var(--surface-bg);
   color: var(--text-primary);
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
@@ -238,16 +245,16 @@
   border-bottom: 1px solid var(--panel-border);
   color: var(--accent-blue);
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: var(--text-body, 13px);
   font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  letter-spacing: var(--label-tracking, 0.04em);
+  text-transform: var(--label-case, uppercase);
 }
 
 .savedDialog p {
   margin: 0 0 18px;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--text-body-sm, 12px);
   line-height: 1.5;
 }
 

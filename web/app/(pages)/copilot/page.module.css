@@ -2,7 +2,7 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  padding: 16px 20px;
+  padding: var(--panel-pad-y, 16px) max(var(--panel-pad-x, 20px), calc((100% - var(--panel-max, 100%)) / 2));
   background: var(--main-bg);
   height: 100%;
   overflow: hidden;
@@ -25,7 +25,7 @@
   flex-direction: column;
   background: var(--card-bg);
   border: 1px solid var(--panel-border);
-  border-radius: 4px;
+  border-radius: var(--radius-md, 4px);
   overflow: hidden;
 }
 
@@ -39,21 +39,21 @@
 }
 
 .historyTitle {
-  font-size: 11px;
+  font-size: var(--text-small, 11px);
   font-weight: 600;
-  letter-spacing: 1px;
-  text-transform: uppercase;
+  letter-spacing: var(--label-tracking, 1px);
+  text-transform: var(--label-case, uppercase);
   color: var(--text-muted);
 }
 
 .newChatBtn {
-  background: var(--accent-blue, #3b82f6);
+  background: var(--interactive, var(--accent-blue, #3b82f6));
   color: #fff;
   border: none;
-  border-radius: 3px;
+  border-radius: var(--radius-sm, 3px);
   width: 22px;
   height: 22px;
-  font-size: 16px;
+  font-size: var(--text-title, 16px);
   line-height: 1;
   cursor: pointer;
   display: flex;
@@ -80,7 +80,7 @@
   align-items: center;
   gap: 4px;
   padding: 6px 8px;
-  border-radius: 3px;
+  border-radius: var(--radius-sm, 3px);
   cursor: pointer;
   min-width: 0;
 }
@@ -90,17 +90,17 @@
 }
 
 .historyItemActive {
-  background: color-mix(in srgb, var(--accent-blue, #3b82f6) 15%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent-blue, #3b82f6) 30%, transparent);
+  background: color-mix(in srgb, var(--interactive, var(--accent-blue, #3b82f6)) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--interactive, var(--accent-blue, #3b82f6)) 30%, transparent);
 }
 
 .historyItemActive:hover {
-  background: color-mix(in srgb, var(--accent-blue, #3b82f6) 20%, transparent);
+  background: color-mix(in srgb, var(--interactive, var(--accent-blue, #3b82f6)) 20%, transparent);
 }
 
 .historyItemTitle {
   flex: 1;
-  font-size: 12px;
+  font-size: var(--text-body-sm, 12px);
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
@@ -112,7 +112,7 @@
   background: none;
   border: none;
   color: var(--text-muted);
-  font-size: 16px;
+  font-size: var(--text-title, 16px);
   line-height: 1;
   cursor: pointer;
   padding: 0 2px;
@@ -130,22 +130,24 @@
 }
 
 .sectionTitle {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 1.5px;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  margin-bottom: 12px;
+  font-size: var(--section-title-size, 11px);
+  font-weight: var(--section-title-weight, 600);
+  letter-spacing: var(--label-tracking, 1.5px);
+  text-transform: var(--label-case, uppercase);
+  color: var(--section-title-color, var(--text-muted));
+  margin-bottom: var(--section-title-space, 12px);
   display: flex;
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
+  font-family: var(--font-display, inherit);
 }
 .sectionTitle::after {
   content: '';
   flex: 1;
   height: 1px;
   background: var(--panel-border);
+  display: var(--section-title-rule, block);
 }
 
 /* Chat layout */
@@ -155,7 +157,7 @@
   flex-direction: column;
   background: var(--card-bg);
   border: 1px solid var(--panel-border);
-  border-radius: 4px;
+  border-radius: var(--radius-md, 4px);
   overflow: hidden;
   min-height: 0;
   min-width: 0;
@@ -190,13 +192,13 @@
 
 .messageBubble {
   padding: 10px 14px;
-  border-radius: 4px;
-  font-size: 13px;
+  border-radius: var(--radius-md, 4px);
+  font-size: var(--text-body, 13px);
   line-height: 1.5;
 }
 
 .messageUser .messageBubble {
-  background: var(--accent-blue, #3b82f6);
+  background: var(--interactive, var(--accent-blue, #3b82f6));
   color: #fff;
 }
 
@@ -215,23 +217,23 @@
 }
 
 .messageRole {
-  font-size: 10px;
+  font-size: var(--text-caption, 10px);
   color: var(--text-muted);
-  letter-spacing: 0.5px;
+  letter-spacing: var(--label-tracking, 0.5px);
   display: flex;
   align-items: center;
   gap: 6px;
 }
 
 .workflowTag {
-  font-size: 9px;
+  font-size: var(--text-tiny, 9px);
   font-family: monospace;
   color: var(--text-muted);
   background: var(--panel-border);
   border: 1px solid var(--panel-border);
-  border-radius: 3px;
+  border-radius: var(--radius-sm, 3px);
   padding: 1px 5px;
-  letter-spacing: 0.3px;
+  letter-spacing: var(--label-tracking, 0.3px);
   opacity: 0.7;
 }
 
@@ -247,16 +249,16 @@
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--accent-blue, #3b82f6);
+  background: var(--interactive, var(--accent-blue, #3b82f6));
   flex-shrink: 0;
   animation: pulse 1.4s ease-in-out infinite;
 }
 
 .statusText {
-  font-size: 12px;
+  font-size: var(--text-body-sm, 12px);
   color: var(--text-muted);
   font-style: italic;
-  letter-spacing: 0.2px;
+  letter-spacing: var(--label-tracking, 0.2px);
 }
 
 @keyframes pulse {
@@ -302,9 +304,9 @@
   flex: 1;
   background: var(--main-bg);
   border: 1px solid var(--panel-border);
-  border-radius: 4px;
+  border-radius: var(--radius-md, 4px);
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--text-body, 13px);
   font-family: inherit;
   padding: 8px 12px;
   resize: none;
@@ -313,7 +315,7 @@
 
 .input:focus {
   outline: none;
-  border-color: var(--accent-blue, #3b82f6);
+  border-color: var(--interactive, var(--accent-blue, #3b82f6));
 }
 
 .input:disabled {
@@ -321,12 +323,12 @@
 }
 
 .sendBtn {
-  background: var(--accent-blue, #3b82f6);
+  background: var(--interactive, var(--accent-blue, #3b82f6));
   color: #fff;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-md, 4px);
   padding: 0 18px;
-  font-size: 13px;
+  font-size: var(--text-body, 13px);
   font-weight: 500;
   cursor: pointer;
   flex-shrink: 0;
@@ -355,41 +357,41 @@
   padding: 48px 32px;
   background: var(--card-bg);
   border: 1px solid var(--panel-border);
-  border-radius: 4px;
+  border-radius: var(--radius-md, 4px);
 }
 
 .setupIcon {
-  font-size: 36px;
+  font-size: var(--text-hero, 36px);
   line-height: 1;
 }
 
 .setupTitle {
-  font-size: 15px;
+  font-size: var(--text-title, 15px);
   font-weight: 600;
   color: var(--text-primary);
 }
 
 .setupBody {
-  font-size: 13px;
+  font-size: var(--text-body, 13px);
   color: var(--text-muted);
   max-width: 380px;
   line-height: 1.6;
 }
 
 .setupError {
-  font-size: 12px;
+  font-size: var(--text-body-sm, 12px);
   color: var(--accent-red, #ef4444);
   max-width: 380px;
 }
 
 .setupBtn {
   margin-top: 4px;
-  background: var(--accent-blue, #3b82f6);
+  background: var(--interactive, var(--accent-blue, #3b82f6));
   color: #fff;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-md, 4px);
   padding: 8px 24px;
-  font-size: 13px;
+  font-size: var(--text-body, 13px);
   font-weight: 500;
   cursor: pointer;
 }
@@ -409,19 +411,19 @@
   max-width: 340px;
   height: 6px;
   background: var(--panel-border);
-  border-radius: 3px;
+  border-radius: var(--radius-sm, 3px);
   overflow: hidden;
 }
 
 .progressBar {
   height: 100%;
-  background: var(--accent-blue, #3b82f6);
-  border-radius: 3px;
+  background: var(--interactive, var(--accent-blue, #3b82f6));
+  border-radius: var(--radius-sm, 3px);
   transition: width 0.4s ease;
 }
 
 .progressLabel {
-  font-size: 12px;
+  font-size: var(--text-body-sm, 12px);
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
 }

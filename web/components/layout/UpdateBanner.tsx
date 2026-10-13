@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { fs, radius } from '../../styles/tokens';
 
 type UpdateStatus =
   | { status: 'idle' }
@@ -33,7 +34,7 @@ export default function UpdateBanner() {
 
   if (update.status === 'error') {
     return (
-      <div style={bannerStyle('#3a1a1a', 'rgba(244,135,113,0.15)', '#f48771')}>
+      <div style={bannerStyle('#3a1a1a', 'rgba(var(--tint-red, 244,135,113),0.15)', '#f48771')}>
         <span style={dotStyle('#f48771')} />
         <span style={textStyle}>Update check failed: {update.message}</span>
         <button onClick={() => setUpdate({ status: 'idle' })} style={dismissStyle}>Dismiss</button>
@@ -43,7 +44,7 @@ export default function UpdateBanner() {
 
   if (update.status === 'available') {
     return (
-      <div style={bannerStyle('#1a2a3a', 'rgba(86,156,214,0.15)', '#569cd6')}>
+      <div style={bannerStyle('#1a2a3a', 'rgba(var(--tint-blue, 86,156,214),0.15)', '#569cd6')}>
         <span style={dotStyle('#569cd6')} />
         <span style={textStyle}>
           Version <strong>{update.version}</strong> is available
@@ -61,12 +62,12 @@ export default function UpdateBanner() {
 
   if (update.status === 'downloading') {
     return (
-      <div style={bannerStyle('#1a2a3a', 'rgba(86,156,214,0.15)', '#569cd6')}>
+      <div style={bannerStyle('#1a2a3a', 'rgba(var(--tint-blue, 86,156,214),0.15)', '#569cd6')}>
         <span style={dotStyle('#569cd6')} />
         <span style={textStyle}>Downloading update… {update.percent}%</span>
         <div style={{
           flex: 1, maxWidth: 120, height: 3,
-          background: 'rgba(255,255,255,0.1)', borderRadius: 2, overflow: 'hidden',
+          background: 'rgba(var(--overlay-rgb, 255,255,255),0.1)', borderRadius: radius(2), overflow: 'hidden',
         }}>
           <div style={{
             width: `${update.percent}%`, height: '100%',
@@ -79,7 +80,7 @@ export default function UpdateBanner() {
 
   if (update.status === 'downloaded') {
     return (
-      <div style={bannerStyle('#1a3a1a', 'rgba(78,201,176,0.15)', '#4ec9b0')}>
+      <div style={bannerStyle('#1a3a1a', 'rgba(var(--tint-green, 78,201,176),0.15)', '#4ec9b0')}>
         <span style={dotStyle('#4ec9b0')} />
         <span style={textStyle}>
           Version <strong>{update.version}</strong> ready to install
@@ -106,10 +107,10 @@ function bannerStyle(bg: string, border: string, _accent: string): React.CSSProp
     alignItems: 'center',
     gap: 10,
     padding: '5px 14px',
-    background: bg,
+    background: `var(--banner-surface, ${bg})`,
     borderBottom: `1px solid ${border}`,
     fontFamily: 'var(--font-sans)',
-    fontSize: 12,
+    fontSize: fs(12),
     flexShrink: 0,
     minHeight: 32,
   };
@@ -132,8 +133,8 @@ const textStyle: React.CSSProperties = {
 function actionStyle(color: string): React.CSSProperties {
   return {
     padding: '3px 10px',
-    borderRadius: 3,
-    fontSize: 11,
+    borderRadius: radius(3),
+    fontSize: fs(11),
     fontWeight: 600,
     color: '#fff',
     background: color,
@@ -146,11 +147,11 @@ function actionStyle(color: string): React.CSSProperties {
 
 const dismissStyle: React.CSSProperties = {
   padding: '3px 8px',
-  borderRadius: 3,
-  fontSize: 11,
+  borderRadius: radius(3),
+  fontSize: fs(11),
   color: 'var(--text-muted)',
-  background: 'rgba(255,255,255,0.06)',
-  border: '1px solid rgba(255,255,255,0.1)',
+  background: 'rgba(var(--overlay-rgb, 255,255,255),0.06)',
+  border: '1px solid rgba(var(--overlay-rgb, 255,255,255),0.1)',
   cursor: 'pointer',
   fontFamily: 'var(--font-sans)',
   flexShrink: 0,

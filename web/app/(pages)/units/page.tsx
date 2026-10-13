@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import styles from './page.module.css';
 import UnitOfferingsModal from './UnitOfferingsModal';
+import { fs } from '../../../styles/tokens';
 
 
 // ==================================================================================================================
@@ -335,7 +336,7 @@ export default function UnitsPage() {
                                     value={formPrereq}
                                     onChange={(e) => setFormPrereq(e.target.value)}
                                 />
-                                <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                                <span style={{ fontSize: fs(10), color: 'var(--text-muted)' }}>
                                     Use '&' for AND, '/' for OR (e.g. COS10009 / COS10022). Credit points: 50cp
                                 </span>
                                 </div>

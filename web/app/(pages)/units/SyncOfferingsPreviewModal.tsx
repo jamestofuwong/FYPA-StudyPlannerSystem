@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import styles from './page.module.css';
+import { fs } from '../../../styles/tokens';
 
 type InferredDiffItem = {
   unit_id: string;
@@ -115,7 +116,7 @@ export default function SyncOfferingsPreviewModal({
         <div className={styles.modalHeader}>
           <div>
             <h3 className={styles.modalTitle}>Auto-Detect Offerings Review</h3>
-            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+            <span style={{ fontSize: fs(11), color: 'var(--text-muted)' }}>
               Analyzed <strong>{totalPlanners}</strong> planners across <strong>{yearRangeStr}</strong>. Detected changes for <strong>{totalChanges}</strong> units.
             </span>
           </div>
@@ -126,7 +127,7 @@ export default function SyncOfferingsPreviewModal({
 
         {/* Filter bar */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '8px 0' }}>
-          <label className={styles.checkboxLabel} style={{ fontSize: '11px' }}>
+          <label className={styles.checkboxLabel} style={{ fontSize: fs(11) }}>
             <input
               type="checkbox"
               checked={filterChangedOnly}
@@ -134,7 +135,7 @@ export default function SyncOfferingsPreviewModal({
             />
             Show changed & new units only ({totalChanges})
           </label>
-          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+          <span style={{ fontSize: fs(11), color: 'var(--text-muted)' }}>
             You can modify the proposed checkboxes before confirming overwrite.
           </span>
         </div>
@@ -168,7 +169,7 @@ export default function SyncOfferingsPreviewModal({
                           {TERMS.map((t) => (
                             <label
                               key={t.id}
-                              style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize: '11px', cursor: 'pointer' }}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize: fs(11), cursor: 'pointer' }}
                             >
                               <input
                                 type="checkbox"

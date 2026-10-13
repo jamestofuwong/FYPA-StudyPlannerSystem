@@ -23,6 +23,7 @@ import {
 } from '../../../../core/shared/constants/grades';
 import { Badge, InlineCode, ProgressBar, type BadgeClass } from '../../../components/common/Primitives';
 import MinorProgressCard from '../../../components/common/MinorProgressCard';
+import { colWidth, fs, labelCase, radius, tracking } from '../../../styles/tokens';
 
 
 // Main component
@@ -706,7 +707,7 @@ export default function DashboardPage() {
     <div className={styles.panel}>
       {/* Search bar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-        <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>🔍</span>
+        <span style={{ fontSize: fs(13), color: 'var(--text-muted)' }}>🔍</span>
         <div className={styles.suggestionsWrap}>
           <input
             className={`${styles.formInput} ${styles.formInputMono}`}
@@ -746,7 +747,7 @@ export default function DashboardPage() {
           )}
         </div>
         {isLoadingStudentList && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: fs(12), color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
             <div className={styles.spinner} style={{ width: 14, height: 14, borderWidth: 2 }} />
             Loading student list…
           </div>
@@ -775,11 +776,11 @@ export default function DashboardPage() {
 
       {/* Import Panel */}
       {showImportPanel && (
-        <div style={{ border: '1px solid var(--panel-border)', borderRadius: 4, padding: '14px 16px', marginBottom: 14, background: 'var(--card-bg)' }}>
+        <div style={{ border: '1px solid var(--panel-border)', borderRadius: radius(4), padding: '14px 16px', marginBottom: 14, background: 'var(--card-bg)' }}>
           {/* Tab bar */}
           <div style={{ display: 'flex', gap: 4, marginBottom: 12 }}>
             {(['xlsx', 'manual', 'paste'] as const).map((mode) => (
-              <button key={mode} onClick={() => setImportMode(mode)} style={{ fontSize: 11, padding: '3px 10px', borderRadius: 3, border: '1px solid var(--panel-border)', background: importMode === mode ? 'var(--accent-blue, #2563eb)' : 'transparent', color: importMode === mode ? '#fff' : 'var(--text-muted)', cursor: 'pointer', fontWeight: importMode === mode ? 600 : 400 }}>
+              <button key={mode} onClick={() => setImportMode(mode)} style={{ fontSize: fs(11), padding: '3px 10px', borderRadius: radius(3), border: '1px solid var(--panel-border)', background: importMode === mode ? 'var(--interactive, var(--accent-blue, #2563eb))' : 'transparent', color: importMode === mode ? '#fff' : 'var(--text-muted)', cursor: 'pointer', fontWeight: importMode === mode ? 600 : 400 }}>
                 {mode === 'xlsx' ? 'Upload Excel' : mode === 'manual' ? 'Add Units' : 'Paste Table'}
               </button>
             ))}
@@ -788,11 +789,11 @@ export default function DashboardPage() {
           {/* Shared intake fields */}
           <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
             <div>
-              <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Intake Year</div>
+              <div style={{ fontSize: fs(10), color: 'var(--text-muted)', textTransform: labelCase, letterSpacing: tracking('0.05em'), marginBottom: 4 }}>Intake Year</div>
               <input className={`${styles.formInput} ${styles.formInputMono}`} type="number" min={2000} max={2100} value={importIntakeYear} onChange={(e) => setImportIntakeYear(parseInt(e.target.value) || new Date().getFullYear())} />
             </div>
             <div>
-              <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Intake Sem</div>
+              <div style={{ fontSize: fs(10), color: 'var(--text-muted)', textTransform: labelCase, letterSpacing: tracking('0.05em'), marginBottom: 4 }}>Intake Sem</div>
               <select className={styles.enrollSelect} value={importIntakeSem} onChange={(e) => setImportIntakeSem(parseInt(e.target.value) as 1 | 2)}>
                 <option value={1}>Sem 1</option>
                 <option value={2}>Sem 2</option>
@@ -804,9 +805,9 @@ export default function DashboardPage() {
           {importMode === 'xlsx' && (
             <>
               <div style={{ marginBottom: 10 }}>
-                <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Results File (.xlsx) <span style={{ color: 'var(--accent-red)' }}>*</span></div>
-                <input type="file" accept=".xlsx" style={{ fontSize: 12, color: 'var(--text-primary)' }} onChange={(e) => setImportFile(e.target.files?.[0] ?? null)} />
-                {importFile && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{importFile.name}</div>}
+                <div style={{ fontSize: fs(10), color: 'var(--text-muted)', textTransform: labelCase, letterSpacing: tracking('0.05em'), marginBottom: 4 }}>Results File (.xlsx) <span style={{ color: 'var(--accent-red)' }}>*</span></div>
+                <input type="file" accept=".xlsx" style={{ fontSize: fs(12), color: 'var(--text-primary)' }} onChange={(e) => setImportFile(e.target.files?.[0] ?? null)} />
+                {importFile && <div style={{ fontSize: fs(11), color: 'var(--text-muted)', marginTop: 4 }}>{importFile.name}</div>}
               </div>
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                 <button className={styles.btnSecondary} onClick={() => setShowImportPanel(false)}>Cancel</button>
@@ -820,7 +821,7 @@ export default function DashboardPage() {
             <>
               <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginBottom: 8 }}>
                 <div style={{ flex: 1, position: 'relative' }}>
-                  <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>Unit Code or Name</div>
+                  <div style={{ fontSize: fs(10), color: 'var(--text-muted)', textTransform: labelCase, letterSpacing: tracking('0.05em'), marginBottom: 4 }}>Unit Code or Name</div>
                   <input
                     className={`${styles.formInput} ${styles.formInputMono}`}
                     style={{ width: '100%' }}
@@ -853,17 +854,17 @@ export default function DashboardPage() {
                 <button className={styles.btnPrimary} onClick={() => { setShowUnitSuggestions(false); handleAddUnit(); }}>+ Add</button>
               </div>
               {manualUnits.length > 0 && (
-                <div style={{ border: '1px solid var(--panel-border)', borderRadius: 3, marginBottom: 8, maxHeight: 180, overflowY: 'auto', display: 'flex', flexWrap: 'wrap', gap: 6, padding: '8px 10px' }}>
+                <div style={{ border: '1px solid var(--panel-border)', borderRadius: radius(3), marginBottom: 8, maxHeight: 180, overflowY: 'auto', display: 'flex', flexWrap: 'wrap', gap: 6, padding: '8px 10px' }}>
                   {manualUnits.map((u, i) => (
-                    <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'var(--card-bg)', border: '1px solid var(--panel-border)', borderRadius: 3, padding: '2px 8px', fontFamily: 'monospace', fontSize: 11 }}>
+                    <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'var(--card-bg)', border: '1px solid var(--panel-border)', borderRadius: radius(3), padding: '2px 8px', fontFamily: 'monospace', fontSize: fs(11) }}>
                       {u.courseId}
-                      <button onClick={() => handleRemoveUnit(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent-red)', fontSize: 11, padding: 0, lineHeight: 1 }}>✕</button>
+                      <button onClick={() => handleRemoveUnit(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent-red)', fontSize: fs(11), padding: 0, lineHeight: 1 }}>✕</button>
                     </span>
                   ))}
                 </div>
               )}
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
-                {manualUnits.length > 0 && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{manualUnits.length} unit{manualUnits.length !== 1 ? 's' : ''}</span>}
+                {manualUnits.length > 0 && <span style={{ fontSize: fs(11), color: 'var(--text-muted)' }}>{manualUnits.length} unit{manualUnits.length !== 1 ? 's' : ''}</span>}
                 <button className={styles.btnSecondary} onClick={() => setShowImportPanel(false)}>Cancel</button>
                 <button className={styles.btnPrimary} onClick={handleImportManual} disabled={manualUnits.length === 0}>Load</button>
               </div>
@@ -874,24 +875,24 @@ export default function DashboardPage() {
           {importMode === 'paste' && (
             <>
               <div style={{ marginBottom: 8 }}>
-                <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>Paste from Excel or student portal</div>
+                <div style={{ fontSize: fs(10), color: 'var(--text-muted)', textTransform: labelCase, letterSpacing: tracking('0.05em'), marginBottom: 6 }}>Paste from Excel or student portal</div>
                 {/* Column reference header */}
                 <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr 60px 60px 80px 55px 110px', gap: 0, marginBottom: 2, border: '1px solid var(--panel-border)', borderRadius: '3px 3px 0 0', overflow: 'hidden' }}>
                   {[['#1', 'Course'], ['#2', 'Course Title'], ['#3', 'Credits'], ['#4', 'Earned'], ['#5', 'Status'], ['#6', 'Grade'], ['#7', 'Term']].map(([num, label]) => (
                     <div key={num} style={{ padding: '3px 6px', background: 'var(--card-bg)', borderRight: '1px solid var(--panel-border)' }}>
-                      <div style={{ fontSize: 9, color: 'var(--text-muted)', lineHeight: 1.2 }}>{num}</div>
-                      <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</div>
+                      <div style={{ fontSize: fs(9), color: 'var(--text-muted)', lineHeight: 1.2 }}>{num}</div>
+                      <div style={{ fontSize: fs(10), fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</div>
                     </div>
                   ))}
                 </div>
                 <textarea
                   className={styles.formInput}
-                  style={{ width: '100%', minHeight: 140, fontFamily: 'monospace', fontSize: 11, resize: 'vertical', boxSizing: 'border-box', borderRadius: '0 0 3px 3px', borderTop: 'none' }}
+                  style={{ width: '100%', minHeight: 140, fontFamily: 'monospace', fontSize: fs(11), resize: 'vertical', boxSizing: 'border-box', borderRadius: '0 0 3px 3px', borderTop: 'none' }}
                   placeholder={'COS10003\tComputer and Logic Essentials\t12.5\t12.5\tComplete\tHD\t2024_FEB_S1\nCOS30015\tIT Security\t12.5\t0\tCurrent\t\t2026_MAR_S1\nCOS10022\tData Science Principles\t12.5\t0\tFuture\t\t'}
                   value={pasteText}
                   onChange={(e) => setPasteText(e.target.value)}
                 />
-                <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 4 }}>Header row is auto-skipped. Empty Grade and Term cells are allowed.</div>
+                <div style={{ fontSize: fs(10), color: 'var(--text-muted)', marginTop: 4 }}>Header row is auto-skipped. Empty Grade and Term cells are allowed.</div>
               </div>
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                 <button className={styles.btnSecondary} onClick={() => setShowImportPanel(false)}>Cancel</button>
@@ -914,30 +915,30 @@ export default function DashboardPage() {
       {!isLoggedIn && portalSessionStatus !== 'login-pending' && !studentLoaded && (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '60px 20px', textAlign: 'center' }}>
           <div style={{ fontSize: 48, opacity: 0.25 }}>🔒</div>
-          <div style={{ fontSize: 14, fontWeight: 600, marginTop: 12 }}>Log in to proceed</div>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>Log in to the student portal via the Scraper page to search for students.</div>
+          <div style={{ fontSize: fs(14), fontWeight: 600, marginTop: 12 }}>Log in to proceed</div>
+          <div style={{ fontSize: fs(12), color: 'var(--text-muted)', marginTop: 4 }}>Log in to the student portal via the Scraper page to search for students.</div>
         </div>
       )}
 
       {portalSessionStatus === 'login-pending' && (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '60px 20px', textAlign: 'center' }}>
           <div className={styles.spinner} />
-          <div style={{ fontSize: 14, fontWeight: 600, marginTop: 12 }}>Logging in to portal...</div>
+          <div style={{ fontSize: fs(14), fontWeight: 600, marginTop: 12 }}>Logging in to portal...</div>
         </div>
       )}
 
       {loading && !scrapedStudent && (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '60px 20px', textAlign: 'center' }}>
           <div className={styles.spinner} />
-          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 12 }}>Retrieving data...</div>
+          <div style={{ fontSize: fs(13), color: 'var(--text-muted)', marginTop: 12 }}>Retrieving data...</div>
         </div>
       )}
 
       {/* Scrape error / retry panel (REQ-FUN-105) */}
       {isLoggedIn && !loading && !studentLoaded && scraperError && (
-        <div style={{ border: '1px solid rgba(244,135,113,0.5)', borderRadius: 4, padding: '16px 18px', marginBottom: 14, background: 'rgba(244,135,113,0.07)' }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent-red)', marginBottom: 6 }}>Scrape Failed</div>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>{scraperError}</div>
+        <div style={{ border: '1px solid rgba(var(--tint-red, 244,135,113),0.5)', borderRadius: radius(4), padding: '16px 18px', marginBottom: 14, background: 'rgba(var(--tint-red, 244,135,113),0.07)' }}>
+          <div style={{ fontSize: fs(13), fontWeight: 600, color: 'var(--accent-red)', marginBottom: 6 }}>Scrape Failed</div>
+          <div style={{ fontSize: fs(12), color: 'var(--text-muted)', marginBottom: 12 }}>{scraperError}</div>
           <div style={{ display: 'flex', gap: 8 }}>
             <button
               className={styles.btnPrimary}
@@ -960,7 +961,7 @@ export default function DashboardPage() {
       {isLoggedIn && !loading && !studentLoaded && !scraperError && (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '60px 20px', textAlign: 'center' }}>
           <div style={{ fontSize: 48, opacity: 0.25 }}>🎓</div>
-          <div style={{ fontSize: 14, fontWeight: 600 }}>Enter a Student ID to begin</div>
+          <div style={{ fontSize: fs(14), fontWeight: 600 }}>Enter a Student ID to begin</div>
         </div>
       )}
 
@@ -977,10 +978,10 @@ export default function DashboardPage() {
           ['Credits Completed', s?.creditsCompleted != null ? String(s.creditsCompleted) : '—'],
         ];
         return (
-          <div style={{ background: 'var(--card-bg)', border: '1px solid var(--panel-border)', borderRadius: 4, padding: '12px 14px', marginBottom: 16 }}>
+          <div style={{ background: 'var(--card-bg)', border: '1px solid var(--panel-border)', borderRadius: radius(4), padding: '12px 14px', marginBottom: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 14, fontWeight: 600 }}>{s?.studentName || scrapedStudent.studentId || '—'}</div>
+                <div style={{ fontSize: fs(14), fontWeight: 600 }}>{s?.studentName || scrapedStudent.studentId || '—'}</div>
               </div>
               {dashboardData && (
                 <button className={styles.btnSecondary} onClick={() => setShowExportModal(true)}>Export</button>
@@ -990,8 +991,8 @@ export default function DashboardPage() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '6px 16px' }}>
               {fields.map(([label, value]) => (
                 <div key={label}>
-                  <div style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</div>
-                  <div style={{ fontSize: 12, fontWeight: 500 }}>{value}</div>
+                  <div style={{ fontSize: fs(10), color: 'var(--text-muted)', textTransform: labelCase, letterSpacing: tracking('0.05em') }}>{label}</div>
+                  <div style={{ fontSize: fs(12), fontWeight: 500 }}>{value}</div>
                 </div>
               ))}
             </div>
@@ -1001,7 +1002,7 @@ export default function DashboardPage() {
               const current = scrapedStudent?.student?.selectedEnrollment;
               return (
                 <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--panel-border)', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 10, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>Enrolment</span>
+                  <span style={{ fontSize: fs(10), color: 'var(--text-muted)', textTransform: labelCase, letterSpacing: tracking('0.05em'), whiteSpace: 'nowrap' }}>Enrolment</span>
                   {options.map((opt) => {
                     const active = opt.text === current;
                     return (
@@ -1010,7 +1011,7 @@ export default function DashboardPage() {
                         onClick={() => !active && handleSwitchEnrollment(opt.text)}
                         disabled={loading}
                         style={{
-                          fontSize: 11, padding: '2px 10px', borderRadius: 12, cursor: active ? 'default' : 'pointer',
+                          fontSize: fs(11), padding: '2px 10px', borderRadius: 12, cursor: active ? 'default' : 'pointer',
                           border: active ? '1px solid var(--accent-blue)' : '1px solid var(--panel-border)',
                           background: active ? 'var(--active-bg, rgba(111,163,200,0.15))' : 'transparent',
                           color: active ? 'var(--accent-blue)' : 'var(--text-muted)',
@@ -1030,7 +1031,7 @@ export default function DashboardPage() {
       {scrapedStudent && !dashboardData && loading && (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '40px 20px', textAlign: 'center' }}>
           <div className={styles.spinner} />
-          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 12 }}>Matching student to planner...</div>
+          <div style={{ fontSize: fs(13), color: 'var(--text-muted)', marginTop: 12 }}>Matching student to planner...</div>
         </div>
       )}
 
@@ -1043,17 +1044,17 @@ export default function DashboardPage() {
           return (
             <div>
               <div className={styles.sectionTitle}>Course List</div>
-              <div style={{ overflowX: 'auto', border: '1px solid var(--panel-border)', borderRadius: 4 }}>
+              <div style={{ overflowX: 'auto', border: '1px solid var(--panel-border)', borderRadius: radius(4) }}>
                 <table className={styles.table} style={{ tableLayout: 'fixed', width: '100%' }}>
                   <colgroup>
-                    <col style={{ width: 110 }} />
+                    <col style={{ width: colWidth(110) }} />
                     <col style={{ width: 'auto' }} />
-                    <col style={{ width: 60 }} />
-                    <col style={{ width: 70 }} />
-                    <col style={{ width: 70 }} />
-                    <col style={{ width: 110 }} />
-                    <col style={{ width: 70 }} />
-                    <col style={{ width: 110 }} />
+                    <col style={{ width: colWidth(60) }} />
+                    <col style={{ width: colWidth(70) }} />
+                    <col style={{ width: colWidth(70) }} />
+                    <col style={{ width: colWidth(110) }} />
+                    <col style={{ width: colWidth(70) }} />
+                    <col style={{ width: colWidth(110) }} />
                   </colgroup>
                   <thead>
                     <tr><th>Course ID</th><th>Course Title</th><th>Level</th><th>Credits</th><th>Earned</th><th>Status</th><th>Grade</th><th>Term</th></tr>
@@ -1091,38 +1092,38 @@ export default function DashboardPage() {
           {dashboardData.match.status === 'noMajorDetected' && (() => {
             const closest = (dashboardData.match.rankedPlanners ?? []).slice(0, 3);
             return (
-              <div style={{ border: '1px solid rgba(244,135,113,0.5)', borderRadius: 4, padding: '14px 16px', marginBottom: 14, background: 'rgba(244,135,113,0.07)' }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent-red)', marginBottom: 4 }}>
+              <div style={{ border: '1px solid rgba(var(--tint-red, 244,135,113),0.5)', borderRadius: radius(4), padding: '14px 16px', marginBottom: 14, background: 'rgba(var(--tint-red, 244,135,113),0.07)' }}>
+                <div style={{ fontSize: fs(13), fontWeight: 700, color: 'var(--accent-red)', marginBottom: 4 }}>
                   No Major Detected
                 </div>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: closest.length > 0 ? 10 : 0 }}>
+                <div style={{ fontSize: fs(12), color: 'var(--text-muted)', marginBottom: closest.length > 0 ? 10 : 0 }}>
                   None of the stored planners reached the detection threshold for this student.
                   {closest.length > 0 ? ' Closest matches and their completion gaps:' : ' No planners are stored yet — upload a study planner PDF to begin.'}
                 </div>
                 {closest.map((r: any) => (
-                  <div key={r.plannerID} style={{ background: 'var(--card-bg)', border: '1px solid var(--panel-border)', borderRadius: 3, padding: '10px 12px', marginBottom: 6 }}>
+                  <div key={r.plannerID} style={{ background: 'var(--card-bg)', border: '1px solid var(--panel-border)', borderRadius: radius(3), padding: '10px 12px', marginBottom: 6 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6 }}>
-                      <span style={{ fontSize: 12, fontWeight: 600, flex: 1 }}>{r.majorName || '—'}</span>
-                      <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--accent-orange)' }}>{r.matchPct}% match</span>
+                      <span style={{ fontSize: fs(12), fontWeight: 600, flex: 1 }}>{r.majorName || '—'}</span>
+                      <span style={{ fontSize: fs(11), fontFamily: 'var(--font-mono)', color: 'var(--accent-orange)' }}>{r.matchPct}% match</span>
                     </div>
                     {r.missingCore?.length > 0 && (
-                      <div style={{ fontSize: 11, marginBottom: 3 }}>
+                      <div style={{ fontSize: fs(11), marginBottom: 3 }}>
                         <span style={{ color: 'var(--text-muted)' }}>Missing core: </span>
                         {r.missingCore.map((c: string) => (
-                          <code key={c} style={{ color: 'var(--accent-red)', fontFamily: 'var(--font-mono)', marginRight: 4, fontSize: 10 }}>{c}</code>
+                          <code key={c} style={{ color: 'var(--accent-red)', fontFamily: 'var(--font-mono)', marginRight: 4, fontSize: fs(10) }}>{c}</code>
                         ))}
                       </div>
                     )}
                     {r.missingMajorCore?.length > 0 && (
-                      <div style={{ fontSize: 11 }}>
+                      <div style={{ fontSize: fs(11) }}>
                         <span style={{ color: 'var(--text-muted)' }}>Missing major core: </span>
                         {r.missingMajorCore.map((c: string) => (
-                          <code key={c} style={{ color: 'var(--accent-orange)', fontFamily: 'var(--font-mono)', marginRight: 4, fontSize: 10 }}>{c}</code>
+                          <code key={c} style={{ color: 'var(--accent-orange)', fontFamily: 'var(--font-mono)', marginRight: 4, fontSize: fs(10) }}>{c}</code>
                         ))}
                       </div>
                     )}
                     {(!r.missingCore?.length && !r.missingMajorCore?.length) && (
-                      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>No gap data available.</div>
+                      <div style={{ fontSize: fs(11), color: 'var(--text-muted)' }}>No gap data available.</div>
                     )}
                   </div>
                 ))}
@@ -1185,7 +1186,7 @@ export default function DashboardPage() {
                     <span className={styles.plannerTabRank} style={{ color: 'var(--accent-purple)' }}>M</span>
                     <span
                       className={styles.btnDanger}
-                      style={{ fontSize: 11, padding: '2px 8px' }}
+                      style={{ fontSize: fs(11), padding: '2px 8px' }}
                       onClick={(e) => { e.stopPropagation(); setManualPlanner(null); if (selectedPlannerIdx === -1) setSelectedPlannerIdx(0); }}
                     >✕</span>
                   </div>
@@ -1200,18 +1201,18 @@ export default function DashboardPage() {
           <div style={{ marginBottom: 12 }}>
             <button
               className={styles.btnSecondary}
-              style={{ fontSize: 11, width: '100%' }}
+              style={{ fontSize: fs(11), width: '100%' }}
               onClick={openPlannerPicker}
             >
               {showPlannerPicker ? '▲ Close planner search' : '▼ Match against a different planner'}
             </button>
             {showPlannerPicker && (
-              <div style={{ marginTop: 6, border: '1px solid var(--panel-border)', borderRadius: 4, overflow: 'hidden' }}>
+              <div style={{ marginTop: 6, border: '1px solid var(--panel-border)', borderRadius: radius(4), overflow: 'hidden' }}>
                 <div style={{ padding: '6px 8px', background: 'var(--surface-bg)', borderBottom: '1px solid var(--panel-border)' }}>
                   <input
                     autoFocus
                     className={styles.formInput}
-                    style={{ width: '100%', fontSize: 12 }}
+                    style={{ width: '100%', fontSize: fs(12) }}
                     placeholder="Search by course, major, or year..."
                     value={plannerPickerSearch}
                     onChange={(e) => setPlannerPickerSearch(e.target.value)}
@@ -1219,7 +1220,7 @@ export default function DashboardPage() {
                 </div>
                 <div style={{ maxHeight: 220, overflowY: 'auto' }}>
                   {allPlanners === null ? (
-                    <div style={{ padding: '12px 14px', fontSize: 12, color: 'var(--text-muted)' }}>Loading...</div>
+                    <div style={{ padding: '12px 14px', fontSize: fs(12), color: 'var(--text-muted)' }}>Loading...</div>
                   ) : (() => {
                     const q = plannerPickerSearch.toLowerCase();
                     const filtered = allPlanners.filter((p) =>
@@ -1229,14 +1230,14 @@ export default function DashboardPage() {
                       String(p.intake_year).includes(q)
                     );
                     if (filtered.length === 0) return (
-                      <div style={{ padding: '12px 14px', fontSize: 12, color: 'var(--text-muted)' }}>No planners found.</div>
+                      <div style={{ padding: '12px 14px', fontSize: fs(12), color: 'var(--text-muted)' }}>No planners found.</div>
                     );
                     return filtered.map((p: any) => (
                       <div
                         key={p.id}
                         onClick={() => selectManualPlanner(p.id)}
                         style={{
-                          padding: '8px 12px', fontSize: 12, cursor: 'pointer',
+                          padding: '8px 12px', fontSize: fs(12), cursor: 'pointer',
                           borderBottom: '1px solid var(--panel-border)',
                           background: manualPlanner?.id === p.id ? 'var(--active-bg)' : undefined,
                         }}
@@ -1244,7 +1245,7 @@ export default function DashboardPage() {
                         onMouseLeave={(e) => (e.currentTarget.style.background = manualPlanner?.id === p.id ? 'var(--active-bg)' : '')}
                       >
                         <div style={{ fontWeight: 600 }}>{p.major?.name ?? p.course?.name ?? '—'}</div>
-                        <div style={{ color: 'var(--text-muted)', fontSize: 11 }}>
+                        <div style={{ color: 'var(--text-muted)', fontSize: fs(11) }}>
                           {[p.course?.name, p.intake_year,
                             p.intake_month != null
                               ? new Date(2000, p.intake_month - 1).toLocaleString('default', { month: 'long' })
@@ -1700,8 +1701,8 @@ export default function DashboardPage() {
                               }
                             />
                           </td>
-                          <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{u.grade || '—'}</td>
-                          <td style={{ color: 'var(--text-muted)', fontSize: 11 }}>{u.term || '—'}</td>
+                          <td style={{ fontFamily: 'var(--font-mono)', fontSize: fs(11) }}>{u.grade || '—'}</td>
+                          <td style={{ color: 'var(--text-muted)', fontSize: fs(11) }}>{u.term || '—'}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -1738,7 +1739,7 @@ export default function DashboardPage() {
                 style={{
                   marginBottom: 8,
                   border: `1px solid ${superseded ? 'rgba(128,128,128,0.2)' : 'var(--panel-border)'}`,
-                  borderRadius: 4,
+                  borderRadius: radius(4),
                   overflow: 'hidden',
                   opacity: superseded ? 0.38 : 1,
                   transition: 'opacity 0.2s',
@@ -1746,12 +1747,12 @@ export default function DashboardPage() {
               >
                 <div onClick={() => toggleYearSem(key)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'var(--surface-bg)', cursor: 'pointer' }}>
                   <span style={{ transition: '0.15s', transform: open ? 'rotate(0deg)' : 'rotate(-90deg)' }}>▾</span>
-                  <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: superseded ? 'var(--text-muted)' : 'var(--accent-blue)' }}>
+                  <span style={{ fontSize: fs(11), fontFamily: 'var(--font-mono)', color: superseded ? 'var(--text-muted)' : 'var(--accent-blue)' }}>
                     YEAR {year} · SEM {sem}
                   </span>
-                  <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 8 }}>{units.length} units</span>
+                  <span style={{ fontSize: fs(11), color: 'var(--text-muted)', marginLeft: 8 }}>{units.length} units</span>
                   {superseded && (
-                    <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                    <span style={{ marginLeft: 'auto', fontSize: fs(10), color: 'var(--text-muted)', fontStyle: 'italic' }}>
                       superseded by custom plan
                     </span>
                   )}
@@ -1760,13 +1761,13 @@ export default function DashboardPage() {
                   <div style={{ overflowX: 'auto' }}>
                     <table className={styles.table} style={{ tableLayout: 'fixed', width: '100%' }}>
                       <colgroup>
-                        <col style={{ width: 110 }} />
+                        <col style={{ width: colWidth(110) }} />
                         <col style={{ width: 'auto' }} />
-                        <col style={{ width: 70 }} />
-                        <col style={{ width: 130 }} />
-                        <col style={{ width: 120 }} />
-                        <col style={{ width: 110 }} />
-                        <col style={{ width: 160 }} />
+                        <col style={{ width: colWidth(70) }} />
+                        <col style={{ width: colWidth(130) }} />
+                        <col style={{ width: colWidth(120) }} />
+                        <col style={{ width: colWidth(110) }} />
+                        <col style={{ width: colWidth(160) }} />
                       </colgroup>
                       <thead>
                         <tr><th>Unit Code</th><th>Unit Name</th><th>Grade</th><th>Term</th><th>Type</th><th>Status</th><th>Prerequisites</th></tr>
@@ -1776,10 +1777,10 @@ export default function DashboardPage() {
                           const isFailed = isFailingGrade(u.grade);
                           // REQ-FUN-404: highlight rows where prerequisites are unmet
                           const rowStyle: React.CSSProperties =
-                            isFailed                       ? { background: 'rgba(244,135,113,0.15)' } :
-                            u.hasUnmetPrereqs              ? { background: 'rgba(244,135,113,0.12)' } :
+                            isFailed                       ? { background: 'rgba(var(--tint-red, 244,135,113),0.15)' } :
+                            u.hasUnmetPrereqs              ? { background: 'rgba(var(--tint-red, 244,135,113),0.12)' } :
                             u.status === 'Current'         ? { background: 'rgba(111,191,115,0.12)' } :
-                            (!u.grade || u.grade === '—')  ? { background: 'rgba(244,135,113,0.08)' } :
+                            (!u.grade || u.grade === '—')  ? { background: 'rgba(var(--tint-red, 244,135,113),0.08)' } :
                             {};
                           return (
                           <tr key={u.code} style={rowStyle}>
@@ -1792,7 +1793,7 @@ export default function DashboardPage() {
                             {/* REQ-FUN-404: prerequisites column */}
                             <td>
                               {u.prerequisites.length === 0 ? (
-                                <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>—</span>
+                                <span style={{ color: 'var(--text-muted)', fontSize: fs(11) }}>—</span>
                               ) : (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                                   {u.prerequisites.map((p: { code: string; name: string; met: boolean }) => (
@@ -1801,7 +1802,7 @@ export default function DashboardPage() {
                                       title={p.met ? `${p.code} — completed` : `${p.code} — NOT completed`}
                                       style={{
                                         display: 'inline-flex', alignItems: 'center', gap: 4,
-                                        fontSize: 11, fontFamily: 'var(--font-mono)',
+                                        fontSize: fs(11), fontFamily: 'var(--font-mono)',
                                         color: p.met ? 'var(--accent-green)' : 'var(--accent-red)',
                                         fontWeight: p.met ? 400 : 600,
                                       }}
@@ -1836,8 +1837,8 @@ export default function DashboardPage() {
               <div>
                 <div className={styles.sectionTitle} style={{ marginTop: 20 }}>Student Pathway</div>
 
-                <div style={{ background: 'var(--card-bg)', border: '1px solid rgba(244,135,113,0.35)', borderRadius: 4, padding: '12px 14px' }}>
-                  <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>
+                <div style={{ background: 'var(--card-bg)', border: '1px solid var(--notice-border, rgba(var(--tint-red, 244,135,113),0.35))', borderRadius: radius(4), padding: 'var(--card-pad, 12px 14px)' }}>
+                  <div style={{ fontSize: fs(12), color: 'var(--text-muted)', marginBottom: 10 }}>
                     {canOpen
                       ? customPlan
                         ? 'A pathway has been generated for this student.'
@@ -1846,7 +1847,7 @@ export default function DashboardPage() {
                   </div>
                   <button
                     className={styles.btnPrimary}
-                    style={{ fontSize: 12 }}
+                    style={{ fontSize: fs(12) }}
                     onClick={() => router.push(panelToPath('pathway'))}
                     disabled={!canOpen}
                   >

@@ -6,7 +6,7 @@
 .step {
   background: var(--card-bg);
   border: 1px solid var(--panel-border);
-  border-radius: 8px;
+  border-radius: var(--radius-lg, 8px);
   margin-bottom: 12px;
 }
 
@@ -29,10 +29,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
+  font-size: var(--text-body-sm, 12px);
   font-weight: 700;
-  color: var(--accent-blue);
-  border: 1.5px solid var(--accent-blue);
+  color: var(--interactive, var(--accent-blue));
+  border: 1.5px solid var(--interactive, var(--accent-blue));
 }
 
 .stepDone {
@@ -48,7 +48,7 @@
 
 .stepTitle {
   margin: 0;
-  font-size: 14px;
+  font-size: var(--text-body-lg, 14px);
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -56,7 +56,7 @@
 .stepExplainer,
 .stepSummary {
   margin: 2px 0 0;
-  font-size: 12px;
+  font-size: var(--text-body-sm, 12px);
   color: var(--text-muted);
   line-height: 1.45;
 }
@@ -69,17 +69,17 @@
   flex-shrink: 0;
   background: none;
   border: 1px solid var(--panel-border);
-  border-radius: 5px;
+  border-radius: var(--radius-md, 5px);
   padding: 4px 10px;
   font-family: var(--font-sans);
-  font-size: 11px;
+  font-size: var(--text-small, 11px);
   color: var(--text-secondary);
   cursor: pointer;
 }
 
 .stepToggle:hover {
-  border-color: var(--accent-blue);
-  color: var(--accent-blue);
+  border-color: var(--interactive, var(--accent-blue));
+  color: var(--interactive, var(--accent-blue));
 }
 
 .stepBody {
@@ -104,7 +104,7 @@
   border-bottom: 2px solid transparent;
   padding: 8px 14px;
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: var(--text-body-sm, 12px);
   font-weight: 600;
   color: var(--text-muted);
   cursor: pointer;
@@ -117,15 +117,15 @@
 }
 
 .tabActive {
-  color: var(--accent-blue);
-  border-bottom-color: var(--accent-blue);
+  color: var(--interactive, var(--accent-blue));
+  border-bottom-color: var(--interactive, var(--accent-blue));
 }
 
 .tabCount {
   margin-left: 6px;
   padding: 1px 6px;
-  border-radius: 8px;
-  font-size: 10px;
+  border-radius: var(--radius-lg, 8px);
+  font-size: var(--text-caption, 10px);
   background: var(--surface-bg);
   color: var(--text-muted);
 }
@@ -145,24 +145,24 @@
   gap: 2px;
   padding: 12px 14px;
   border: 1px solid var(--panel-border);
-  border-radius: 6px;
+  border-radius: var(--radius-md, 6px);
   background: var(--surface-bg);
 }
 
 .figureValue {
-  font-size: 22px;
+  font-size: var(--text-display-sm, 22px);
   font-weight: 600;
   color: var(--text-primary);
 }
 
 .figureLabel {
-  font-size: 11px;
+  font-size: var(--text-small, 11px);
   font-weight: 600;
   color: var(--text-secondary);
 }
 
 .figureNote {
-  font-size: 11px;
+  font-size: var(--text-small, 11px);
   color: var(--text-muted);
 }
 
@@ -197,16 +197,16 @@
   flex: 0 1 240px;
   background: var(--sidebar-search-bg);
   border: 1px solid var(--panel-border);
-  border-radius: 6px;
+  border-radius: var(--radius-md, 6px);
   padding: 6px 10px;
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: var(--text-body-sm, 12px);
   color: var(--text-primary);
 }
 
 .grid {
   border: 1px solid var(--panel-border);
-  border-radius: 6px;
+  border-radius: var(--radius-md, 6px);
   overflow: hidden;
 }
 
@@ -215,7 +215,7 @@
   gap: 10px;
   align-items: center;
   padding: 7px 12px;
-  font-size: 12px;
+  font-size: var(--text-body-sm, 12px);
 }
 
 .rowGroup:nth-child(even) > .row {
@@ -234,10 +234,10 @@
   padding: 0;
   text-align: left;
   font-family: var(--font-sans);
-  font-size: 10px;
+  font-size: var(--text-caption, 10px);
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  text-transform: var(--label-case, uppercase);
+  letter-spacing: var(--label-tracking, 0.05em);
   color: var(--text-muted);
   cursor: default;
 }
@@ -252,7 +252,7 @@
 
 .sortMark {
   margin-left: 4px;
-  font-size: 8px;
+  font-size: var(--text-micro, 8px);
 }
 
 .hintMark {
@@ -264,7 +264,7 @@
   height: 12px;
   border-radius: 50%;
   border: 1px solid var(--text-muted);
-  font-size: 8px;
+  font-size: var(--text-micro, 8px);
 }
 
 .cell {
@@ -296,13 +296,13 @@
   padding: 10px 14px 14px;
   border-top: 1px dashed var(--panel-border);
   background: var(--surface-bg);
-  font-size: 12px;
+  font-size: var(--text-body-sm, 12px);
   color: var(--text-secondary);
 }
 
 .empty {
   padding: 14px;
-  font-size: 12px;
+  font-size: var(--text-body-sm, 12px);
   color: var(--text-muted);
 }
 
@@ -312,7 +312,7 @@
   justify-content: space-between;
   gap: 10px;
   flex-wrap: wrap;
-  font-size: 11px;
+  font-size: var(--text-small, 11px);
   color: var(--text-muted);
 }
 
@@ -325,11 +325,11 @@
 .pagerButtons button {
   background: var(--button-bg);
   border: 1px solid var(--panel-border);
-  border-radius: 4px;
+  border-radius: var(--radius-md, 4px);
   min-width: 26px;
   padding: 3px 6px;
   font-family: var(--font-sans);
-  font-size: 11px;
+  font-size: var(--text-small, 11px);
   color: var(--text-primary);
   cursor: pointer;
 }
