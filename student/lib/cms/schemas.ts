@@ -60,17 +60,18 @@ export const UnitSchema = z.object({
   assessments: z
     .array(
       z.object({
-        title: z.string().trim().min(1, 'Assessment title is required').max(255),
         type: z.string().trim().min(1, 'Assessment type is required').max(100),
-        weight: z.number().int().min(0, 'Weight must be 0–100').max(100, 'Weight must be 0–100'),
+        task: z.string().max(255).nullable().optional().default(null),
+        weight: z.number().int().min(0, 'Weight must be 0–100').max(100, 'Weight must be 0–100').nullable().optional().default(null),
+        weighting_raw: z.string().max(2000).nullable().optional().default(null),
         ulos: z.array(z.number().int().min(1)),
         position: z.number().int().min(1),
       })
     )
     .refine(
       (items) => {
-        if (items.length === 0) return true
-        return items.reduce((sum, a) => sum + a.weight, 0) === 100
+        if (items.length === 0 || items.some(a => a.weight === null)) return true
+        return items.reduce((sum, a) => sum + (a.weight ?? 0), 0) === 100
       },
       { message: 'Assessment weights must sum to 100%' }
     ),

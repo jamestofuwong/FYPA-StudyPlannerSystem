@@ -27,7 +27,7 @@ type RequisiteType = 'prerequisite' | 'corequisite' | 'antirequisite'
 interface UnitRef { id: string; code: string; name: string }
 interface ULO { id?: string; ulo_number: number; description: string }
 interface ContentTopic { id?: string; position: number; topic: string }
-interface Assessment { id?: string; title: string; type: string; weight: string; ulosStr: string; position: number }
+interface Assessment { id?: string; type: string; task: string; weight: string; weightingRaw: string; ulosStr: string; position: number }
 
 interface Props {
   allUnits: UnitRef[]
@@ -41,7 +41,7 @@ interface Props {
     availability: { month: number }[]
     learning_outcomes: { id: string; ulo_number: number; description: string }[]
     content_topics: { id: string; position: number; topic: string }[]
-    assessments: { id: string; title: string; type: string; weight: number; ulos: number[]; position: number }[]
+    assessments: { id: string; type: string; task: string | null; weight: number | null; weighting_raw: string | null; ulos: number[]; position: number }[]
     requisites: { id: string; requisite_type: string; requisite_unit: UnitRef }[]
   }
 }
@@ -155,7 +155,7 @@ export default function UnitForm({ unit, allUnits }: Props) {
 
   // Assessments
   const [assessments, setAssessments] = useState<Assessment[]>(
-    unit?.assessments.map(a => ({ id: a.id, title: a.title, type: a.type, weight: String(a.weight), ulosStr: a.ulos.join(', '), position: a.position })) ?? []
+    unit?.assessments.map(a => ({ id: a.id, type: a.type, task: a.task ?? '', weight: a.weight == null ? '' : String(a.weight), weightingRaw: a.weighting_raw ?? '', ulosStr: a.ulos.join(', '), position: a.position })) ?? []
   )
 
   // Requisites — split by type
@@ -214,7 +214,7 @@ export default function UnitForm({ unit, allUnits }: Props) {
   }
 
   function addAssessment() {
-    setAssessments(prev => [...prev, { title: '', type: '', weight: '', ulosStr: '', position: prev.length + 1 }])
+    setAssessments(prev => [...prev, { type: '', task: '', weight: '', weightingRaw: '', ulosStr: '', position: prev.length + 1 }])
   }
   function removeAssessment(index: number) {
     setAssessments(prev => prev.filter((_, i) => i !== index).map((a, i) => ({ ...a, position: i + 1 })))
@@ -240,7 +240,14 @@ export default function UnitForm({ unit, allUnits }: Props) {
           availability: selectedMonths,
           learning_outcomes: ulos.map(u => ({ ulo_number: u.ulo_number, description: u.description })),
           content_topics: topics.map(t => ({ position: t.position, topic: t.topic })),
-          assessments: assessments.map(a => ({ title: a.title, type: a.type, weight: parseFloat(a.weight) || 0, ulos: parseUlos(a.ulosStr), position: a.position })),
+          assessments: assessments.map(a => ({
+            type: a.type,
+            task: a.task || null,
+            weight: a.weight.trim() ? Number(a.weight) : null,
+            weighting_raw: a.weightingRaw.trim() ? a.weightingRaw : null,
+            ulos: parseUlos(a.ulosStr),
+            position: a.position,
+          })),
           requisites: [
             ...prerequisites.map(u => ({ requisite_type: 'prerequisite' as const, requisite_unit_id: u.id })),
             ...corequisites.map(u => ({ requisite_type: 'corequisite' as const, requisite_unit_id: u.id })),
@@ -360,22 +367,26 @@ export default function UnitForm({ unit, allUnits }: Props) {
       {/* Tab: Assessments */}
       {activeTab === 'Assessments' && (
         <div className={styles.panel}>
-          <div className={styles.assessmentHeader}>
-            <span className={styles.assessmentHeaderCell}>Title</span>
-            <span className={styles.assessmentHeaderCell}>Type</span>
-            <span className={styles.assessmentHeaderCell}>Weight %</span>
-            <span className={styles.assessmentHeaderCell}>ULOs</span>
-            <span></span>
-          </div>
-          {assessments.map((a, index) => (
-            <div key={index} className={styles.assessmentGrid}>
-              <input className={styles.input} value={a.title} onChange={e => updateAssessment(index, 'title', e.target.value)} placeholder="e.g. Final Exam" />
-              <input className={styles.input} value={a.type} onChange={e => updateAssessment(index, 'type', e.target.value)} placeholder="e.g. Exam" />
-              <input className={styles.input} value={a.weight} onChange={e => updateAssessment(index, 'weight', e.target.value)} placeholder="e.g. 40" />
-              <input className={styles.input} value={a.ulosStr} onChange={e => updateAssessment(index, 'ulosStr', e.target.value)} placeholder="1,2,3" />
-              <button type="button" className={styles.iconBtn} onClick={() => removeAssessment(index)} title="Remove">&times;</button>
+          <div className={styles.assessmentsScroll}>
+            <div className={styles.assessmentHeader}>
+              <span className={styles.assessmentHeaderCell}>Type</span>
+              <span className={styles.assessmentHeaderCell}>Task</span>
+              <span className={styles.assessmentHeaderCell}>Weight %</span>
+              <span className={styles.assessmentHeaderCell}>Official weighting</span>
+              <span className={styles.assessmentHeaderCell}>ULOs</span>
+              <span></span>
             </div>
-          ))}
+            {assessments.map((a, index) => (
+              <div key={index} className={styles.assessmentGrid}>
+                <input className={styles.input} value={a.type} onChange={e => updateAssessment(index, 'type', e.target.value)} placeholder="e.g. Exam" />
+                <input className={styles.input} value={a.task} onChange={e => updateAssessment(index, 'task', e.target.value)} placeholder="e.g. Individual" />
+                <input className={styles.input} type="number" min="0" max="100" step="1" value={a.weight} onChange={e => updateAssessment(index, 'weight', e.target.value)} placeholder="e.g. 40" />
+                <input className={styles.input} value={a.weightingRaw} onChange={e => updateAssessment(index, 'weightingRaw', e.target.value)} placeholder="e.g. 15 - 25%, Pass/Fail" />
+                <input className={styles.input} value={a.ulosStr} onChange={e => updateAssessment(index, 'ulosStr', e.target.value)} placeholder="1,2,3" />
+                <button type="button" className={styles.iconBtn} onClick={() => removeAssessment(index)} title="Remove">&times;</button>
+              </div>
+            ))}
+          </div>
           <button type="button" className={styles.addBtn} onClick={addAssessment}>+ Add Assessment</button>
         </div>
       )}

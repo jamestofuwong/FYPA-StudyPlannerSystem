@@ -81,9 +81,10 @@ export async function getUnit(code: string): Promise<UnitDetail | null> {
     learningOutcomes: u.learning_outcomes.map(lo => lo.description),
     content: u.content_topics.map(t => t.topic),
     assessment: u.assessments.map(a => ({
-      title: a.title,
       type: a.type,
+      task: a.task,
       weight: a.weight,
+      weightingRaw: a.weighting_raw,
       ulos: a.ulos,
     })),
   }

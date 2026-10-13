@@ -238,12 +238,13 @@
 .assessWrap {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  overflow: hidden;
+  overflow-x: auto;
   box-shadow: var(--shadow-card);
 }
 
 .assessTable {
   width: 100%;
+  min-width: 700px;
   border-collapse: collapse;
   font-size: var(--font-size-sm);
 }
@@ -260,10 +261,10 @@
   border-bottom: 1px solid var(--color-border);
 }
 
-.assessColTask   { }
-.assessColType   { width: 130px; }
-.assessColUlo    { width: 200px; }
-.assessColWeight { width: 80px; text-align: right; }
+.assessColType   { width: 110px; }
+.assessColTask   { width: 110px; }
+.assessColUlo    { width: 160px; }
+.assessColWeight { width: 130px; text-align: right; }
 
 .assessRow td {
   padding: 12px 16px;
@@ -274,8 +275,6 @@
 .assessRow:last-child td { border-bottom: none; }
 .assessRow:hover td { background: var(--color-surface); }
 
-.assessTask { color: var(--color-text-primary); }
-
 .assessType {
   color: var(--color-text-primary);
 }
@@ -285,7 +284,6 @@
 }
 
 .assessWeight {
-  text-align: right;
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
 }

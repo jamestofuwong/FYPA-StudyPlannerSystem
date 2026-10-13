@@ -16,7 +16,7 @@ interface UnitFormData {
   availability: number[]
   learning_outcomes: { ulo_number: number; description: string }[]
   content_topics: { position: number; topic: string }[]
-  assessments: { title: string; type: string; weight: number; ulos: number[]; position: number }[]
+  assessments: { type: string; task: string | null; weight: number | null; weighting_raw: string | null; ulos: number[]; position: number }[]
   requisites: { requisite_type: 'prerequisite' | 'corequisite' | 'antirequisite'; requisite_unit_id: string }[]
 }
 

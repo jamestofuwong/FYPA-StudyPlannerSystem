@@ -1,6 +1,8 @@
 import { Prisma, PrismaClient } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { hashPassword } from '../lib/cms/auth'
+import { SOURCE_UNITS, type SourceUnit } from '../data/source-units'
+import approvedUnitDetails from '../data/unit-details.json'
 
 const connectionString = process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL!
 const prisma = new PrismaClient({
@@ -10,13 +12,6 @@ const prisma = new PrismaClient({
 
 type UnitCategory = 'core' | 'major_core' | 'prescribed_elective' | 'elective' | 'wil' | 'mpu'
 type RequisiteType = 'prerequisite' | 'corequisite' | 'antirequisite'
-
-type SourceUnit = {
-  code: string
-  name: string
-  offeredIn: number[]
-  compatibilityYearLevel: number | null
-}
 
 type SourcePlacement = {
   code: string
@@ -63,6 +58,7 @@ type PlannerRequirementTotals = {
   wil_cp: number | null
 }
 
+// Main course and major records used by the planner source data.
 const SOURCE_COURSE = {
   code: 'BA-CS',
   name: 'Bachelor of Computer Science',
@@ -76,82 +72,7 @@ const SOURCE_MAJORS = [
   'Software Development',
 ] as const
 
-const SOURCE_UNITS: SourceUnit[] = [
-  {"code": "COS10003", "name": "Computer and Logic Essentials", "offeredIn": [1, 2], "compatibilityYearLevel": 1},
-  {"code": "COS10004", "name": "Computer Systems", "offeredIn": [1, 2], "compatibilityYearLevel": 2},
-  {"code": "COS10009", "name": "Introduction to Programming", "offeredIn": [1, 2], "compatibilityYearLevel": 1},
-  {"code": "COS10011", "name": "Creating Web Applications", "offeredIn": [1, 2], "compatibilityYearLevel": 1},
-  {"code": "COS10022", "name": "Introduction to Data Science", "offeredIn": [1, 2], "compatibilityYearLevel": 1},
-  {"code": "COS10025", "name": "Technology in an Indigenous Context Project", "offeredIn": [1, 2], "compatibilityYearLevel": 1},
-  {"code": "COS10026", "name": "Web Technology Project", "offeredIn": [1, 2], "compatibilityYearLevel": 1},
-  {"code": "COS10082", "name": "Applied Analytics in Business", "offeredIn": [2], "compatibilityYearLevel": 1},
-  {"code": "COS20001", "name": "User-Centred Design", "offeredIn": [1, 2], "compatibilityYearLevel": 1},
-  {"code": "COS20007", "name": "Object-oriented Programming", "offeredIn": [1, 2], "compatibilityYearLevel": 1},
-  {"code": "COS20015", "name": "Fundamentals of Data Management", "offeredIn": [1], "compatibilityYearLevel": 1},
-  {"code": "COS20019", "name": "Cloud Computing Architecture", "offeredIn": [1, 2], "compatibilityYearLevel": 1},
-  {"code": "COS20028", "name": "Big Data Architecture and Application", "offeredIn": [2], "compatibilityYearLevel": 2},
-  {"code": "COS20030", "name": "Malware Analysis", "offeredIn": [2], "compatibilityYearLevel": 2},
-  {"code": "COS20031", "name": "Database Design Project", "offeredIn": [1, 2], "compatibilityYearLevel": 2},
-  {"code": "COS20083", "name": "Advanced Data Analytics", "offeredIn": [1], "compatibilityYearLevel": 2},
-  {"code": "COS30008", "name": "Data Structure and Patterns", "offeredIn": [2], "compatibilityYearLevel": 2},
-  {"code": "COS30015", "name": "IT Security", "offeredIn": [1, 2], "compatibilityYearLevel": 1},
-  {"code": "COS30017", "name": "Software Development for Mobile Devices", "offeredIn": [1, 2], "compatibilityYearLevel": 2},
-  {"code": "COS30018", "name": "Intelligent Systems", "offeredIn": [1], "compatibilityYearLevel": 2},
-  {"code": "COS30019", "name": "Introduction to Artificial Intelligence", "offeredIn": [1, 2], "compatibilityYearLevel": 2},
-  {"code": "COS30020", "name": "Advanced Web Development", "offeredIn": [2], "compatibilityYearLevel": 2},
-  {"code": "COS30041", "name": "Creating Secure and Scalable Software", "offeredIn": [2], "compatibilityYearLevel": 2},
-  {"code": "COS30043", "name": "Interface Design and Development", "offeredIn": [1], "compatibilityYearLevel": 2},
-  {"code": "COS30045", "name": "Data Visualisation", "offeredIn": [2], "compatibilityYearLevel": 2},
-  {"code": "COS30047", "name": "Security Operations Centre", "offeredIn": [1, 2], "compatibilityYearLevel": 3},
-  {"code": "COS30049", "name": "Computing Technology Innovation Project", "offeredIn": [1, 2], "compatibilityYearLevel": 2},
-  {"code": "COS30081", "name": "Fundamentals of Natural Language Processing", "offeredIn": [1], "compatibilityYearLevel": 2},
-  {"code": "COS30082", "name": "Applied Machine Learning", "offeredIn": [2], "compatibilityYearLevel": 2},
-  {"code": "COS40003", "name": "Concurrent Programming", "offeredIn": [2], "compatibilityYearLevel": 3},
-  {"code": "COS40005", "name": "Computing Technology Project A", "offeredIn": [1, 2], "compatibilityYearLevel": 3},
-  {"code": "COS40006", "name": "Computing Technology Project B", "offeredIn": [1, 2], "compatibilityYearLevel": 3},
-  {"code": "COS40007", "name": "Artificial Intelligence for Engineering", "offeredIn": [1], "compatibilityYearLevel": 3},
-  {"code": "ICT20016", "name": "Work-Integrated Learning", "offeredIn": [3, 4], "compatibilityYearLevel": 2},
-  {"code": "ICT20016*Optional", "name": "Work-Integrated Learning", "offeredIn": [4], "compatibilityYearLevel": 2},
-  {"code": "ICT30005", "name": "Professional Issues in IT", "offeredIn": [1, 2], "compatibilityYearLevel": 3},
-  {"code": "ICT30010", "name": "eForensic Fundamentals", "offeredIn": [1], "compatibilityYearLevel": 2},
-  {"code": "INF10003", "name": "International Business Operations", "offeredIn": [], "compatibilityYearLevel": null},
-  {"code": "INF10024", "name": "Business Digitalisation", "offeredIn": [1, 2], "compatibilityYearLevel": 1},
-  {"code": "INF30020", "name": "Information Systems Risk and Security", "offeredIn": [2], "compatibilityYearLevel": 2},
-  {"code": "MGT10010", "name": "Ethics of Innovation", "offeredIn": [1, 2], "compatibilityYearLevel": 1},
-  {"code": "MPU3112", "name": "Kursus Integriti dan Antirasuh (KIAR) (Malaysian and International Students)", "offeredIn": [], "compatibilityYearLevel": 2},
-  {"code": "MPU3122", "name": "Falsafah dan Cabaran Semasa (Malaysian Students Only)", "offeredIn": [], "compatibilityYearLevel": 3},
-  {"code": "MPU3142", "name": "Malay Language Communication 2 (International Students Only)", "offeredIn": [1, 2], "compatibilityYearLevel": 1},
-  {"code": "MPU3143", "name": "Malay Language Communication 2", "offeredIn": [1, 2], "compatibilityYearLevel": 2},
-  {"code": "MPU3152", "name": "Citra Malaysia (International Students Only)", "offeredIn": [], "compatibilityYearLevel": 3},
-  {"code": "MPU3172", "name": "Aspirasi Negara Bangsa (Malaysian Students Only", "offeredIn": [], "compatibilityYearLevel": 1},
-  {"code": "MPU3182", "name": "Penghayatan Etika dan Peradaban (Malaysian Students Only)", "offeredIn": [1, 2], "compatibilityYearLevel": 2},
-  {"code": "MPU3183", "name": "Penghayatan Etika dan Peradaban", "offeredIn": [1, 2], "compatibilityYearLevel": 2},
-  {"code": "MPU3192", "name": "Philosophy and Current Issues (Malaysian and International Students)", "offeredIn": [1, 2], "compatibilityYearLevel": 1},
-  {"code": "MPU3193", "name": "Philosophy and Current Issues", "offeredIn": [1, 2], "compatibilityYearLevel": 1},
-  {"code": "MPU3212", "name": "Bahasa Kebangsaan A (Malaysian students who do not have SPM Bahasa Melayu credit)", "offeredIn": [3, 4], "compatibilityYearLevel": 1},
-  {"code": "MPU3222", "name": "Career Development (Malaysian and International Students)", "offeredIn": [], "compatibilityYearLevel": 2},
-  {"code": "MPU3272", "name": "Integrity and Anti-Corruption (Malaysian and International Students)", "offeredIn": [1, 2], "compatibilityYearLevel": 1},
-  {"code": "MPU3273", "name": "Integrity and Anti-Corruption", "offeredIn": [1, 2], "compatibilityYearLevel": 1},
-  {"code": "MPU3312", "name": "Academic Integrity and Professional Conduct (Malaysian and International Students)", "offeredIn": [], "compatibilityYearLevel": 1},
-  {"code": "MPU3412", "name": "Service Learning (Malaysian and International Students)", "offeredIn": [1, 2], "compatibilityYearLevel": 2},
-  {"code": "STA10003", "name": "Foundations of Statistics", "offeredIn": [1], "compatibilityYearLevel": 1},
-  {"code": "SWE20001", "name": "Managing Software Projects", "offeredIn": [1, 2], "compatibilityYearLevel": 2},
-  {"code": "SWE20004", "name": "Technical Software Development", "offeredIn": [], "compatibilityYearLevel": null},
-  {"code": "SWE30003", "name": "Software Architecture and Design", "offeredIn": [1, 2], "compatibilityYearLevel": 2},
-  {"code": "SWE30009", "name": "Software Testing and Reliability", "offeredIn": [2], "compatibilityYearLevel": 2},
-  {"code": "SWE30011", "name": "IoT Programming", "offeredIn": [1], "compatibilityYearLevel": 2},
-  {"code": "SWE30012", "name": "IoT Launcher Project", "offeredIn": [2], "compatibilityYearLevel": 3},
-  {"code": "SWE40001", "name": "Software Engineering Project A", "offeredIn": [1, 2], "compatibilityYearLevel": 3},
-  {"code": "SWE40002", "name": "Software Engineering Project B", "offeredIn": [1, 2], "compatibilityYearLevel": 3},
-  {"code": "SWE40006", "name": "Software Deployment and Evolution", "offeredIn": [1], "compatibilityYearLevel": 3},
-  {"code": "TNE10005", "name": "Network Administration", "offeredIn": [1], "compatibilityYearLevel": 1},
-  {"code": "TNE10006", "name": "Networks and Switching", "offeredIn": [1, 2], "compatibilityYearLevel": 1},
-  {"code": "TNE20002", "name": "Network Routing Principles", "offeredIn": [1], "compatibilityYearLevel": 1},
-  {"code": "TNE20003", "name": "Internet and Cybersecurity for Engineering Applications", "offeredIn": [1], "compatibilityYearLevel": 1},
-  {"code": "TNE30009", "name": "Network Security & Resilience", "offeredIn": [2], "compatibilityYearLevel": 2},
-  {"code": "TNE30012", "name": "Secure Remote Access Networks", "offeredIn": [1], "compatibilityYearLevel": 2}
-]
-
+// Planner snapshots preserve intake-specific placements and empty elective slots.
 const SOURCE_PLANNERS: SourcePlanner[] = [
   {
     "courseCode": "BA-CS",
@@ -2041,6 +1962,7 @@ const SOURCE_PLANNERS: SourcePlanner[] = [
   }
 ]
 
+// Direct elective options associated with each matching planner intake.
 const SOURCE_ELECTIVE_GROUPS: SourceElectiveGroup[] = [
   {
     "courseCode": "BA-CS",
@@ -2645,6 +2567,7 @@ const SOURCE_ELECTIVE_GROUPS: SourceElectiveGroup[] = [
   }
 ]
 
+// Simple unit-to-unit requisite relationships from the academic source.
 const SOURCE_SIMPLE_REQUISITES = {
   "prerequisite": [
     [
@@ -2830,6 +2753,7 @@ const SOURCE_COMPLEX_REQUISITES: SourceRequisiteRule[] = [
   ] },
 ]
 
+// Historical units that are inactive and point to their official replacements.
 const SOURCE_UNIT_REPLACEMENTS = [
   { oldCode: 'MPU3143', replacementCode: 'MPU3142' },
   { oldCode: 'MPU3183', replacementCode: 'MPU3182' },
@@ -2837,11 +2761,13 @@ const SOURCE_UNIT_REPLACEMENTS = [
   { oldCode: 'MPU3273', replacementCode: 'MPU3272' },
 ] as const
 
+// Minor membership is shared by every planner that meets the source eligibility rule.
 const BIG_DATA_ANALYTICS_MINOR = {
   name: 'Big Data Analytics',
   unitCodes: ['COS10022', 'COS10082', 'COS20083', 'COS20028'],
 } as const
 
+// Authoritative requirement totals are grouped by the source planner intake era.
 const PLANNER_REQUIREMENT_TOTALS: Record<'legacy' | 'current', PlannerRequirementTotals> = {
   legacy: {
     core_count: 8,
@@ -2875,6 +2801,7 @@ const STUDENT_TERM_TO_MONTH: Record<number, number> = {
   4: 11,
 }
 
+// Helpers translate source planner identity and academic terms into Student fields.
 function plannerKey(courseCode: string, major: string, intakeYear: number, intakeMonth: number) {
   return [courseCode, major, intakeYear, intakeMonth].join('|')
 }
@@ -2901,12 +2828,14 @@ function compatibilityYearLevel(unit: SourceUnit) {
   return unit.compatibilityYearLevel ?? 1
 }
 
+// Return the stored source totals rather than estimating requirements from placements.
 function plannerRequirementTotals(intakeYear: number): PlannerRequirementTotals {
   if (intakeYear >= 2022 && intakeYear <= 2024) return PLANNER_REQUIREMENT_TOTALS.legacy
   if (intakeYear === 2025 || intakeYear === 2026) return PLANNER_REQUIREMENT_TOTALS.current
   throw new Error(`No source requirement totals for intake year ${intakeYear}`)
 }
 
+// Include eligible non-Data-Science planners with coded or empty elective slots.
 function isBigDataAnalyticsMinorEligible(planner: SourcePlanner) {
   return planner.courseCode === 'BA-CS' &&
     planner.major !== 'Data Science' &&
@@ -2914,6 +2843,7 @@ function isBigDataAnalyticsMinorEligible(planner: SourcePlanner) {
       planner.electiveSlots.length > 0)
 }
 
+// Combine simple requisite pairs with grouped rules while keeping their logic intact.
 function sourceRequisiteRules(): SourceRequisiteRule[] {
   const simpleRules = Object.entries(SOURCE_SIMPLE_REQUISITES).flatMap(([requisiteType, pairs]) =>
     pairs.map(([targetCode, unitCode]) => ({
@@ -2928,6 +2858,7 @@ function sourceRequisiteRules(): SourceRequisiteRule[] {
   return [...simpleRules, ...SOURCE_COMPLEX_REQUISITES]
 }
 
+// Build stable keys so equivalent requisite conditions can be recognized on reruns.
 function sourceConditionFingerprint(condition: SourceRequisiteCondition): string {
   const requisiteType = condition.requisiteType ?? 'prerequisite'
   if (condition.type === 'unit') return `unit|${requisiteType}|${condition.unitCode}`
@@ -2935,10 +2866,12 @@ function sourceConditionFingerprint(condition: SourceRequisiteCondition): string
   return `external|${requisiteType}|${condition.externalRequisite}`
 }
 
+// Sort conditions in a group because their stored order does not change AND meaning.
 function sourceGroupFingerprint(targetCode: string, conditions: SourceRequisiteCondition[]): string {
   return `${targetCode}|${conditions.map(sourceConditionFingerprint).sort().join('&')}`
 }
 
+// Reject duplicate codes and broken planner or requisite references before seeding.
 function validateSourceData() {
   const unitCodes = new Set<string>()
   for (const unit of SOURCE_UNITS) {
@@ -3012,6 +2945,7 @@ function validateSourceData() {
 // CMS user
 // -----------------------------------------------------------------------------
 
+// Create the initial CMS account only when its email is not already present.
 async function seedCmsUser() {
   const email = process.env.CMS_SEED_EMAIL ?? 'admin@example.com'
   const password = process.env.CMS_SEED_PASSWORD ?? 'changeme123'
@@ -3032,6 +2966,7 @@ async function seedCmsUser() {
 // Academic content
 // -----------------------------------------------------------------------------
 
+// Create base units and their course, major, planner, placement, and elective records once.
 async function createAcademicContent() {
   validateSourceData()
 
@@ -3040,6 +2975,7 @@ async function createAcademicContent() {
     return false
   }
 
+  // Create base Unit rows first so every later planner relationship can use their IDs.
   const unitMap = new Map<string, string>()
   for (const unit of SOURCE_UNITS) {
     const created = await prisma.unit.create({
@@ -3057,6 +2993,7 @@ async function createAcademicContent() {
     unitMap.set(unit.code, created.id)
   }
 
+  // Create the course and majors before linking planner templates to them.
   const course = await prisma.course.create({ data: SOURCE_COURSE })
   const majorMap = new Map<string, string>()
   for (const major of SOURCE_MAJORS) {
@@ -3070,6 +3007,7 @@ async function createAcademicContent() {
   let semesterUnitCount = 0
   let electivePoolCount = 0
 
+  // Create planner templates, semester placements, empty slots, and direct elective pools.
   for (const planner of SOURCE_PLANNERS) {
     const majorId = majorMap.get(planner.major)
     if (!majorId) throw new Error(`Missing major for planner: ${planner.major}`)
@@ -3091,6 +3029,7 @@ async function createAcademicContent() {
       items.push(placement)
       bySemester.set(key, items)
     }
+    // Empty elective slots preserve required planner structure without inventing a unit.
     for (const slot of planner.electiveSlots) {
       const key = `${slot.year}|${slot.term}`
       const items = bySemester.get(key) ?? []
@@ -3140,6 +3079,244 @@ async function createAcademicContent() {
   return true
 }
 
+// Fields used from the official snapshot after provenance-only metadata is ignored.
+type UnitDetailSeedRecord = {
+  unitCode: string
+  normalizedCode: string
+  overview: string | null
+  learningOutcomes: { number: number; description: string }[]
+  contentTopics: { position: number; topic: string }[]
+  assessments: {
+    type: string
+    task?: string | null
+    weightingRaw?: string | null
+    weight?: number | null
+    ulos: number[]
+    position: number
+  }[]
+}
+
+// Narrow untrusted JSON values before reading named fields from them.
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+// Accept only whole-number fields where the seed schema expects an integer.
+function isInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value)
+}
+
+// Validate the snapshot completely before any Unit Detail rows are changed.
+function validateUnitDetailRecords(value: unknown): UnitDetailSeedRecord[] {
+  if (!Array.isArray(value)) {
+    throw new Error('Unit Detail data field "units" must be an array')
+  }
+
+  return value.map((record: unknown, index: number) => {
+    if (!isRecord(record)) {
+      throw new Error(`Unit Detail record #${index + 1} must be an object`)
+    }
+
+    const unitCode = record.unitCode
+    const codeLabel = typeof unitCode === 'string' && unitCode.trim()
+      ? unitCode.trim()
+      : `record #${index + 1}`
+
+    if (typeof unitCode !== 'string' || !unitCode.trim()) {
+      throw new Error(`Unit Detail record ${codeLabel}: unitCode must be a non-empty string`)
+    }
+    const normalizedCode = record.normalizedCode
+    if (typeof normalizedCode !== 'string' || !normalizedCode.trim()) {
+      throw new Error(`Unit Detail record ${codeLabel}: normalizedCode must be a non-empty string`)
+    }
+    const overview = record.overview
+    if (overview !== null && typeof overview !== 'string') {
+      throw new Error(`Unit Detail record ${codeLabel}: overview must be a string or null`)
+    }
+    const outcomeRecords = record.learningOutcomes
+    if (!Array.isArray(outcomeRecords)) {
+      throw new Error(`Unit Detail record ${codeLabel}: learningOutcomes must be an array`)
+    }
+    const topicRecords = record.contentTopics
+    if (!Array.isArray(topicRecords)) {
+      throw new Error(`Unit Detail record ${codeLabel}: contentTopics must be an array`)
+    }
+    const assessmentRecords = record.assessments
+    if (!Array.isArray(assessmentRecords)) {
+      throw new Error(`Unit Detail record ${codeLabel}: assessments must be an array`)
+    }
+
+    const learningOutcomes = outcomeRecords.map((value: unknown, outcomeIndex: number) => {
+      const field = `learningOutcomes[${outcomeIndex}]`
+      const outcome = value
+      if (!isRecord(outcome)) {
+        throw new Error(`Unit Detail record ${codeLabel}: ${field} must be an object`)
+      }
+      const number = outcome.number
+      if (!isInteger(number)) {
+        throw new Error(`Unit Detail record ${codeLabel}: ${field}.number must be an integer`)
+      }
+      const description = outcome.description
+      if (typeof description !== 'string') {
+        throw new Error(`Unit Detail record ${codeLabel}: ${field}.description must be a string`)
+      }
+      return { number, description }
+    })
+
+    const contentTopics = topicRecords.map((value: unknown, topicIndex: number) => {
+      const field = `contentTopics[${topicIndex}]`
+      const topic = value
+      if (!isRecord(topic)) {
+        throw new Error(`Unit Detail record ${codeLabel}: ${field} must be an object`)
+      }
+      const position = topic.position
+      if (!isInteger(position)) {
+        throw new Error(`Unit Detail record ${codeLabel}: ${field}.position must be an integer`)
+      }
+      const text = topic.topic
+      if (typeof text !== 'string') {
+        throw new Error(`Unit Detail record ${codeLabel}: ${field}.topic must be a string`)
+      }
+      return { position, topic: text }
+    })
+
+    const assessments = assessmentRecords.map((value: unknown, assessmentIndex: number) => {
+      const field = `assessments[${assessmentIndex}]`
+      const assessment = value
+      if (!isRecord(assessment)) {
+        throw new Error(`Unit Detail record ${codeLabel}: ${field} must be an object`)
+      }
+      const type = assessment.type
+      if (typeof type !== 'string' || !type.trim()) {
+        throw new Error(`Unit Detail record ${codeLabel}: ${field}.type must be a non-empty string`)
+      }
+      const task = assessment.task
+      if (task !== undefined && task !== null && typeof task !== 'string') {
+        throw new Error(`Unit Detail record ${codeLabel}: ${field}.task must be a string, null, or omitted`)
+      }
+      const weightingRaw = assessment.weightingRaw
+      if (weightingRaw !== undefined && weightingRaw !== null && typeof weightingRaw !== 'string') {
+        throw new Error(`Unit Detail record ${codeLabel}: ${field}.weightingRaw must be a string, null, or omitted`)
+      }
+      const weight = assessment.weight
+      if (weight !== undefined && weight !== null && !isInteger(weight)) {
+        throw new Error(`Unit Detail record ${codeLabel}: ${field}.weight must be an integer, null, or omitted`)
+      }
+      const position = assessment.position
+      if (!isInteger(position)) {
+        throw new Error(`Unit Detail record ${codeLabel}: ${field}.position must be an integer`)
+      }
+      const uloValues = assessment.ulos
+      if (!Array.isArray(uloValues)) {
+        throw new Error(`Unit Detail record ${codeLabel}: ${field}.ulos must be an array of integers`)
+      }
+      const ulos = uloValues.map((ulo: unknown, uloIndex: number) => {
+        if (!isInteger(ulo)) {
+          throw new Error(`Unit Detail record ${codeLabel}: ${field}.ulos[${uloIndex}] must be an integer`)
+        }
+        return ulo
+      })
+
+      return {
+        type,
+        task,
+        weightingRaw,
+        weight,
+        ulos,
+        position,
+      }
+    })
+
+    return {
+      unitCode,
+      normalizedCode,
+      overview,
+      learningOutcomes,
+      contentTopics,
+      assessments,
+    }
+  })
+}
+
+// Replace the approved Unit Detail data on existing units, matched by normalized code.
+async function seedUnitDetails() {
+  const details = validateUnitDetailRecords(approvedUnitDetails.units)
+  const normalizeCode = (code: string) => code.trim().toUpperCase()
+  // Approved equivalent-unit details remain attached to the original unit's code.
+  const detailCodes = details.map(detail => normalizeCode(detail.normalizedCode))
+
+  if (detailCodes.some(code => !code) || new Set(detailCodes).size !== detailCodes.length) {
+    throw new Error('Unit Detail data contains a blank or duplicate normalized unit code')
+  }
+
+  const units = await prisma.unit.findMany({ select: { id: true, unit_code: true } })
+  const unitIdByCode = new Map(units.map(unit => [normalizeCode(unit.unit_code), unit.id]))
+  const missingCodes = detailCodes.filter(code => !unitIdByCode.has(code))
+  if (missingCodes.length > 0) {
+    throw new Error(`Unit Detail data references units that are not seeded: ${missingCodes.join(', ')}`)
+  }
+
+  // Apply each unit's overview and child rows together so a failed run cannot leave partial details.
+  await prisma.$transaction(async tx => {
+    for (const detail of details) {
+      const unitId = unitIdByCode.get(normalizeCode(detail.normalizedCode))!
+
+      // Keep missing overview data null rather than adding placeholder text.
+      await tx.unit.update({
+        where: { id: unitId },
+        data: { overview: detail.overview?.trim() ? detail.overview : null },
+      })
+      // Clear old child rows first so removed snapshot details do not survive a rerun.
+      await tx.unitLearningOutcome.deleteMany({ where: { unit_id: unitId } })
+      await tx.unitContentTopic.deleteMany({ where: { unit_id: unitId } })
+      await tx.unitAssessment.deleteMany({ where: { unit_id: unitId } })
+
+      // Empty arrays intentionally leave no rich-detail children for incomplete sources.
+      if (detail.learningOutcomes.length > 0) {
+        await tx.unitLearningOutcome.createMany({
+          data: detail.learningOutcomes.map(outcome => ({
+            unit_id: unitId,
+            ulo_number: outcome.number,
+            description: outcome.description,
+          })),
+        })
+      }
+      if (detail.contentTopics.length > 0) {
+        await tx.unitContentTopic.createMany({
+          data: detail.contentTopics.map(topic => ({
+            unit_id: unitId,
+            position: topic.position,
+            topic: topic.topic,
+          })),
+        })
+      }
+      // Keep raw weight text for ranges or Pass/Fail and store numbers only when supplied.
+      if (detail.assessments.length > 0) {
+        await tx.unitAssessment.createMany({
+          data: detail.assessments.map(assessment => ({
+            unit_id: unitId,
+            type: assessment.type,
+            // Blank task values stay null instead of becoming empty display text.
+            task: assessment.task?.trim() ? assessment.task : null,
+            weighting_raw: assessment.weightingRaw ?? null,
+            weight: assessment.weight ?? null,
+            // Keep the approved outcome links attached to each assessment.
+            ulos: assessment.ulos,
+            position: assessment.position,
+          })),
+        })
+      }
+    }
+  }, { timeout: 60_000 })
+
+  console.log(`Replaced Unit Detail for ${details.length} units`)
+  console.log(`Seeded ${details.filter(unit => Boolean(unit.overview?.trim())).length} overviews`)
+  console.log(`Seeded ${details.reduce((n, unit) => n + unit.learningOutcomes.length, 0)} learning outcomes`)
+  console.log(`Seeded ${details.reduce((n, unit) => n + unit.contentTopics.length, 0)} content topics`)
+  console.log(`Seeded ${details.reduce((n, unit) => n + unit.assessments.length, 0)} assessments`)
+}
+
+// Map each source condition type to the matching Prisma requisite fields.
 function requisiteConditionData(
   condition: SourceRequisiteCondition,
   unitMap: Map<string, string>,
@@ -3169,6 +3346,7 @@ function requisiteConditionData(
   }
 }
 
+// Read stored conditions into the same stable key used to prevent duplicate groups.
 function storedGroupFingerprint(group: {
   unit: { unit_code: string }
   conditions: Array<{
@@ -3188,6 +3366,7 @@ function storedGroupFingerprint(group: {
   return `${group.unit.unit_code}|${conditions.sort().join('&')}`
 }
 
+// Add missing requisite groups while preserving AND conditions and OR alternatives.
 async function seedSourceRequisiteGroups(unitMap: Map<string, string>) {
   const existingGroups = await prisma.unitRequisiteGroup.findMany({
     include: {
@@ -3200,6 +3379,7 @@ async function seedSourceRequisiteGroups(unitMap: Map<string, string>) {
   const existing = new Set(existingGroups.map(storedGroupFingerprint))
   let createdGroups = 0
 
+  // Conditions within one group are AND requirements; separate groups are OR choices.
   for (const rule of sourceRequisiteRules()) {
     const targetId = unitMap.get(rule.targetCode)
     if (!targetId) throw new Error(`Missing requisite target unit: ${rule.targetCode}`)
@@ -3225,10 +3405,12 @@ async function seedSourceRequisiteGroups(unitMap: Map<string, string>) {
   console.log(`Ensured ${expectedGroups} source requisite groups (${createdGroups} created this run)`)
 }
 
+// Apply replacements, official planner totals, eligible minors, and source requisite groups.
 async function applyAcademicExtensions() {
   const units = await prisma.unit.findMany({ select: { id: true, unit_code: true } })
   const unitMap = new Map(units.map(unit => [unit.unit_code, unit.id]))
 
+  // Mark retired units inactive and connect them to their replacement Unit rows.
   for (const { oldCode, replacementCode } of SOURCE_UNIT_REPLACEMENTS) {
     const oldUnitId = unitMap.get(oldCode)
     const replacementUnitId = unitMap.get(replacementCode)
@@ -3256,6 +3438,7 @@ async function applyAcademicExtensions() {
       ]),
   )
 
+  // Copy the authoritative requirement totals onto each matching planner template.
   for (const planner of SOURCE_PLANNERS) {
     const key = plannerKey(planner.courseCode, planner.major, planner.intakeYear, planner.intakeMonth)
     const template = templateByKey.get(key)
@@ -3266,6 +3449,7 @@ async function applyAcademicExtensions() {
     })
   }
 
+  // Create the Big Data Analytics minor only for planners allowed by the source rule.
   const eligibleMinorPlanners = SOURCE_PLANNERS.filter(isBigDataAnalyticsMinorEligible)
   for (const planner of eligibleMinorPlanners) {
     const key = plannerKey(planner.courseCode, planner.major, planner.intakeYear, planner.intakeMonth)
@@ -3303,6 +3487,7 @@ async function applyAcademicExtensions() {
 // Help content
 // -----------------------------------------------------------------------------
 
+// Seed the Student-facing FAQ and contact records after planner data is ready.
 async function seedHelpContent() {
   const faqItems = [
     {
@@ -3389,10 +3574,15 @@ async function seedHelpContent() {
 // -----------------------------------------------------------------------------
 
 async function main() {
+  // 1. Ensure CMS access, then create the base academic records if they are not present.
   await seedCmsUser()
   await createAcademicContent()
+  // 2. Add official Unit Detail content after the base Unit rows exist.
+  await seedUnitDetails()
+  // 3. Add academic extensions, then seed student help and contact information.
   await applyAcademicExtensions()
   await seedHelpContent()
 }
 
+// Always release the Prisma connection after success or failure.
 main().catch(console.error).finally(() => prisma.$disconnect())

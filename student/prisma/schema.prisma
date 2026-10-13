@@ -220,16 +220,17 @@ model UnitContentTopic {
 }
 
 model UnitAssessment {
-  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  unit_id    String   @db.Uuid
-  unit       Unit     @relation(fields: [unit_id], references: [id], onDelete: Cascade)
-  title      String   @db.VarChar(255)
-  type       String   @db.VarChar(100)
-  weight     Int      @db.SmallInt
-  ulos       Int[]
-  position   Int      @db.SmallInt
-  created_at DateTime @default(now()) @db.Timestamptz
-  updated_at DateTime @default(now()) @updatedAt @db.Timestamptz
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  unit_id       String   @db.Uuid
+  unit          Unit     @relation(fields: [unit_id], references: [id], onDelete: Cascade)
+  type          String   @db.VarChar(100)
+  task          String?  @db.VarChar(255)
+  weight        Int?     @db.SmallInt
+  weighting_raw String?  @db.Text
+  ulos          Int[]
+  position      Int      @db.SmallInt
+  created_at    DateTime @default(now()) @db.Timestamptz
+  updated_at    DateTime @default(now()) @updatedAt @db.Timestamptz
 
   @@map("unit_assessments")
 }

@@ -120,21 +120,26 @@ export default async function UnitDetailPage({ params }: Props) {
                   <table className={styles.assessTable}>
                     <thead>
                       <tr className={styles.assessHeaderRow}>
-                        <th className={styles.assessColTask}>Task</th>
                         <th className={styles.assessColType}>Type</th>
+                        <th className={styles.assessColTask}>Task</th>
                         <th className={styles.assessColUlo}>ULOs</th>
                         <th className={styles.assessColWeight}>Weight</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {unit.assessment.map((item, i) => (
-                        <tr key={i} className={styles.assessRow}>
-                          <td className={styles.assessTask}>{item.title}</td>
-                          <td className={styles.assessType}>{item.type}</td>
-                          <td className={styles.assessUlo}>{item.ulos.join(', ')}</td>
-                          <td className={styles.assessWeight}>{item.weight}%</td>
-                        </tr>
-                      ))}
+                      {unit.assessment.map((item, i) => {
+                        const weightLabel = item.weightingRaw?.trim()
+                          ? item.weightingRaw
+                          : item.weight != null ? `${item.weight}%` : 'Not specified'
+                        return (
+                          <tr key={i} className={styles.assessRow}>
+                            <td className={styles.assessType}>{item.type}</td>
+                            <td className={styles.assessType}>{item.task || '—'}</td>
+                            <td className={styles.assessUlo}>{item.ulos.join(', ')}</td>
+                            <td className={styles.assessWeight}>{weightLabel}</td>
+                          </tr>
+                        )
+                      })}
                     </tbody>
                   </table>
                 </div>

@@ -44,9 +44,10 @@ export interface UnitListing {
 }
 
 export interface AssessmentItem {
-  title: string
   type: string
-  weight: number
+  task?: string | null
+  weight: number | null
+  weightingRaw?: string | null
   ulos: number[]
 }
 
