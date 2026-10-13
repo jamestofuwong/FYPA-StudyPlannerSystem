@@ -2,6 +2,29 @@ import { notFound } from 'next/navigation'
 import { prisma } from '@/lib/prisma'
 import UnitForm from '../UnitForm'
 
+function pendingContent(snapshot: unknown): unknown {
+  if (typeof snapshot !== 'object' || snapshot === null || Array.isArray(snapshot)) return null
+  const content = (snapshot as Record<string, unknown>).content
+  return content === undefined ? null : content
+}
+
+function pendingSourceUrl(snapshot: unknown): string | null {
+  if (typeof snapshot !== 'object' || snapshot === null || Array.isArray(snapshot)) return null
+  const provenance = (snapshot as Record<string, unknown>).provenance
+  if (typeof provenance !== 'object' || provenance === null || Array.isArray(provenance)) return null
+  const sourceUrl = (provenance as Record<string, unknown>).sourceUrl
+  if (typeof sourceUrl !== 'string') return null
+  try {
+    const url = new URL(sourceUrl)
+    const host = url.hostname.toLowerCase()
+    return ['swinburne.edu.au', 'swinburne.edu.my'].some(domain => host === domain || host.endsWith(`.${domain}`))
+      ? url.href
+      : null
+  } catch {
+    return null
+  }
+}
+
 export default async function EditUnitPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
 
@@ -13,6 +36,10 @@ export default async function EditUnitPage({ params }: { params: Promise<{ id: s
         learning_outcomes: { orderBy: { ulo_number: 'asc' } },
         content_topics: { orderBy: { position: 'asc' } },
         assessments: { orderBy: { position: 'asc' } },
+        detail_section_states: {
+          orderBy: { section: 'asc' },
+          select: { section: true, pending_snapshot: true },
+        },
         requisite_groups: {
           include: {
             conditions: {
@@ -51,11 +78,19 @@ export default async function EditUnitPage({ params }: { params: Promise<{ id: s
     ),
   }
   const unitOptions = allUnits.map(unit => ({ id: unit.id, code: unit.unit_code, name: unit.unit_name }))
-
+  const pendingUpdates = unit.detail_section_states.flatMap(state =>
+    state.pending_snapshot
+      ? [{
+          section: state.section,
+          content: pendingContent(state.pending_snapshot),
+          sourceUrl: pendingSourceUrl(state.pending_snapshot),
+        }]
+      : [],
+  )
   return (
     <div style={{ padding: 32 }}>
       <h1 style={{ fontSize: 28, fontWeight: 700, color: '#111827', marginBottom: 32 }}>Edit Unit</h1>
-      <UnitForm unit={unitForForm} allUnits={unitOptions} />
+      <UnitForm unit={unitForForm} allUnits={unitOptions} pendingUpdates={pendingUpdates} />
     </div>
   )
 }

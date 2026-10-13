@@ -58,6 +58,7 @@ model Unit {
   learning_outcomes    UnitLearningOutcome[]
   content_topics       UnitContentTopic[]
   assessments          UnitAssessment[]
+  detail_section_states UnitDetailSectionState[]
 
   @@map("units")
 }
@@ -233,6 +234,26 @@ model UnitAssessment {
   updated_at    DateTime @default(now()) @updatedAt @db.Timestamptz
 
   @@map("unit_assessments")
+}
+
+enum UnitDetailSection {
+  overview
+  learning_outcomes
+  content_topics
+  assessments
+}
+
+model UnitDetailSectionState {
+  id                 String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  unit_id            String            @db.Uuid
+  unit               Unit              @relation(fields: [unit_id], references: [id], onDelete: Cascade)
+  section            UnitDetailSection
+  pending_snapshot   Json?
+  created_at         DateTime          @default(now()) @db.Timestamptz
+  updated_at         DateTime          @updatedAt @db.Timestamptz
+
+  @@unique([unit_id, section])
+  @@map("unit_detail_section_states")
 }
 
 model FaqItem {

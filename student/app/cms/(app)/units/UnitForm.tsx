@@ -1,11 +1,19 @@
 'use client'
-import { useState, useTransition, useRef } from 'react'
+import { useEffect, useState, useTransition, useRef } from 'react'
 import Link from 'next/link'
-import { saveUnit } from './actions'
+import { useRouter } from 'next/navigation'
+import { checkOfficialUnitUpdates, reviewUnitDetailUpdate, saveUnit } from './actions'
+import type { UnitDetailSectionKey } from '@/lib/unit-detail-service'
 import styles from './UnitForm.module.css'
 
 const TABS = ['Basic', 'Availability', 'Learning Outcomes', 'Content', 'Assessments', 'Requisites'] as const
 type Tab = typeof TABS[number]
+const UNIT_DETAIL_SECTION_LABELS: Record<UnitDetailSectionKey, string> = {
+  overview: 'Overview',
+  learning_outcomes: 'Learning Outcomes',
+  content_topics: 'Content Topics',
+  assessments: 'Assessments',
+}
 
 const AVAILABLE_MONTHS: { value: number; label: string }[] = [
   { value: 1,  label: 'January'   },
@@ -29,8 +37,150 @@ interface ULO { id?: string; ulo_number: number; description: string }
 interface ContentTopic { id?: string; position: number; topic: string }
 interface Assessment { id?: string; type: string; task: string; weight: string; weightingRaw: string; ulosStr: string; position: number }
 
+type PendingUnitDetailUpdate = {
+  section: UnitDetailSectionKey
+  content: unknown
+  sourceUrl: string | null
+}
+
+type ReviewDecision = 'keep_current' | 'use_official'
+
+type RecordValue = Record<string, unknown>
+
+function isRecord(value: unknown): value is RecordValue {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function EmptyValue({ children }: { children: string }) {
+  return <p className={styles.reviewEmpty}>{children}</p>
+}
+
+function SectionContent({ section, value }: { section: UnitDetailSectionKey; value: unknown }) {
+  if (section === 'overview') {
+    return typeof value === 'string' && value.trim()
+      ? <p className={styles.reviewOverview}>{value}</p>
+      : <EmptyValue>No overview available.</EmptyValue>
+  }
+
+  if (!Array.isArray(value) || value.length === 0) {
+    return <EmptyValue>{section === 'learning_outcomes' ? 'No learning outcomes available.' : section === 'content_topics' ? 'No content topics available.' : 'No assessments available.'}</EmptyValue>
+  }
+
+  if (section === 'learning_outcomes') {
+    return (
+      <ol className={styles.reviewList}>
+        {value.map((item, index) => {
+          const outcome = isRecord(item) ? item : {}
+          return (
+            <li className={styles.reviewItem} key={index}>
+              <strong>ULO {String(outcome.number ?? index + 1)}</strong>
+              <p>{String(outcome.description ?? '')}</p>
+            </li>
+          )
+        })}
+      </ol>
+    )
+  }
+
+  if (section === 'content_topics') {
+    return (
+      <ol className={styles.reviewList}>
+        {value.map((item, index) => {
+          const topic = isRecord(item) ? item : {}
+          return <li className={styles.reviewItem} key={index}>{String(topic.topic ?? '')}</li>
+        })}
+      </ol>
+    )
+  }
+
+  return (
+    <div className={`${styles.reviewList} ${styles.reviewAssessmentList}`}>
+      {value.map((item, index) => {
+        const assessment = isRecord(item) ? item : {}
+        const task = typeof assessment.task === 'string' && assessment.task.trim() ? assessment.task : null
+        const rawWeight = typeof assessment.weighting_raw === 'string' && assessment.weighting_raw.trim()
+          ? assessment.weighting_raw
+          : typeof assessment.weightingRaw === 'string' && assessment.weightingRaw.trim()
+            ? assessment.weightingRaw
+            : null
+        const numericWeight = typeof assessment.weight === 'number' ? `${assessment.weight}%` : null
+        const ulos = Array.isArray(assessment.ulos) ? assessment.ulos.map(String).join(', ') : ''
+
+        return (
+          <article className={styles.reviewItem} key={index}>
+            <h4>{String(assessment.type || 'Assessment')}</h4>
+            <dl className={styles.reviewDetails}>
+              <div><dt>Task</dt><dd>{task ?? 'Not specified'}</dd></div>
+              <div><dt>Weighting</dt><dd>{rawWeight ?? numericWeight ?? 'Not specified'}</dd></div>
+              <div><dt>ULOs</dt><dd>{ulos || 'Not specified'}</dd></div>
+            </dl>
+          </article>
+        )
+      })}
+    </div>
+  )
+}
+
+function UnitDetailReviewDialog({
+  update,
+  currentContent,
+  busy,
+  onClose,
+  onDecision,
+}: {
+  update: PendingUnitDetailUpdate
+  currentContent: unknown
+  busy: boolean
+  onClose: () => void
+  onDecision: (decision: ReviewDecision) => void
+}) {
+  useEffect(() => {
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape' && !busy) onClose()
+    }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [busy, onClose])
+
+  return (
+    <div className={styles.dialogOverlay} onMouseDown={event => event.target === event.currentTarget && !busy && onClose()}>
+      <section className={styles.reviewDialog} role="dialog" aria-modal="true" aria-labelledby="review-dialog-title">
+        <header className={styles.dialogHeader}>
+          <div>
+            <h2 id="review-dialog-title">Review {UNIT_DETAIL_SECTION_LABELS[update.section]} Update</h2>
+            <p>Compare the current content with the official Swinburne version.</p>
+          </div>
+          <button type="button" className={styles.dialogClose} onClick={onClose} disabled={busy} aria-label="Close review dialog" autoFocus>&times;</button>
+        </header>
+
+        <div className={styles.comparisonGrid}>
+          <section className={styles.comparisonColumn} aria-labelledby="current-version-heading">
+            <h3 id="current-version-heading">Current Version</h3>
+            <SectionContent section={update.section} value={currentContent} />
+          </section>
+          <section className={styles.comparisonColumn} aria-labelledby="official-version-heading">
+            <h3 id="official-version-heading">Official Swinburne Version</h3>
+            <SectionContent section={update.section} value={update.content} />
+            {update.sourceUrl && <a className={styles.sourceLink} href={update.sourceUrl} target="_blank" rel="noopener noreferrer">View official source</a>}
+          </section>
+        </div>
+
+        <footer className={styles.dialogActions}>
+          <button type="button" className={styles.addBtn} onClick={() => onDecision('keep_current')} disabled={busy}>
+            {busy ? 'Saving...' : 'Keep Current Version'}
+          </button>
+          <button type="button" className={styles.saveBtn} onClick={() => onDecision('use_official')} disabled={busy}>
+            {busy ? 'Saving...' : 'Use Official Version'}
+          </button>
+        </footer>
+      </section>
+    </div>
+  )
+}
+
 interface Props {
   allUnits: UnitRef[]
+  pendingUpdates?: PendingUnitDetailUpdate[]
   unit?: {
     id: string
     code: string
@@ -44,6 +194,10 @@ interface Props {
     assessments: { id: string; type: string; task: string | null; weight: number | null; weighting_raw: string | null; ulos: number[]; position: number }[]
     requisites: { id: string; requisite_type: string; requisite_unit: UnitRef }[]
   }
+}
+
+export default function UnitForm({ unit, ...formProps }: Props) {
+  return <UnitFormFields unit={unit} {...formProps} />
 }
 
 const REQUISITE_SECTIONS: { type: RequisiteType; label: string; description: string }[] = [
@@ -126,10 +280,17 @@ function RequisiteSection({
   )
 }
 
-export default function UnitForm({ unit, allUnits }: Props) {
+function UnitFormFields({ unit, allUnits, pendingUpdates = [] }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>('Basic')
   const [isPending, startTransition] = useTransition()
+  const [isCheckingUpdates, startCheckingUpdates] = useTransition()
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+  const [selectedUpdate, setSelectedUpdate] = useState<PendingUnitDetailUpdate | null>(null)
+  const [resolvedSections, setResolvedSections] = useState<Set<UnitDetailSectionKey>>(new Set())
+  const [checkDialog, setCheckDialog] = useState<'updates' | 'no_changes' | 'unavailable' | null>(null)
+  const updatePanelRef = useRef<HTMLElement>(null)
+  const saveFeedbackTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const router = useRouter()
 
   // Basic fields
   const [code, setCode] = useState(unit?.code ?? '')
@@ -226,7 +387,134 @@ export default function UnitForm({ unit, allUnits }: Props) {
     return raw.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n) && n > 0)
   }
 
+  function currentSectionContent(section: UnitDetailSectionKey): unknown {
+    if (section === 'overview') return overview
+    if (section === 'learning_outcomes') return ulos.map(item => ({ number: item.ulo_number, description: item.description }))
+    if (section === 'content_topics') return topics
+    return assessments.map(item => ({
+      position: item.position,
+      type: item.type,
+      task: item.task || null,
+      weighting_raw: item.weightingRaw || null,
+      weight: item.weight.trim() ? Number(item.weight) : null,
+      ulos: parseUlos(item.ulosStr),
+    }))
+  }
+
+  function checkUpdates() {
+    if (!unit) return
+    setCheckDialog(null)
+    setResolvedSections(new Set())
+    startCheckingUpdates(async () => {
+      try {
+        const result = await checkOfficialUnitUpdates(unit.id)
+        setCheckDialog(result.type === 'error'
+          ? 'unavailable'
+          : result.message === 'No official changes found.' ? 'no_changes' : 'updates')
+        router.refresh()
+      } catch {
+        setCheckDialog('unavailable')
+      }
+    })
+  }
+
+  function applyOfficialContent(update: PendingUnitDetailUpdate) {
+    if (update.section === 'overview') {
+      setOverview(typeof update.content === 'string' ? update.content : '')
+      return
+    }
+    if (!Array.isArray(update.content)) return
+
+    if (update.section === 'learning_outcomes') {
+      setUlos(update.content.map((value, index) => {
+        const item = value && typeof value === 'object' ? value as Record<string, unknown> : {}
+        return {
+          ulo_number: typeof item.number === 'number' ? item.number : index + 1,
+          description: typeof item.description === 'string' ? item.description : '',
+        }
+      }))
+    } else if (update.section === 'content_topics') {
+      setTopics(update.content.map((value, index) => {
+        const item = value && typeof value === 'object' ? value as Record<string, unknown> : {}
+        return {
+          position: typeof item.position === 'number' ? item.position : index + 1,
+          topic: typeof item.topic === 'string' ? item.topic : '',
+        }
+      }))
+    } else {
+      setAssessments(update.content.map((value, index) => {
+        const item = value && typeof value === 'object' ? value as Record<string, unknown> : {}
+        return {
+          position: typeof item.position === 'number' ? item.position : index + 1,
+          type: typeof item.type === 'string' ? item.type : '',
+          task: typeof item.task === 'string' ? item.task : '',
+          weight: typeof item.weight === 'number' ? String(item.weight) : '',
+          weightingRaw: typeof item.weighting_raw === 'string' ? item.weighting_raw : '',
+          ulosStr: Array.isArray(item.ulos) ? item.ulos.map(String).join(', ') : '',
+        }
+      }))
+    }
+  }
+
+  function reviewOfficialUpdate(update: PendingUnitDetailUpdate, decision: 'keep_current' | 'use_official') {
+    if (!unit) return
+    setFeedback(null)
+    startTransition(async () => {
+      try {
+        await reviewUnitDetailUpdate(unit.id, update.section, decision)
+        if (decision === 'use_official') applyOfficialContent(update)
+        setResolvedSections(previous => new Set(previous).add(update.section))
+        setSelectedUpdate(null)
+        router.refresh()
+      } catch (error) {
+        setFeedback({ type: 'error', message: error instanceof Error ? error.message : 'Could not review the official update' })
+      }
+    })
+  }
+
+  const sectionOrder: UnitDetailSectionKey[] = ['overview', 'learning_outcomes', 'content_topics', 'assessments']
+  const listedUpdates = sectionOrder.flatMap(section =>
+    pendingUpdates.filter(update => update.section === section && !resolvedSections.has(section)),
+  )
+  const updateResultMessage = listedUpdates.length === 1
+    ? '1 section has an official version available for review.'
+    : listedUpdates.length > 1
+      ? `${listedUpdates.length} sections have official versions available for review.`
+      : 'Official versions are available for review in the Official Updates panel.'
+
+  function focusUpdatePanel() {
+    setCheckDialog(null)
+    requestAnimationFrame(() => {
+      updatePanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      updatePanelRef.current?.focus({ preventScroll: true })
+    })
+  }
+
+  useEffect(() => {
+    if (!checkDialog) return
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === 'Escape') setCheckDialog(null)
+    }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [checkDialog])
+
+  useEffect(() => () => {
+    if (saveFeedbackTimeoutRef.current) clearTimeout(saveFeedbackTimeoutRef.current)
+  }, [])
+
+  function showSavedFeedback() {
+    if (saveFeedbackTimeoutRef.current) clearTimeout(saveFeedbackTimeoutRef.current)
+    setFeedback({ type: 'success', message: 'Saved' })
+    saveFeedbackTimeoutRef.current = setTimeout(() => {
+      setFeedback(current => current?.type === 'success' ? null : current)
+      saveFeedbackTimeoutRef.current = null
+    }, 1800)
+  }
+
   async function handleSubmit() {
+    if (saveFeedbackTimeoutRef.current) clearTimeout(saveFeedbackTimeoutRef.current)
+    saveFeedbackTimeoutRef.current = null
     setFeedback(null)
     startTransition(async () => {
       try {
@@ -254,8 +542,12 @@ export default function UnitForm({ unit, allUnits }: Props) {
             ...antirequisites.map(u => ({ requisite_type: 'antirequisite' as const, requisite_unit_id: u.id })),
           ],
         })
+        showSavedFeedback()
       } catch (err: unknown) {
-        if (err instanceof Error && err.message.includes('NEXT_REDIRECT')) return
+        if (err instanceof Error && err.message.includes('NEXT_REDIRECT')) {
+          showSavedFeedback()
+          return
+        }
         const msg = err instanceof Error ? err.message : 'An error occurred'
         setFeedback({ type: 'error', message: msg })
       }
@@ -263,6 +555,7 @@ export default function UnitForm({ unit, allUnits }: Props) {
   }
 
   return (
+    <div className={`${styles.editLayout} ${unit ? '' : styles.editLayoutSingle}`}>
     <div className={styles.form}>
       {/* Tabs */}
       <div className={styles.tabs}>
@@ -280,6 +573,7 @@ export default function UnitForm({ unit, allUnits }: Props) {
 
       {/* Tab: Basic */}
       {activeTab === 'Basic' && (
+        <>
         <div className={styles.panel}>
           <div className={styles.row2}>
             <div className={styles.field}>
@@ -304,6 +598,7 @@ export default function UnitForm({ unit, allUnits }: Props) {
             <textarea className={styles.textarea} rows={5} value={overview} onChange={e => setOverview(e.target.value)} placeholder="Unit description..." />
           </div>
         </div>
+        </>
       )}
 
       {/* Tab: Availability */}
@@ -326,6 +621,7 @@ export default function UnitForm({ unit, allUnits }: Props) {
 
       {/* Tab: Learning Outcomes */}
       {activeTab === 'Learning Outcomes' && (
+        <>
         <div className={styles.panel}>
           <div>
             {ulos.map((ulo, index) => (
@@ -342,10 +638,12 @@ export default function UnitForm({ unit, allUnits }: Props) {
             <button type="button" className={styles.addBtn} onClick={addUlo}>+ Add Learning Outcome</button>
           </div>
         </div>
+        </>
       )}
 
       {/* Tab: Content */}
       {activeTab === 'Content' && (
+        <>
         <div className={styles.panel}>
           <div>
             {topics.map((topic, index) => (
@@ -362,10 +660,12 @@ export default function UnitForm({ unit, allUnits }: Props) {
             <button type="button" className={styles.addBtn} onClick={addTopic}>+ Add Topic</button>
           </div>
         </div>
+        </>
       )}
 
       {/* Tab: Assessments */}
       {activeTab === 'Assessments' && (
+        <>
         <div className={styles.panel}>
           <div className={styles.assessmentsScroll}>
             <div className={styles.assessmentHeader}>
@@ -389,6 +689,7 @@ export default function UnitForm({ unit, allUnits }: Props) {
           </div>
           <button type="button" className={styles.addBtn} onClick={addAssessment}>+ Add Assessment</button>
         </div>
+        </>
       )}
 
       {/* Tab: Requisites */}
@@ -420,15 +721,73 @@ export default function UnitForm({ unit, allUnits }: Props) {
       {/* Footer */}
       <div className={styles.formFooter}>
         <button type="button" className={styles.saveBtn} onClick={handleSubmit} disabled={isPending}>
-          {isPending ? 'Saving...' : 'Save Unit'}
+          {isPending ? 'Saving...' : feedback?.type === 'success' ? 'Saved' : 'Save Changes'}
         </button>
         <Link href="/cms/units" className={styles.cancelLink}>Cancel</Link>
-        {feedback && (
-          <span className={`${styles.feedback} ${feedback.type === 'success' ? styles.feedbackSuccess : styles.feedbackError}`}>
+        {feedback?.type === 'error' && (
+          <span className={`${styles.feedback} ${styles.feedbackError}`}>
             {feedback.message}
           </span>
         )}
       </div>
+    </div>
+      {unit && (
+        <aside ref={updatePanelRef} className={styles.updateSidebar} tabIndex={-1} aria-labelledby="official-updates-heading">
+          <div className={styles.updatePanel}>
+            <div className={styles.updatePanelHeader}>
+              <h2 id="official-updates-heading">Official Updates</h2>
+              <p>{listedUpdates.length} update{listedUpdates.length === 1 ? '' : 's'} available</p>
+            </div>
+            <button type="button" className={styles.checkUpdatesBtn} onClick={checkUpdates} disabled={isCheckingUpdates || isPending}>
+              {isCheckingUpdates ? 'Checking...' : 'Check Official Updates'}
+            </button>
+            {listedUpdates.length ? (
+              <ul className={styles.updateList}>
+                {listedUpdates.map(update => (
+                  <li key={update.section} className={styles.updateListItem}>
+                    <span>{UNIT_DETAIL_SECTION_LABELS[update.section]}</span>
+                    <button type="button" className={styles.viewUpdateBtn} onClick={() => setSelectedUpdate(update)} disabled={isPending}>View</button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className={styles.updateEmpty}>No official updates waiting for review.</p>
+            )}
+          </div>
+        </aside>
+      )}
+
+      {selectedUpdate && (
+        <UnitDetailReviewDialog
+          update={selectedUpdate}
+          currentContent={currentSectionContent(selectedUpdate.section)}
+          busy={isPending}
+          onClose={() => setSelectedUpdate(null)}
+          onDecision={decision => reviewOfficialUpdate(selectedUpdate, decision)}
+        />
+      )}
+
+      {checkDialog && !isCheckingUpdates && (
+        <div className={styles.dialogOverlay} role="presentation" onMouseDown={event => event.target === event.currentTarget && setCheckDialog(null)}>
+          <section className={styles.resultDialog} role="dialog" aria-modal="true" aria-labelledby="check-result-title">
+            <h2 id="check-result-title">
+              {checkDialog === 'updates' ? 'Official Check Complete' : checkDialog === 'no_changes' ? 'No Changes Found' : 'Unable to Check Official Information'}
+            </h2>
+            <p>
+              {checkDialog === 'updates'
+                ? updateResultMessage
+                : checkDialog === 'no_changes'
+                  ? 'This unit already matches the current official information.'
+                  : 'No reliable official unit details could be retrieved. Your current content was not changed.'}
+            </p>
+            <footer className={styles.dialogActions}>
+              {checkDialog === 'updates'
+                ? <button type="button" className={styles.saveBtn} onClick={focusUpdatePanel} autoFocus>Review Updates</button>
+                : <button type="button" className={styles.saveBtn} onClick={() => setCheckDialog(null)} autoFocus>OK</button>}
+            </footer>
+          </section>
+        </div>
+      )}
     </div>
   )
 }

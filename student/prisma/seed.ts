@@ -3,6 +3,12 @@ import { PrismaPg } from '@prisma/adapter-pg'
 import { hashPassword } from '../lib/cms/auth'
 import { SOURCE_UNITS, type SourceUnit } from '../data/source-units'
 import approvedUnitDetails from '../data/unit-details.json'
+import {
+  normalizeUnitDetailSection,
+  UNIT_DETAIL_SECTIONS,
+  type UnitDetailSectionContent,
+  type UnitDetailSectionKey,
+} from '../lib/unit-detail-service'
 
 const connectionString = process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL!
 const prisma = new PrismaClient({
@@ -3083,6 +3089,10 @@ async function createAcademicContent() {
 type UnitDetailSeedRecord = {
   unitCode: string
   normalizedCode: string
+  sourceKind: string
+  sourceUrl: string | null
+  verifiedEquivalentCode: string | null
+  equivalenceEvidenceUrl: string | null
   overview: string | null
   learningOutcomes: { number: number; description: string }[]
   contentTopics: { position: number; topic: string }[]
@@ -3128,6 +3138,10 @@ function validateUnitDetailRecords(value: unknown): UnitDetailSeedRecord[] {
     const normalizedCode = record.normalizedCode
     if (typeof normalizedCode !== 'string' || !normalizedCode.trim()) {
       throw new Error(`Unit Detail record ${codeLabel}: normalizedCode must be a non-empty string`)
+    }
+    const sourceKind = record.sourceKind
+    if (typeof sourceKind !== 'string' || !sourceKind.trim()) {
+      throw new Error(`Unit Detail record ${codeLabel}: sourceKind must be a non-empty string`)
     }
     const overview = record.overview
     if (overview !== null && typeof overview !== 'string') {
@@ -3230,6 +3244,10 @@ function validateUnitDetailRecords(value: unknown): UnitDetailSeedRecord[] {
     return {
       unitCode,
       normalizedCode,
+      sourceKind,
+      sourceUrl: typeof record.sourceUrl === 'string' ? record.sourceUrl : null,
+      verifiedEquivalentCode: typeof record.verifiedEquivalentCode === 'string' ? record.verifiedEquivalentCode : null,
+      equivalenceEvidenceUrl: typeof record.equivalenceEvidenceUrl === 'string' ? record.equivalenceEvidenceUrl : null,
       overview,
       learningOutcomes,
       contentTopics,
@@ -3238,7 +3256,77 @@ function validateUnitDetailRecords(value: unknown): UnitDetailSeedRecord[] {
   })
 }
 
-// Replace the approved Unit Detail data on existing units, matched by normalized code.
+function seedSectionValue(detail: UnitDetailSeedRecord, section: UnitDetailSectionKey): unknown {
+  if (section === 'overview') return detail.overview
+  if (section === 'learning_outcomes') return detail.learningOutcomes
+  if (section === 'content_topics') return detail.contentTopics
+  return detail.assessments.map(assessment => ({
+    position: assessment.position,
+    type: assessment.type,
+    task: assessment.task ?? null,
+    weighting_raw: assessment.weightingRaw ?? null,
+    weight: assessment.weight ?? null,
+    ulos: assessment.ulos,
+  }))
+}
+
+function currentSectionValue(unit: {
+  overview: string | null
+  learning_outcomes: { ulo_number: number; description: string }[]
+  content_topics: { position: number; topic: string }[]
+  assessments: { position: number; type: string; task: string | null; weighting_raw: string | null; weight: number | null; ulos: number[] }[]
+}, section: UnitDetailSectionKey): unknown {
+  if (section === 'overview') return unit.overview
+  if (section === 'learning_outcomes') {
+    return unit.learning_outcomes.map(outcome => ({ number: outcome.ulo_number, description: outcome.description }))
+  }
+  if (section === 'content_topics') return unit.content_topics
+  return unit.assessments.map(assessment => ({
+    position: assessment.position,
+    type: assessment.type,
+    task: assessment.task,
+    weighting_raw: assessment.weighting_raw,
+    weight: assessment.weight,
+    ulos: assessment.ulos,
+  }))
+}
+
+function sectionHasContent(section: UnitDetailSectionKey, value: unknown): boolean {
+  if (section === 'overview') return typeof value === 'string' && value.trim().length > 0
+  return Array.isArray(value) && value.length > 0
+}
+
+async function writeSeedSection(
+  tx: Prisma.TransactionClient,
+  unitId: string,
+  section: UnitDetailSectionKey,
+  value: unknown,
+) {
+  if (section === 'overview') {
+    await tx.unit.update({ where: { id: unitId }, data: { overview: value as string | null } })
+  } else if (section === 'learning_outcomes') {
+    const outcomes = value as { number: number; description: string }[]
+    if (outcomes.length) {
+      await tx.unitLearningOutcome.createMany({
+        data: outcomes.map(outcome => ({ unit_id: unitId, ulo_number: outcome.number, description: outcome.description })),
+      })
+    }
+  } else if (section === 'content_topics') {
+    const topics = value as { position: number; topic: string }[]
+    if (topics.length) {
+      await tx.unitContentTopic.createMany({
+        data: topics.map(topic => ({ unit_id: unitId, position: topic.position, topic: topic.topic })),
+      })
+    }
+  } else {
+    const assessments = value as UnitDetailSectionContent['assessments']
+    if (assessments.length) {
+      await tx.unitAssessment.createMany({ data: assessments.map(assessment => ({ unit_id: unitId, ...assessment })) })
+    }
+  }
+}
+
+// Initialize missing section state once, without replacing already populated CMS content.
 async function seedUnitDetails() {
   const details = validateUnitDetailRecords(approvedUnitDetails.units)
   const normalizeCode = (code: string) => code.trim().toUpperCase()
@@ -3249,71 +3337,58 @@ async function seedUnitDetails() {
     throw new Error('Unit Detail data contains a blank or duplicate normalized unit code')
   }
 
-  const units = await prisma.unit.findMany({ select: { id: true, unit_code: true } })
-  const unitIdByCode = new Map(units.map(unit => [normalizeCode(unit.unit_code), unit.id]))
-  const missingCodes = detailCodes.filter(code => !unitIdByCode.has(code))
-  if (missingCodes.length > 0) {
-    throw new Error(`Unit Detail data references units that are not seeded: ${missingCodes.join(', ')}`)
-  }
-
-  // Apply each unit's overview and child rows together so a failed run cannot leave partial details.
+  let initializedSections = 0
+  let populatedSections = 0
   await prisma.$transaction(async tx => {
+    const units = await tx.unit.findMany({
+      select: {
+        id: true,
+        unit_code: true,
+        overview: true,
+        learning_outcomes: { select: { ulo_number: true, description: true }, orderBy: { ulo_number: 'asc' } },
+        content_topics: { select: { position: true, topic: true }, orderBy: { position: 'asc' } },
+        assessments: {
+          select: { position: true, type: true, task: true, weighting_raw: true, weight: true, ulos: true },
+          orderBy: { position: 'asc' },
+        },
+        detail_section_states: { select: { section: true } },
+      },
+    })
+    const unitByCode = new Map(units.map(unit => [normalizeCode(unit.unit_code), unit]))
+    const missingCodes = detailCodes.filter(code => !unitByCode.has(code))
+    if (missingCodes.length > 0) {
+      throw new Error(`Unit Detail data references units that are not seeded: ${missingCodes.join(', ')}`)
+    }
+
     for (const detail of details) {
-      const unitId = unitIdByCode.get(normalizeCode(detail.normalizedCode))!
+      const unit = unitByCode.get(normalizeCode(detail.normalizedCode))!
+      const knownStates = new Set(unit.detail_section_states.map(state => state.section))
 
-      // Keep missing overview data null rather than adding placeholder text.
-      await tx.unit.update({
-        where: { id: unitId },
-        data: { overview: detail.overview?.trim() ? detail.overview : null },
-      })
-      // Clear old child rows first so removed snapshot details do not survive a rerun.
-      await tx.unitLearningOutcome.deleteMany({ where: { unit_id: unitId } })
-      await tx.unitContentTopic.deleteMany({ where: { unit_id: unitId } })
-      await tx.unitAssessment.deleteMany({ where: { unit_id: unitId } })
+      for (const section of UNIT_DETAIL_SECTIONS) {
+        if (knownStates.has(section)) continue
 
-      // Empty arrays intentionally leave no rich-detail children for incomplete sources.
-      if (detail.learningOutcomes.length > 0) {
-        await tx.unitLearningOutcome.createMany({
-          data: detail.learningOutcomes.map(outcome => ({
-            unit_id: unitId,
-            ulo_number: outcome.number,
-            description: outcome.description,
-          })),
+        const approvedValue = normalizeUnitDetailSection(section, seedSectionValue(detail, section))
+        const currentValue = normalizeUnitDetailSection(section, currentSectionValue(unit, section))
+        const hasExistingContent = sectionHasContent(section, currentValue)
+        if (!hasExistingContent) {
+          await writeSeedSection(tx, unit.id, section, approvedValue)
+          populatedSections += 1
+        }
+
+        await tx.unitDetailSectionState.create({
+          data: {
+            unit_id: unit.id,
+            section,
+            pending_snapshot: Prisma.DbNull,
+          },
         })
-      }
-      if (detail.contentTopics.length > 0) {
-        await tx.unitContentTopic.createMany({
-          data: detail.contentTopics.map(topic => ({
-            unit_id: unitId,
-            position: topic.position,
-            topic: topic.topic,
-          })),
-        })
-      }
-      // Keep raw weight text for ranges or Pass/Fail and store numbers only when supplied.
-      if (detail.assessments.length > 0) {
-        await tx.unitAssessment.createMany({
-          data: detail.assessments.map(assessment => ({
-            unit_id: unitId,
-            type: assessment.type,
-            // Blank task values stay null instead of becoming empty display text.
-            task: assessment.task?.trim() ? assessment.task : null,
-            weighting_raw: assessment.weightingRaw ?? null,
-            weight: assessment.weight ?? null,
-            // Keep the approved outcome links attached to each assessment.
-            ulos: assessment.ulos,
-            position: assessment.position,
-          })),
-        })
+        knownStates.add(section)
+        initializedSections += 1
       }
     }
   }, { timeout: 60_000 })
 
-  console.log(`Replaced Unit Detail for ${details.length} units`)
-  console.log(`Seeded ${details.filter(unit => Boolean(unit.overview?.trim())).length} overviews`)
-  console.log(`Seeded ${details.reduce((n, unit) => n + unit.learningOutcomes.length, 0)} learning outcomes`)
-  console.log(`Seeded ${details.reduce((n, unit) => n + unit.contentTopics.length, 0)} content topics`)
-  console.log(`Seeded ${details.reduce((n, unit) => n + unit.assessments.length, 0)} assessments`)
+  console.log(`Initialized ${initializedSections} Unit Detail section states; populated ${populatedSections} empty sections`)
 }
 
 // Map each source condition type to the matching Prisma requisite fields.
