@@ -237,6 +237,34 @@
   opacity: 0.7;
 }
 
+/* Buttons under an answer that open the page showing its result */
+.messageActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.linkBtn {
+  background: transparent;
+  color: var(--interactive, var(--accent-blue, #3b82f6));
+  border: 1px solid var(--interactive, var(--accent-blue, #3b82f6));
+  border-radius: var(--radius-md, 4px);
+  padding: 4px 10px;
+  font-size: var(--text-caption, 11px);
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.linkBtn:hover {
+  background: var(--active-bg);
+}
+
+.linkBtn:focus-visible {
+  outline: 2px solid var(--interactive, var(--accent-blue, #3b82f6));
+  outline-offset: 2px;
+}
+
 /* Status line (workflow progress) */
 .statusLine {
   display: flex;
@@ -606,6 +634,17 @@
   padding: 1px 8px;
   opacity: 1;
 }
+
+/* Buttons under an answer */
+:global(html[data-design='meadow']) .messageActions { gap: 8px; padding: 0 4px; }
+:global(html[data-design='meadow']) .linkBtn {
+  border-radius: 999px;
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  background: var(--card-bg);
+}
+:global(html[data-design='meadow']) .linkBtn:hover { background: var(--active-bg); }
 
 /* Starters */
 .mStarters { display: flex; flex-direction: column; gap: 10px; padding-left: 46px; }

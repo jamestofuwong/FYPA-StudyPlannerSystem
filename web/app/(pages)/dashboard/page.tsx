@@ -58,6 +58,7 @@ export default function DashboardPage() {
     setGeneratedSemesters,
     setIsPlanEdited,
     setRestoredSession,
+    handoffArrival, setHandoffArrival,
   } = useStudentSession();
   const router = useRouter();
   // Meadow re-lays the page out around the advising workflow; classic is unchanged.
@@ -677,6 +678,8 @@ export default function DashboardPage() {
   };
 
   const handleClear = () => {
+    setJumpTo(null);
+    setAutoSearch(false);
     setStudentLoaded(false);
     setStudentIdInput('');
     setSelectedStudentDbId(null);
@@ -708,6 +711,56 @@ export default function DashboardPage() {
     // REQ-SEC-101: no sessionStorage to remove, data was never persisted
     showToast('Student data cleared.', 'info');
   };
+
+  // ── Opened from an AI Copilot button ───────────────────────────────────────
+  // The loader (pages layout) has either filled the session with the student the
+  // answer was about, or asks this page to search for them. Here the page fills
+  // in its own search fields and, once the result is on screen, shows the part
+  // the answer was about. Declared after the effect that resets the tab, so the
+  // jump wins.
+  const [jumpTo, setJumpTo] = useState<string | null>(null);
+  const [autoSearch, setAutoSearch] = useState(false);
+  // Held back until a search the link asked for has finished.
+  const sectionAfterSearchRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!handoffArrival) return;
+    setStudentIdInput(handoffArrival.studentId);
+    setEnrollmentMode(handoffArrival.enrollMode);
+    if (handoffArrival.load) {
+      sectionAfterSearchRef.current = handoffArrival.section;
+      setAutoSearch(true);
+    } else {
+      setSelectedStudentDbId(handoffArrival.dbId ?? null);
+      setSelectedStudentName(handoffArrival.studentName ?? '');
+      setEnrollmentsList(handoffArrival.enrollments ?? []);
+      setJumpTo(handoffArrival.section);
+    }
+    setHandoffArrival(null);
+  }, [handoffArrival, setHandoffArrival]);
+
+  // No prepared data came with the link: search once the portal is ready.
+  useEffect(() => {
+    if (!autoSearch || !isLoggedIn || isLoadingStudentList || loading || !studentIdInput.trim()) return;
+    setAutoSearch(false);
+    const section = sectionAfterSearchRef.current;
+    sectionAfterSearchRef.current = null;
+    void handleSearch().then(() => {
+      if (section) setJumpTo(section);
+    });
+  }, [autoSearch, isLoggedIn, isLoadingStudentList, loading, studentIdInput]);
+
+  useEffect(() => {
+    if (!jumpTo || !studentLoaded || !dashboardData || loading) return;
+    const tabs = ['analytics', 'graduation', 'units', 'pathway'] as const;
+    const tab = tabs.find((t) => t === jumpTo);
+    if (tab) setResultTab(tab);
+    setJumpTo(null);
+    // Let the chosen tab render before scrolling to it.
+    requestAnimationFrame(() => {
+      document.getElementById(tab ? 'dash-result-tabs' : `dash-${jumpTo}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }, [jumpTo, studentLoaded, dashboardData, loading]);
 
   return (
     <div className={styles.panel}>
@@ -822,6 +875,10 @@ export default function DashboardPage() {
                 <div style={{ fontSize: fs(10), color: 'var(--text-muted)', textTransform: labelCase, letterSpacing: tracking('0.05em'), marginBottom: 4 }}>Results File (.xlsx) <span style={{ color: 'var(--accent-red)' }}>*</span></div>
                 <input type="file" accept=".xlsx" style={{ fontSize: fs(12), color: 'var(--text-primary)' }} onChange={(e) => setImportFile(e.target.files?.[0] ?? null)} />
                 {importFile && <div style={{ fontSize: fs(11), color: 'var(--text-muted)', marginTop: 4 }}>{importFile.name}</div>}
+                <div style={{ fontSize: fs(11), color: 'var(--text-muted)', marginTop: 6 }}>
+                  The first sheet needs a header row with the columns <strong>Course</strong>, <strong>Credits</strong>, <strong>Earned</strong> and <strong>Status</strong>
+                  {' '}(and optionally <strong>Course Title</strong>, <strong>Grade</strong> and <strong>Term</strong>). Column order does not matter.
+                </div>
               </div>
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                 <button className={styles.btnSecondary} onClick={() => setShowImportPanel(false)}>Cancel</button>
@@ -1119,7 +1176,7 @@ export default function DashboardPage() {
               if (!options || options.length === 0) return null;
               const current = scrapedStudent?.student?.selectedEnrollment;
               return (
-                <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--panel-border)', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <div id="dash-enrollment" style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--panel-border)', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                   <span style={{ fontSize: fs(10), color: 'var(--text-muted)', textTransform: labelCase, letterSpacing: tracking('0.05em'), whiteSpace: 'nowrap' }}>Enrolment</span>
                   {options.map((opt) => {
                     const active = opt.text === current;
@@ -1257,7 +1314,7 @@ export default function DashboardPage() {
 
           <div className={styles.plannerRail}>
           {/* Ranked Planners as tabs */}
-          <div className={styles.sectionTitle}>Ranked Planners</div>
+          <div id="dash-ranked-planners" className={styles.sectionTitle}>Ranked Planners</div>
           <div className={styles.plannerTabBar} role="tablist" aria-label="Ranked majors">
             {dashboardData.match.rankedPlanners.slice(0, 3).map((ranked: any, idx: number) => {
               const planner = dashboardData.planners[idx];
@@ -1389,7 +1446,7 @@ export default function DashboardPage() {
           </div>
 
           <div className={styles.resultsMain}>
-          <div className={styles.resultTabBar} role="tablist" aria-label="Match result views">
+          <div id="dash-result-tabs" className={styles.resultTabBar} role="tablist" aria-label="Match result views">
             <button
               type="button"
               role="tab"

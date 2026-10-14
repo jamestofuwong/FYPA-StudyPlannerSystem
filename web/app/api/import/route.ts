@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import * as XLSX from 'xlsx-js-style';
 import { prisma } from '../../../../core/db/client';
 import { NOTICE_VERSION } from '../../../lib/privacyNoticeContent';
+import { parseResultsSheet } from '../../../lib/resultsSheet';
 
 export async function POST(req: NextRequest) {
   // Server-side privacy gate — belt-and-suspenders behind the UI modal (REQ-PRI-101)
@@ -23,24 +24,12 @@ export async function POST(req: NextRequest) {
     const buffer = Buffer.from(await file.arrayBuffer());
     const wb = XLSX.read(buffer, { type: 'buffer' });
     const ws = wb.Sheets[wb.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1 }) as unknown[][];
 
-    if (rows.length < 2) return NextResponse.json({ error: 'File has no data rows.' }, { status: 400 });
-
-    // Map columns: Course | Course Title | Credits | Earned | Status | Grade | Term
-    const courseList = rows
-      .slice(1)
-      .filter((row) => row.length >= 5 && row[0])
-      .map((row) => ({
-        courseId:      String(row[0] ?? '').trim(),
-        courseTitle:   String(row[1] ?? '').trim(),
-        level:         '',
-        credits:       Number(row[2]) || 0,
-        creditsEarned: Number(row[3]) || 0,
-        status:        String(row[4] ?? '').trim(),
-        grade:         String(row[5] ?? '').trim(),
-        term:          String(row[6] ?? '').trim(),
-      }));
+    // Columns are found by their header names, not by position.
+    const parsed = parseResultsSheet(rows);
+    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+    const { courseList } = parsed;
 
     return NextResponse.json({ courseList });
   } catch {

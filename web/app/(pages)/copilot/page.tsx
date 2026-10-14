@@ -1,15 +1,20 @@
 'use client';
 
 import { useRef, useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import styles from './page.module.css';
 import { StateCard } from '../../../components/common/MeadowBits';
 import { useDesign } from '../../../styles/themeProvider';
 import { Activity, Bot, Download, GraduationCap, Layers, ListChecks, MessageSquare, Plus, SendHorizontal, Sparkles, Trash2, TriangleAlert } from 'lucide-react';
+import type { CopilotLink } from '../../../../core/services/copilot/types';
+import { copilotLinkHref, parseCopilotLinks } from '../../../lib/copilotLinks';
 
 interface Message {
   role: 'user' | 'assistant';
   content: string;
   workflowId?: string;
+  /** Buttons that open the page showing this answer's result. */
+  links?: CopilotLink[];
 }
 
 interface Conversation {
@@ -82,6 +87,7 @@ function saveConversations(conversations: Conversation[]): void {
 }
 
 export default function CopilotPage() {
+  const router = useRouter();
   const [setupState, setSetupState] = useState<SetupState>('checking');
   const [pullProgress, setPullProgress] = useState(0);
   const [pullError, setPullError] = useState<string | null>(null);
@@ -95,6 +101,26 @@ export default function CopilotPage() {
   const [streamingContent, setStreamingContent] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const isMeadow = useDesign() === 'meadow';
+
+  // Buttons under an answer that open the page showing its result; both layouts use this.
+  const renderAnswerLinks = (msg: Message) => {
+    const links = msg.role === 'assistant' ? parseCopilotLinks(msg.links) : [];
+    if (links.length === 0) return null;
+    return (
+      <div className={styles.messageActions}>
+        {links.map((link, j) => (
+          <button
+            key={j}
+            type="button"
+            className={styles.linkBtn}
+            onClick={() => router.push(copilotLinkHref(link))}
+          >
+            {link.label} <span aria-hidden="true">→</span>
+          </button>
+        ))}
+      </div>
+    );
+  };
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -259,7 +285,7 @@ export default function CopilotPage() {
         for (const line of lines) {
           if (!line.trim()) continue;
           try {
-            const event = JSON.parse(line) as { type: string; message?: string; content?: string; workflowId?: string };
+            const event = JSON.parse(line) as { type: string; message?: string; content?: string; workflowId?: string; links?: unknown };
             if (event.type === 'status') {
               setStatusMessage(event.message ?? null);
               setStreamingContent(null);
@@ -267,7 +293,8 @@ export default function CopilotPage() {
               setStatusMessage(null);
               setStreamingContent((prev) => (prev ?? '') + (event.content ?? ''));
             } else if (event.type === 'reply') {
-              const finalMessages = [...next, { role: 'assistant' as const, content: event.content ?? 'No response received.', workflowId: event.workflowId }];
+              const links = parseCopilotLinks(event.links);
+              const finalMessages = [...next, { role: 'assistant' as const, content: event.content ?? 'No response received.', workflowId: event.workflowId, ...(links.length > 0 ? { links } : {}) }];
               updateMessages(activeId, finalMessages);
               setStatusMessage(null);
               setStreamingContent(null);
@@ -456,6 +483,7 @@ export default function CopilotPage() {
                     <div className={styles.messageBubble}>
                       <pre className={styles.messageText}>{msg.content}</pre>
                     </div>
+                    {renderAnswerLinks(msg)}
                     <div className={styles.messageRole}>
                       {msg.role === 'user' ? 'You' : 'Copilot'}
                       {msg.role === 'assistant' && msg.workflowId && (
@@ -487,6 +515,7 @@ export default function CopilotPage() {
                   <div className={styles.messageBubble}>
                     <pre className={styles.messageText}>{msg.content}</pre>
                   </div>
+                  {renderAnswerLinks(msg)}
                   <div className={styles.messageRole}>
                     {msg.role === 'user' ? 'You' : 'Copilot'}
                     {msg.role === 'assistant' && msg.workflowId && (

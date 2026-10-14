@@ -14,6 +14,7 @@ import { ToastProvider } from '../../components/providers/ToastProvider';
 import { PortalAuthProvider } from '../../components/providers/PortalAuthContext';
 import { ScraperProvider } from '../../components/providers/ScraperContext';
 import { StudentSessionProvider } from '../../components/providers/StudentSessionContext';
+import CopilotHandoffLoader from '../../components/providers/CopilotHandoffLoader';
 import { panelFromPathname, panelToPath, type PanelId } from '../../lib/navigation';
 import { useDesign } from '../../styles/themeProvider';
 import { fs, radius } from '../../styles/tokens';
@@ -120,6 +121,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       <ScraperProvider>
       <StudentSessionProvider>
       <ToastProvider>
+        <CopilotHandoffLoader />
         <div className={styles.shell}>
           {!isMeadow && <TopBar />}
           <UpdateBanner />

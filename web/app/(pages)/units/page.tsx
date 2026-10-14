@@ -51,9 +51,15 @@ export default function UnitsPage() {
     // ==================================================================================================================
     const [units, setUnits] = useState<UnitData[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    // A copilot button can open this page with ?q= to show just the unit(s) it answered about.
     const [searchQuery, setSearchQuery] = useState('');
     // Meadow: page header, search toolbar with prefix jump links, groups as cards.
     const isMeadow = useDesign() === 'meadow';
+
+    useEffect(() => {
+        const q = new URLSearchParams(window.location.search).get('q');
+        if (q) setSearchQuery(q);
+    }, []);
 
     // Add / Edit Modal State
     const [isModalOpen, setIsModalOpen] = useState(false);
