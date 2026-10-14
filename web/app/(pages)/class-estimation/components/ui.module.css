@@ -342,3 +342,109 @@
 .pagerButtons span {
   padding: 0 6px;
 }
+
+/* ── Meadow layout ───────────────────────────────────────────────────────── */
+:global(html[data-design='meadow']) .step {
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  margin-bottom: 0;
+}
+:global(html[data-design='meadow']) .stepHead { gap: 16px; padding: 20px 24px; }
+:global(html[data-design='meadow']) .stepFolded .stepHead { padding: 16px 24px; }
+:global(html[data-design='meadow']) .stepNumber {
+  width: 36px;
+  height: 36px;
+  border-width: 2px;
+  font-family: var(--font-display);
+  font-size: 16px;
+  color: var(--active-highlight);
+  border-color: var(--active-highlight);
+}
+:global(html[data-design='meadow']) .stepDone {
+  background: var(--active-highlight);
+  border-color: var(--active-highlight);
+  color: var(--on-accent);
+}
+:global(html[data-design='meadow']) .stepTitle { font-family: var(--font-display); font-size: 20px; font-weight: 700; }
+:global(html[data-design='meadow']) .stepExplainer,
+:global(html[data-design='meadow']) .stepSummary { margin-top: 4px; font-size: 14px; }
+:global(html[data-design='meadow']) .stepSummary { color: var(--text-secondary); }
+:global(html[data-design='meadow']) .stepToggle {
+  height: 38px;
+  padding: 0 16px;
+  border-radius: var(--radius-control);
+  font-size: 14px;
+  font-weight: 600;
+}
+:global(html[data-design='meadow']) .stepBody { padding: 20px 24px 24px; }
+
+/* Tabs become a segmented control */
+:global(html[data-design='meadow']) .tabs {
+  display: inline-flex;
+  max-width: 100%;
+  gap: 4px;
+  margin: 20px 0 16px;
+  padding: 4px;
+  border: none;
+  border-radius: var(--radius-control);
+  background: var(--surface-bg);
+}
+:global(html[data-design='meadow']) .tab {
+  display: inline-flex;
+  align-items: center;
+  margin-bottom: 0;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 9px;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+:global(html[data-design='meadow']) .tabActive {
+  background: var(--card-bg);
+  color: var(--text-primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+:global(html[data-design='meadow']) .tabCount { font-size: 12px; border-radius: 999px; padding: 1px 8px; background: var(--card-bg); }
+:global(html[data-design='meadow']) .tabActive .tabCount { background: var(--active-bg); color: var(--active-highlight); }
+
+/* Headline figures */
+:global(html[data-design='meadow']) .figures {
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+  margin-top: 20px;
+}
+:global(html[data-design='meadow']) .figure {
+  gap: 4px;
+  padding: 18px 20px;
+  border-radius: var(--radius-lg);
+  background: var(--card-bg);
+}
+:global(html[data-design='meadow']) .figureValue {
+  font-family: var(--font-display);
+  font-size: 34px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+:global(html[data-design='meadow']) .figureLabel { font-size: 14px; font-weight: 700; color: var(--text-primary); }
+:global(html[data-design='meadow']) .figureNote { font-size: 13px; line-height: 1.45; }
+:global(html[data-design='meadow']) .figureWarn { background: rgba(var(--tint-orange), 0.07); }
+
+/* Paged table */
+:global(html[data-design='meadow']) .table { gap: 12px; }
+:global(html[data-design='meadow']) .search {
+  height: 40px;
+  padding: 0 14px;
+  border-radius: var(--radius-control);
+  background: var(--card-bg);
+  font-size: 14px;
+}
+:global(html[data-design='meadow']) .grid { border-radius: var(--radius-lg); }
+:global(html[data-design='meadow']) .row { padding: 11px 16px; font-size: 14px; }
+:global(html[data-design='meadow']) .head { padding-top: 10px; padding-bottom: 10px; }
+:global(html[data-design='meadow']) .headCell { font-size: 12px; }
+/* Larger type needs more room, so cells wrap instead of cutting text off. */
+:global(html[data-design='meadow']) .cell { white-space: normal; overflow-wrap: break-word; }
+:global(html[data-design='meadow']) .expanded { padding: 14px 18px 18px; font-size: 14px; line-height: 1.55; }
+:global(html[data-design='meadow']) .empty { padding: 18px; font-size: 14px; }
+:global(html[data-design='meadow']) .pager { font-size: 13px; }
+:global(html[data-design='meadow']) .pagerButtons button { min-width: 32px; height: 32px; border-radius: var(--radius-sm); font-size: 13px; }

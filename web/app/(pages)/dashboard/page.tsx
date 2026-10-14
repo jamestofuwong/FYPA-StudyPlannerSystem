@@ -23,6 +23,9 @@ import {
 } from '../../../../core/shared/constants/grades';
 import { Badge, InlineCode, ProgressBar, type BadgeClass } from '../../../components/common/Primitives';
 import MinorProgressCard from '../../../components/common/MinorProgressCard';
+import { PageHeader, StateCard } from '../../../components/common/MeadowBits';
+import { useDesign } from '../../../styles/themeProvider';
+import { Download, GraduationCap, Lock, Search, TriangleAlert, X } from 'lucide-react';
 import { colWidth, fs, labelCase, radius, tracking } from '../../../styles/tokens';
 
 
@@ -57,6 +60,8 @@ export default function DashboardPage() {
     setRestoredSession,
   } = useStudentSession();
   const router = useRouter();
+  // Meadow re-lays the page out around the advising workflow; classic is unchanged.
+  const isMeadow = useDesign() === 'meadow';
   const [openYears, setOpenYears] = useState<Set<string>>(new Set());
   const [internalLoading, setInternalLoading] = useState(false);
   const [scraperApiStatus, setScraperApiStatus] = useState<string>('idle');
@@ -279,7 +284,8 @@ export default function DashboardPage() {
           grade:  gradeMap.get(u.unit.unit_code)  ?? mpuGradeMap.get(u.unit.unit_code)  ?? '—',
           term:   termMap.get(u.unit.unit_code)   ?? mpuTermMap.get(u.unit.unit_code)   ?? '—',
           type: u.category.replace('_', ' '),
-          typeClass: u.category === 'core' ? 'badgeRed' : 'badgePurple',
+          // Meadow keeps red for problems, so core units get the same blue as the pathway page.
+          typeClass: u.category === 'core' ? (isMeadow ? 'badgeBlue' : 'badgeRed') : 'badgePurple',
           status: statusMap.get(u.unit.unit_code) ?? mpuStatusMap.get(u.unit.unit_code) ?? '—',
           prerequisites,
           hasUnmetPrereqs: prerequisites.some((p) => !p.met),
@@ -705,9 +711,17 @@ export default function DashboardPage() {
 
   return (
     <div className={styles.panel}>
+      {isMeadow && (
+        <PageHeader
+          title="Major Detection"
+          description={studentLoaded ? undefined : 'Find a student to see their best-fit major, how close they are to graduating and what is still left to take.'}
+        />
+      )}
       {/* Search bar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-        <span style={{ fontSize: fs(13), color: 'var(--text-muted)' }}>🔍</span>
+      <div className={styles.searchRow}>
+        {isMeadow
+          ? <Search className={styles.mSearchIcon} aria-hidden="true" />
+          : <span style={{ fontSize: fs(13), color: 'var(--text-muted)' }}>🔍</span>}
         <div className={styles.suggestionsWrap}>
           <input
             className={`${styles.formInput} ${styles.formInputMono}`}
@@ -776,7 +790,7 @@ export default function DashboardPage() {
 
       {/* Import Panel */}
       {showImportPanel && (
-        <div style={{ border: '1px solid var(--panel-border)', borderRadius: radius(4), padding: '14px 16px', marginBottom: 14, background: 'var(--card-bg)' }}>
+        <div className={styles.importPanel}>
           {/* Tab bar */}
           <div style={{ display: 'flex', gap: 4, marginBottom: 12 }}>
             {(['xlsx', 'manual', 'paste'] as const).map((mode) => (
@@ -904,15 +918,44 @@ export default function DashboardPage() {
       )}
 
       {/* Import action bar, shown instead of identity card for imports */}
-      {isImported && studentLoaded && dashboardData && (
+      {isImported && studentLoaded && dashboardData && (isMeadow ? (() => {
+        const s = scrapedStudent?.student;
+        const units = s?.courseList ?? [];
+        const source = dataSource === 'import_paste' ? 'pasted table' : dataSource === 'import_manual' ? 'units entered by hand' : 'Excel file';
+        return (
+          <section className={styles.mStudentCard}>
+            <div className={styles.mStudentTop}>
+              <span className={styles.mAvatar} aria-hidden="true"><GraduationCap /></span>
+              <div className={styles.mStudentWho}>
+                <h2 className={styles.mStudentName}>Imported transcript</h2>
+                <span className={styles.mStudentMeta}>{units.length} units from a {source}</span>
+              </div>
+              <div className={styles.mStudentActions}>
+                <button className={styles.btnSecondary} onClick={() => setShowExportModal(true)}><Download aria-hidden="true" />Export</button>
+                <button className={styles.btnDanger} onClick={handleClear}><X aria-hidden="true" />Clear</button>
+              </div>
+            </div>
+            <div className={styles.mStatGrid}>
+              <div className={styles.mStat}><span className={styles.mStatLabel}>Credits completed</span><span className={styles.mStatValue}>{s?.creditsCompleted ?? 0}</span></div>
+              <div className={styles.mStat}><span className={styles.mStatLabel}>Credits this term</span><span className={styles.mStatValue}>{s?.scheduledCredits ?? 0}</span></div>
+              <div className={styles.mStat}><span className={styles.mStatLabel}>Units on record</span><span className={styles.mStatValue}>{units.length}</span></div>
+            </div>
+          </section>
+        );
+      })() : (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, marginBottom: 14 }}>
           <button className={styles.btnSecondary} onClick={() => setShowExportModal(true)}>Export</button>
           <button className={styles.btnDanger} onClick={handleClear}>✕ Clear</button>
         </div>
-      )}
+      ))}
 
       {/* Loading states */}
-      {!isLoggedIn && portalSessionStatus !== 'login-pending' && !studentLoaded && (
+      {!isLoggedIn && portalSessionStatus !== 'login-pending' && !studentLoaded && isMeadow && (
+        <StateCard icon={<Lock />} title="Log in to the student portal">
+          Use Log in to Portal in the sidebar to search for students, or bring in results with Import.
+        </StateCard>
+      )}
+      {!isLoggedIn && portalSessionStatus !== 'login-pending' && !studentLoaded && !isMeadow && (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '60px 20px', textAlign: 'center' }}>
           <div style={{ fontSize: 48, opacity: 0.25 }}>🔒</div>
           <div style={{ fontSize: fs(14), fontWeight: 600, marginTop: 12 }}>Log in to proceed</div>
@@ -920,14 +963,20 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {portalSessionStatus === 'login-pending' && (
+      {portalSessionStatus === 'login-pending' && isMeadow && (
+        <StateCard busy title="Logging in to portal…" />
+      )}
+      {portalSessionStatus === 'login-pending' && !isMeadow && (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '60px 20px', textAlign: 'center' }}>
           <div className={styles.spinner} />
           <div style={{ fontSize: fs(14), fontWeight: 600, marginTop: 12 }}>Logging in to portal...</div>
         </div>
       )}
 
-      {loading && !scrapedStudent && (
+      {loading && !scrapedStudent && isMeadow && (
+        <StateCard busy title="Retrieving data…" />
+      )}
+      {loading && !scrapedStudent && !isMeadow && (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '60px 20px', textAlign: 'center' }}>
           <div className={styles.spinner} />
           <div style={{ fontSize: fs(13), color: 'var(--text-muted)', marginTop: 12 }}>Retrieving data...</div>
@@ -935,7 +984,16 @@ export default function DashboardPage() {
       )}
 
       {/* Scrape error / retry panel (REQ-FUN-105) */}
-      {isLoggedIn && !loading && !studentLoaded && scraperError && (
+      {isLoggedIn && !loading && !studentLoaded && scraperError && isMeadow && (
+        <StateCard tone="error" icon={<TriangleAlert />} title="Could not load this student">
+          <span>{scraperError}</span>
+          <span className={styles.mStateActions}>
+            <button className={styles.btnPrimary} onClick={handleSearch} disabled={!studentIdInput.trim()}>Retry</button>
+            <button className={styles.btnSecondary} onClick={() => { setScraperError(null); setShowImportPanel(true); }}>Enter Data Manually</button>
+          </span>
+        </StateCard>
+      )}
+      {isLoggedIn && !loading && !studentLoaded && scraperError && !isMeadow && (
         <div style={{ border: '1px solid rgba(var(--tint-red, 244,135,113),0.5)', borderRadius: radius(4), padding: '16px 18px', marginBottom: 14, background: 'rgba(var(--tint-red, 244,135,113),0.07)' }}>
           <div style={{ fontSize: fs(13), fontWeight: 600, color: 'var(--accent-red)', marginBottom: 6 }}>Scrape Failed</div>
           <div style={{ fontSize: fs(12), color: 'var(--text-muted)', marginBottom: 12 }}>{scraperError}</div>
@@ -958,7 +1016,12 @@ export default function DashboardPage() {
       )}
 
       {/* Empty state */}
-      {isLoggedIn && !loading && !studentLoaded && !scraperError && (
+      {isLoggedIn && !loading && !studentLoaded && !scraperError && isMeadow && (
+        <StateCard icon={<GraduationCap />} title="Search for a student to begin">
+          Type a student ID or name above, choose which enrolment to check, then press Search.
+        </StateCard>
+      )}
+      {isLoggedIn && !loading && !studentLoaded && !scraperError && !isMeadow && (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '60px 20px', textAlign: 'center' }}>
           <div style={{ fontSize: 48, opacity: 0.25 }}>🎓</div>
           <div style={{ fontSize: fs(14), fontWeight: 600 }}>Enter a Student ID to begin</div>
@@ -977,6 +1040,61 @@ export default function DashboardPage() {
           ['Credits Required',  s?.creditsRequired != null ? String(s.creditsRequired) : '—'],
           ['Credits Completed', s?.creditsCompleted != null ? String(s.creditsCompleted) : '—'],
         ];
+        const enrolmentOptions = scrapedStudent?.student?.enrollmentOptions ?? [];
+        const currentEnrolment = scrapedStudent?.student?.selectedEnrollment;
+        if (isMeadow) {
+          const name = s?.studentName || scrapedStudent.studentId || '—';
+          const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map((w: string) => w[0]).join('').toUpperCase();
+          const completed = s?.creditsCompleted ?? null;
+          const required = s?.creditsRequired ?? null;
+          const creditPct = completed != null && required ? Math.min((completed / required) * 100, 100) : 0;
+          const meta = [scrapedStudent.studentId, s?.gradeLevel, s?.enrollmentDate ? `Enrolled ${s.enrollmentDate}` : null].filter(Boolean).join(' · ');
+          return (
+            <section className={styles.mStudentCard}>
+              <div className={styles.mStudentTop}>
+                <span className={styles.mAvatar} aria-hidden="true">{initials || <GraduationCap />}</span>
+                <div className={styles.mStudentWho}>
+                  <h2 className={styles.mStudentName}>{name}</h2>
+                  {meta && <span className={styles.mStudentMeta}>{meta}</span>}
+                </div>
+                <div className={styles.mStudentActions}>
+                  {dashboardData && (
+                    <button className={styles.btnSecondary} onClick={() => setShowExportModal(true)}><Download aria-hidden="true" />Export</button>
+                  )}
+                  <button className={styles.btnDanger} onClick={handleClear}><X aria-hidden="true" />Clear</button>
+                </div>
+              </div>
+              <div className={styles.mStatGrid}>
+                <div className={`${styles.mStat} ${styles.mStatWide}`}>
+                  <span className={styles.mStatLabel}>Credits completed</span>
+                  <span className={styles.mStatValue}>
+                    {completed ?? '—'}{required != null && <span className={styles.mStatOf}> / {required}</span>}
+                  </span>
+                  {required ? <ProgressBar pct={creditPct} color="var(--accent-green)" /> : null}
+                </div>
+                <div className={styles.mStat}><span className={styles.mStatLabel}>GPA</span><span className={styles.mStatValue}>{s?.cgpa != null ? String(s.cgpa) : '—'}</span></div>
+                <div className={styles.mStat}><span className={styles.mStatLabel}>Expected graduation</span><span className={styles.mStatValue}>{s?.graduationDate || '—'}</span></div>
+              </div>
+              {enrolmentOptions.length > 0 && (
+                <div className={styles.mEnrolRow}>
+                  <span className={styles.mEnrolLabel}>Enrolment</span>
+                  {enrolmentOptions.map((opt) => {
+                    const active = opt.text === currentEnrolment;
+                    return (
+                      <button
+                        key={opt.text}
+                        className={`${styles.mEnrolChip} ${active ? styles.mEnrolChipActive : ''}`}
+                        onClick={() => !active && handleSwitchEnrollment(opt.text)}
+                        disabled={loading}
+                        aria-pressed={active}
+                      >{opt.text}</button>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+          );
+        }
         return (
           <div style={{ background: 'var(--card-bg)', border: '1px solid var(--panel-border)', borderRadius: radius(4), padding: '12px 14px', marginBottom: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
@@ -1028,7 +1146,10 @@ export default function DashboardPage() {
       })()}
 
       {/* Matching spinner, shown after scrape, before match result */}
-      {scrapedStudent && !dashboardData && loading && (
+      {scrapedStudent && !dashboardData && loading && isMeadow && (
+        <StateCard busy title="Matching student to planners…" />
+      )}
+      {scrapedStudent && !dashboardData && loading && !isMeadow && (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '40px 20px', textAlign: 'center' }}>
           <div className={styles.spinner} />
           <div style={{ fontSize: fs(13), color: 'var(--text-muted)', marginTop: 12 }}>Matching student to planner...</div>
@@ -1086,9 +1207,10 @@ export default function DashboardPage() {
         const isGraduationReady = missingCoreCount === 0 && totalCredits >= 300;
 
         return (
-          <div>
+          <div className={`${styles.resultsLayout} ${resultTab === 'units' ? styles.resultsWide : ''}`}>
 
           {/* REQ-FUN-611: No Major Detected panel */}
+          <div className={styles.resultsNotice}>
           {dashboardData.match.status === 'noMajorDetected' && (() => {
             const closest = (dashboardData.match.rankedPlanners ?? []).slice(0, 3);
             return (
@@ -1131,6 +1253,9 @@ export default function DashboardPage() {
             );
           })()}
 
+          </div>
+
+          <div className={styles.plannerRail}>
           {/* Ranked Planners as tabs */}
           <div className={styles.sectionTitle}>Ranked Planners</div>
           <div className={styles.plannerTabBar} role="tablist" aria-label="Ranked majors">
@@ -1261,6 +1386,9 @@ export default function DashboardPage() {
             )}
           </div>
 
+          </div>
+
+          <div className={styles.resultsMain}>
           <div className={styles.resultTabBar} role="tablist" aria-label="Match result views">
             <button
               type="button"
@@ -1737,17 +1865,18 @@ export default function DashboardPage() {
               <div
                 key={key}
                 style={{
-                  marginBottom: 8,
+                  marginBottom: 'var(--sem-card-gap, 8px)',
                   border: `1px solid ${superseded ? 'rgba(128,128,128,0.2)' : 'var(--panel-border)'}`,
-                  borderRadius: radius(4),
+                  borderRadius: 'var(--radius-card, 4px)',
+                  background: 'var(--sem-card-bg, transparent)',
                   overflow: 'hidden',
                   opacity: superseded ? 0.38 : 1,
                   transition: 'opacity 0.2s',
                 }}
               >
-                <div onClick={() => toggleYearSem(key)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'var(--surface-bg)', cursor: 'pointer' }}>
+                <div onClick={() => toggleYearSem(key)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 'var(--sem-head-pad, 8px 12px)', background: 'var(--sem-head-bg, var(--surface-bg))', cursor: 'pointer' }}>
                   <span style={{ transition: '0.15s', transform: open ? 'rotate(0deg)' : 'rotate(-90deg)' }}>▾</span>
-                  <span style={{ fontSize: fs(11), fontFamily: 'var(--font-mono)', color: superseded ? 'var(--text-muted)' : 'var(--accent-blue)' }}>
+                  <span style={{ fontSize: fs(11), fontFamily: 'var(--font-mono)', color: superseded ? 'var(--text-muted)' : 'var(--sem-head-color, var(--accent-blue))', fontWeight: 'var(--sem-head-weight, normal)' }}>
                     YEAR {year} · SEM {sem}
                   </span>
                   <span style={{ fontSize: fs(11), color: 'var(--text-muted)', marginLeft: 8 }}>{units.length} units</span>
@@ -1761,13 +1890,13 @@ export default function DashboardPage() {
                   <div style={{ overflowX: 'auto' }}>
                     <table className={styles.table} style={{ tableLayout: 'fixed', width: '100%' }}>
                       <colgroup>
-                        <col style={{ width: colWidth(110) }} />
+                        <col style={{ width: colWidth(110, 112) }} />
                         <col style={{ width: 'auto' }} />
-                        <col style={{ width: colWidth(70) }} />
-                        <col style={{ width: colWidth(130) }} />
-                        <col style={{ width: colWidth(120) }} />
-                        <col style={{ width: colWidth(110) }} />
-                        <col style={{ width: colWidth(160) }} />
+                        <col style={{ width: colWidth(70, 72) }} />
+                        <col style={{ width: colWidth(130, 124) }} />
+                        <col style={{ width: colWidth(120, 156) }} />
+                        <col style={{ width: colWidth(110, 104) }} />
+                        <col style={{ width: colWidth(160, 140) }} />
                       </colgroup>
                       <thead>
                         <tr><th>Unit Code</th><th>Unit Name</th><th>Grade</th><th>Term</th><th>Type</th><th>Status</th><th>Prerequisites</th></tr>
@@ -1860,6 +1989,7 @@ export default function DashboardPage() {
           </div>
           )}
 
+          </div>
           </div>
         );
       })()}

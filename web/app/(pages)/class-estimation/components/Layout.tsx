@@ -12,6 +12,8 @@ import type { ReactNode } from 'react';
 import styles from './ui.module.css';
 
 interface StepProps {
+  /** Anchor for links that jump to this step. */
+  id?: string;
   number: number;
   title: string;
   /** One plain sentence on what this step does, for someone who has not used the page before. */
@@ -26,9 +28,9 @@ interface StepProps {
   children?: ReactNode;
 }
 
-export function Step({ number, title, explainer, summary, folded, onToggle, toggleLabel, done, children }: StepProps) {
+export function Step({ id, number, title, explainer, summary, folded, onToggle, toggleLabel, done, children }: StepProps) {
   return (
-    <section className={`${styles.step} ${folded ? styles.stepFolded : ''}`}>
+    <section id={id} className={`${styles.step} ${folded ? styles.stepFolded : ''}`}>
       <div className={styles.stepHead}>
         <span className={`${styles.stepNumber} ${done ? styles.stepDone : ''}`}>{done ? '✓' : number}</span>
         <div className={styles.stepTitles}>

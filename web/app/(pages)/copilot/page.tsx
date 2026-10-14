@@ -2,6 +2,9 @@
 
 import { useRef, useState, useEffect, useCallback } from 'react';
 import styles from './page.module.css';
+import { StateCard } from '../../../components/common/MeadowBits';
+import { useDesign } from '../../../styles/themeProvider';
+import { Activity, Bot, Download, GraduationCap, Layers, ListChecks, MessageSquare, Plus, SendHorizontal, Sparkles, Trash2, TriangleAlert } from 'lucide-react';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -34,6 +37,24 @@ const WELCOME: Message = {
   role: 'assistant',
   content: "Hi! I'm your study planner assistant. I can check a student's detected major, graduation status, completed units, list available planners, or check system status. How can I help?",
 };
+
+// Meadow: starting points shown in an empty chat. Prompts ending in a space
+// need a student ID, so they fill the input instead of sending straight away.
+const STARTERS = [
+  { icon: GraduationCap, title: 'Detected major', prompt: 'What major is student ', hint: 'Add the student ID' },
+  { icon: Activity, title: 'Student progress', prompt: 'Show the progress of student ', hint: 'Add the student ID' },
+  { icon: Layers, title: 'Available planners', prompt: 'What planners are available?', hint: 'Lists every study planner' },
+  { icon: ListChecks, title: 'Units with no prerequisites', prompt: 'Which units have no prerequisites?', hint: 'Good for first-year students' },
+];
+
+function formatChatDate(ts: number): string {
+  const d = new Date(ts);
+  const today = new Date();
+  if (d.toDateString() === today.toDateString()) {
+    return `Today, ${d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`;
+  }
+  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+}
 
 function newConversation(): Conversation {
   return {
@@ -73,6 +94,7 @@ export default function CopilotPage() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [streamingContent, setStreamingContent] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
+  const isMeadow = useDesign() === 'meadow';
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -200,8 +222,8 @@ export default function CopilotPage() {
   }
 
   // ── Send message ──────────────────────────────────────────────────────────
-  async function handleSend() {
-    const text = input.trim();
+  async function handleSend(prompt?: string) {
+    const text = (prompt ?? input).trim();
     if (!text || loading || !activeId) return;
 
     const userMsg: Message = { role: 'user', content: text };
@@ -265,6 +287,20 @@ export default function CopilotPage() {
     }
   }
 
+  function handleStarter(prompt: string) {
+    if (prompt.endsWith(' ')) {
+      setInput(prompt);
+      requestAnimationFrame(() => {
+        const el = inputRef.current;
+        if (!el) return;
+        el.focus();
+        el.setSelectionRange(prompt.length, prompt.length);
+      });
+    } else {
+      handleSend(prompt);
+    }
+  }
+
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -275,14 +311,44 @@ export default function CopilotPage() {
   return (
     <div className={styles.panel}>
       {/* ── Setup states (full-width) ── */}
-      {setupState === 'checking' && (
+      {isMeadow && setupState !== 'ready' && (
+        <div className={styles.mSetup}>
+          {setupState === 'checking' && <StateCard busy title="Checking the AI service…" />}
+          {setupState === 'ollama-unavailable' && (
+            <StateCard icon={<TriangleAlert />} title="Ollama is not running">
+              <span>The AI copilot requires Ollama to be running locally. Start Ollama, then come back to this page.</span>
+              <button className={styles.setupBtn} onClick={checkStatus}>Check again</button>
+            </StateCard>
+          )}
+          {setupState === 'model-unavailable' && (
+            <StateCard icon={<Bot />} title="Download the AI model">
+              <span>The copilot uses <strong>{COPILOT_MODEL}</strong>. The model is not installed yet (~2 GB). Download it once and the copilot will be available.</span>
+              {pullError && <span className={styles.setupError}>{pullError}</span>}
+              <button className={styles.setupBtn} onClick={handleDownload} disabled={downloading}>
+                <Download aria-hidden="true" />{downloading ? 'Starting download…' : 'Download model'}
+              </button>
+            </StateCard>
+          )}
+          {setupState === 'pulling' && (
+            <StateCard icon={<Download />} title={`Downloading ${COPILOT_MODEL}…`}>
+              <span>This may take a few minutes depending on your connection. Do not close the app.</span>
+              <div className={styles.progressTrack}>
+                <div className={styles.progressBar} style={{ width: `${pullProgress}%` }} />
+              </div>
+              <span className={styles.progressLabel}>{pullProgress}%</span>
+            </StateCard>
+          )}
+        </div>
+      )}
+
+      {!isMeadow && setupState === 'checking' && (
         <div className={styles.setupCard}>
           <div className={styles.setupIcon}>⏳</div>
           <div className={styles.setupTitle}>Checking AI status…</div>
         </div>
       )}
 
-      {setupState === 'ollama-unavailable' && (
+      {!isMeadow && setupState === 'ollama-unavailable' && (
         <div className={styles.setupCard}>
           <div className={styles.setupIcon}>⚠️</div>
           <div className={styles.setupTitle}>Ollama is not running</div>
@@ -293,7 +359,7 @@ export default function CopilotPage() {
         </div>
       )}
 
-      {setupState === 'model-unavailable' && (
+      {!isMeadow && setupState === 'model-unavailable' && (
         <div className={styles.setupCard}>
           <div className={styles.setupIcon}>🤖</div>
           <div className={styles.setupTitle}>AI model not downloaded</div>
@@ -307,7 +373,7 @@ export default function CopilotPage() {
         </div>
       )}
 
-      {setupState === 'pulling' && (
+      {!isMeadow && setupState === 'pulling' && (
         <div className={styles.setupCard}>
           <div className={styles.setupIcon}>⬇️</div>
           <div className={styles.setupTitle}>Downloading {COPILOT_MODEL}…</div>
@@ -327,10 +393,19 @@ export default function CopilotPage() {
 
           {/* History sidebar */}
           <div className={styles.historySidebar}>
+            {isMeadow ? (
+              <div className={styles.historyHeader}>
+                <button className={styles.mNewChat} onClick={handleNewChat} disabled={loading}>
+                  <Plus aria-hidden="true" />New chat
+                </button>
+                <span className={styles.historyTitle}>Recent chats</span>
+              </div>
+            ) : (
             <div className={styles.historyHeader}>
               <span className={styles.historyTitle}>Chats</span>
               <button className={styles.newChatBtn} onClick={handleNewChat} title="New chat">+</button>
             </div>
+            )}
             <div className={styles.historyList}>
               {conversations.map((conv) => (
                 <div
@@ -338,13 +413,24 @@ export default function CopilotPage() {
                   className={`${styles.historyItem} ${conv.id === activeId ? styles.historyItemActive : ''}`}
                   onClick={() => { if (!loading) setActiveId(conv.id); }}
                 >
+                  {isMeadow ? (
+                    <>
+                      <MessageSquare className={styles.mChatIcon} aria-hidden="true" />
+                      <span className={styles.mChatText}>
+                        <span className={styles.historyItemTitle}>{conv.title}</span>
+                        <span className={styles.mChatDate}>{formatChatDate(conv.createdAt)}</span>
+                      </span>
+                    </>
+                  ) : (
                   <span className={styles.historyItemTitle}>{conv.title}</span>
+                  )}
                   <button
                     className={styles.historyItemDelete}
                     onClick={(e) => { e.stopPropagation(); handleDeleteChat(conv.id); }}
                     title="Delete chat"
+                    aria-label={isMeadow ? `Delete chat: ${conv.title}` : undefined}
                   >
-                    ×
+                    {isMeadow ? <Trash2 aria-hidden="true" /> : '×'}
                   </button>
                 </div>
               ))}
@@ -353,8 +439,47 @@ export default function CopilotPage() {
 
           {/* Chat area */}
           <div className={styles.chatContainer}>
+            {isMeadow && (
+              <div className={styles.mChatHead}>
+                <div className={styles.mChatHeadText}>
+                  <span className={styles.mChatHeadTitle}>{activeConversation?.title ?? 'New chat'}</span>
+                  <span className={styles.mChatHeadSub}>Answers use the student portal and the planner database.</span>
+                </div>
+                <span className={styles.mModelChip}><span className={styles.mModelDot} />{COPILOT_MODEL}</span>
+              </div>
+            )}
             <div className={styles.messageList}>
-              {messages.map((msg, i) => (
+              {isMeadow && messages.map((msg, i) => (
+                <div key={i} className={`${styles.message} ${msg.role === 'user' ? styles.messageUser : styles.messageAssistant}`}>
+                  {msg.role === 'assistant' && <span className={styles.mAvatar} aria-hidden="true"><Sparkles /></span>}
+                  <div className={styles.msgBody}>
+                    <div className={styles.messageBubble}>
+                      <pre className={styles.messageText}>{msg.content}</pre>
+                    </div>
+                    <div className={styles.messageRole}>
+                      {msg.role === 'user' ? 'You' : 'Copilot'}
+                      {msg.role === 'assistant' && msg.workflowId && (
+                        <span className={styles.workflowTag}>{msg.workflowId}</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {isMeadow && messages.length === 1 && !loading && (
+                <div className={styles.mStarters}>
+                  <span className={styles.mStartersLabel}>Try asking</span>
+                  <div className={styles.mStarterGrid}>
+                    {STARTERS.map(({ icon: Icon, title, prompt, hint }) => (
+                      <button key={title} type="button" className={styles.mStarter} onClick={() => handleStarter(prompt)}>
+                        <span className={styles.mStarterIcon} aria-hidden="true"><Icon /></span>
+                        <span className={styles.mStarterTitle}>{title}</span>
+                        <span className={styles.mStarterHint}>{hint}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {!isMeadow && messages.map((msg, i) => (
                 <div
                   key={i}
                   className={`${styles.message} ${msg.role === 'user' ? styles.messageUser : styles.messageAssistant}`}
@@ -372,6 +497,8 @@ export default function CopilotPage() {
               ))}
               {loading && (
                 <div className={`${styles.message} ${styles.messageAssistant}`}>
+                  {isMeadow && <span className={styles.mAvatar} aria-hidden="true"><Sparkles /></span>}
+                  <div className={styles.msgBody}>
                   <div className={styles.messageBubble}>
                     {streamingContent !== null ? (
                       <pre className={styles.messageText}>{streamingContent}</pre>
@@ -387,11 +514,35 @@ export default function CopilotPage() {
                     )}
                   </div>
                   <div className={styles.messageRole}>Copilot</div>
+                  </div>
                 </div>
               )}
               <div ref={bottomRef} />
             </div>
 
+            {isMeadow ? (
+              <div className={styles.mComposerWrap}>
+                <div className={styles.mComposer}>
+                  <textarea
+                    ref={inputRef}
+                    className={styles.input}
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder="Ask about a student's major, graduation status, or available planners…"
+                    rows={2}
+                    disabled={loading}
+                    aria-label="Message the copilot"
+                  />
+                  <div className={styles.mComposerBar}>
+                    <span className={styles.mComposerHint}>Enter to send · Shift + Enter for a new line</span>
+                    <button className={styles.sendBtn} onClick={() => handleSend()} disabled={loading || !input.trim()}>
+                      <SendHorizontal aria-hidden="true" />Send
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
             <div className={styles.inputRow}>
               <textarea
                 ref={inputRef}
@@ -405,12 +556,13 @@ export default function CopilotPage() {
               />
               <button
                 className={styles.sendBtn}
-                onClick={handleSend}
+                onClick={() => handleSend()}
                 disabled={loading || !input.trim()}
               >
                 Send
               </button>
             </div>
+            )}
           </div>
         </div>
       )}

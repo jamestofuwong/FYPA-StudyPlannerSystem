@@ -376,6 +376,11 @@
   border-top: 1px solid var(--panel-border, #333);
 }
 
+/* Layout hooks: classic renders as if these wrappers were absent. */
+.planMain,
+.planRail,
+.planMpu { display: contents; }
+
 /* ===== Meadow design ===== */
 :global(html[data-design='meadow']) .planActions {
   gap: 12px;
@@ -440,3 +445,110 @@
 :global(html[data-design='meadow']) .warningItem {
   padding: 6px 2px;
 }
+
+/* Meadow: header chips */
+.mMetaChip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: var(--card-bg);
+  border: 1px solid var(--panel-border);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.mBtnIcon {
+  width: 17px;
+  height: 17px;
+  vertical-align: -3px;
+  margin-right: 8px;
+}
+
+/* Meadow: plan workspace. Actions and checks sit above the semesters, and
+   move into a sticky rail beside them on wide windows. */
+:global(html[data-design='meadow']) .planLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: 'rail' 'main' 'mpu';
+  gap: 20px;
+  align-items: start;
+}
+:global(html[data-design='meadow']) .planMain { display: block; grid-area: main; min-width: 0; }
+:global(html[data-design='meadow']) .planMpu { display: block; grid-area: mpu; min-width: 0; }
+:global(html[data-design='meadow']) .planMpu:empty { display: none; }
+:global(html[data-design='meadow']) .planRail {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  grid-area: rail;
+  min-width: 0;
+  padding: 20px 22px;
+  background: var(--card-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 18px;
+  box-shadow: var(--shadow-card);
+}
+/* The summary is its own card elsewhere; inside the rail it is just the top section. */
+:global(html[data-design='meadow']) .planRail .planSummary {
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+:global(html[data-design='meadow']) .planRail .planActions {
+  margin: 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--panel-border);
+  flex-wrap: wrap;
+  gap: 10px;
+}
+:global(html[data-design='meadow']) .planRail .planActions button {
+  font-size: 14px !important;
+}
+:global(html[data-design='meadow']) .planRail .warningList {
+  margin: 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--panel-border);
+  gap: 8px;
+}
+:global(html[data-design='meadow']) .planRail .warningItem {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(var(--tint-orange), 0.07);
+  font-size: 15px;
+  line-height: 1.45;
+}
+:global(html[data-design='meadow']) .planRail .cataloguePanel {
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+}
+@media (min-width: 1500px) {
+  :global(html[data-design='meadow']) .planLayout {
+    grid-template-columns: minmax(0, 1fr) 340px;
+    grid-template-areas: 'main rail' 'mpu rail';
+  }
+  :global(html[data-design='meadow']) .planRail { position: sticky; top: 16px; }
+  :global(html[data-design='meadow']) .planRail .planActions button { flex: 1 1 100%; }
+}
+
+/* Meadow: optional opportunities below the plan, as a card grid */
+.mOpportunities {
+  margin-top: 36px;
+}
+.mOpportunities .pathwaySection {
+  margin-top: 0;
+  margin-bottom: 28px;
+}
+:global(html[data-design='meadow']) .mOpportunities .doubleMajorGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(380px, 100%), 1fr));
+  gap: 14px;
+}
+:global(html[data-design='meadow']) .doubleMajorCard {
+  align-items: flex-start;
+  box-shadow: var(--shadow-card);
+}
+:global(html[data-design='meadow']) .planRail .warningList:empty { display: none; }

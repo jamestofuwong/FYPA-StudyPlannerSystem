@@ -227,3 +227,104 @@
 :global(html[data-design='meadow']) .cardDesc {
   margin: -6px 0 16px;
 }
+
+/* ── Meadow layout: settings as rows, the explanation beside its control ── */
+.mSection { margin-bottom: 28px; }
+.mSectionTitle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 12px;
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.mSectionTitle svg { width: 20px; height: 20px; color: var(--active-highlight); }
+.mGroup {
+  background: var(--card-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+.mRow {
+  display: grid;
+  grid-template-columns: minmax(200px, 300px) minmax(0, 1fr);
+  gap: 16px 40px;
+  padding: 24px;
+}
+.mRow + .mRow { border-top: 1px solid var(--panel-border); }
+@media (max-width: 900px) {
+  .mRow { grid-template-columns: 1fr; }
+}
+.mRowText { display: flex; flex-direction: column; gap: 4px; }
+.mRowLabel { font-size: 16px; font-weight: 700; color: var(--text-primary); }
+.mRowDesc { font-size: 14px; line-height: 1.55; color: var(--text-muted); }
+.mRowControl { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+:global(html[data-design='meadow']) .mRowControl.designOptions { display: grid; }
+
+.mModes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.mMode {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas: 'icon label' 'desc desc';
+  align-items: center;
+  gap: 8px 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-lg);
+  background: var(--card-bg);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.mMode:hover { border-color: var(--active-highlight); }
+.mModeActive { border-color: var(--active-highlight); background: var(--active-bg); box-shadow: inset 0 0 0 1px var(--active-highlight); }
+.mMode svg { grid-area: icon; width: 20px; height: 20px; color: var(--text-secondary); }
+.mModeActive svg { color: var(--active-highlight); }
+.mModeLabel { grid-area: label; font-size: 15px; font-weight: 700; color: var(--text-primary); }
+.mModeDesc { grid-area: desc; font-size: 13px; line-height: 1.45; color: var(--text-muted); }
+
+.mSliderRow { display: flex; align-items: center; gap: 16px; }
+.mSlider { flex: 1; accent-color: var(--active-highlight); height: 24px; }
+.mSliderValue {
+  min-width: 64px;
+  padding: 6px 12px;
+  border-radius: var(--radius-md);
+  background: var(--surface-bg);
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 800;
+  text-align: center;
+  color: var(--text-primary);
+}
+.mActions { display: flex; flex-wrap: wrap; gap: 10px; }
+.mBtn,
+.mBtnPrimary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 18px;
+  border-radius: var(--radius-control);
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.mBtn { background: var(--card-bg); border: 1px solid var(--panel-border); color: var(--text-primary); }
+.mBtn:hover:not(:disabled) { background: var(--card-hover); }
+.mBtnPrimary { background: var(--active-highlight); border: 1px solid var(--active-highlight); color: var(--on-accent); }
+.mBtnPrimary:hover:not(:disabled) { background: var(--btn-primary-hover); }
+.mBtn:disabled, .mBtnPrimary:disabled { opacity: 0.55; cursor: not-allowed; }
+.mBtnPrimary svg { width: 16px; height: 16px; }
+
+.mUpdateLine { display: flex; align-items: center; gap: 10px; font-size: 15px; color: var(--text-secondary); }
+.mUpdateDot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; background: var(--text-muted); }
+.mTone_busy .mUpdateDot { background: var(--accent-blue); }
+.mTone_good .mUpdateDot { background: var(--accent-green); }
+.mTone_bad { color: var(--accent-red); }
+.mTone_bad .mUpdateDot { background: var(--accent-red); }
+.mUpdateTrack { height: 8px; border-radius: 999px; background: var(--surface-bg); overflow: hidden; }
+.mUpdateTrack > div { height: 100%; border-radius: 999px; background: var(--active-highlight); transition: width 0.3s; }

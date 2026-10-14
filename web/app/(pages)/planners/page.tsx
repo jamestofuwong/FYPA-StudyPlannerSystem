@@ -6,7 +6,9 @@ import { useSearchParams } from 'next/navigation';
 import CourseListTable, { getSemesterOrder, getSemesterLabel } from '../../../components/planner/CourseListTable';
 import PlannerHeader from '../../../components/planner/PlannerHeader';
 
-import styles from './page.module.css'; 
+import styles from './page.module.css';
+import { useDesign } from '../../../styles/themeProvider';
+import { Pencil, Search, Trash2, Upload } from 'lucide-react';
 
 // ==================================================================================================================
 // Utility Functions
@@ -26,6 +28,8 @@ export default function PlannersPage() {
   const [planners, setPlanners] = useState<any[]>([]);
   const [selectedPlannerId, setSelectedPlannerId] = useState<string | null>(null);
   const [selectedPlanner, setSelectedPlanner] = useState<any | null>(null);
+  // Meadow shows a planner hero with requirement tiles; classic keeps the summary grid.
+  const isMeadow = useDesign() === 'meadow';
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedCourses, setExpandedCourses] = useState<Set<string>>(new Set());
@@ -416,6 +420,29 @@ export default function PlannersPage() {
 
       {/* LEFT PANEL: The List of Planners */}
       <div className={styles.listPanel}>
+        {isMeadow ? (
+          <div className={styles.mListHeader}>
+            <div className={styles.mListTitleRow}>
+              <h1 className={styles.mListTitle}>Study planners</h1>
+              <span className={styles.mListCount}>{planners.length}</span>
+            </div>
+            <div className={styles.mSearchRow}>
+              <label className={styles.mSearch}>
+                <Search aria-hidden="true" />
+                <input
+                  type="text"
+                  placeholder="Filter planners"
+                  aria-label="Filter planners"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </label>
+              <Link href="/import" className={styles.mImportLink} title="Import a study planner PDF">
+                <Upload aria-hidden="true" />Import
+              </Link>
+            </div>
+          </div>
+        ) : (
         <div className={styles.listHeader}>
           <input
             type="text"
@@ -430,6 +457,7 @@ export default function PlannersPage() {
             </button>
           </Link>
         </div>
+        )}
 
         <div className={styles.listItems}>
           {isLoading ? (
@@ -505,11 +533,23 @@ export default function PlannersPage() {
       {/* RIGHT PANEL: The Selected Planner Details */}
       <div className={styles.detailPanel}>
         {selectedPlanner ? (
-          <div>
+          <div className={styles.detailBody}>
+            {isMeadow && (
+              <div className={styles.mHero}>
+                <div className={styles.mHeroText}>
+                  <span className={styles.mHeroEyebrow}>{selectedPlanner.course?.name}</span>
+                  <h2 className={styles.mHeroTitle}>{selectedPlanner.major?.name || selectedPlanner.course?.name || 'General Program'}</h2>
+                  <span className={styles.mHeroMeta}>
+                    {getIntakeLabel(selectedPlanner.intake_month)} {selectedPlanner.intake_year} intake · {selectedPlanner.units?.length ?? 0} units
+                    {editMode && <span className={styles.mEditingTag}>Editing</span>}
+                  </span>
+                </div>
+              </div>
+            )}
             <div className={styles.editActions}>
               {!editMode ? (
                 <button className={styles.btnPrimary} onClick={() => { setEditSnapshot(JSON.parse(JSON.stringify(selectedPlanner))); setEditMode(true); setSaveMessage(''); setShowSavedDialog(false); }}>
-                  Edit Planner
+                  {isMeadow && <Pencil aria-hidden="true" className={styles.mBtnIcon} />}Edit Planner
                 </button>
               ) : (
                 <>
@@ -522,10 +562,26 @@ export default function PlannersPage() {
                 </>
               )}
               <button className={styles.btnDanger} onClick={() => { setShowDeleteDialog(true); setSaveMessage(''); }} disabled={isDeleting || isSaving}>
-                Delete Planner
+                {isMeadow && <Trash2 aria-hidden="true" className={styles.mBtnIcon} />}Delete Planner
               </button>
               {saveMessage && <span>{saveMessage}</span>}
             </div>
+            {isMeadow && !editMode ? (
+              <div className={styles.mReqGrid}>
+                {([
+                  ['Core', selectedPlanner.core_count, selectedPlanner.core_cp],
+                  ['Major', selectedPlanner.major_count, selectedPlanner.major_cp],
+                  ['Elective', selectedPlanner.elective_count, selectedPlanner.elective_cp],
+                  ['Work placement', selectedPlanner.wil_count, selectedPlanner.wil_cp],
+                ] as [string, number | null, number | null][]).map(([label, count, cp]) => (
+                  <div key={label} className={styles.mReqTile}>
+                    <span className={styles.mReqLabel}>{label}</span>
+                    <span className={styles.mReqValue}>{count ?? '–'} <span className={styles.mReqUnit}>units</span></span>
+                    <span className={styles.mReqSub}>{cp != null ? `${cp} credit points` : 'Credit points not set'}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
             <PlannerHeader
               course={selectedPlanner.course?.name || ''}
               major={selectedPlanner.major?.name || ''}
@@ -540,6 +596,7 @@ export default function PlannersPage() {
               editable={editMode}
               onEdit={handlePlannerEdit}
             />
+            )}
             <CourseListTable
               yearGroups={yearGroups}
               editable={editMode}

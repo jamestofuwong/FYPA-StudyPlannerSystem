@@ -900,3 +900,151 @@
 :global(html[data-design='meadow']) .dropZoneActive {
   background: var(--active-bg);
 }
+
+/* Meadow: choose → read → review → save */
+.mSteps {
+  list-style: none;
+  margin: 0 0 20px;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.mSteps li {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 0 16px 0 6px;
+  border-radius: 999px;
+  background: var(--card-bg);
+  border: 1px solid var(--panel-border);
+  color: var(--text-muted);
+  font-size: 15px;
+  font-weight: 600;
+}
+.mSteps li span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--surface-bg);
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 700;
+}
+.mSteps li.mStepActive {
+  color: var(--text-primary);
+  border-color: var(--active-highlight);
+}
+.mSteps li.mStepActive span {
+  background: var(--active-highlight);
+  color: var(--on-accent, #fff);
+}
+.mDropIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 16px;
+  border-radius: 18px;
+  background: var(--active-bg);
+  color: var(--text-secondary);
+}
+.mDropIcon svg { width: 30px; height: 30px; }
+:global(html[data-design='meadow']) .dropZone {
+  border: 2px dashed var(--panel-border);
+  padding: 56px 32px;
+}
+:global(html[data-design='meadow']) .dropZone:hover,
+:global(html[data-design='meadow']) .dropZoneActive { border-color: var(--active-highlight); }
+:global(html[data-design='meadow']) .dropTitle {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+:global(html[data-design='meadow']) .dropSubtitle { font-size: 15px; }
+:global(html[data-design='meadow']) .dropMeta { font-family: var(--font-sans); color: var(--text-muted); }
+.mHistory { margin-top: 28px; }
+.mHistoryTitle {
+  margin: 0 0 12px;
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+/* Meadow: review pane */
+:global(html[data-design='meadow']) .resultsPane { padding: 0 28px 28px; }
+:global(html[data-design='meadow']) .importStickyHeader {
+  padding: 18px 0 14px;
+  margin-bottom: 8px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
+  border-bottom: 1px solid var(--panel-border);
+}
+:global(html[data-design='meadow']) .importHeaderActions { justify-content: flex-start; }
+:global(html[data-design='meadow']) .importHeaderActions > button:last-child { margin-left: auto; }
+.mHeaderTitle { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+:global(html[data-design='meadow']) .importHeaderTitle {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text-primary);
+  white-space: normal;
+}
+.mHeaderSub { font-size: 14px; color: var(--text-muted); max-width: 52ch; }
+.mFileCard {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  margin: 12px 0 20px;
+  background: var(--card-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 16px;
+  box-shadow: var(--shadow-card);
+}
+.mFileIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--active-bg);
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+.mFileIcon svg { width: 22px; height: 22px; }
+.mFileText { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.mFileName {
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mFileState { font-size: 14px; color: var(--text-muted); }
+:global(html[data-design='meadow']) .resultSummary {
+  grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
+  gap: 14px;
+  margin: 16px 0 4px;
+}
+:global(html[data-design='meadow']) .resultGroup {
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  background: var(--main-bg);
+  padding: 14px 16px;
+}
+:global(html[data-design='meadow']) .resultGroupTitle { font-size: 15px; color: var(--text-primary); }
+:global(html[data-design='meadow']) .validationBox {
+  margin: 0 0 16px;
+  border-radius: 12px;
+}

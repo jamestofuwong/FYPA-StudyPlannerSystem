@@ -752,6 +752,15 @@
   padding: 16px 0;
 }
 
+/* Layout hooks: classic renders these exactly like the original inline styles
+   (or as if the wrapper were absent); the Meadow design re-arranges them. */
+.searchRow { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+.importPanel { border: 1px solid var(--panel-border); border-radius: var(--radius-md, 4px); padding: 14px 16px; margin-bottom: 14px; background: var(--card-bg); }
+.resultsNotice,
+.plannerRail,
+.resultsMain { display: contents; }
+.mSearchIcon { width: 20px; height: 20px; color: var(--text-muted); flex-shrink: 0; }
+
 /* ===== Meadow design ===== */
 :global(html[data-design='meadow']) .formInput,
 :global(html[data-design='meadow']) .formSelect,
@@ -760,36 +769,6 @@
   padding: 10px 14px;
   border-radius: 12px;
   background: var(--card-bg);
-}
-:global(html[data-design='meadow']) .plannerTabBar {
-  gap: 12px;
-  margin-bottom: 14px;
-  padding-bottom: 4px;
-}
-:global(html[data-design='meadow']) .plannerTab {
-  padding: 16px 18px;
-  border-radius: 16px;
-  gap: 6px;
-  min-width: 180px;
-  box-shadow: var(--shadow-card);
-}
-:global(html[data-design='meadow']) .plannerTabMeta {
-  white-space: normal;
-}
-:global(html[data-design='meadow']) .resultTabBar {
-  margin: 24px 0 20px;
-}
-:global(html[data-design='meadow']) .resultTab {
-  padding: 12px 18px;
-  border-bottom-width: 3px;
-  font-size: 16px;
-}
-:global(html[data-design='meadow']) .analyticsGrid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20px;
-}
-@media (max-width: 860px) {
-  :global(html[data-design='meadow']) .analyticsGrid { grid-template-columns: minmax(0, 1fr); }
 }
 :global(html[data-design='meadow']) .insightCard {
   border-radius: 18px;
@@ -849,3 +828,246 @@
 :global(html[data-design='meadow']) .statCard.orange {
   border-top: 1px solid var(--panel-border);
 }
+
+/* Meadow: find-a-student card */
+:global(html[data-design='meadow']) .searchRow {
+  gap: 10px;
+  padding: 14px 16px;
+  margin-bottom: 24px;
+  background: var(--card-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 18px;
+  box-shadow: var(--shadow-card);
+  flex-wrap: wrap;
+}
+:global(html[data-design='meadow']) .searchRow .suggestionsWrap {
+  flex: 1 1 320px;
+}
+:global(html[data-design='meadow']) .importPanel {
+  border-radius: 18px;
+  padding: 22px 24px;
+  margin: -12px 0 24px;
+  box-shadow: var(--shadow-card);
+}
+
+/* Meadow: student header */
+.mStudentCard {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 22px 24px;
+  margin-bottom: 24px;
+  background: var(--card-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 18px;
+  box-shadow: var(--shadow-card);
+}
+.mStudentTop {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.mAvatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--active-highlight);
+  color: var(--on-accent, #fff);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.mAvatar svg { width: 26px; height: 26px; }
+.mStudentWho {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 260px;
+  min-width: 0;
+}
+.mStudentName {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 26px;
+  line-height: 1.2;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+.mStudentMeta {
+  font-size: 15px;
+  color: var(--text-muted);
+}
+.mStudentActions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.mStudentActions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.mStudentActions svg { width: 17px; height: 17px; }
+.mStatGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr));
+  gap: 12px;
+}
+.mStat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: var(--main-bg);
+}
+.mStatWide { grid-column: span 2; }
+@media (max-width: 760px) { .mStatWide { grid-column: auto; } }
+.mStatLabel { font-size: 14px; color: var(--text-muted); }
+.mStatValue {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+.mStatOf { font-size: 17px; font-weight: 600; color: var(--text-muted); }
+.mStat .progressWrap { margin-top: 6px; height: 8px; border-radius: 999px; }
+.mEnrolRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-top: 16px;
+  border-top: 1px solid var(--panel-border);
+}
+.mEnrolLabel { font-size: 14px; font-weight: 600; color: var(--text-muted); margin-right: 4px; }
+.mEnrolChip {
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid var(--panel-border);
+  background: var(--card-bg);
+  color: var(--text-primary);
+  font-size: 14px;
+  cursor: pointer;
+}
+.mEnrolChip:hover:not(:disabled) { border-color: var(--active-highlight); }
+.mEnrolChipActive {
+  background: var(--active-bg);
+  border-color: var(--active-highlight);
+  color: var(--text-secondary);
+  font-weight: 600;
+  cursor: default;
+}
+.mStateActions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+
+/* Meadow: results on the left, ranked majors in a sticky rail on the right */
+:global(html[data-design='meadow']) .resultsLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  grid-template-areas: 'notice notice' 'main rail';
+  gap: 24px;
+  align-items: start;
+}
+:global(html[data-design='meadow']) .resultsNotice { display: block; grid-area: notice; }
+:global(html[data-design='meadow']) .resultsNotice:empty { display: none; }
+:global(html[data-design='meadow']) .resultsLayout:has(> .resultsNotice:empty) { grid-template-areas: 'main rail'; }
+:global(html[data-design='meadow']) .resultsMain { display: block; grid-area: main; min-width: 0; }
+:global(html[data-design='meadow']) .plannerRail {
+  display: flex;
+  flex-direction: column;
+  grid-area: rail;
+  position: sticky;
+  top: 16px;
+  padding: 20px;
+  background: var(--card-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 18px;
+  box-shadow: var(--shadow-card);
+}
+:global(html[data-design='meadow']) .plannerRail .sectionTitle {
+  font-size: 18px;
+  margin-bottom: 14px;
+}
+:global(html[data-design='meadow']) .plannerTabBar {
+  flex-direction: column;
+  gap: 10px;
+  overflow: visible;
+  margin-bottom: 12px;
+}
+:global(html[data-design='meadow']) .plannerTab {
+  flex: none;
+  min-width: 0;
+  padding: 14px 16px;
+  border-radius: 14px;
+  gap: 6px;
+}
+:global(html[data-design='meadow']) .plannerTabMeta { white-space: normal; }
+/* Wide data views (the unit plan tables) take the full width; the majors sit in a row above. */
+:global(html[data-design='meadow']) .resultsWide {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: 'notice' 'rail' 'main';
+}
+:global(html[data-design='meadow']) .resultsWide:has(> .resultsNotice:empty) {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: 'rail' 'main';
+}
+:global(html[data-design='meadow']) .resultsWide .plannerRail { position: static; }
+:global(html[data-design='meadow']) .resultsWide .plannerTabBar { flex-direction: row; }
+:global(html[data-design='meadow']) .resultsWide .plannerTab { flex: 1 1 0; }
+@media (max-width: 1100px) {
+  :global(html[data-design='meadow']) .resultsLayout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: 'notice' 'rail' 'main';
+  }
+  :global(html[data-design='meadow']) .resultsLayout:has(> .resultsNotice:empty) {
+    grid-template-areas: 'rail' 'main';
+  }
+  :global(html[data-design='meadow']) .plannerRail { position: static; }
+  :global(html[data-design='meadow']) .plannerTabBar { flex-direction: row; }
+  :global(html[data-design='meadow']) .plannerTab { flex: 1 1 0; }
+}
+:global(html[data-design='meadow']) .gradReqRow {
+  grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
+  gap: 20px;
+}
+
+/* Meadow: result views as a segmented control */
+:global(html[data-design='meadow']) .resultTabBar {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px;
+  margin: 0 0 20px;
+  border: none;
+  border-radius: 14px;
+  background: var(--surface-bg);
+}
+:global(html[data-design='meadow']) .resultTab {
+  min-height: 40px;
+  padding: 0 18px;
+  margin: 0;
+  border: none;
+  border-radius: 10px;
+  font-size: 15px;
+  color: var(--text-muted);
+}
+:global(html[data-design='meadow']) .resultTabActive {
+  background: var(--card-bg);
+  color: var(--text-primary);
+  box-shadow: 0 1px 2px rgba(var(--overlay-rgb), 0.12);
+}
+/* The tab already names the view, so the first heading inside it is redundant. */
+:global(html[data-design='meadow']) .resultTabPanel > .sectionTitle:first-child { display: none; }
+:global(html[data-design='meadow']) .analyticsGrid {
+  grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr));
+  gap: 20px;
+}
+/* Unit names wrap instead of truncating in the unit plan tables. */
+:global(html[data-design='meadow']) .resultsMain .table tbody td { white-space: normal; }

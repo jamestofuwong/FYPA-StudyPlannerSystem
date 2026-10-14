@@ -373,3 +373,139 @@
   padding: 10px 14px;
   border-radius: 12px;
 }
+
+/* Meadow: session and student list in a rail, the selected student's audit beside it. */
+.mLayout {
+  display: grid;
+  grid-template-columns: 340px minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+@media (max-width: 1000px) {
+  .mLayout { grid-template-columns: 1fr; }
+}
+.mRail {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.mRail > .card { margin-bottom: 0; }
+.mMain { min-width: 0; }
+:global(html[data-design='meadow']) .card { padding: 20px; border-radius: var(--radius-card); }
+:global(html[data-design='meadow']) .cardTitle {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+:global(html[data-design='meadow']) .mRail .btnGroup > button { width: 100%; height: 44px; font-size: 15px; }
+.mDebug { margin-bottom: 14px; font-size: 13px; color: var(--text-muted); }
+.mDebug > summary { cursor: pointer; margin-bottom: 8px; font-weight: 600; }
+
+.mListCard { display: flex; flex-direction: column; gap: 12px; }
+.mListHead { display: flex; align-items: center; justify-content: space-between; }
+.mListCount {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--surface-bg);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.mSearch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-control);
+  background: var(--card-bg);
+  color: var(--text-muted);
+}
+.mSearch:focus-within { border-color: var(--active-highlight); }
+.mSearch svg { width: 18px; height: 18px; flex-shrink: 0; }
+.mSearch input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: none;
+  font-family: inherit;
+  font-size: 15px;
+  color: var(--text-primary);
+}
+.mList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 440px;
+  overflow-y: auto;
+  margin: 0 -8px;
+  padding: 0 8px;
+}
+.mListItem {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 10px 12px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: none;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.mListItem:hover { background: var(--card-hover); }
+.mListItemActive, .mListItemActive:hover { background: var(--active-bg); }
+.mListName { font-size: 15px; font-weight: 600; color: var(--text-primary); }
+.mListId { font-size: 13px; color: var(--text-muted); }
+.mListItemActive .mListName { color: var(--active-highlight); }
+.mListEmpty, .mListNote { padding: 8px 4px; font-size: 13px; color: var(--text-muted); }
+
+:global(html[data-design='meadow']) .studentBar {
+  gap: 14px;
+  padding: 18px 20px;
+  margin-bottom: 20px;
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+:global(html[data-design='meadow']) .avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: var(--active-bg);
+  color: var(--active-highlight);
+  font-family: var(--font-display);
+  font-size: 20px;
+}
+:global(html[data-design='meadow']) .studentName { font-family: var(--font-display); font-size: 22px; font-weight: 800; color: var(--text-primary); }
+:global(html[data-design='meadow']) .studentMeta { font-family: var(--font-sans); font-size: 14px; }
+:global(html[data-design='meadow']) .studentSelect { background: var(--card-bg); font-size: 14px; font-weight: 600; }
+:global(html[data-design='meadow']) .mMain .sectionTitle { margin-top: 8px; }
+:global(html[data-design='meadow']) .statGrid { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); margin-bottom: 20px; }
+:global(html[data-design='meadow']) .statValue { font-family: var(--font-display); font-weight: 800; color: var(--text-primary); }
+:global(html[data-design='meadow']) .statLabel { font-size: 13px; font-weight: 600; }
+:global(html[data-design='meadow']) .statSub { font-size: 13px; }
+:global(html[data-design='meadow']) .formLabel { font-size: 13px; font-weight: 600; }
+:global(html[data-design='meadow']) .fieldValue,
+:global(html[data-design='meadow']) .fieldValueMono { font-family: var(--font-sans); font-size: 15px; }
+:global(html[data-design='meadow']) .mMain .tableWrap { max-height: none; border-radius: var(--radius-lg); }
+/* The term already heads each group of rows, so its column only squeezes the titles. */
+:global(html[data-design='meadow']) .mMain .table th:nth-child(7),
+:global(html[data-design='meadow']) .mMain .table td:nth-child(7) { display: none; }
+:global(html[data-design='meadow']) .table { font-size: 14px; }
+:global(html[data-design='meadow']) .table thead th { font-family: var(--font-sans); font-size: 12px; }
+:global(html[data-design='meadow']) .table tbody td { padding: 10px 12px; }
+:global(html[data-design='meadow']) .code { font-family: var(--font-sans); font-size: 13px; font-weight: 600; background: none; padding: 0; }
+:global(html[data-design='meadow']) .badge { font-family: var(--font-sans); font-size: 12px; white-space: nowrap; }
+.mTermRow {
+  padding: 10px 12px;
+  background: var(--surface-bg);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}

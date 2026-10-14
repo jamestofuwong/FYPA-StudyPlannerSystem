@@ -587,3 +587,135 @@
     align-items: center;
     gap: 8;
 }
+/* ===== Meadow design ===== */
+/* Header and toolbar sit directly in the scrolling layout so the toolbar can stay pinned. */
+.mTop { display: contents; }
+.mTop > header {
+  width: 100%;
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 32px 40px 20px;
+  box-sizing: border-box;
+}
+.mToolbar {
+  position: sticky;
+  top: 12px;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+  width: calc(100% - 80px);
+  max-width: 1160px;
+  margin: 0 auto 8px;
+  padding: 12px 14px;
+  box-sizing: border-box;
+  background: var(--card-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 16px;
+  box-shadow: var(--shadow-card);
+}
+.mSearch {
+  flex: 1 1 320px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  background: var(--main-bg);
+  color: var(--text-muted);
+}
+.mSearch:focus-within { border-color: var(--active-highlight); }
+.mSearch svg { width: 18px; height: 18px; flex-shrink: 0; }
+.mSearch input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 15px;
+}
+.mJump { display: flex; flex-wrap: wrap; gap: 6px; }
+.mJumpChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--panel-border);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.mJumpChip span { color: var(--text-muted); font-weight: 500; }
+.mJumpChip:hover { border-color: var(--active-highlight); background: var(--active-bg); }
+.mMetaChip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: var(--card-bg);
+  border: 1px solid var(--panel-border);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.mQuietLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 12px;
+  color: var(--text-secondary);
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.mQuietLink svg { width: 17px; height: 17px; }
+.mBtnIcon { width: 17px; height: 17px; vertical-align: -3px; margin-right: 8px; }
+.mEditIcon { width: 14px; height: 14px; vertical-align: -2px; margin-right: 6px; }
+:global(html[data-design='meadow']) .contentArea {
+  max-width: 1240px;
+  padding: 16px 40px 40px;
+}
+:global(html[data-design='meadow']) .termGroup {
+  scroll-margin-top: 96px;
+  margin-bottom: 24px;
+  padding: 18px 18px 6px;
+  background: var(--card-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 18px;
+  box-shadow: var(--shadow-card);
+}
+:global(html[data-design='meadow']) .termHeading { margin-bottom: 14px; }
+:global(html[data-design='meadow']) .termLabel {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+:global(html[data-design='meadow']) .termDivider { display: none; }
+:global(html[data-design='meadow']) .tableWrap {
+  border-radius: 12px;
+  margin-bottom: 12px;
+}
+:global(html[data-design='meadow']) .editBtn {
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 8px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 600;
+}
+:global(html[data-design='meadow']) .editBtn {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+}
+:global(html[data-design='meadow']) .table .badge { white-space: nowrap; }

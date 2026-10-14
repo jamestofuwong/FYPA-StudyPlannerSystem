@@ -903,3 +903,197 @@
   letter-spacing: var(--label-tracking, 0.04em);
   color: var(--text-muted);
 }
+
+/* Groups the target semester with the estimate settings; only Meadow lays it out as one strip. */
+.estimateSetup { display: contents; }
+
+/* ── Meadow layout ───────────────────────────────────────────────────────── */
+:global(html[data-design='meadow']) .panel { gap: 20px; }
+:global(html[data-design='meadow']) .panel > header { margin-bottom: 0; }
+
+:global(html[data-design='meadow']) .reportLink {
+  gap: 8px;
+  height: 44px;
+  padding: 0 18px;
+  border-radius: var(--radius-control);
+  font-size: 15px;
+  font-weight: 600;
+}
+:global(html[data-design='meadow']) .reportLink:hover { color: var(--on-accent); }
+:global(html[data-design='meadow']) .reportLink svg { width: 18px; height: 18px; }
+
+/* Step tracker */
+.mStepper {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.mStep {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--card-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-lg);
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s;
+}
+.mStep:hover { border-color: var(--active-highlight); }
+.mStepNum {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 2px solid var(--panel-border);
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+.mStepNum svg { width: 16px; height: 16px; }
+.mStepDone .mStepNum {
+  background: var(--active-highlight);
+  border-color: var(--active-highlight);
+  color: var(--on-accent);
+}
+.mStepText { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.mStepTitle { font-size: 15px; font-weight: 700; color: var(--text-primary); }
+.mStepStatus { font-size: 13px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 900px) {
+  .mStepper { grid-template-columns: 1fr; }
+}
+:global(html[data-design='meadow']) .panel section[id^='ce-step-'] { scroll-margin-top: 16px; }
+
+/* Step 1: where the students come from */
+:global(html[data-design='meadow']) .sourceRow { gap: 12px; margin-bottom: 16px; }
+:global(html[data-design='meadow']) .sourceOption {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas: 'icon label' 'icon hint';
+  align-items: center;
+  column-gap: 14px;
+  row-gap: 2px;
+  padding: 16px;
+  border-radius: var(--radius-lg);
+  background: var(--card-bg);
+}
+:global(html[data-design='meadow']) .sourceOptionActive {
+  background: var(--active-bg);
+  border-color: var(--active-highlight);
+  box-shadow: inset 0 0 0 1px var(--active-highlight);
+}
+.mSourceIcon {
+  grid-area: icon;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--surface-bg);
+  color: var(--text-secondary);
+}
+:global(html[data-design='meadow']) .sourceOptionActive .mSourceIcon { background: var(--card-bg); color: var(--active-highlight); }
+.mSourceIcon svg { width: 20px; height: 20px; }
+:global(html[data-design='meadow']) .sourceOptionLabel { grid-area: label; font-size: 15px; font-weight: 700; }
+:global(html[data-design='meadow']) .sourceOptionHint { grid-area: hint; font-size: 13px; }
+
+:global(html[data-design='meadow']) .dropZone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 28px 20px;
+  border: 2px dashed var(--panel-border);
+  border-radius: var(--radius-lg);
+  font-size: 14px;
+}
+:global(html[data-design='meadow']) .dropZone:hover,
+:global(html[data-design='meadow']) .dropZoneActive {
+  border-color: var(--active-highlight);
+  background: var(--active-bg);
+}
+.mDropIcon { width: 26px; height: 26px; color: var(--active-highlight); }
+
+:global(html[data-design='meadow']) .subPanel { margin-top: 16px; gap: 10px; }
+:global(html[data-design='meadow']) .rangeRow { gap: 16px; margin-top: 8px; }
+:global(html[data-design='meadow']) .rangeField { gap: 6px; }
+:global(html[data-design='meadow']) .rangeLabel { font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+:global(html[data-design='meadow']) .rangeInput {
+  height: 44px;
+  padding: 0 14px;
+  background: var(--card-bg);
+  border-radius: var(--radius-control);
+  font-family: var(--font-sans);
+  font-size: 15px;
+}
+:global(html[data-design='meadow']) .hintText { font-size: 13px; }
+:global(html[data-design='meadow']) .actionRow { gap: 10px; margin-top: 16px; align-items: flex-end; flex-wrap: wrap; }
+:global(html[data-design='meadow']) .actionRow > button,
+:global(html[data-design='meadow']) .actionRow > a { height: 44px; }
+:global(html[data-design='meadow']) .errorBox { border-radius: var(--radius-lg); padding: 12px 14px; }
+
+/* Step 2: the target semester and the two settings sit in one strip above the results */
+:global(html[data-design='meadow']) .estimateSetup {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.8fr) minmax(0, 2fr);
+  gap: 16px;
+  align-items: stretch;
+  padding: 16px;
+  border-radius: var(--radius-lg);
+  background: var(--surface-bg);
+}
+:global(html[data-design='meadow']) .estimateSetup .targetRow {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2px;
+  margin: 0;
+  padding: 12px 16px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--card-bg);
+}
+:global(html[data-design='meadow']) .targetLabel { font-size: 13px; font-weight: 600; }
+:global(html[data-design='meadow']) .targetValue { font-family: var(--font-display); font-size: 22px; font-weight: 800; }
+:global(html[data-design='meadow']) .targetReason { font-size: 13px; }
+:global(html[data-design='meadow']) .estimateSetup .actionRow { margin-top: 0; align-self: center; }
+@media (max-width: 1000px) {
+  :global(html[data-design='meadow']) .estimateSetup { grid-template-columns: 1fr; }
+}
+
+:global(html[data-design='meadow']) .courseLine {
+  margin-top: 14px;
+  padding: 12px 16px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--panel-border);
+  font-size: 14px;
+}
+:global(html[data-design='meadow']) .courseLabel,
+:global(html[data-design='meadow']) .previewNotes { font-family: var(--font-sans); }
+:global(html[data-design='meadow']) .courseLabel { font-size: 13px; font-weight: 600; }
+:global(html[data-design='meadow']) .previewNotes {
+  gap: 6px;
+  margin-top: 16px;
+  padding: 12px 16px;
+  border-radius: var(--radius-lg);
+  background: var(--surface-bg);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+:global(html[data-design='meadow']) .tabIntro { font-size: 14px; color: var(--text-muted); max-width: 96ch; margin-bottom: 14px; }
+:global(html[data-design='meadow']) .chip,
+:global(html[data-design='meadow']) .chipActive { padding: 6px 12px; font-size: 13px; border-radius: 999px; }
+:global(html[data-design='meadow']) .checksHeading { font-family: var(--font-display); font-size: 18px; }
+:global(html[data-design='meadow']) .funnel > div { border-radius: var(--radius-lg); padding: 14px 16px; }
+:global(html[data-design='meadow']) .funnel em { font-family: var(--font-sans); }
+:global(html[data-design='meadow']) .funnel strong { font-family: var(--font-display); font-size: 26px; font-weight: 800; }
+:global(html[data-design='meadow']) .logDetails > summary { font-size: 14px; }
+:global(html[data-design='meadow']) .progressWrap { height: 8px; border-radius: 999px; }
+:global(html[data-design='meadow']) .progressFill { border-radius: 999px; }
+:global(html[data-design='meadow']) .runDelete { font-size: 13px; }

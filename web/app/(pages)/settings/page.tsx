@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import styles from './page.module.css';
 import { useTheme, type DesignMode, type ThemePreference } from '../../../styles/themeProvider';
 import { fs, radius } from '../../../styles/tokens';
+import { PageHeader } from '../../../components/common/MeadowBits';
+import { Check, Monitor, Moon, Palette, RefreshCw, ScanSearch, Sun } from 'lucide-react';
 
 const THEME_OPTIONS: { value: ThemePreference; label: string; description: string }[] = [
   { value: 'system', label: 'System',          description: 'Follows your OS theme preference' },
@@ -27,6 +29,21 @@ type UpdateStatus =
   | { status: 'error'; message: string };
 
 const DEFAULT_THRESHOLD = 70; // 70 %
+
+const MODE_ICONS = { system: Monitor, light: Sun, dark: Moon } as const;
+
+/** Meadow: one line saying where the updater is, and how it should read. */
+function describeUpdate(update: UpdateStatus): { text: string; tone: 'muted' | 'busy' | 'good' | 'bad' } {
+  switch (update.status) {
+    case 'idle': return { text: 'Not checked yet', tone: 'muted' };
+    case 'checking': return { text: 'Checking for updates…', tone: 'busy' };
+    case 'not-available': return { text: "You're on the latest version.", tone: 'good' };
+    case 'available': return { text: `Version v${update.version} is available`, tone: 'busy' };
+    case 'downloading': return { text: `Downloading… ${update.percent}%`, tone: 'busy' };
+    case 'downloaded': return { text: `Version v${update.version} downloaded and ready to install`, tone: 'good' };
+    case 'error': return { text: `Error: ${update.message}`, tone: 'bad' };
+  }
+}
 
 export default function SettingsPage() {
   const { preference, setPreference, design, setDesign } = useTheme();
@@ -78,6 +95,153 @@ export default function SettingsPage() {
     api.check();
   };
 
+  const designTiles = DESIGN_OPTIONS.map((opt) => {
+    const active = design === opt.value;
+    return (
+      <button
+        key={opt.value}
+        className={`${styles.designOption} ${active ? styles.themeOptionActive : ''}`}
+        onClick={() => setDesign(opt.value)}
+        aria-pressed={active}
+      >
+        <DesignPreview design={opt.value} />
+        <span className={styles.designOptionHead}>
+          <span className={styles.themeOptionLabel}>{opt.label}</span>
+          {active && <span className={styles.themeOptionCheck}>✓</span>}
+        </span>
+        <span className={styles.themeOptionDesc}>{opt.description}</span>
+      </button>
+    );
+  });
+
+  if (design === 'meadow') {
+    const updateLine = describeUpdate(update);
+    return (
+      <div className={styles.panel}>
+        <PageHeader title="Settings" description="Appearance, major detection and updates for this computer." />
+
+        <section className={styles.mSection}>
+          <h2 className={styles.mSectionTitle}><Palette aria-hidden="true" />Appearance</h2>
+          <div className={styles.mGroup}>
+            <div className={styles.mRow}>
+              <div className={styles.mRowText}>
+                <div className={styles.mRowLabel}>Design</div>
+                <div className={styles.mRowDesc}>Changes the colours, fonts and layout. Every page works the same in both designs.</div>
+              </div>
+              <div className={`${styles.mRowControl} ${styles.designOptions}`}>{designTiles}</div>
+            </div>
+            <div className={styles.mRow}>
+              <div className={styles.mRowText}>
+                <div className={styles.mRowLabel}>Colour mode</div>
+                <div className={styles.mRowDesc}>
+                  {preference === 'portal'
+                    ? 'Original Portal is a Classic theme, so Meadow is using its light colours.'
+                    : 'Light, dark, or follow your computer.'}
+                </div>
+              </div>
+              <div className={styles.mRowControl}>
+                <div className={styles.mModes}>
+                  {themeOptions.map((opt) => {
+                    const active = preference === opt.value;
+                    const Icon = MODE_ICONS[opt.value as keyof typeof MODE_ICONS] ?? Monitor;
+                    return (
+                      <button
+                        key={opt.value}
+                        className={`${styles.mMode} ${active ? styles.mModeActive : ''}`}
+                        onClick={() => setPreference(opt.value)}
+                        aria-pressed={active}
+                        title={opt.description}
+                      >
+                        <Icon aria-hidden="true" />
+                        <span className={styles.mModeLabel}>{opt.label}</span>
+                        <span className={styles.mModeDesc}>{opt.description}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* REQ-FUN-610 */}
+        <section className={styles.mSection}>
+          <h2 className={styles.mSectionTitle}><ScanSearch aria-hidden="true" />Major detection</h2>
+          <div className={styles.mGroup}>
+            <div className={styles.mRow}>
+              <div className={styles.mRowText}>
+                <div className={styles.mRowLabel}>Second major threshold</div>
+                <div className={styles.mRowDesc}>
+                  A second major is detected when a student&apos;s unit completion matches a second planner at or above
+                  this percentage. Default: 70%.
+                </div>
+              </div>
+              <div className={styles.mRowControl}>
+                <div className={styles.mSliderRow}>
+                  <input
+                    type="range"
+                    min={10}
+                    max={100}
+                    step={5}
+                    value={threshold}
+                    onChange={(e) => { setThreshold(parseInt(e.target.value)); setThresholdSaved(false); }}
+                    className={styles.mSlider}
+                    aria-label="Second major threshold"
+                  />
+                  <span className={styles.mSliderValue}>{threshold}%</span>
+                </div>
+                <div className={styles.mActions}>
+                  <button className={styles.mBtnPrimary} onClick={handleSaveThreshold} disabled={thresholdLoading}>
+                    {thresholdSaved && <Check aria-hidden="true" />}
+                    {thresholdLoading ? 'Saving…' : thresholdSaved ? 'Saved' : 'Save'}
+                  </button>
+                  {threshold !== DEFAULT_THRESHOLD && (
+                    <button className={styles.mBtn} onClick={() => { setThreshold(DEFAULT_THRESHOLD); setThresholdSaved(false); }}>
+                      Reset to default
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className={styles.mSection}>
+          <h2 className={styles.mSectionTitle}><RefreshCw aria-hidden="true" />Updates</h2>
+          <div className={styles.mGroup}>
+            <div className={styles.mRow}>
+              <div className={styles.mRowText}>
+                <div className={styles.mRowLabel}>Application update</div>
+                <div className={styles.mRowDesc}>Current version: v{appVersion}</div>
+              </div>
+              <div className={styles.mRowControl}>
+                <div className={`${styles.mUpdateLine} ${styles[`mTone_${updateLine.tone}`]}`}>
+                  <span className={styles.mUpdateDot} />
+                  {updateLine.text}
+                </div>
+                {update.status === 'downloading' && (
+                  <div className={styles.mUpdateTrack}><div style={{ width: `${update.percent}%` }} /></div>
+                )}
+                <div className={styles.mActions}>
+                  {(update.status === 'idle' || update.status === 'not-available' || update.status === 'error') && (
+                    <button className={styles.mBtn} onClick={handleCheck}>Check for updates</button>
+                  )}
+                  {update.status === 'available' && (
+                    <button className={styles.mBtnPrimary} onClick={() => (window as any).updaterAPI?.download()}>Download v{update.version}</button>
+                  )}
+                  {update.status === 'downloaded' && (
+                    <button className={styles.mBtnPrimary} onClick={() => (window as any).updaterAPI?.install()}>Restart &amp; install</button>
+                  )}
+                  {update.status === 'checking' && <button className={styles.mBtn} disabled>Checking…</button>}
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    );
+  }
+
   return (
     <div className={styles.panel}>
 
@@ -87,31 +251,11 @@ export default function SettingsPage() {
         <div className={styles.cardTitle}>Design</div>
         <div className={styles.cardDesc}>Changes the colours, fonts and layout. Every page works the same in both designs.</div>
         <div className={styles.designOptions}>
-          {DESIGN_OPTIONS.map((opt) => {
-            const active = design === opt.value;
-            return (
-              <button
-                key={opt.value}
-                className={`${styles.designOption} ${active ? styles.themeOptionActive : ''}`}
-                onClick={() => setDesign(opt.value)}
-                aria-pressed={active}
-              >
-                <DesignPreview design={opt.value} />
-                <span className={styles.designOptionHead}>
-                  <span className={styles.themeOptionLabel}>{opt.label}</span>
-                  {active && <span className={styles.themeOptionCheck}>✓</span>}
-                </span>
-                <span className={styles.themeOptionDesc}>{opt.description}</span>
-              </button>
-            );
-          })}
+          {designTiles}
         </div>
       </div>
       <div className={styles.card}>
-        <div className={styles.cardTitle}>{design === 'meadow' ? 'Colour mode' : 'Theme'}</div>
-        {design === 'meadow' && preference === 'portal' && (
-          <div className={styles.cardDesc}>Original Portal is a Classic theme, so Meadow is using its light colours.</div>
-        )}
+        <div className={styles.cardTitle}>Theme</div>
         <div className={styles.themeOptions}>
           {themeOptions.map((opt) => {
             const active = preference === opt.value;
