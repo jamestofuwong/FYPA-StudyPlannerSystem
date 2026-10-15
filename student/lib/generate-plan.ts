@@ -1,7 +1,13 @@
 import 'server-only'
-import { buildCustomPlan } from '@core/services/scheduling/customPlannerScheduler'
+import { DEFAULT_SCHEDULER_CONFIG } from '@core/services/scheduling/customPlannerScheduler'
 import type { SchedulableUnit } from '@core/services/scheduling/customPlannerScheduler'
-import { toSchedulableUnit } from '@core/shared/scheduling/schedulableUnit'
+import {
+  finishPlanForPlanner,
+  startPlanForPlanner,
+  type PlannerPlanInput,
+} from '@core/services/scheduling/planForPlanner'
+import { unitRowToSchedulable, type UnitRow } from '@core/shared/scheduling/schedulableUnit'
+import { describePlanWarning } from '@core/shared/scheduling/planWarnings'
 import type { GenerationInput, GenerationResult } from './plan-builder'
 import { getPlannerById } from './planners'
 import { prisma } from './prisma'
@@ -25,55 +31,41 @@ function startAfterCompletedSemesters(semesters: { unitCodes: string[] }[]): { y
   }
 }
 
+// Everything the scheduler needs to know about a unit, nested the way the shared
+// mapper reads it
+const UNIT_INCLUDE = {
+  offerings: true,
+  requisite_groups: {
+    include: {
+      conditions: {
+        include: { unit: { select: { unit_code: true } } },
+      },
+    },
+  },
+} as const
+
 async function loadPlannerTemplateForGeneration(id: string) {
   return prisma.plannerTemplate.findUnique({
     where: { id },
     include: {
       units: {
         orderBy: [{ year_level: 'asc' }, { semester: 'asc' }, { created_at: 'asc' }],
-        include: {
-          unit: {
-            include: {
-              offerings: true,
-              requisite_groups: {
-                include: {
-                  conditions: {
-                    include: { unit: { select: { unit_code: true } } },
-                  },
-                },
-              },
-            },
-          },
-        },
+        include: { unit: { include: UNIT_INCLUDE } },
+      },
+      // The units an advisor would pick from to fill an empty elective slot
+      elective_groups: {
+        orderBy: { created_at: 'asc' },
+        include: { units: { include: { unit: { include: UNIT_INCLUDE } } } },
       },
     },
   })
 }
 
 type PlannerTemplateForGeneration = NonNullable<Awaited<ReturnType<typeof loadPlannerTemplateForGeneration>>>
-type TemplateUnitForGeneration = PlannerTemplateForGeneration['units'][number]
 
-function templateUnitToSchedulable(
-  slot: TemplateUnitForGeneration,
-  category: string = slot.category,
-): SchedulableUnit | null {
-  if (!slot.unit) return null
-  return toSchedulableUnit({
-    code: slot.unit.unit_code,
-    name: slot.unit.unit_name,
-    category,
-    offeringTerms: slot.unit.offerings.map(o => o.offered_in),
-    requisiteGroups: slot.unit.requisite_groups.map(group =>
-      group.conditions
-        .map(condition => ({
-          type: condition.type,
-          unitCode: condition.unit?.unit_code,
-          creditPoints: condition.credit_points == null ? null : Number(condition.credit_points),
-          requisiteType: condition.requisite_type ?? 'prerequisite',
-        })),
-    ),
-    creditPoints: Number(slot.unit.credit_points),
-  })
+/** The same mapping the advisor uses, so a unit means the same to the scheduler in both apps. */
+function toSchedulable(unit: UnitRow, category: string): SchedulableUnit {
+  return unitRowToSchedulable(unit, category, { withCreditPoints: true })
 }
 
 async function loadUnitMetadataByCodes(codes: Set<string>): Promise<Map<string, Unit>> {
@@ -110,20 +102,22 @@ async function loadUnitMetadataByCodes(codes: Set<string>): Promise<Map<string, 
   }))
 }
 
-function templateUnitToDisplayUnit(
-  slot: TemplateUnitForGeneration,
-  category: string = slot.category,
+type DisplayUnitRow = NonNullable<PlannerTemplateForGeneration['units'][number]['unit']>
+
+function toDisplayUnit(
+  unit: DisplayUnitRow,
+  id: string,
+  category: string,
   sourceMajorName?: string | null,
-): Unit | null {
-  if (!slot.unit) return null
-  const requisiteGroups = toRequisiteGroups(slot.unit.requisite_groups)
+): Unit {
+  const requisiteGroups = toRequisiteGroups(unit.requisite_groups)
   return {
-    id: slot.id,
-    code: slot.unit.unit_code,
-    name: slot.unit.unit_name,
+    id,
+    code: unit.unit_code,
+    name: unit.unit_name,
     category: category as Unit['category'],
-    creditPoints: Number(slot.unit.credit_points),
-    yearLevel: slot.unit.year_level ?? 1,
+    creditPoints: Number(unit.credit_points),
+    yearLevel: unit.year_level ?? 1,
     semester: 0,
     isElectiveSlot: false,
     requisiteGroups,
@@ -182,32 +176,48 @@ export async function generatePlanOnServer({
   const template = await loadPlannerTemplateForGeneration(config.plannerId)
   if (!template) return null
 
-  const remainingUnits: SchedulableUnit[] = []
   const unitMetadataByCode = new Map<string, Unit>(completedUnitMetadataByCode)
-  const plannedCodes = new Set(completedCodes)
-
   for (const slot of template.units) {
-      // An elective slot has no unit, so there is nothing to schedule or match
-      if (!slot.unit) continue
-      const code = slot.unit.unit_code.trim().toUpperCase()
-      const displayUnit = templateUnitToDisplayUnit(
-        slot,
-        slot.category,
-        slot.category === 'major_core' ? planner.majorName : null,
-      )
-      if (displayUnit) unitMetadataByCode.set(code, displayUnit)
-
-      // Finished units stay out of the plan. Their place in the template does not decide the start year — a year-2 unit taken in the student's first semester must not push the plan to year 3.
-      if (completedCodes.has(code)) continue
-
-      const schedulable = templateUnitToSchedulable(slot)
-      if (schedulable) {
-        remainingUnits.push(schedulable)
-        plannedCodes.add(code)
-      }
+    if (!slot.unit) continue
+    unitMetadataByCode.set(
+      slot.unit.unit_code.trim().toUpperCase(),
+      toDisplayUnit(slot.unit, slot.id, slot.category, slot.category === 'major_core' ? planner.majorName : null),
+    )
   }
 
+  const start = startAfterCompletedSemesters(completedSemesters)
+
+  // The planner's own intake decides which calendar term "semester 1" is; the
+  // chosen intake month is only the fallback for a planner that never recorded one.
+  const intakeSemester: 1 | 2 = (template.intake_month ?? config.intakeMonth) >= 7 ? 2 : 1
+
+  // The plan is built by the same code the advisor's Student Pathway uses. No
+  // grade data reaches this app, only completed codes, so no unit can be known to
+  // be a Conceded Pass.
+  const planInput: PlannerPlanInput = {
+    plannerUnits: template.units.map(slot => ({
+      category: slot.category,
+      unit: slot.unit ? toSchedulable(slot.unit, slot.category) : null,
+    })),
+    electiveCount: template.elective_count,
+    electiveGroups: template.elective_groups.map(group =>
+      group.units.map(groupUnit => toSchedulable(groupUnit.unit, 'elective')),
+    ),
+    completedUnitCodes: [...completedCodes],
+    startYear: start.year,
+    startSemester: start.semester,
+    intakeSemester,
+    // This app has no separate MPU section, so a required MPU unit has to be in the plan
+    scheduleMpu: true,
+  }
+  const planStart = startPlanForPlanner(planInput)
+
   const warnings: string[] = []
+
+  // A second major takes the place of elective slots rather than extending the
+  // plan, and only fits when it needs no more units than there are free slots.
+  // That is the rule the advisor applies before it offers a double major.
+  let swapped: SchedulableUnit[] = []
   if (config.secondMajorId) {
     const secondMajorTemplate = await prisma.plannerTemplate.findFirst({
       where: {
@@ -219,21 +229,9 @@ export async function generatePlanOnServer({
       include: {
         major: true,
         units: {
+          where: { category: 'major_core' },
           orderBy: [{ year_level: 'asc' }, { semester: 'asc' }, { created_at: 'asc' }],
-          include: {
-            unit: {
-              include: {
-                offerings: true,
-                requisite_groups: {
-                  include: {
-                    conditions: {
-                      include: { unit: { select: { unit_code: true } } },
-                    },
-                  },
-                },
-              },
-            },
-          },
+          include: { unit: { include: UNIT_INCLUDE } },
         },
       },
     })
@@ -241,37 +239,50 @@ export async function generatePlanOnServer({
     if (!secondMajorTemplate) {
       warnings.push('No Program Study Planner is available for the selected second major and intake. The generated plan uses your primary major only.')
     } else {
-      for (const slot of secondMajorTemplate.units) {
-          if (!slot.unit || slot.category !== 'major_core') continue
-          const code = slot.unit.unit_code.trim().toUpperCase()
-          const displayUnit = templateUnitToDisplayUnit(slot, 'double_major', secondMajorTemplate.major?.name ?? null)
-          if (displayUnit) unitMetadataByCode.set(code, displayUnit)
+      const majorName = secondMajorTemplate.major?.name ?? 'The selected second major'
+      const primaryCodes = new Set(
+        template.units
+          .filter(slot => slot.unit && slot.category !== 'elective')
+          .map(slot => slot.unit!.unit_code.trim().toUpperCase()),
+      )
+      const missing = secondMajorTemplate.units.flatMap(slot => {
+        if (!slot.unit) return []
+        const code = slot.unit.unit_code.trim().toUpperCase()
+        if (completedCodes.has(code) || primaryCodes.has(code)) return []
+        unitMetadataByCode.set(code, toDisplayUnit(slot.unit, slot.id, 'double_major', secondMajorTemplate.major?.name ?? null))
+        return [toSchedulable(slot.unit, 'double_major')]
+      })
 
-          if (plannedCodes.has(code)) continue
-
-          const schedulable = templateUnitToSchedulable(slot, 'double_major')
-          if (schedulable) {
-            remainingUnits.push(schedulable)
-            plannedCodes.add(code)
-          }
+      if (missing.length === 0) {
+        warnings.push(`${majorName} needs no units beyond your primary major, so it adds nothing to this plan.`)
+      } else if (missing.length > planStart.freeElectiveSlots) {
+        warnings.push(
+          `${majorName} needs ${missing.length} more unit${missing.length === 1 ? '' : 's'}, but only ${planStart.freeElectiveSlots} elective slot${planStart.freeElectiveSlots === 1 ? ' is' : 's are'} free. The generated plan uses your primary major only.`,
+        )
+      } else {
+        swapped = missing
       }
     }
   }
 
-  const start = startAfterCompletedSemesters(completedSemesters)
+  const finished = finishPlanForPlanner(planInput, planStart, swapped)
+  const result = finished.result
 
-  // The advisor dashboard anchors on Current units before completed ones. There is no enrolment status here, only completed codes, so that branch does not apply.
-  const intakeSemester: 1 | 2 = config.intakeMonth >= 7 ? 2 : 1
+  // Say why a unit was left out, in the words the advisor's page uses
+  for (const warning of result.warnings) {
+    const message = describePlanWarning(warning, DEFAULT_SCHEDULER_CONFIG.maxSemesters, intakeSemester)
+    if (message && !warnings.includes(message)) warnings.push(message)
+  }
 
-  const result = buildCustomPlan(
-    remainingUnits,
-    [...completedCodes],
-    start.year,
-    start.semester,
-    intakeSemester,
-    // No grade data reaches this app, only completed codes, so no unit can be known to be a Conceded Pass
-    [],
-  )
+  // Electives recommended for the open slots are drawn from the planner's groups
+  for (const group of template.elective_groups) {
+    for (const groupUnit of group.units) {
+      const code = groupUnit.unit.unit_code.trim().toUpperCase()
+      if (!unitMetadataByCode.has(code)) {
+        unitMetadataByCode.set(code, toDisplayUnit(groupUnit.unit, groupUnit.unit_id, 'elective'))
+      }
+    }
+  }
 
   for (const semester of planner.semesters) {
     for (const unit of semester.units) {
