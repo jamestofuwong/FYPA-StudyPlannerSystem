@@ -1,3 +1,23 @@
+/**
+ * CLOUD SYNC API ROUTE (retired, kept for reference)
+ *
+ * What it is:
+ *   The server side of the Cloud Sync page. It connected this advisor app to a separate cloud web
+ *   app, listed the study planner entries stored in that cloud app and let the user pull the
+ *   ones they wanted into the local database, flagging entries that were already
+ *   imported and reporting which pulls succeeded, were duplicates, or failed.
+ *
+ * Why it was taken out:
+ *   The cloud web app it talked to has been phased out, so there is nothing left
+ *   to sync with. The page has been removed from the sidebar and is no longer
+ *   part of the normal workflow.
+ *
+ * Why the code is still here:
+ *   It is kept in case a similar feature (pulling planner data from a remote
+ *   source) is needed in the future. Related code: the Cloud Sync page
+ *   (app/(pages)/cloud-sync) and the CLOUD_API_URL setting in the web .env files.
+ */
+
 import { NextResponse } from 'next/server';
 import { prisma } from '../../../../core/db/client';
 import { savePlannerFromImport } from '../../../../core/db/repositories/plannerRepository';

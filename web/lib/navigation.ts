@@ -61,7 +61,6 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { id: 'planners',    icon: '📋', label: 'Study Planners' },
       { id: 'units',    icon: '📝', label: 'Units' },
-      { id: 'cloud-sync',  icon: '☁️', label: 'Cloud Sync' },
     ],
   },
   {
