@@ -15,8 +15,8 @@ async function deleteUnit(id: string) {
 
 export default async function UnitsPage() {
   const units = await prisma.unit.findMany({
-    orderBy: { code: 'asc' },
-    select: { id: true, code: true, name: true, year_level: true, credit_points: true },
+    orderBy: { unit_code: 'asc' },
+    select: { id: true, unit_code: true, unit_name: true, year_level: true, credit_points: true },
   })
 
   return (
@@ -37,15 +37,15 @@ export default async function UnitsPage() {
             <th className={styles.th}>Code</th>
             <th className={styles.th}>Name</th>
             <th className={styles.th}>Year</th>
-            <th className={styles.th}>Credit Points</th>
+            <th className={styles.th}>CP</th>
             <th className={styles.th}>Actions</th>
           </tr>
         </thead>
         <tbody>
           {units.map(unit => (
             <tr key={unit.id} className={styles.tr}>
-              <td className={`${styles.td} ${styles.codeCell}`}>{unit.code}</td>
-              <td className={styles.td}>{unit.name}</td>
+              <td className={`${styles.td} ${styles.codeCell}`}>{unit.unit_code}</td>
+              <td className={styles.td}>{unit.unit_name}</td>
               <td className={styles.td}>Year {unit.year_level}</td>
               <td className={styles.td}>{String(unit.credit_points)}</td>
               <td className={styles.td}>

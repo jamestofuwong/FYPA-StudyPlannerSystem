@@ -15,7 +15,7 @@ export async function saveGeneralEnquiries(formData: FormData) {
 
   const parsed = GeneralEnquiriesSchema.safeParse(raw)
   if (!parsed.success) {
-    throw new Error(parsed.error.errors[0]?.message ?? 'Invalid contact data')
+    throw new Error(parsed.error.issues[0]?.message ?? 'Invalid contact data')
   }
   const data = parsed.data
 
@@ -44,7 +44,7 @@ export async function saveItHelpDesk(formData: FormData) {
 
   const parsed = ItHelpDeskSchema.safeParse(raw)
   if (!parsed.success) {
-    throw new Error(parsed.error.errors[0]?.message ?? 'Invalid IT Help Desk data')
+    throw new Error(parsed.error.issues[0]?.message ?? 'Invalid IT Help Desk data')
   }
   const data = parsed.data
 

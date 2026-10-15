@@ -16,6 +16,7 @@ const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Se
 const STOP_WORDS = new Set(['of', 'the', 'and', 'in', 'for', 'a'])
 
 function courseAbbrev(name: string): string {
+  if (/bachelor\s+of\s+computer\s+science/i.test(name)) return 'BA-CS'
   const words = name.split(/\s+/).filter(w => !STOP_WORDS.has(w.toLowerCase()))
   if (words.length === 0) return name.slice(0, 3).toUpperCase()
   const parts = words.map(w => w[0].toUpperCase())
@@ -72,6 +73,9 @@ export default async function PlannerDetailPage({ params }: Props) {
 
         {/* Breadcrumb */}
         <nav className={styles.breadcrumb} aria-label="Breadcrumb">
+          <Link href="/" className={styles.backButton} aria-label="Back to planners">
+            ‹
+          </Link>
           <Link href="/" className={styles.breadcrumbLink}>Study Planners</Link>
           <span className={styles.breadcrumbSep}>/</span>
           <span className={styles.breadcrumbCurrent}>
@@ -136,14 +140,14 @@ export default async function PlannerDetailPage({ params }: Props) {
             <div className={styles.sidebarCard}>
               <div className={styles.sidebarTitle}>Course Information</div>
               <div className={styles.totalUnits}>{planner.totalUnits} units total</div>
-              <div className={styles.totalCp}>{totalCp} credit points</div>
+              <div className={styles.totalCp}>{totalCp} cp</div>
               <hr className={styles.divider} />
 
               {core.count !== null && (
                 <div className={`${styles.reqRow} ${styles.reqRowCore}`}>
                   <span className={styles.reqLabel}>Core Units</span>
                   <span className={styles.reqDetail}>
-                    <strong>{core.count}</strong> units · <strong>{core.count * 12.5}</strong> cp
+                    <strong>{core.count}</strong> units{core.creditPoints != null && <> · <strong>{core.creditPoints}</strong> cp</>}
                   </span>
                 </div>
               )}
@@ -151,7 +155,7 @@ export default async function PlannerDetailPage({ params }: Props) {
                 <div className={`${styles.reqRow} ${styles.reqRowMajor}`}>
                   <span className={styles.reqLabel}>Major Core</span>
                   <span className={styles.reqDetail}>
-                    <strong>{major.count}</strong> units · <strong>{major.count * 12.5}</strong> cp
+                    <strong>{major.count}</strong> units{major.creditPoints != null && <> · <strong>{major.creditPoints}</strong> cp</>}
                   </span>
                 </div>
               )}
@@ -159,7 +163,7 @@ export default async function PlannerDetailPage({ params }: Props) {
                 <div className={`${styles.reqRow} ${styles.reqRowElective}`}>
                   <span className={styles.reqLabel}>Elective</span>
                   <span className={styles.reqDetail}>
-                    <strong>{elective.count}</strong> units · <strong>{elective.count * 12.5}</strong> cp
+                    <strong>{elective.count}</strong> units{elective.creditPoints != null && <> · <strong>{elective.creditPoints}</strong> cp</>}
                   </span>
                 </div>
               )}
@@ -167,7 +171,7 @@ export default async function PlannerDetailPage({ params }: Props) {
                 <div className={`${styles.reqRow} ${styles.reqRowWil}`}>
                   <span className={styles.reqLabel}>WIL</span>
                   <span className={styles.reqDetail}>
-                    <strong>{wil.count}</strong> {wil.count === 1 ? 'unit' : 'units'} · <strong>{wil.count * 12.5}</strong> cp
+                    <strong>{wil.count}</strong> {wil.count === 1 ? 'unit' : 'units'}{wil.creditPoints != null && <> · <strong>{wil.creditPoints}</strong> cp</>}
                   </span>
                 </div>
               )}

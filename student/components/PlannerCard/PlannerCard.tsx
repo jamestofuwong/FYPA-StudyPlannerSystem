@@ -1,5 +1,5 @@
-import Link from 'next/link'
 import type { PlannerSummary } from '@student/lib/types'
+import { PendingLink } from '@student/components/common/PendingNavigation'
 import styles from './PlannerCard.module.css'
 
 interface Props {
@@ -9,6 +9,7 @@ interface Props {
 const STOP_WORDS = new Set(['of', 'the', 'and', 'in', 'for', 'a'])
 
 function courseAbbrev(name: string): string {
+  if (/bachelor\s+of\s+computer\s+science/i.test(name)) return 'BA-CS'
   const words = name.split(/\s+/).filter(w => !STOP_WORDS.has(w.toLowerCase()))
   if (words.length === 0) return name.slice(0, 3).toUpperCase()
   const parts = words.map(w => w[0].toUpperCase())
@@ -23,15 +24,21 @@ export default function PlannerCard({ planner }: Props) {
   const abbrev = courseAbbrev(planner.courseName)
 
   return (
-    <Link href={`/planners/${planner.id}`} className={styles.card}>
+    <PendingLink
+      href={`/planners/${planner.id}`}
+      label="Loading study planner..."
+      className={styles.card}
+      ariaLabel={`View ${planner.courseName}${planner.majorName ? ` ${planner.majorName}` : ''} planner`}
+    >
       <div className={styles.bar}>
         <span className={styles.barCode}>{abbrev}</span>
       </div>
 
       <div className={styles.content}>
-        <span className={styles.intake}>{planner.intakeLabel}</span>
-
         <div className={styles.body}>
+          <div className={styles.titleRow}>
+            <span className={styles.intakeBadge}>Intake: {planner.intakeLabel}</span>
+          </div>
           {planner.majorName ? (
             <h2 className={styles.major}>{planner.majorName}</h2>
           ) : (
@@ -49,6 +56,6 @@ export default function PlannerCard({ planner }: Props) {
           <span className={styles.viewLink}>View planner →</span>
         </div>
       </div>
-    </Link>
+    </PendingLink>
   )
 }

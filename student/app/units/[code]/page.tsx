@@ -2,15 +2,44 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import Nav from '@student/components/Nav/Nav'
 import { getCachedUnit } from '@student/lib/catalog'
+import { requisiteCreditPoints } from '@student/lib/requisites'
+import RequisiteExpression from './RequisiteExpression'
 import styles from './page.module.css'
 
 interface Props {
   params: Promise<{ code: string }>
 }
 
-function unitYear(code: string): number {
-  const match = code.match(/\d/)
-  return match ? parseInt(match[0]) : 0
+function availabilityValue(availability: string[] | undefined): string {
+  if (!availability || availability.length === 0) return 'TBC'
+
+  const semesterNums: string[] = []
+  const others: string[] = []
+
+  for (const term of availability) {
+    const semester = term.match(/^Semester (\d+)$/)
+    if (semester) {
+      semesterNums.push(semester[1])
+      continue
+    }
+    if (term === 'Summer Term') {
+      others.push('Summer')
+      continue
+    }
+    if (term === 'Winter Term') {
+      others.push('Winter')
+      continue
+    }
+    others.push(term)
+  }
+
+  const parts: string[] = []
+  if (semesterNums.length > 0) {
+    parts.push(`Semester ${semesterNums.join(' & ')}`)
+  }
+  parts.push(...others)
+
+  return parts.join(', ')
 }
 
 export default async function UnitDetailPage({ params }: Props) {
@@ -19,8 +48,10 @@ export default async function UnitDetailPage({ params }: Props) {
 
   if (!unit) notFound()
 
-  const year = unitYear(unit.code)
-
+  const year = unit.yearLevel ?? 0
+  const requiredCreditPoints = [...new Set(requisiteCreditPoints(unit.requisiteGroups, 'prerequisite'))]
+  const availValue = availabilityValue(unit.availability)
+  const offerText = `Unit Offer: ${availValue}`
   return (
     <div className={styles.page}>
       <Nav />
@@ -38,22 +69,11 @@ export default async function UnitDetailPage({ params }: Props) {
           <div className={styles.heroMeta}>
             {year > 0 && <span className={styles.metaItem}>Year {year}</span>}
             {year > 0 && <span className={styles.metaDivider} aria-hidden="true">·</span>}
-            <span className={styles.metaItem}>{unit.creditPoints} credit points</span>
+            <span className={styles.metaItem}>{unit.creditPoints} cp</span>
           </div>
           <h1 className={styles.heroTitle}>{unit.name}</h1>
           <p className={styles.heroCode}>{unit.code}</p>
-          {unit.availability && unit.availability.length > 0 && (
-            <div className={styles.availRow}>
-              <span className={styles.availLabel}>Offered in</span>
-              <div className={styles.availMonths}>
-                {unit.availability.map(a => (
-                  <span key={a} className={styles.availMonth}>
-                    {a}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
+          <p className={styles.availSummary}>{offerText}</p>
         </div>
 
         {/* Content grid */}
@@ -100,21 +120,26 @@ export default async function UnitDetailPage({ params }: Props) {
                   <table className={styles.assessTable}>
                     <thead>
                       <tr className={styles.assessHeaderRow}>
-                        <th className={styles.assessColTask}>Task</th>
                         <th className={styles.assessColType}>Type</th>
+                        <th className={styles.assessColTask}>Task</th>
                         <th className={styles.assessColUlo}>ULOs</th>
                         <th className={styles.assessColWeight}>Weight</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {unit.assessment.map((item, i) => (
-                        <tr key={i} className={styles.assessRow}>
-                          <td className={styles.assessTask}>{item.title}</td>
-                          <td className={styles.assessType}>{item.type}</td>
-                          <td className={styles.assessUlo}>{item.ulos.join(', ')}</td>
-                          <td className={styles.assessWeight}>{item.weight}%</td>
-                        </tr>
-                      ))}
+                      {unit.assessment.map((item, i) => {
+                        const weightLabel = item.weightingRaw?.trim()
+                          ? item.weightingRaw
+                          : item.weight != null ? `${item.weight}%` : 'Not specified'
+                        return (
+                          <tr key={i} className={styles.assessRow}>
+                            <td className={styles.assessType}>{item.type}</td>
+                            <td className={styles.assessType}>{item.task || '—'}</td>
+                            <td className={styles.assessUlo}>{item.ulos.join(', ')}</td>
+                            <td className={styles.assessWeight}>{weightLabel}</td>
+                          </tr>
+                        )
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -134,21 +159,27 @@ export default async function UnitDetailPage({ params }: Props) {
                   <dd className={styles.infoValue}>{unit.code}</dd>
                 </div>
                 <div className={styles.infoRow}>
-                  <dt className={styles.infoLabel}>Credit Points</dt>
-                  <dd className={styles.infoValue}>{unit.creditPoints}</dd>
+                  <dt className={styles.infoLabel}>CP</dt>
+                  <dd className={styles.infoValue}>{unit.creditPoints} cp</dd>
                 </div>
+                {requiredCreditPoints.length > 0 && (
+                  <div className={styles.infoRow}>
+                    <dt className={styles.infoLabel}>Required CP</dt>
+                    <dd className={styles.infoValue}>
+                      {requiredCreditPoints.map(points => `${points} cp`).join(' / ')}
+                    </dd>
+                  </div>
+                )}
                 {year > 0 && (
                   <div className={styles.infoRow}>
                     <dt className={styles.infoLabel}>Year Level</dt>
                     <dd className={styles.infoValue}>Year {year}</dd>
                   </div>
                 )}
-                {unit.availability && unit.availability.length > 0 && (
-                  <div className={styles.infoRow}>
-                    <dt className={styles.infoLabel}>Availability</dt>
-                    <dd className={styles.infoValue}>{unit.availability.join(', ')}</dd>
-                  </div>
-                )}
+                <div className={styles.infoRow}>
+                  <dt className={styles.infoLabel}>Availability</dt>
+                  <dd className={styles.infoValue}>{availValue}</dd>
+                </div>
               </dl>
             </div>
 
@@ -167,15 +198,13 @@ export default async function UnitDetailPage({ params }: Props) {
                       </span>
                     </span>
                   </div>
-                  {unit.prerequisites && unit.prerequisites.length > 0 ? (
-                    <ul className={styles.reqList}>
-                      {unit.prerequisites.map(c => (
-                        <li key={c}>
-                          <Link href={`/units/${c}`} className={styles.reqLink}>{c}</Link>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : <p className={styles.reqNone}>None</p>}
+                  <p className={styles.reqNone}>
+                    <RequisiteExpression
+                      groups={unit.requisiteGroups}
+                      type="prerequisite"
+                      fallbackCodes={unit.prerequisites}
+                    />
+                  </p>
                 </div>
 
                 {/* Co-requisite */}
@@ -189,15 +218,13 @@ export default async function UnitDetailPage({ params }: Props) {
                       </span>
                     </span>
                   </div>
-                  {unit.corequisites && unit.corequisites.length > 0 ? (
-                    <ul className={styles.reqList}>
-                      {unit.corequisites.map(c => (
-                        <li key={c}>
-                          <Link href={`/units/${c}`} className={styles.reqLink}>{c}</Link>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : <p className={styles.reqNone}>None</p>}
+                  <p className={styles.reqNone}>
+                    <RequisiteExpression
+                      groups={unit.requisiteGroups}
+                      type="corequisite"
+                      fallbackCodes={unit.corequisites}
+                    />
+                  </p>
                 </div>
 
                 {/* Anti-requisite */}
@@ -211,15 +238,13 @@ export default async function UnitDetailPage({ params }: Props) {
                       </span>
                     </span>
                   </div>
-                  {unit.antirequisites && unit.antirequisites.length > 0 ? (
-                    <ul className={styles.reqList}>
-                      {unit.antirequisites.map(c => (
-                        <li key={c}>
-                          <Link href={`/units/${c}`} className={styles.reqLink}>{c}</Link>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : <p className={styles.reqNone}>None</p>}
+                  <p className={styles.reqNone}>
+                    <RequisiteExpression
+                      groups={unit.requisiteGroups}
+                      type="antirequisite"
+                      fallbackCodes={unit.antirequisites}
+                    />
+                  </p>
                 </div>
 
               </div>

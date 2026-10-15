@@ -9,8 +9,13 @@
 .table {
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
   font-size: var(--font-size-sm);
 }
+
+.colCode { width: 18%; }
+.colName { width: 52%; }
+.colPrereq { width: 30%; }
 
 /* Dark charcoal semester header */
 .semesterHeaderRow th {
@@ -49,6 +54,19 @@
 .clickable:hover td { filter: brightness(0.94); }
 .clickable:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
 
+.unitLink {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+  min-height: 20px;
+}
+
+.unitLink:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
 /* Row background by category */
 .rowCore td     { background: var(--color-cat-core-bg); }
 .rowMajor td    { background: var(--color-cat-major-bg); }
@@ -69,6 +87,14 @@
 .cellCodeSlot { color: var(--color-text-secondary); }
 
 .cellName { color: var(--color-text-primary); }
+
+.majorTag {
+  margin-left: 6px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
+}
 
 .asterisk {
   color: var(--color-accent);
@@ -99,6 +125,7 @@
   padding: 0 14px 0 56px;
   display: flex;
   align-items: center;
+  gap: var(--space-2);
   opacity: 0;
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-semibold);
@@ -111,6 +138,8 @@
 }
 
 .clickable:hover .viewHint { opacity: 1; }
+.rowPending .viewHint { opacity: 1; }
+.completedHint { opacity: 1; }
 
 /* Per-category gradient end colours */
 .rowCore     .viewHint { background: linear-gradient(to right, transparent, var(--color-cat-core-bg) 45%); }
@@ -124,13 +153,23 @@
 .rowCompleted td { opacity: 0.6; }
 .rowCompleted:hover td { opacity: 0.8; }
 
-.completedCheck {
-  color: #16a34a;
-  font-weight: var(--font-weight-bold);
-  margin-right: 5px;
-  font-size: var(--font-size-xs);
-}
-
 /* Override viewHint text colour for completed rows */
 .rowCompleted .viewHint { color: #16a34a; }
+
+.inlineSpinner {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 13px;
+  height: 13px;
+  border: 2px solid color-mix(in srgb, currentColor 24%, transparent);
+  border-top-color: currentColor;
+  border-radius: 999px;
+  animation: spin 0.75s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 

@@ -10,7 +10,7 @@ export async function saveHods(
 ) {
   const parsed = HodListSchema.safeParse(hods)
   if (!parsed.success) {
-    throw new Error(parsed.error.errors[0]?.message ?? 'Invalid head of department data')
+    throw new Error(parsed.error.issues[0]?.message ?? 'Invalid head of department data')
   }
   const data = parsed.data
 

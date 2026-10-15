@@ -1,7 +1,9 @@
 'use client'
 
-import { useRouter } from 'next/navigation'
+import type { MouseEvent } from 'react'
 import type { SemesterBlock } from '@student/lib/types'
+import { formatPrerequisiteText } from '@student/lib/requisites'
+import { usePendingNavigation } from '@student/components/common/PendingNavigation'
 import styles from './SemesterTable.module.css'
 
 interface Props {
@@ -15,6 +17,7 @@ function rowClass(category: string, isSlot: boolean): string {
   switch (category) {
     case 'core':                return styles.rowCore
     case 'major_core':          return styles.rowMajor
+    case 'double_major':        return styles.rowMajor
     case 'prescribed_elective':
     case 'elective':            return styles.rowElective
     case 'wil':                 return styles.rowWil
@@ -23,16 +26,47 @@ function rowClass(category: string, isSlot: boolean): string {
   }
 }
 
-export default function SemesterTable({ block, periodLabel, completedCodes }: Props) {
-  const router = useRouter()
+function majorAbbrev(name: string | null | undefined): string | null {
+  if (!name) return null
+  const cleaned = name.trim()
+  if (!cleaned) return null
+  if (/artificial intelligence/i.test(cleaned)) return 'AI'
+  if (/cyber\s*security|cybersecurity/i.test(cleaned)) return 'Cybersecurity'
+  const words = cleaned.match(/[A-Za-z0-9]+/g) ?? []
+  if (words.length <= 1) return cleaned
+  return words.map(word => word[0]).join('').toUpperCase()
+}
 
+export default function SemesterTable({ block, periodLabel, completedCodes }: Props) {
+  const navigation = usePendingNavigation('Loading unit details...')
   const headerText = periodLabel
-    ? `${block.label}  ·  ${periodLabel}`
+    ? `${block.label} - ${periodLabel}`
     : block.label
+
+  function onUnitLinkClick(event: MouseEvent<HTMLAnchorElement>, href: string) {
+    if (
+      event.defaultPrevented ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey ||
+      event.button !== 0
+    ) {
+      return
+    }
+
+    event.preventDefault()
+    navigation.push(href)
+  }
 
   return (
     <div className={styles.wrap}>
       <table className={styles.table}>
+        <colgroup>
+          <col className={styles.colCode} />
+          <col className={styles.colName} />
+          <col className={styles.colPrereq} />
+        </colgroup>
         <thead>
           <tr className={styles.semesterHeaderRow}>
             <th colSpan={3}>{headerText}</th>
@@ -46,7 +80,12 @@ export default function SemesterTable({ block, periodLabel, completedCodes }: Pr
         <tbody>
           {block.units.map(unit => {
             const clickable = !unit.isElectiveSlot
-            const completed = completedCodes != null && !unit.isElectiveSlot && completedCodes.has(unit.code)
+            const completed = completedCodes != null && clickable && completedCodes.has(unit.code)
+            const href = `/units/${unit.code}`
+            const pending = navigation.activePendingHref === href
+            const majorTag = majorAbbrev(unit.sourceMajorName)
+            const prerequisiteText = formatPrerequisiteText(unit.requisiteGroups, unit.prerequisites)
+
             return (
               <tr
                 key={unit.id}
@@ -55,31 +94,56 @@ export default function SemesterTable({ block, periodLabel, completedCodes }: Pr
                   rowClass(unit.category, unit.isElectiveSlot),
                   clickable ? styles.clickable : '',
                   completed ? styles.rowCompleted : '',
+                  pending ? styles.rowPending : '',
                 ].filter(Boolean).join(' ')}
-                onClick={clickable ? () => router.push(`/units/${unit.code}`) : undefined}
-                tabIndex={clickable ? 0 : undefined}
-                onKeyDown={clickable ? e => { if (e.key === 'Enter' || e.key === ' ') router.push(`/units/${unit.code}`) } : undefined}
-                role={clickable ? 'link' : undefined}
-                aria-label={clickable ? `View ${unit.name}` : undefined}
               >
                 <td className={`${styles.cellCode} ${unit.isElectiveSlot ? styles.cellCodeSlot : ''}`}>
-                  {completed && <span className={styles.completedCheck} aria-hidden="true">✓</span>}
-                  {unit.isElectiveSlot ? '—' : unit.code}
+                  {clickable ? (
+                    <a
+                      href={href}
+                      className={styles.unitLink}
+                      aria-label={`View ${unit.name}`}
+                      onClick={event => onUnitLinkClick(event, href)}
+                    >
+                      {unit.code}
+                    </a>
+                  ) : (
+                    '-'
+                  )}
                 </td>
                 <td className={`${styles.cellName} ${unit.isElectiveSlot ? styles.cellNameSlot : ''}`}>
-                  {unit.isElectiveSlot ? 'Open Elective Slot' : unit.name}
-                  {unit.category === 'prescribed_elective' && (
-                    <span className={styles.asterisk}>*</span>
+                  {clickable ? (
+                    <a href={href} className={styles.unitLink} onClick={event => onUnitLinkClick(event, href)}>
+                      {unit.name}
+                      {majorTag && (
+                        <span className={styles.majorTag}>({majorTag})</span>
+                      )}
+                      {unit.category === 'prescribed_elective' && (
+                        <span className={styles.asterisk}>*</span>
+                      )}
+                    </a>
+                  ) : (
+                    'Open Elective Slot'
                   )}
                 </td>
                 <td className={styles.cellPrereq}>
-                  {unit.prerequisites && unit.prerequisites.length > 0
-                    ? unit.prerequisites.join(', ')
-                    : 'Nil'}
-                  {clickable && (
-                    <span className={styles.viewHint} aria-hidden="true">
-                      {completed ? 'Completed ✓' : 'View unit →'}
-                    </span>
+                  {clickable ? (
+                    <a href={href} className={styles.unitLink} onClick={event => onUnitLinkClick(event, href)}>
+                      {prerequisiteText}
+                      <span
+                        className={`${styles.viewHint} ${completed ? styles.completedHint : ''}`}
+                        aria-hidden="true"
+                      >
+                        {completed ? 'Completed' : 'View unit'}
+                        {pending ? (
+                          <span className={styles.inlineSpinner} />
+                        ) : !completed ? (
+                          <span>-&gt;</span>
+                        ) : null}
+                      </span>
+                    </a>
+                  ) : (
+                    prerequisiteText
                   )}
                 </td>
               </tr>
