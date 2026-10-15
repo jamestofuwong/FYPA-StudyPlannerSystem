@@ -3,6 +3,10 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import styles from './page.module.css';
 import type { ScrapedStudent } from '../../../../core/shared/types/student';
+import { fs, labelCase, radius, tracking } from '../../../styles/tokens';
+import { PageHeader, StateCard } from '../../../components/common/MeadowBits';
+import { useDesign } from '../../../styles/themeProvider';
+import { Globe, Search, Users } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -97,6 +101,7 @@ export default function ScrapingPage() {
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const studentsLoadedRef = useRef(false);
+  const isMeadow = useDesign() === 'meadow';
 
   // ── Poll status ─────────────────────────────────────────────────────────────
 
@@ -246,447 +251,543 @@ export default function ScrapingPage() {
 
   const termGroups = student ? groupByTerm(student.courseList) : null;
 
+  const debugOptions = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8,
+        fontSize: fs(12), color: 'var(--text-muted)', cursor: 'pointer' }}>
+        <input
+          type="checkbox"
+          checked={keepOpen}
+          onChange={e => setKeepOpen(e.target.checked)}
+          style={{ accentColor: 'var(--accent-orange)', cursor: 'pointer' }}
+        />
+        Keep browser open after login (debug)
+      </label>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8,
+        fontSize: fs(12), color: 'var(--text-muted)', cursor: 'pointer' }}>
+        <input
+          type="checkbox"
+          checked={manualMode}
+          onChange={e => setManualMode(e.target.checked)}
+          style={{ accentColor: 'var(--accent-orange)', cursor: 'pointer' }}
+        />
+        Manual step-through mode (debug)
+      </label>
+    </div>
+  );
+
+  // ── Session card ──
+  const sessionCard = (
+    <div className={styles.card}>
+      <div className={styles.cardHeader}>
+        <div className={styles.cardTitle}>Portal Session</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{
+            display: 'inline-block', width: 8, height: 8,
+            borderRadius: '50%', background: statusColour(sessionStatus),
+            boxShadow: sessionStatus === 'login-pending'
+              ? `0 0 6px ${statusColour(sessionStatus)}` : 'none',
+          }} />
+          <span style={{ fontSize: fs(12), color: statusColour(sessionStatus) }}>
+            {statusLabel(sessionStatus)}
+          </span>
+        </div>
+      </div>
+
+      {sessionStatus === 'login-pending' && (
+        <div style={{ fontSize: fs(12), color: 'var(--accent-yellow)', marginBottom: 10 }}>
+          A browser window has opened — complete the Microsoft SSO login there.
+          This page will update automatically when done.
+        </div>
+      )}
+
+      {sessionStatus === 'login-error' && sessionError && (
+        <div style={{ fontSize: fs(12), color: 'var(--accent-red)', marginBottom: 10,
+          padding: '6px 10px', background: 'rgba(var(--tint-red, 244,135,113),0.08)',
+          border: '1px solid rgba(var(--tint-red, 244,135,113),0.3)', borderRadius: radius(3) }}>
+          {sessionError}
+        </div>
+      )}
+
+      {sessionStatus === 'logged-in' && (
+        <div style={{ fontSize: fs(12), color: 'var(--text-muted)', marginBottom: 10 }}>
+          {studentCount > 0
+            ? `${studentCount.toLocaleString()} students loaded in memory`
+            : 'Loading student list…'}
+        </div>
+      )}
+
+      {sessionStatus !== 'logged-in' && (isMeadow ? (
+        <details className={styles.mDebug}>
+          <summary>Debug options</summary>
+          {debugOptions}
+        </details>
+      ) : debugOptions)}
+
+      {/* ── Manual step buttons ── */}
+      {manualMode && sessionStatus === 'login-pending' && (
+        <div style={{ marginBottom: 10 }}>
+          {/* Step progress */}
+          <div style={{ fontSize: fs(11), color: 'var(--text-muted)', marginBottom: 8,
+            fontFamily: 'var(--font-mono)', padding: '6px 10px',
+            background: 'var(--surface-bg)', borderRadius: radius(3) }}>
+            Step {manualStep}/5 — {MANUAL_STEP_LABELS[manualStep]}
+          </div>
+
+          {manualStepError && (
+            <div style={{ fontSize: fs(11), color: 'var(--accent-red)', marginBottom: 8,
+              padding: '6px 10px', background: 'rgba(var(--tint-red, 244,135,113),0.08)',
+              border: '1px solid rgba(var(--tint-red, 244,135,113),0.3)', borderRadius: radius(3) }}>
+              {manualStepError}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {([
+              { step: 2, label: 'Step 2 — Navigate to Degree1, find iframe' },
+              { step: 3, label: 'Step 3 — Load PortalExtension, capture token' },
+              { step: 4, label: 'Step 4 — Collect cookies & finalise session' },
+            ] as const).map(({ step, label }) => {
+              const isNext    = step === manualStep + 1;
+              const isDone    = step <= manualStep;
+              const isLoading = advancingStep === step;
+              return (
+                <button
+                  key={step}
+                  className={isDone ? styles.btnSecondary : styles.btnSuccess}
+                  style={{
+                    textAlign: 'left', padding: '7px 12px', fontSize: fs(12),
+                    opacity: isDone ? 0.5 : isNext ? 1 : 0.35,
+                  }}
+                  disabled={!isNext || isLoading}
+                  onClick={() => handleAdvanceStep(step)}
+                >
+                  {isLoading ? `Running step ${step}…` : isDone ? `✓ ${label}` : label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <div className={styles.btnGroup}>
+        {sessionStatus !== 'logged-in' && (
+          <button
+            className={styles.btnSuccess}
+            onClick={handleLogin}
+            disabled={sessionStatus === 'login-pending'}
+          >
+            {sessionStatus === 'login-pending' ? 'Waiting for SSO…' : 'Login to Portal'}
+          </button>
+        )}
+        {sessionStatus === 'logged-in' && (
+          <button className={styles.btnDanger} onClick={handleLogout}>
+            Logout
+          </button>
+        )}
+      </div>
+    </div>
+  );
+
+  // ── Student list table ──
+  const studentListCard = allStudents.length > 0 && (
+    <div className={styles.card}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <div className={styles.cardTitle}>
+          Student List
+          <span style={{ marginLeft: 8, fontSize: fs(11), color: 'var(--text-muted)',
+            fontFamily: 'var(--font-mono)', fontWeight: 400 }}>
+            {allStudents.length.toLocaleString()} students
+          </span>
+        </div>
+        <input
+          className={styles.formInput}
+          style={{ width: 220, marginBottom: 0 }}
+          value={studentFilter}
+          onChange={e => setStudentFilter(e.target.value)}
+          placeholder="Filter by name or ID…"
+        />
+      </div>
+      <div className={styles.tableWrap} style={{ maxHeight: 320, overflowY: 'auto' }}>
+        <table className={styles.table}>
+          <thead>
+            <tr>
+              <th>Student ID</th>
+              <th>Name</th>
+              <th style={{ width: 80 }}>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {allStudents
+              .filter(s => {
+                if (!studentFilter.trim()) return true;
+                const q = studentFilter.toLowerCase();
+                return (s.name ?? '').toLowerCase().includes(q) || (s.student_id ?? '').toLowerCase().includes(q);
+              })
+              .slice(0, 200)
+              .map(s => (
+                <tr key={s.db_id}>
+                  <td><code className={styles.code}>{s.student_id}</code></td>
+                  <td>{s.name}</td>
+                  <td>
+                    <button
+                      className={styles.btnSecondary}
+                      style={{ padding: '3px 10px', fontSize: fs(11) }}
+                      onClick={() => handleSelectStudent(s)}
+                    >
+                      Select
+                    </button>
+                  </td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      </div>
+      {(() => {
+        const filtered = studentFilter.trim()
+          ? allStudents.filter(s => {
+              const q = studentFilter.toLowerCase();
+              return (s.name ?? '').toLowerCase().includes(q) || (s.student_id ?? '').toLowerCase().includes(q);
+            })
+          : allStudents;
+        return filtered.length > 200 ? (
+          <div style={{ fontSize: fs(11), color: 'var(--text-muted)', marginTop: 8, textAlign: 'center' }}>
+            Showing 200 of {filtered.length.toLocaleString()} — use the filter to narrow results
+          </div>
+        ) : null;
+      })()}
+    </div>
+  );
+
+  // Meadow: the list is the rail beside the audit, so each row is one click target.
+  const filteredStudents = studentFilter.trim()
+    ? allStudents.filter(s => {
+        const q = studentFilter.toLowerCase();
+        return (s.name ?? '').toLowerCase().includes(q) || (s.student_id ?? '').toLowerCase().includes(q);
+      })
+    : allStudents;
+  const meadowStudentList = (
+    <div className={`${styles.card} ${styles.mListCard}`}>
+      <div className={styles.mListHead}>
+        <span className={styles.cardTitle}>Students</span>
+        <span className={styles.mListCount}>{allStudents.length.toLocaleString()}</span>
+      </div>
+      <label className={styles.mSearch}>
+        <Search aria-hidden="true" />
+        <input
+          value={studentFilter}
+          onChange={e => setStudentFilter(e.target.value)}
+          placeholder="Filter by name or ID"
+          aria-label="Filter students by name or ID"
+        />
+      </label>
+      <div className={styles.mList}>
+        {filteredStudents.slice(0, 200).map(s => (
+          <button
+            key={s.db_id}
+            type="button"
+            className={`${styles.mListItem} ${selectedStudent?.db_id === s.db_id ? styles.mListItemActive : ''}`}
+            onClick={() => handleSelectStudent(s)}
+          >
+            <span className={styles.mListName}>{s.name}</span>
+            <span className={styles.mListId}>{s.student_id}</span>
+          </button>
+        ))}
+        {filteredStudents.length === 0 && <div className={styles.mListEmpty}>No student matches “{studentFilter}”.</div>}
+      </div>
+      {filteredStudents.length > 200 && (
+        <div className={styles.mListNote}>Showing 200 of {filteredStudents.length.toLocaleString()}. Filter to narrow the list.</div>
+      )}
+    </div>
+  );
+
+  const studentWork = (
+    <>
+      {/* ── Selected student + enrollment picker ── */}
+      {selectedStudent && (
+        <div className={styles.studentBar}>
+          <div className={styles.avatar}>
+            {selectedStudent.name.charAt(0).toUpperCase()}
+          </div>
+          <div>
+            <div className={styles.studentName}>{selectedStudent.name}</div>
+            <div className={styles.studentMeta}>{selectedStudent.student_id}</div>
+          </div>
+          <button
+            className={styles.studentSelect}
+            onClick={() => { setSelectedStudent(null); setEnrollments([]); setStudent(null); }}
+          >
+            Clear
+          </button>
+        </div>
+      )}
+
+      {loadingEnrollments && (
+        <div style={{ fontSize: fs(12), color: 'var(--text-muted)', marginBottom: 12 }}>
+          Loading enrollments…
+        </div>
+      )}
+
+      {enrollments.length > 0 && !student && !loadingAudit && (
+        <div className={styles.card}>
+          <div className={styles.cardTitle} style={{ marginBottom: 10 }}>Select Enrollment</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {enrollments.map(e => (
+              <button
+                key={e.EnrollId}
+                className={styles.btnSecondary}
+                style={{ textAlign: 'left', padding: '8px 12px' }}
+                onClick={() => handleSelectEnrollment(e)}
+              >
+                {e.EnrollmentDesc}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {loadingAudit && (
+        <div style={{ fontSize: fs(12), color: 'var(--text-muted)', marginBottom: 12 }}>
+          Loading degree audit…
+        </div>
+      )}
+
+      {auditError && (
+        <div style={{ fontSize: fs(12), color: 'var(--accent-red)', marginBottom: 12,
+          padding: '8px 12px', background: 'rgba(var(--tint-red, 244,135,113),0.08)',
+          border: '1px solid rgba(var(--tint-red, 244,135,113),0.3)', borderRadius: radius(4) }}>
+          {auditError}
+        </div>
+      )}
+
+      {/* ── Degree audit result ── */}
+      {student && (
+        <>
+          <div className={styles.sectionTitle}>Degree Audit — {student.course}</div>
+
+          {/* Credit summary */}
+          <div className={styles.statGrid}>
+            <div className={`${styles.statCard} ${styles.blue}`}>
+              <div className={styles.statLabel}>Credits Required</div>
+              <div className={styles.statValue}>{student.creditsRequired}</div>
+              <div className={styles.statSub}>to graduate</div>
+            </div>
+            <div className={`${styles.statCard} ${styles.green}`}>
+              <div className={styles.statLabel}>Credits Earned</div>
+              <div className={styles.statValue}>{student.creditsCompleted}</div>
+              <div className={styles.statSub}>completed</div>
+            </div>
+            <div className={`${styles.statCard} ${styles.yellow}`}>
+              <div className={styles.statLabel}>Scheduled</div>
+              <div className={styles.statValue}>{student.scheduledCredits}</div>
+              <div className={styles.statSub}>in progress</div>
+            </div>
+            <div className={`${styles.statCard} ${styles.orange}`}>
+              <div className={styles.statLabel}>Cum GPA</div>
+              <div className={styles.statValue} style={{ fontSize: fs(22) }}>
+                {student.cgpa.toFixed(2)}
+              </div>
+              <div className={styles.statSub}>{student.gradeLevel}</div>
+            </div>
+          </div>
+
+          {/* Info row */}
+          <div className={styles.card}>
+            <div className={styles.formGrid2}>
+              <div className={styles.formGroup} style={{ marginBottom: 0 }}>
+                <label className={styles.formLabel}>Status</label>
+                <div className={styles.fieldValue}>{student.status}</div>
+              </div>
+              <div className={styles.formGroup} style={{ marginBottom: 0 }}>
+                <label className={styles.formLabel}>Grade Level</label>
+                <div className={styles.fieldValue}>{student.gradeLevel}</div>
+              </div>
+              <div className={styles.formGroup} style={{ marginBottom: 0 }}>
+                <label className={styles.formLabel}>Enrolled</label>
+                <div className={styles.fieldValueMono}>{student.enrollmentDate?.split('T')[0] ?? '—'}</div>
+              </div>
+              <div className={styles.formGroup} style={{ marginBottom: 0 }}>
+                <label className={styles.formLabel}>Expected Graduation</label>
+                <div className={styles.fieldValueMono}>{student.graduationDate?.split('T')[0] ?? '—'}</div>
+              </div>
+              {student.areasOfStudy && student.areasOfStudy.length > 0 && (
+                <div className={styles.formGroup} style={{ marginBottom: 0, gridColumn: '1 / -1' }}>
+                  <label className={styles.formLabel}>Areas of Study</label>
+                  <div className={styles.fieldValue}>{student.areasOfStudy.join(', ')}</div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Course history */}
+          <div className={styles.sectionTitle}>
+            Course History ({student.courseList.length} units)
+          </div>
+          <div className={styles.tableWrap}>
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th>Code</th>
+                  <th>Title</th>
+                  <th>Credits</th>
+                  <th>Earned</th>
+                  <th>Status</th>
+                  <th>Grade</th>
+                  <th>Term</th>
+                </tr>
+              </thead>
+              <tbody>
+                {termGroups && [...termGroups.entries()].map(([term, courses]) => (
+                  <React.Fragment key={`term-${term}`}>
+                    <tr>
+                      <td colSpan={7} className={isMeadow ? styles.mTermRow : undefined} style={isMeadow ? undefined : {
+                        padding: '6px 12px', background: 'var(--surface-bg)',
+                        fontFamily: 'var(--font-mono)', fontSize: fs(10),
+                        color: 'var(--accent-blue)', fontWeight: 600,
+                        letterSpacing: tracking('1px'), textTransform: labelCase,
+                      }}>
+                        {term}
+                      </td>
+                    </tr>
+                    {courses.map((c, i) => (
+                      <tr key={`${term}-${c.courseId ?? i}`}>
+                        <td><code className={styles.code}>{c.courseId}</code></td>
+                        <td>{c.courseTitle}</td>
+                        <td className={styles.tdRight}>{c.credits}</td>
+                        <td className={styles.tdRight}>{c.creditsEarned}</td>
+                        <td>
+                          <span className={`${styles.badge} ${
+                            c.status === 'Complete'  ? styles.badgeGreen  :
+                            c.status === 'Current' || c.status === 'Scheduled'
+                                                     ? styles.badgeBlue   :
+                            c.status === 'Future'    ? styles.badgeYellow :
+                                                       styles.badgeOrange
+                          }`}>
+                            {c.status}
+                          </span>
+                        </td>
+                        <td><code className={styles.code}>{c.grade || '—'}</code></td>
+                        <td style={{ fontFamily: 'var(--font-mono)', fontSize: fs(10),
+                          color: 'var(--text-muted)' }}>{c.term}</td>
+                      </tr>
+                    ))}
+                  </React.Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </>
+  );
+
+  // ── Sidebar ──
+  const sideColumn = (
+    <>
+      <div className={styles.sectionTitle}>Session Info</div>
+      <div className={styles.card}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div className={`${styles.statCard} ${styles.blue}`} style={{ margin: 0 }}>
+            <div className={styles.statLabel}>Students in Memory</div>
+            <div className={styles.statValue}>{studentCount > 0 ? studentCount.toLocaleString() : '—'}</div>
+            <div className={styles.statSub}>active students</div>
+          </div>
+          <div className={`${styles.statCard} ${styles.green}`} style={{ margin: 0 }}>
+            <div className={styles.statLabel}>Cum GPA</div>
+            <div className={styles.statValue} style={{ fontSize: fs(20) }}>
+              {student ? student.cgpa.toFixed(2) : '—'}
+            </div>
+            <div className={styles.statSub}>current student</div>
+          </div>
+          <div className={`${styles.statCard} ${styles.yellow}`} style={{ margin: 0 }}>
+            <div className={styles.statLabel}>Status</div>
+            <div className={styles.statValue} style={{ fontSize: fs(14), paddingTop: 4 }}>
+              {student?.status ?? statusLabel(sessionStatus)}
+            </div>
+            <div className={styles.statSub}>
+              {student ? `${student.courseList.length} units` : 'awaiting selection'}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {student && (
+        <>
+          <div className={styles.sectionTitle} style={{ marginTop: 4 }}>Credit Progress</div>
+          <div className={styles.card}>
+            {([
+              { label: 'Required',  val: student.creditsRequired,  colour: 'var(--accent-blue)' },
+              { label: 'Earned',    val: student.creditsCompleted, colour: 'var(--accent-green)' },
+              { label: 'Scheduled', val: student.scheduledCredits, colour: 'var(--accent-yellow)' },
+            ] as const).map(row => (
+              <div key={row.label} style={{ marginBottom: 10 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between',
+                  fontSize: fs(11), color: 'var(--text-muted)', marginBottom: 3 }}>
+                  <span>{row.label}</span>
+                  <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
+                    {row.val}
+                  </span>
+                </div>
+                <div style={{ background: '#1a1a1a', borderRadius: radius(2), height: 5, overflow: 'hidden' }}>
+                  <div style={{
+                    height: '100%', borderRadius: radius(2),
+                    background: row.colour,
+                    width: `${Math.min(100, (row.val / (student.creditsRequired || 1)) * 100)}%`,
+                  }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </>
+  );
+
+  if (isMeadow) {
+    return (
+      <div className={styles.panel}>
+        <PageHeader
+          title="Student portal"
+          description="Log in to the portal, choose a student and one of their enrolments, then read their degree audit."
+        />
+        <div className={styles.mLayout}>
+          <aside className={styles.mRail}>
+            {sessionCard}
+            {allStudents.length > 0 && meadowStudentList}
+          </aside>
+          <section className={styles.mMain}>
+            {selectedStudent ? studentWork : sessionStatus === 'logged-in' ? (
+              <StateCard icon={<Users />} title="Choose a student">
+                Pick a student from the list to load their enrolments and degree audit.
+              </StateCard>
+            ) : (
+              <StateCard icon={<Globe />} title="Log in to the portal first">
+                Use Login to Portal on the left. A browser window opens for the university sign-in, and this page
+                updates when it is done.
+              </StateCard>
+            )}
+          </section>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={styles.panel}>
       <div className={styles.sectionTitle}>Student Portal — API Pipeline</div>
 
       <div className={styles.splitLayout}>
         <div className={styles.splitMain}>
+          {sessionCard}
 
-          {/* ── Session card ── */}
-          <div className={styles.card}>
-            <div className={styles.cardHeader}>
-              <div className={styles.cardTitle}>Portal Session</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{
-                  display: 'inline-block', width: 8, height: 8,
-                  borderRadius: '50%', background: statusColour(sessionStatus),
-                  boxShadow: sessionStatus === 'login-pending'
-                    ? `0 0 6px ${statusColour(sessionStatus)}` : 'none',
-                }} />
-                <span style={{ fontSize: 12, color: statusColour(sessionStatus) }}>
-                  {statusLabel(sessionStatus)}
-                </span>
-              </div>
-            </div>
+          {studentListCard}
 
-            {sessionStatus === 'login-pending' && (
-              <div style={{ fontSize: 12, color: 'var(--accent-yellow)', marginBottom: 10 }}>
-                A browser window has opened — complete the Microsoft SSO login there.
-                This page will update automatically when done.
-              </div>
-            )}
-
-            {sessionStatus === 'login-error' && sessionError && (
-              <div style={{ fontSize: 12, color: 'var(--accent-red)', marginBottom: 10,
-                padding: '6px 10px', background: 'rgba(244,135,113,0.08)',
-                border: '1px solid rgba(244,135,113,0.3)', borderRadius: 3 }}>
-                {sessionError}
-              </div>
-            )}
-
-            {sessionStatus === 'logged-in' && (
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>
-                {studentCount > 0
-                  ? `${studentCount.toLocaleString()} students loaded in memory`
-                  : 'Loading student list…'}
-              </div>
-            )}
-
-            {sessionStatus !== 'logged-in' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8,
-                  fontSize: 12, color: 'var(--text-muted)', cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={keepOpen}
-                    onChange={e => setKeepOpen(e.target.checked)}
-                    style={{ accentColor: 'var(--accent-orange)', cursor: 'pointer' }}
-                  />
-                  Keep browser open after login (debug)
-                </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8,
-                  fontSize: 12, color: 'var(--text-muted)', cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={manualMode}
-                    onChange={e => setManualMode(e.target.checked)}
-                    style={{ accentColor: 'var(--accent-orange)', cursor: 'pointer' }}
-                  />
-                  Manual step-through mode (debug)
-                </label>
-              </div>
-            )}
-
-            {/* ── Manual step buttons ── */}
-            {manualMode && sessionStatus === 'login-pending' && (
-              <div style={{ marginBottom: 10 }}>
-                {/* Step progress */}
-                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8,
-                  fontFamily: 'var(--font-mono)', padding: '6px 10px',
-                  background: 'var(--surface-bg)', borderRadius: 3 }}>
-                  Step {manualStep}/5 — {MANUAL_STEP_LABELS[manualStep]}
-                </div>
-
-                {manualStepError && (
-                  <div style={{ fontSize: 11, color: 'var(--accent-red)', marginBottom: 8,
-                    padding: '6px 10px', background: 'rgba(244,135,113,0.08)',
-                    border: '1px solid rgba(244,135,113,0.3)', borderRadius: 3 }}>
-                    {manualStepError}
-                  </div>
-                )}
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  {([
-                    { step: 2, label: 'Step 2 — Navigate to Degree1, find iframe' },
-                    { step: 3, label: 'Step 3 — Load PortalExtension, capture token' },
-                    { step: 4, label: 'Step 4 — Collect cookies & finalise session' },
-                  ] as const).map(({ step, label }) => {
-                    const isNext    = step === manualStep + 1;
-                    const isDone    = step <= manualStep;
-                    const isLoading = advancingStep === step;
-                    return (
-                      <button
-                        key={step}
-                        className={isDone ? styles.btnSecondary : styles.btnSuccess}
-                        style={{
-                          textAlign: 'left', padding: '7px 12px', fontSize: 12,
-                          opacity: isDone ? 0.5 : isNext ? 1 : 0.35,
-                        }}
-                        disabled={!isNext || isLoading}
-                        onClick={() => handleAdvanceStep(step)}
-                      >
-                        {isLoading ? `Running step ${step}…` : isDone ? `✓ ${label}` : label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            <div className={styles.btnGroup}>
-              {sessionStatus !== 'logged-in' && (
-                <button
-                  className={styles.btnSuccess}
-                  onClick={handleLogin}
-                  disabled={sessionStatus === 'login-pending'}
-                >
-                  {sessionStatus === 'login-pending' ? 'Waiting for SSO…' : 'Login to Portal'}
-                </button>
-              )}
-              {sessionStatus === 'logged-in' && (
-                <button className={styles.btnDanger} onClick={handleLogout}>
-                  Logout
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* ── Student list table ── */}
-          {allStudents.length > 0 && (
-            <div className={styles.card}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                <div className={styles.cardTitle}>
-                  Student List
-                  <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--text-muted)',
-                    fontFamily: 'var(--font-mono)', fontWeight: 400 }}>
-                    {allStudents.length.toLocaleString()} students
-                  </span>
-                </div>
-                <input
-                  className={styles.formInput}
-                  style={{ width: 220, marginBottom: 0 }}
-                  value={studentFilter}
-                  onChange={e => setStudentFilter(e.target.value)}
-                  placeholder="Filter by name or ID…"
-                />
-              </div>
-              <div className={styles.tableWrap} style={{ maxHeight: 320, overflowY: 'auto' }}>
-                <table className={styles.table}>
-                  <thead>
-                    <tr>
-                      <th>Student ID</th>
-                      <th>Name</th>
-                      <th style={{ width: 80 }}>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {allStudents
-                      .filter(s => {
-                        if (!studentFilter.trim()) return true;
-                        const q = studentFilter.toLowerCase();
-                        return (s.name ?? '').toLowerCase().includes(q) || (s.student_id ?? '').toLowerCase().includes(q);
-                      })
-                      .slice(0, 200)
-                      .map(s => (
-                        <tr key={s.db_id}>
-                          <td><code className={styles.code}>{s.student_id}</code></td>
-                          <td>{s.name}</td>
-                          <td>
-                            <button
-                              className={styles.btnSecondary}
-                              style={{ padding: '3px 10px', fontSize: 11 }}
-                              onClick={() => handleSelectStudent(s)}
-                            >
-                              Select
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                  </tbody>
-                </table>
-              </div>
-              {(() => {
-                const filtered = studentFilter.trim()
-                  ? allStudents.filter(s => {
-                      const q = studentFilter.toLowerCase();
-                      return (s.name ?? '').toLowerCase().includes(q) || (s.student_id ?? '').toLowerCase().includes(q);
-                    })
-                  : allStudents;
-                return filtered.length > 200 ? (
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8, textAlign: 'center' }}>
-                    Showing 200 of {filtered.length.toLocaleString()} — use the filter to narrow results
-                  </div>
-                ) : null;
-              })()}
-            </div>
-          )}
-
-          {/* ── Selected student + enrollment picker ── */}
-          {selectedStudent && (
-            <div className={styles.studentBar}>
-              <div className={styles.avatar}>
-                {selectedStudent.name.charAt(0).toUpperCase()}
-              </div>
-              <div>
-                <div className={styles.studentName}>{selectedStudent.name}</div>
-                <div className={styles.studentMeta}>{selectedStudent.student_id}</div>
-              </div>
-              <button
-                className={styles.studentSelect}
-                onClick={() => { setSelectedStudent(null); setEnrollments([]); setStudent(null); }}
-              >
-                Clear
-              </button>
-            </div>
-          )}
-
-          {loadingEnrollments && (
-            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
-              Loading enrollments…
-            </div>
-          )}
-
-          {enrollments.length > 0 && !student && !loadingAudit && (
-            <div className={styles.card}>
-              <div className={styles.cardTitle} style={{ marginBottom: 10 }}>Select Enrollment</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {enrollments.map(e => (
-                  <button
-                    key={e.EnrollId}
-                    className={styles.btnSecondary}
-                    style={{ textAlign: 'left', padding: '8px 12px' }}
-                    onClick={() => handleSelectEnrollment(e)}
-                  >
-                    {e.EnrollmentDesc}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {loadingAudit && (
-            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
-              Loading degree audit…
-            </div>
-          )}
-
-          {auditError && (
-            <div style={{ fontSize: 12, color: 'var(--accent-red)', marginBottom: 12,
-              padding: '8px 12px', background: 'rgba(244,135,113,0.08)',
-              border: '1px solid rgba(244,135,113,0.3)', borderRadius: 4 }}>
-              {auditError}
-            </div>
-          )}
-
-          {/* ── Degree audit result ── */}
-          {student && (
-            <>
-              <div className={styles.sectionTitle}>Degree Audit — {student.course}</div>
-
-              {/* Credit summary */}
-              <div className={styles.statGrid}>
-                <div className={`${styles.statCard} ${styles.blue}`}>
-                  <div className={styles.statLabel}>Credits Required</div>
-                  <div className={styles.statValue}>{student.creditsRequired}</div>
-                  <div className={styles.statSub}>to graduate</div>
-                </div>
-                <div className={`${styles.statCard} ${styles.green}`}>
-                  <div className={styles.statLabel}>Credits Earned</div>
-                  <div className={styles.statValue}>{student.creditsCompleted}</div>
-                  <div className={styles.statSub}>completed</div>
-                </div>
-                <div className={`${styles.statCard} ${styles.yellow}`}>
-                  <div className={styles.statLabel}>Scheduled</div>
-                  <div className={styles.statValue}>{student.scheduledCredits}</div>
-                  <div className={styles.statSub}>in progress</div>
-                </div>
-                <div className={`${styles.statCard} ${styles.orange}`}>
-                  <div className={styles.statLabel}>Cum GPA</div>
-                  <div className={styles.statValue} style={{ fontSize: 22 }}>
-                    {student.cgpa.toFixed(2)}
-                  </div>
-                  <div className={styles.statSub}>{student.gradeLevel}</div>
-                </div>
-              </div>
-
-              {/* Info row */}
-              <div className={styles.card}>
-                <div className={styles.formGrid2}>
-                  <div className={styles.formGroup} style={{ marginBottom: 0 }}>
-                    <label className={styles.formLabel}>Status</label>
-                    <div className={styles.fieldValue}>{student.status}</div>
-                  </div>
-                  <div className={styles.formGroup} style={{ marginBottom: 0 }}>
-                    <label className={styles.formLabel}>Grade Level</label>
-                    <div className={styles.fieldValue}>{student.gradeLevel}</div>
-                  </div>
-                  <div className={styles.formGroup} style={{ marginBottom: 0 }}>
-                    <label className={styles.formLabel}>Enrolled</label>
-                    <div className={styles.fieldValueMono}>{student.enrollmentDate?.split('T')[0] ?? '—'}</div>
-                  </div>
-                  <div className={styles.formGroup} style={{ marginBottom: 0 }}>
-                    <label className={styles.formLabel}>Expected Graduation</label>
-                    <div className={styles.fieldValueMono}>{student.graduationDate?.split('T')[0] ?? '—'}</div>
-                  </div>
-                  {student.areasOfStudy && student.areasOfStudy.length > 0 && (
-                    <div className={styles.formGroup} style={{ marginBottom: 0, gridColumn: '1 / -1' }}>
-                      <label className={styles.formLabel}>Areas of Study</label>
-                      <div className={styles.fieldValue}>{student.areasOfStudy.join(', ')}</div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Course history */}
-              <div className={styles.sectionTitle}>
-                Course History ({student.courseList.length} units)
-              </div>
-              <div className={styles.tableWrap}>
-                <table className={styles.table}>
-                  <thead>
-                    <tr>
-                      <th>Code</th>
-                      <th>Title</th>
-                      <th>Credits</th>
-                      <th>Earned</th>
-                      <th>Status</th>
-                      <th>Grade</th>
-                      <th>Term</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {termGroups && [...termGroups.entries()].map(([term, courses]) => (
-                      <React.Fragment key={`term-${term}`}>
-                        <tr>
-                          <td colSpan={7} style={{
-                            padding: '6px 12px', background: 'var(--surface-bg)',
-                            fontFamily: 'var(--font-mono)', fontSize: 10,
-                            color: 'var(--accent-blue)', fontWeight: 600,
-                            letterSpacing: '1px', textTransform: 'uppercase',
-                          }}>
-                            {term}
-                          </td>
-                        </tr>
-                        {courses.map((c, i) => (
-                          <tr key={`${term}-${c.courseId ?? i}`}>
-                            <td><code className={styles.code}>{c.courseId}</code></td>
-                            <td>{c.courseTitle}</td>
-                            <td className={styles.tdRight}>{c.credits}</td>
-                            <td className={styles.tdRight}>{c.creditsEarned}</td>
-                            <td>
-                              <span className={`${styles.badge} ${
-                                c.status === 'Complete'  ? styles.badgeGreen  :
-                                c.status === 'Current' || c.status === 'Scheduled'
-                                                         ? styles.badgeBlue   :
-                                c.status === 'Future'    ? styles.badgeYellow :
-                                                           styles.badgeOrange
-                              }`}>
-                                {c.status}
-                              </span>
-                            </td>
-                            <td><code className={styles.code}>{c.grade || '—'}</code></td>
-                            <td style={{ fontFamily: 'var(--font-mono)', fontSize: 10,
-                              color: 'var(--text-muted)' }}>{c.term}</td>
-                          </tr>
-                        ))}
-                      </React.Fragment>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </>
-          )}
+          {studentWork}
         </div>
 
         {/* ── Sidebar ── */}
         <div className={styles.splitSide}>
-          <div className={styles.sectionTitle}>Session Info</div>
-          <div className={styles.card}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <div className={`${styles.statCard} ${styles.blue}`} style={{ margin: 0 }}>
-                <div className={styles.statLabel}>Students in Memory</div>
-                <div className={styles.statValue}>{studentCount > 0 ? studentCount.toLocaleString() : '—'}</div>
-                <div className={styles.statSub}>active students</div>
-              </div>
-              <div className={`${styles.statCard} ${styles.green}`} style={{ margin: 0 }}>
-                <div className={styles.statLabel}>Cum GPA</div>
-                <div className={styles.statValue} style={{ fontSize: 20 }}>
-                  {student ? student.cgpa.toFixed(2) : '—'}
-                </div>
-                <div className={styles.statSub}>current student</div>
-              </div>
-              <div className={`${styles.statCard} ${styles.yellow}`} style={{ margin: 0 }}>
-                <div className={styles.statLabel}>Status</div>
-                <div className={styles.statValue} style={{ fontSize: 14, paddingTop: 4 }}>
-                  {student?.status ?? statusLabel(sessionStatus)}
-                </div>
-                <div className={styles.statSub}>
-                  {student ? `${student.courseList.length} units` : 'awaiting selection'}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {student && (
-            <>
-              <div className={styles.sectionTitle} style={{ marginTop: 4 }}>Credit Progress</div>
-              <div className={styles.card}>
-                {([
-                  { label: 'Required',  val: student.creditsRequired,  colour: 'var(--accent-blue)' },
-                  { label: 'Earned',    val: student.creditsCompleted, colour: 'var(--accent-green)' },
-                  { label: 'Scheduled', val: student.scheduledCredits, colour: 'var(--accent-yellow)' },
-                ] as const).map(row => (
-                  <div key={row.label} style={{ marginBottom: 10 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between',
-                      fontSize: 11, color: 'var(--text-muted)', marginBottom: 3 }}>
-                      <span>{row.label}</span>
-                      <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
-                        {row.val}
-                      </span>
-                    </div>
-                    <div style={{ background: '#1a1a1a', borderRadius: 2, height: 5, overflow: 'hidden' }}>
-                      <div style={{
-                        height: '100%', borderRadius: 2,
-                        background: row.colour,
-                        width: `${Math.min(100, (row.val / (student.creditsRequired || 1)) * 100)}%`,
-                      }} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
+          {sideColumn}
         </div>
       </div>
     </div>

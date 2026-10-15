@@ -1,6 +1,11 @@
 export type ThemeMode = "light" | "dark" | "portal";
 
-interface ThemeColors {
+// The overall look: "classic" is the original compact editor-style design,
+// "meadow" is the calmer, roomier design. A design only changes colour, type
+// and layout tokens; every page behaves the same in both.
+export type DesignMode = "classic" | "meadow";
+
+export interface ThemeColors {
   // Backgrounds
   topbarBg: string;
   topbarBorder: string;
@@ -177,3 +182,91 @@ export const themes: Record<ThemeMode, ThemeColors> = {
   },
 };
 
+// Meadow has its own light and dark ("night") palettes. The portal colour
+// mode has no Meadow counterpart, so it falls back to Meadow light.
+export const meadowThemes: Record<"light" | "dark", ThemeColors> = {
+  light: {
+    sidebarBg: "#FFFFFF",
+    sidebarSearchBg: "#F4F6F1",
+    sidebarBorder: "#DCE3DA",
+    topbarBg: "#FFFFFF",
+    topbarBorder: "#DCE3DA",
+    tabbarBg: "#F4F6F1",
+    tabbarBorder: "#DCE3DA",
+    mainBg: "#F4F6F1",
+    panelBg: "#FFFFFF",
+    panelBorder: "#DCE3DA",
+    cardBg: "#FFFFFF",
+    cardHover: "#F4F6F1",
+    surfaceBg: "#ECEFEA",
+
+    activeHighlight: "#2D6A4F",
+    activeBg: "#E4F1E9",
+
+    textPrimary: "#1E2A24",
+    textSecondary: "#1F5139",
+    textMuted: "#55635A",
+    textLogo: "#1E2A24",
+
+    accentBlue: "#2459A8",
+    accentGreen: "#2D6A4F",
+    accentYellow: "#8A6100",
+    accentOrange: "#9A4A0C",
+    accentPurple: "#5B4B8A",
+    accentRed: "#B42318",
+
+    statusbarBg: "#2D6A4F",
+
+    rowAlt: "#F8FAF7",
+    scrollbarThumb: "#C3CEC1",
+    scrollbarTrack: "#F4F6F1",
+
+    buttonBg: "#ECEFEA",
+    btnSecondaryBg: "#FFFFFF",
+  },
+
+  dark: {
+    sidebarBg: "#16201A",
+    sidebarSearchBg: "#1B271F",
+    sidebarBorder: "#2C3A31",
+    topbarBg: "#16201A",
+    topbarBorder: "#2C3A31",
+    tabbarBg: "#111A15",
+    tabbarBorder: "#2C3A31",
+    mainBg: "#111A15",
+    panelBg: "#19241D",
+    panelBorder: "#2C3A31",
+    cardBg: "#19241D",
+    cardHover: "#223028",
+    surfaceBg: "#2A382F",
+
+    activeHighlight: "#7FD1A8",
+    activeBg: "rgba(127, 209, 168, 0.14)",
+
+    textPrimary: "#E5ECE7",
+    textSecondary: "#A8DDBF",
+    textMuted: "#A7B6AC",
+    textLogo: "#E5ECE7",
+
+    accentBlue: "#8DB4F0",
+    accentGreen: "#7FD1A8",
+    accentYellow: "#E8C66A",
+    accentOrange: "#F2A877",
+    accentPurple: "#B9A8E8",
+    accentRed: "#F28B82",
+
+    statusbarBg: "#1F5139",
+
+    rowAlt: "#16201A",
+    scrollbarThumb: "#3A4A40",
+    scrollbarTrack: "#111A15",
+
+    buttonBg: "#2A382F",
+    btnSecondaryBg: "#19241D",
+  },
+};
+
+export function paletteFor(design: DesignMode, mode: ThemeMode): ThemeColors {
+  if (design === "meadow") return meadowThemes[mode === "dark" ? "dark" : "light"];
+  return themes[mode];
+}

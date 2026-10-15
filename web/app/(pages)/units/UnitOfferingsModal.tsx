@@ -3,6 +3,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import styles from './page.module.css';
 import SyncOfferingsPreviewModal from './SyncOfferingsPreviewModal';
+import { fs } from '../../../styles/tokens';
 
 type UnitWithOfferings = {
     id?: string;
@@ -241,7 +242,7 @@ export default function UnitOfferingsModal({
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <div>
                             <h3 className={styles.modalTitle}>Unit Offerings Manager</h3>
-                            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                            <span style={{ fontSize: fs(11), color: 'var(--text-muted)' }}>
                                 Organize scheduled unit offerings across semesters and classify pending units.
                             </span>
                         </div>
@@ -267,7 +268,7 @@ export default function UnitOfferingsModal({
                             <input
                                 type="search"
                                 className={styles.dropdownSearchInput}
-                                style={{ width: '100%', paddingLeft: 30, height: 34, fontSize: 13 }}
+                                style={{ width: '100%', paddingLeft: 30, height: 34, fontSize: fs(13) }}
                                 placeholder="Search by unit code or name across all semesters..."
                                 value={globalSearch}
                                 onChange={(e) => setGlobalSearch(e.target.value)}
@@ -280,7 +281,7 @@ export default function UnitOfferingsModal({
                             <button
                                 type="button"
                                 className={styles.addUnitInlineBtn}
-                                style={{ fontSize: 11, padding: '4px 8px' }}
+                                style={{ fontSize: fs(11), padding: '4px 8px' }}
                                 onClick={expandAll}
                                 title="Expand all semester tables"
                             >
@@ -289,7 +290,7 @@ export default function UnitOfferingsModal({
                             <button
                                 type="button"
                                 className={styles.addUnitInlineBtn}
-                                style={{ fontSize: 11, padding: '4px 8px' }}
+                                style={{ fontSize: fs(11), padding: '4px 8px' }}
                                 onClick={collapseAll}
                                 title="Collapse all semester tables"
                             >
@@ -317,7 +318,7 @@ export default function UnitOfferingsModal({
                                     style={{ cursor: 'pointer', userSelect: 'none' }}
                                     onClick={() => toggleSection(term.id)}
                                 >
-                                    <span style={{ marginRight: 6, fontSize: 12, opacity: 0.6 }}>
+                                    <span style={{ marginRight: 6, fontSize: fs(12), opacity: 0.6 }}>
                                         {isCollapsed ? '▸' : '▾'}
                                     </span>
                                     <span className={styles.termLabel}>{term.name} Offerings</span>
@@ -456,7 +457,7 @@ export default function UnitOfferingsModal({
                                     style={{ cursor: 'pointer', userSelect: 'none' }}
                                     onClick={() => toggleSection(0)}
                                 >
-                                    <span style={{ marginRight: 6, fontSize: 12, opacity: 0.6 }}>
+                                    <span style={{ marginRight: 6, fontSize: fs(12), opacity: 0.6 }}>
                                         {isUnclassifiedCollapsed ? '▸' : '▾'}
                                     </span>
                                     <span className={styles.termLabel}>Unclassified Units (No Semesters Assigned)</span>

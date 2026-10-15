@@ -1,0 +1,152 @@
+/*
+ * Meadow design tokens.
+ *
+ * Every page's CSS reads these as `var(--token, <classic value>)`. The classic
+ * design never defines them, so it keeps its exact original values; this file
+ * defines them only when <html data-design="meadow">. Colours that the theme
+ * provider sets inline on <html> (--main-bg, --accent-*, …) come from the
+ * Meadow palettes in theme.ts instead.
+ */
+
+html[data-design='meadow'] {
+  /* Type */
+  --font-sans: 'Figtree', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'Figtree', 'Segoe UI', system-ui, sans-serif;
+  --font-display: 'Bricolage Grotesque', 'Figtree', 'Segoe UI', sans-serif;
+
+  --text-micro: 12px;
+  --text-tiny: 13px;
+  --text-caption: 13px;
+  --text-small: 14px;
+  --text-body-sm: 15px;
+  --text-body: 16px;
+  --text-body-lg: 17px;
+  --text-title: 19px;
+  --text-heading: 23px;
+  --text-display-sm: 26px;
+  --text-display: 32px;
+  --text-hero: 40px;
+
+  /* Sentence case labels, no spaced-out capitals */
+  --label-case: none;
+  --label-tracking: normal;
+
+  /* Shape */
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-card: 18px;
+  --radius-control: 12px;
+  --radius-badge: 999px;
+  --shadow-card: 0 1px 2px rgba(30, 42, 36, 0.04), 0 8px 24px rgba(30, 42, 36, 0.05);
+
+  /* Layout */
+  --panel-pad-y: 32px;
+  --panel-pad-x: 40px;
+  --panel-max: 1240px;
+  --card-pad: 22px 24px;
+
+  --section-title-size: 22px;
+  --section-title-weight: 700;
+  --section-title-color: var(--text-primary);
+  --section-title-space: 16px;
+  --section-title-rule: none;
+  --card-title-size: 17px;
+  --card-title-color: var(--text-primary);
+
+  /* Controls: at least 44px tall */
+  --control-height: 44px;
+  --input-height: 44px;
+  --btn-pad: 10px 18px;
+  --btn-weight: 600;
+  --input-pad: 10px 14px;
+  --on-accent: #ffffff;
+  --interactive: var(--active-highlight);
+  --btn-primary-hover: #1f5139;
+  --input-bg: var(--card-bg);
+
+  /* Tables */
+  --cell-pad: 12px 16px;
+  --col-scale: 1.22;
+  --col-meadow: 1;
+  --table-head-bg: var(--surface-bg);
+  --table-head-color: var(--text-muted);
+  --table-head-weight: 600;
+
+  /* Badges and unit codes */
+  --badge-pad: 3px 10px;
+  --code-bg: var(--surface-bg);
+  --code-color: var(--text-primary);
+  --code-emphasis: #1f5139;
+
+  /* Accent tints, re-hued to the Meadow palette (r, g, b) */
+  --tint-red: 180, 35, 24;
+  --tint-blue: 36, 89, 168;
+  --tint-green: 45, 106, 79;
+  --tint-yellow: 138, 97, 0;
+  --tint-orange: 154, 74, 12;
+  --tint-purple: 91, 75, 138;
+  --tint-highlight: 45, 106, 79;
+  --overlay-rgb: 30, 42, 36;
+
+  /* Pathway semester cards, notices and banners */
+  --sem-card-gap: 16px;
+  --sem-card-border: var(--panel-border);
+  --sem-card-bg: var(--card-bg);
+  --sem-head-pad: 14px 16px;
+  --sem-head-bg: var(--card-bg);
+  --sem-head-color: var(--text-secondary);
+  --sem-head-weight: 700;
+  --notice-border: rgba(var(--tint-orange), 0.4);
+  --banner-surface: var(--card-bg);
+
+  --guide-icon: var(--active-highlight);
+  --guide-ai: var(--accent-purple);
+  --guide-ok: var(--accent-green);
+
+  --tab-divider: transparent;
+  --scrollbar-thumb-hover: #a9b8a6;
+}
+
+html[data-design='meadow'][data-theme='dark'] {
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --on-accent: #0e2219;
+  --btn-primary-hover: #a3e0c0;
+  --code-emphasis: #a8ddbf;
+
+  --tint-red: 242, 139, 130;
+  --tint-blue: 141, 180, 240;
+  --tint-green: 127, 209, 168;
+  --tint-yellow: 232, 198, 106;
+  --tint-orange: 242, 168, 119;
+  --tint-purple: 185, 168, 232;
+  --tint-highlight: 127, 209, 168;
+  --overlay-rgb: 255, 255, 255;
+
+  --scrollbar-thumb-hover: #4c5f53;
+}
+
+html[data-design='meadow'] body {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Form controls use the Meadow font unless a component picks its own. */
+:where(html[data-design='meadow']) :is(button, input, select, textarea) {
+  font-family: inherit;
+}
+
+html[data-design='meadow'] h1,
+html[data-design='meadow'] h2,
+html[data-design='meadow'] h3 {
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
+}
+
+html[data-design='meadow'] :focus-visible {
+  outline: 2px solid var(--active-highlight);
+  outline-offset: 2px;
+}
+
+html[data-design='meadow'] ::selection {
+  background: rgba(var(--tint-highlight), 0.22);
+}

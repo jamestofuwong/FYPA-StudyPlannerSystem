@@ -2,7 +2,7 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  padding: 16px 20px;
+  padding: var(--panel-pad-y, 16px) max(var(--panel-pad-x, 20px), calc((100% - var(--panel-max, 100%)) / 2));
   background: var(--main-bg);
   height: 100%;
   overflow: hidden;
@@ -25,7 +25,7 @@
   flex-direction: column;
   background: var(--card-bg);
   border: 1px solid var(--panel-border);
-  border-radius: 4px;
+  border-radius: var(--radius-md, 4px);
   overflow: hidden;
 }
 
@@ -39,21 +39,21 @@
 }
 
 .historyTitle {
-  font-size: 11px;
+  font-size: var(--text-small, 11px);
   font-weight: 600;
-  letter-spacing: 1px;
-  text-transform: uppercase;
+  letter-spacing: var(--label-tracking, 1px);
+  text-transform: var(--label-case, uppercase);
   color: var(--text-muted);
 }
 
 .newChatBtn {
-  background: var(--accent-blue, #3b82f6);
+  background: var(--interactive, var(--accent-blue, #3b82f6));
   color: #fff;
   border: none;
-  border-radius: 3px;
+  border-radius: var(--radius-sm, 3px);
   width: 22px;
   height: 22px;
-  font-size: 16px;
+  font-size: var(--text-title, 16px);
   line-height: 1;
   cursor: pointer;
   display: flex;
@@ -80,7 +80,7 @@
   align-items: center;
   gap: 4px;
   padding: 6px 8px;
-  border-radius: 3px;
+  border-radius: var(--radius-sm, 3px);
   cursor: pointer;
   min-width: 0;
 }
@@ -90,17 +90,17 @@
 }
 
 .historyItemActive {
-  background: color-mix(in srgb, var(--accent-blue, #3b82f6) 15%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent-blue, #3b82f6) 30%, transparent);
+  background: color-mix(in srgb, var(--interactive, var(--accent-blue, #3b82f6)) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--interactive, var(--accent-blue, #3b82f6)) 30%, transparent);
 }
 
 .historyItemActive:hover {
-  background: color-mix(in srgb, var(--accent-blue, #3b82f6) 20%, transparent);
+  background: color-mix(in srgb, var(--interactive, var(--accent-blue, #3b82f6)) 20%, transparent);
 }
 
 .historyItemTitle {
   flex: 1;
-  font-size: 12px;
+  font-size: var(--text-body-sm, 12px);
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
@@ -112,7 +112,7 @@
   background: none;
   border: none;
   color: var(--text-muted);
-  font-size: 16px;
+  font-size: var(--text-title, 16px);
   line-height: 1;
   cursor: pointer;
   padding: 0 2px;
@@ -130,22 +130,24 @@
 }
 
 .sectionTitle {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 1.5px;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  margin-bottom: 12px;
+  font-size: var(--section-title-size, 11px);
+  font-weight: var(--section-title-weight, 600);
+  letter-spacing: var(--label-tracking, 1.5px);
+  text-transform: var(--label-case, uppercase);
+  color: var(--section-title-color, var(--text-muted));
+  margin-bottom: var(--section-title-space, 12px);
   display: flex;
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
+  font-family: var(--font-display, inherit);
 }
 .sectionTitle::after {
   content: '';
   flex: 1;
   height: 1px;
   background: var(--panel-border);
+  display: var(--section-title-rule, block);
 }
 
 /* Chat layout */
@@ -155,7 +157,7 @@
   flex-direction: column;
   background: var(--card-bg);
   border: 1px solid var(--panel-border);
-  border-radius: 4px;
+  border-radius: var(--radius-md, 4px);
   overflow: hidden;
   min-height: 0;
   min-width: 0;
@@ -190,13 +192,13 @@
 
 .messageBubble {
   padding: 10px 14px;
-  border-radius: 4px;
-  font-size: 13px;
+  border-radius: var(--radius-md, 4px);
+  font-size: var(--text-body, 13px);
   line-height: 1.5;
 }
 
 .messageUser .messageBubble {
-  background: var(--accent-blue, #3b82f6);
+  background: var(--interactive, var(--accent-blue, #3b82f6));
   color: #fff;
 }
 
@@ -215,24 +217,52 @@
 }
 
 .messageRole {
-  font-size: 10px;
+  font-size: var(--text-caption, 10px);
   color: var(--text-muted);
-  letter-spacing: 0.5px;
+  letter-spacing: var(--label-tracking, 0.5px);
   display: flex;
   align-items: center;
   gap: 6px;
 }
 
 .workflowTag {
-  font-size: 9px;
+  font-size: var(--text-tiny, 9px);
   font-family: monospace;
   color: var(--text-muted);
   background: var(--panel-border);
   border: 1px solid var(--panel-border);
-  border-radius: 3px;
+  border-radius: var(--radius-sm, 3px);
   padding: 1px 5px;
-  letter-spacing: 0.3px;
+  letter-spacing: var(--label-tracking, 0.3px);
   opacity: 0.7;
+}
+
+/* Buttons under an answer that open the page showing its result */
+.messageActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.linkBtn {
+  background: transparent;
+  color: var(--interactive, var(--accent-blue, #3b82f6));
+  border: 1px solid var(--interactive, var(--accent-blue, #3b82f6));
+  border-radius: var(--radius-md, 4px);
+  padding: 4px 10px;
+  font-size: var(--text-caption, 11px);
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.linkBtn:hover {
+  background: var(--active-bg);
+}
+
+.linkBtn:focus-visible {
+  outline: 2px solid var(--interactive, var(--accent-blue, #3b82f6));
+  outline-offset: 2px;
 }
 
 /* Status line (workflow progress) */
@@ -247,16 +277,16 @@
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--accent-blue, #3b82f6);
+  background: var(--interactive, var(--accent-blue, #3b82f6));
   flex-shrink: 0;
   animation: pulse 1.4s ease-in-out infinite;
 }
 
 .statusText {
-  font-size: 12px;
+  font-size: var(--text-body-sm, 12px);
   color: var(--text-muted);
   font-style: italic;
-  letter-spacing: 0.2px;
+  letter-spacing: var(--label-tracking, 0.2px);
 }
 
 @keyframes pulse {
@@ -302,9 +332,9 @@
   flex: 1;
   background: var(--main-bg);
   border: 1px solid var(--panel-border);
-  border-radius: 4px;
+  border-radius: var(--radius-md, 4px);
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--text-body, 13px);
   font-family: inherit;
   padding: 8px 12px;
   resize: none;
@@ -313,7 +343,7 @@
 
 .input:focus {
   outline: none;
-  border-color: var(--accent-blue, #3b82f6);
+  border-color: var(--interactive, var(--accent-blue, #3b82f6));
 }
 
 .input:disabled {
@@ -321,12 +351,12 @@
 }
 
 .sendBtn {
-  background: var(--accent-blue, #3b82f6);
+  background: var(--interactive, var(--accent-blue, #3b82f6));
   color: #fff;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-md, 4px);
   padding: 0 18px;
-  font-size: 13px;
+  font-size: var(--text-body, 13px);
   font-weight: 500;
   cursor: pointer;
   flex-shrink: 0;
@@ -355,41 +385,41 @@
   padding: 48px 32px;
   background: var(--card-bg);
   border: 1px solid var(--panel-border);
-  border-radius: 4px;
+  border-radius: var(--radius-md, 4px);
 }
 
 .setupIcon {
-  font-size: 36px;
+  font-size: var(--text-hero, 36px);
   line-height: 1;
 }
 
 .setupTitle {
-  font-size: 15px;
+  font-size: var(--text-title, 15px);
   font-weight: 600;
   color: var(--text-primary);
 }
 
 .setupBody {
-  font-size: 13px;
+  font-size: var(--text-body, 13px);
   color: var(--text-muted);
   max-width: 380px;
   line-height: 1.6;
 }
 
 .setupError {
-  font-size: 12px;
+  font-size: var(--text-body-sm, 12px);
   color: var(--accent-red, #ef4444);
   max-width: 380px;
 }
 
 .setupBtn {
   margin-top: 4px;
-  background: var(--accent-blue, #3b82f6);
+  background: var(--interactive, var(--accent-blue, #3b82f6));
   color: #fff;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-md, 4px);
   padding: 8px 24px;
-  font-size: 13px;
+  font-size: var(--text-body, 13px);
   font-weight: 500;
   cursor: pointer;
 }
@@ -409,19 +439,287 @@
   max-width: 340px;
   height: 6px;
   background: var(--panel-border);
-  border-radius: 3px;
+  border-radius: var(--radius-sm, 3px);
   overflow: hidden;
 }
 
 .progressBar {
   height: 100%;
-  background: var(--accent-blue, #3b82f6);
-  border-radius: 3px;
+  background: var(--interactive, var(--accent-blue, #3b82f6));
+  border-radius: var(--radius-sm, 3px);
   transition: width 0.4s ease;
 }
 
 .progressLabel {
-  font-size: 12px;
+  font-size: var(--text-body-sm, 12px);
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
 }
+
+/* Wraps a bubble and its role label; only the Meadow layout gives it a box. */
+.msgBody { display: contents; }
+
+/* ── Meadow layout ───────────────────────────────────────────────────────── */
+:global(html[data-design='meadow']) .panel { padding: 24px 32px; }
+
+.mSetup {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow-y: auto;
+}
+.mSetup > * { width: 100%; max-width: 560px; }
+:global(html[data-design='meadow']) .mSetup .setupBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 22px;
+  border-radius: var(--radius-control);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--on-accent);
+}
+:global(html[data-design='meadow']) .mSetup .setupBtn svg { width: 18px; height: 18px; }
+:global(html[data-design='meadow']) .progressTrack { height: 8px; border-radius: 999px; background: var(--surface-bg); }
+:global(html[data-design='meadow']) .progressBar { border-radius: 999px; }
+
+:global(html[data-design='meadow']) .chatLayout { gap: 20px; }
+
+/* History */
+:global(html[data-design='meadow']) .historySidebar {
+  width: 272px;
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+:global(html[data-design='meadow']) .historyHeader {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 16px;
+  padding: 16px 16px 8px;
+  border-bottom: none;
+}
+.mNewChat {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 44px;
+  border: none;
+  border-radius: var(--radius-control);
+  background: var(--active-highlight);
+  color: var(--on-accent);
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.mNewChat:hover:not(:disabled) { filter: brightness(1.08); }
+.mNewChat:disabled { opacity: 0.55; cursor: not-allowed; }
+.mNewChat svg { width: 18px; height: 18px; }
+:global(html[data-design='meadow']) .historyTitle { font-size: 13px; padding: 0 4px; }
+:global(html[data-design='meadow']) .historyList { padding: 4px 10px 12px; gap: 4px; }
+:global(html[data-design='meadow']) .historyItem {
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
+}
+:global(html[data-design='meadow']) .historyItem:hover { background: var(--card-hover); }
+:global(html[data-design='meadow']) .historyItemActive,
+:global(html[data-design='meadow']) .historyItemActive:hover {
+  background: var(--active-bg);
+  border-color: transparent;
+}
+.mChatIcon { width: 18px; height: 18px; flex-shrink: 0; color: var(--text-muted); }
+:global(html[data-design='meadow']) .historyItemActive .mChatIcon { color: var(--active-highlight); }
+.mChatText { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+:global(html[data-design='meadow']) .historyItemTitle { font-size: 14px; font-weight: 600; }
+.mChatDate { font-size: 12px; color: var(--text-muted); }
+:global(html[data-design='meadow']) .historyItemDelete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: var(--radius-sm);
+}
+:global(html[data-design='meadow']) .historyItemDelete:hover { background: rgba(var(--tint-red), 0.1); }
+:global(html[data-design='meadow']) .historyItemDelete:focus-visible,
+:global(html[data-design='meadow']) .historyItemActive .historyItemDelete { opacity: 1; }
+:global(html[data-design='meadow']) .historyItemDelete svg { width: 16px; height: 16px; }
+
+/* Conversation */
+:global(html[data-design='meadow']) .chatContainer {
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+.mChatHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--panel-border);
+  flex-shrink: 0;
+}
+.mChatHeadText { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.mChatHeadTitle {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mChatHeadSub { font-size: 13px; color: var(--text-muted); }
+.mModelChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--surface-bg);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.mModelDot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-green); }
+
+:global(html[data-design='meadow']) .messageList {
+  gap: 20px;
+  padding: 28px max(28px, calc((100% - 820px) / 2));
+}
+:global(html[data-design='meadow']) .message { max-width: 88%; }
+:global(html[data-design='meadow']) .messageAssistant { flex-direction: row; align-items: flex-start; gap: 12px; }
+:global(html[data-design='meadow']) .msgBody { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+:global(html[data-design='meadow']) .messageUser .msgBody { align-items: flex-end; }
+.mAvatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: 12px;
+  background: var(--active-bg);
+  color: var(--active-highlight);
+}
+.mAvatar svg { width: 18px; height: 18px; }
+:global(html[data-design='meadow']) .messageBubble {
+  padding: 12px 16px;
+  border-radius: 18px;
+  font-size: 15px;
+  line-height: 1.6;
+}
+:global(html[data-design='meadow']) .messageUser .messageBubble {
+  background: var(--active-highlight);
+  color: var(--on-accent);
+  border-bottom-right-radius: 6px;
+}
+:global(html[data-design='meadow']) .messageAssistant .messageBubble {
+  background: var(--surface-bg);
+  border: none;
+  border-top-left-radius: 6px;
+}
+:global(html[data-design='meadow']) .messageRole { font-size: 12px; padding: 0 4px; }
+:global(html[data-design='meadow']) .workflowTag {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  border-radius: 999px;
+  padding: 1px 8px;
+  opacity: 1;
+}
+
+/* Buttons under an answer */
+:global(html[data-design='meadow']) .messageActions { gap: 8px; padding: 0 4px; }
+:global(html[data-design='meadow']) .linkBtn {
+  border-radius: 999px;
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  background: var(--card-bg);
+}
+:global(html[data-design='meadow']) .linkBtn:hover { background: var(--active-bg); }
+
+/* Starters */
+.mStarters { display: flex; flex-direction: column; gap: 10px; padding-left: 46px; }
+.mStartersLabel { font-size: 13px; font-weight: 600; color: var(--text-muted); }
+.mStarterGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+.mStarter {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas: 'icon title' 'icon hint';
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 2px;
+  padding: 14px;
+  text-align: left;
+  font-family: inherit;
+  background: var(--card-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.mStarter:hover { border-color: var(--active-highlight); background: var(--card-hover); }
+.mStarterIcon {
+  grid-area: icon;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--surface-bg);
+  color: var(--text-secondary);
+}
+.mStarterIcon svg { width: 18px; height: 18px; }
+.mStarterTitle { grid-area: title; font-size: 14px; font-weight: 600; color: var(--text-primary); }
+.mStarterHint { grid-area: hint; font-size: 12px; color: var(--text-muted); }
+
+/* Composer */
+.mComposerWrap {
+  flex-shrink: 0;
+  padding: 0 max(28px, calc((100% - 820px) / 2)) 20px;
+}
+.mComposer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 12px 10px 16px;
+  background: var(--card-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  transition: border-color 0.15s;
+}
+.mComposer:focus-within { border-color: var(--active-highlight); }
+:global(html[data-design='meadow']) .mComposer .input {
+  background: transparent;
+  border: none;
+  padding: 4px 0;
+  font-size: 15px;
+  line-height: 1.5;
+}
+.mComposerBar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.mComposerHint { font-size: 12px; color: var(--text-muted); }
+:global(html[data-design='meadow']) .mComposer .sendBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 18px;
+  border-radius: var(--radius-control);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--on-accent);
+  align-self: auto;
+}
+:global(html[data-design='meadow']) .mComposer .sendBtn svg { width: 16px; height: 16px; }
+/* Let the card shadows show; the history list and messages scroll inside. */
+:global(html[data-design='meadow']) .chatLayout { overflow: visible; }

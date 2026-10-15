@@ -40,6 +40,27 @@ export type RestoredSession = {
   startSemester: 1 | 2;
 };
 
+/**
+ * Left by a copilot button that opened a student, for the dashboard to pick up
+ * once: its own search fields (which are local to the page) and the part of the
+ * page the answer was about.
+ */
+export type HandoffArrival = {
+  studentId: string;
+  enrollMode: 'latest' | 'earliest' | 'mpu';
+  /** Dashboard tab or anchor to show, or null to stay on the default view. */
+  section: string | null;
+  /**
+   * True when no prepared data came with the link (an expired handoff, or a
+   * student picked from a search list): the dashboard then runs the search itself.
+   */
+  load?: boolean;
+  /** The dashboard's own search fields, filled in when data did come with the link. */
+  dbId?: number;
+  studentName?: string | null;
+  enrollments?: { EnrollId: number; EnrollmentDesc: string }[];
+};
+
 export type StudentSessionState = {
   scrapedStudent: LoadedStudent | null;
   setScrapedStudent: Dispatch<SetStateAction<LoadedStudent | null>>;
@@ -116,6 +137,9 @@ export type StudentSessionState = {
 
   restoredSession: RestoredSession | null;
   setRestoredSession: Dispatch<SetStateAction<RestoredSession | null>>;
+
+  handoffArrival: HandoffArrival | null;
+  setHandoffArrival: Dispatch<SetStateAction<HandoffArrival | null>>;
 };
 
 const StudentSessionContext = createContext<StudentSessionState | null>(null);
@@ -156,6 +180,7 @@ export function StudentSessionProvider({ children }: { children: ReactNode }) {
   const [customMpuList, setCustomMpuList] = useState<{ code: string; name: string }[] | null>(null);
   const [allDatabaseMpus, setAllDatabaseMpus] = useState<{ code: string; name: string }[]>([]);
   const [restoredSession, setRestoredSession] = useState<RestoredSession | null>(null);
+  const [handoffArrival, setHandoffArrival] = useState<HandoffArrival | null>(null);
 
 
   // Switching planner discards the custom plan built for the previous one. This runs
@@ -214,6 +239,7 @@ export function StudentSessionProvider({ children }: { children: ReactNode }) {
         customMpuList, setCustomMpuList,
         allDatabaseMpus, setAllDatabaseMpus,
         restoredSession, setRestoredSession,
+        handoffArrival, setHandoffArrival,
       }}
     >
       {children}

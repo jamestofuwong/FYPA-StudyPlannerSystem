@@ -16,10 +16,10 @@
 
 .tab {
   padding: 8px 16px;
-  font-size: 12px;
+  font-size: var(--text-body-sm, 12px);
   color: var(--text-muted);
   cursor: pointer;
-  border-right: 1px solid #1a1a1a;
+  border-right: 1px solid var(--tab-divider, #1a1a1a);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -35,7 +35,7 @@
 }
 
 .tab:hover {
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(var(--overlay-rgb, 255, 255, 255), 0.03);
   color: var(--text-primary);
 }
 
@@ -46,19 +46,19 @@
 }
 
 .tabIcon {
-  font-size: 13px;
+  font-size: var(--text-body, 13px);
 }
 
 .tabLabel {
-  font-size: 12px;
+  font-size: var(--text-body-sm, 12px);
 }
 
 .tabClose {
   opacity: 0.5;
-  font-size: 14px;
+  font-size: var(--text-body-lg, 14px);
   line-height: 1;
   padding: 0 2px;
-  border-radius: 3px;
+  border-radius: var(--radius-sm, 3px);
   transition: opacity 0.15s, background 0.15s;
 }
 
@@ -67,6 +67,59 @@
 }
 
 .tabClose:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(var(--overlay-rgb, 255, 255, 255), 0.1);
 }
 
+
+/* ===== Meadow design: open pages as soft pills ===== */
+.tabIconSvg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+:global(html[data-design='meadow']) .tabBar {
+  gap: 6px;
+  padding: 10px 24px 0;
+  min-height: 54px;
+  border-bottom: none;
+  align-items: center;
+}
+
+:global(html[data-design='meadow']) .tab {
+  padding: 0 10px 0 14px;
+  min-height: 38px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-muted);
+  gap: 8px;
+}
+
+:global(html[data-design='meadow']) .tab:hover {
+  background: rgba(var(--overlay-rgb), 0.05);
+  color: var(--text-primary);
+}
+
+:global(html[data-design='meadow']) .tab.active {
+  background: var(--card-bg);
+  border-color: var(--panel-border);
+  color: var(--text-primary);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(var(--overlay-rgb), 0.06);
+}
+
+:global(html[data-design='meadow']) .tabLabel {
+  font-size: 14px;
+}
+
+:global(html[data-design='meadow']) .tabClose {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  font-size: 16px;
+}

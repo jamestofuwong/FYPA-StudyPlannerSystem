@@ -21,11 +21,12 @@
 
 .searchInput {
   flex: 1;
-  padding: 8px;
+  padding: var(--input-pad, 8px);
   background-color: var(--sidebar-bg);
   border: 1px solid var(--panel-border);
   color: var(--text-primary);
-  border-radius: 4px;
+  border-radius: var(--radius-control, 4px);
+  min-height: var(--input-height, auto);
 }
 
 .searchInput::placeholder {
@@ -33,13 +34,15 @@
 }
 
 .btnPrimary {
-  padding: 8px 12px;
+  padding: var(--btn-pad, 8px 12px);
   background-color: var(--active-highlight);
-  color: #fff;
+  color: var(--on-accent, #fff);
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-control, 4px);
   cursor: pointer;
   transition: background-color 0.2s;
+  min-height: var(--control-height, auto);
+  font-weight: var(--btn-weight, normal);
 }
 
 .btnPrimary:hover {
@@ -54,13 +57,15 @@
 }
 
 .btnDanger {
-  padding: 8px 12px;
+  padding: var(--btn-pad, 8px 12px);
   background: var(--accent-red);
-  color: #fff;
+  color: var(--on-accent, #fff);
   border: 1px solid var(--accent-red);
-  border-radius: 4px;
+  border-radius: var(--radius-control, 4px);
   cursor: pointer;
   transition: opacity 0.2s;
+  min-height: var(--control-height, auto);
+  font-weight: var(--btn-weight, normal);
 }
 
 .btnDanger:hover:not(:disabled) {
@@ -68,16 +73,18 @@
 }
 
 .btnSecondary {
-  padding: 8px 12px;
+  padding: var(--btn-pad, 8px 12px);
   background: transparent;
   color: var(--text-secondary);
   border: 1px solid var(--panel-border);
-  border-radius: 4px;
+  border-radius: var(--radius-control, 4px);
   cursor: pointer;
+  min-height: var(--control-height, auto);
+  font-weight: var(--btn-weight, normal);
 }
 
 .btnSecondary:hover:not(:disabled) {
-  border-color: var(--accent-blue);
+  border-color: var(--interactive, var(--accent-blue));
   color: var(--text-primary);
 }
 
@@ -110,7 +117,7 @@
 }
 
 .itemMeta {
-  font-size: 11px;
+  font-size: var(--text-small, 11px);
   color: var(--text-secondary);
   font-family: monospace;
 }
@@ -138,7 +145,7 @@
   padding: 10px 14px;
   cursor: pointer;
   font-weight: 600;
-  font-size: 13px;
+  font-size: var(--text-body, 13px);
   border-bottom: 1px solid var(--panel-border);
   background: var(--surface-bg);
 }
@@ -148,7 +155,7 @@
 }
 
 .courseArrow {
-  font-size: 10px;
+  font-size: var(--text-caption, 10px);
   width: 14px;
 }
 
@@ -157,7 +164,7 @@
 }
 
 .courseCount {
-  font-size: 11px;
+  font-size: var(--text-small, 11px);
   color: var(--text-muted);
   font-family: var(--font-mono);
 }
@@ -168,10 +175,10 @@
   gap: 8px;
   padding: 8px 14px 8px 28px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--text-body-sm, 12px);
   font-weight: 500;
   border-bottom: 1px solid var(--sidebar-border);
-  background: rgba(255,255,255,0.02);
+  background: rgba(var(--overlay-rgb, 255, 255, 255), 0.02);
 }
 
 .yearGroup:hover {
@@ -179,7 +186,7 @@
 }
 
 .yearArrow {
-  font-size: 9px;
+  font-size: var(--text-tiny, 9px);
   width: 12px;
 }
 
@@ -189,7 +196,7 @@
 }
 
 .yearCount {
-  font-size: 10px;
+  font-size: var(--text-caption, 10px);
   color: var(--text-muted);
   font-family: var(--font-mono);
 }
@@ -225,7 +232,7 @@
   max-width: calc(100vw - 32px);
   padding: 20px;
   border: 1px solid var(--panel-border);
-  border-radius: 6px;
+  border-radius: var(--radius-md, 6px);
   background: var(--surface-bg);
   color: var(--text-primary);
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
@@ -238,16 +245,16 @@
   border-bottom: 1px solid var(--panel-border);
   color: var(--accent-blue);
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: var(--text-body, 13px);
   font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  letter-spacing: var(--label-tracking, 0.04em);
+  text-transform: var(--label-case, uppercase);
 }
 
 .savedDialog p {
   margin: 0 0 18px;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--text-body-sm, 12px);
   line-height: 1.5;
 }
 
@@ -255,4 +262,192 @@
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+/* ===== Meadow design ===== */
+:global(html[data-design='meadow']) .listPanel {
+  width: 340px;
+  background: var(--card-bg);
+  border-right: 1px solid var(--panel-border);
+}
+.mListHeader {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 24px 20px 16px;
+  border-bottom: 1px solid var(--panel-border);
+}
+.mListTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.mListTitle {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+.mListCount {
+  min-width: 28px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--surface-bg);
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+}
+.mSearchRow {
+  display: flex;
+  gap: 8px;
+}
+.mSearchRow .mSearch { flex: 1; min-width: 0; }
+.mImportLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 12px;
+  background: var(--active-highlight);
+  color: var(--on-accent, #fff);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.mImportLink:hover { background: var(--btn-primary-hover, var(--active-highlight)); }
+.mImportLink svg { width: 16px; height: 16px; }
+.mSearch {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  background: var(--main-bg);
+  color: var(--text-muted);
+}
+.mSearch:focus-within { border-color: var(--active-highlight); }
+.mSearch svg { width: 18px; height: 18px; flex-shrink: 0; }
+.mSearch input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 15px;
+}
+:global(html[data-design='meadow']) .listItems { padding: 8px 0 16px; }
+:global(html[data-design='meadow']) .courseGroup {
+  padding: 12px 20px;
+  background: transparent;
+  border-bottom: none;
+  font-size: 15px;
+}
+:global(html[data-design='meadow']) .yearGroup {
+  padding: 8px 20px 8px 36px;
+  background: transparent;
+  border-bottom: none;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+:global(html[data-design='meadow']) .listItem {
+  margin: 2px 12px 2px 28px;
+  padding: 12px 14px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+}
+:global(html[data-design='meadow']) .listItemActive {
+  background: var(--active-bg);
+  border: 1px solid var(--active-highlight);
+}
+:global(html[data-design='meadow']) .majorName { font-size: 15px; }
+:global(html[data-design='meadow']) .itemMeta {
+  font-family: var(--font-sans);
+  color: var(--text-muted);
+  font-size: 13px;
+}
+:global(html[data-design='meadow']) .detailPanel { padding: 28px 32px 36px; }
+:global(html[data-design='meadow']) .emptyState { font-size: 16px; }
+
+/* Hero and actions share the top row; everything else spans the width. */
+:global(html[data-design='meadow']) .detailBody {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 20px;
+  align-items: start;
+}
+:global(html[data-design='meadow']) .detailBody > * { grid-column: 1 / -1; }
+:global(html[data-design='meadow']) .detailBody > .mHero { grid-column: 1; grid-row: 1; }
+:global(html[data-design='meadow']) .detailBody > .editActions {
+  grid-column: 2;
+  grid-row: 1;
+  margin: 4px 0 0;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.mHero { margin-bottom: 24px; }
+.mHeroText { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.mHeroEyebrow { font-size: 14px; font-weight: 600; color: var(--text-secondary); }
+.mHeroTitle {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 26px;
+  line-height: 1.2;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+.mHeroMeta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  color: var(--text-muted);
+}
+.mEditingTag {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: rgba(var(--tint-orange), 0.12);
+  color: var(--accent-orange);
+  font-size: 13px;
+  font-weight: 700;
+}
+.mBtnIcon { width: 16px; height: 16px; vertical-align: -3px; margin-right: 8px; }
+.mReqGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr));
+  gap: 12px;
+  margin-bottom: 28px;
+}
+.mReqTile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px 18px;
+  background: var(--card-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 16px;
+  box-shadow: var(--shadow-card);
+}
+.mReqLabel { font-size: 14px; font-weight: 600; color: var(--text-muted); }
+.mReqValue {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+.mReqUnit { font-size: 16px; font-weight: 600; color: var(--text-muted); }
+.mReqSub { font-size: 14px; color: var(--text-muted); }
+:global(html[data-design='meadow']) .editActions .btnPrimary,
+:global(html[data-design='meadow']) .editActions .btnDanger,
+:global(html[data-design='meadow']) .editActions .btnSecondary {
+  min-height: 40px;
+  padding: 0 14px;
+  font-size: 14px;
 }

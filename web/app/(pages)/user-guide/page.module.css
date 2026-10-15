@@ -53,10 +53,11 @@
 
 .card {
     background-color: color-mix(in srgb, var(--panel-bg) 86%, transparent);
-    padding: 1.5rem;
-    border-radius: 1rem;
+    padding: var(--card-pad, 1.5rem);
+    border-radius: var(--radius-card, 1rem);
     border: 1px solid var(--panel-border);
     transition: border-color 0.2s ease;
+    box-shadow: var(--shadow-card, none);
 }
 
 
@@ -97,13 +98,14 @@
 
 
 .sectionTitle {
-    font-size: 1.5rem;
-    font-weight: 700;
-    color: var(--text-primary);
+    font-size: var(--section-title-size, 1.5rem);
+    font-weight: var(--section-title-weight, 700);
+    color: var(--section-title-color, var(--text-primary));
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    margin-bottom: 1.5rem;
+    margin-bottom: var(--section-title-space, 1.5rem);
+    font-family: var(--font-display, inherit);
 }
 
 
@@ -231,3 +233,139 @@
     align-items: center;
     gap: 0.5rem;
 }
+
+/* ── Meadow layout ───────────────────────────────────────────────────────── */
+.mPanel {
+  padding: var(--panel-pad-y) max(var(--panel-pad-x), calc((100% - var(--panel-max)) / 2)) 48px;
+  color: var(--text-primary);
+}
+.mLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 200px;
+  gap: 40px;
+  align-items: start;
+}
+@media (max-width: 1100px) {
+  .mLayout { grid-template-columns: 1fr; }
+  .mToc { display: none !important; }
+}
+.mMain { min-width: 0; }
+.mSection { margin-bottom: 40px; scroll-margin-top: 16px; }
+.mSectionTitle {
+  margin: 0 0 16px;
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.mJobGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.mJob {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 22px;
+  background: var(--card-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+.mJobHead { display: flex; align-items: center; gap: 12px; }
+.mJobIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 12px;
+  background: var(--active-bg);
+  color: var(--active-highlight);
+}
+.mJobIcon svg { width: 20px; height: 20px; }
+.mJobTitle { margin: 0; font-family: var(--font-display); font-size: 18px; font-weight: 700; }
+.mSteps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+}
+.mSteps li {
+  counter-increment: step;
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  gap: 10px;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+.mSteps li::before {
+  content: counter(step);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin-top: 1px;
+  border-radius: 50%;
+  background: var(--surface-bg);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.mNote { margin: 0; font-size: 14px; line-height: 1.5; color: var(--text-muted); }
+.mJobLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--active-highlight);
+  text-decoration: none;
+}
+.mJobLink:hover { text-decoration: underline; }
+.mJobLink svg { width: 16px; height: 16px; }
+
+.mLayoutList {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 0 32px;
+  padding: 8px 24px;
+  background: var(--card-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+}
+.mLayoutItem { display: flex; gap: 14px; padding: 16px 0; }
+.mItemTitle { margin: 0 0 4px; font-size: 16px; font-weight: 700; }
+.mItemText { margin: 0; font-size: 15px; line-height: 1.55; color: var(--text-secondary); }
+
+.mTips { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; }
+.mTips li {
+  display: flex;
+  gap: 12px;
+  padding: 14px 18px;
+  border-radius: var(--radius-lg);
+  background: var(--surface-bg);
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+.mTips svg { width: 18px; height: 18px; flex-shrink: 0; margin-top: 3px; color: var(--accent-yellow); }
+
+.mToc {
+  position: sticky;
+  top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-left: 16px;
+  border-left: 2px solid var(--panel-border);
+}
+.mTocLabel { margin-bottom: 8px; font-size: 13px; font-weight: 700; color: var(--text-muted); }
+.mToc a { padding: 6px 0; font-size: 15px; color: var(--text-secondary); text-decoration: none; }
+.mToc a:hover { color: var(--active-highlight); }

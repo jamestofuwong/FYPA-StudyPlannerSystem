@@ -26,6 +26,9 @@ import {
 import { carryForwardWarnings, validatePlan } from '../../../../core/shared/scheduling/planValidator';
 import type { CatalogueUnit } from '../../api/custom-planner/catalogue/route';
 import ElectivePicker, { type PickerSlot, type PickerSource } from './ElectivePicker';
+import { PageHeader, StateCard } from '../../../components/common/MeadowBits';
+import { useDesign } from '../../../styles/themeProvider';
+import { ArrowLeft, Route } from 'lucide-react';
 import { monthsOf, offeringHint } from './terms';
 import {
   addSemester,
@@ -48,6 +51,7 @@ import {
 } from '../../../../core/shared/planFile';
 import { overlayRestoredArrangement } from '../../../../core/shared/planFile/restore';
 import { encodePayloadForPdf, decodePayloadFromPdf, PDF_PAYLOAD_PREFIX, PDF_PAYLOAD_LIMITS } from '../../../../core/shared/planFile/pdfPayload';
+import { colWidth, fs, radius, tracking } from '../../../styles/tokens';
 
 /** A plan file's payload is a few KB; this is a generous cap against a hostile oversized upload. */
 const MAX_PLAN_FILE_BYTES = 5 * 1024 * 1024;
@@ -148,12 +152,27 @@ function EmptyState({
   onAction?: () => void;
   children?: React.ReactNode;
 }) {
+  const isMeadow = useDesign() === 'meadow';
+  if (isMeadow) {
+    return (
+      <div className={styles.panel}>
+        <PageHeader title="Student Pathway" description="Plan a student's remaining semesters, check the plan for problems and export it." />
+        <StateCard icon={<Route />} title={title}>
+          <span>{message}</span>
+          {actionLabel && onAction && (
+            <button type="button" className={styles.btnPrimary} onClick={onAction}>{actionLabel}</button>
+          )}
+          {children}
+        </StateCard>
+      </div>
+    );
+  }
   return (
     <div className={styles.panel}>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '60px 20px', textAlign: 'center' }}>
         <div style={{ fontSize: 48, opacity: 0.25 }}>🧭</div>
-        <div style={{ fontSize: 14, fontWeight: 600 }}>{title}</div>
-        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>{message}</div>
+        <div style={{ fontSize: fs(14), fontWeight: 600 }}>{title}</div>
+        <div style={{ fontSize: fs(12), color: 'var(--text-muted)', marginTop: 6 }}>{message}</div>
         {actionLabel && onAction && (
           <button
             type="button"
@@ -595,6 +614,8 @@ export function buildExcelWorkbook(
 export default function PathwayPage() {
   const { showToast } = useToast();
   const router = useRouter();
+  // Meadow lays the plan out as a workspace: actions and checks beside or above the semesters.
+  const isMeadow = useDesign() === 'meadow';
   const {
     scrapedStudent: realScrapedStudent,
     studentLoaded: realStudentLoaded,
@@ -1089,10 +1110,10 @@ export default function PathwayPage() {
         onAction={() => router.push(panelToPath('dashboard'))}
       >
         <div style={{ marginTop: 20, paddingTop: 20, borderTop: '1px solid var(--border-color, rgba(255,255,255,0.1))', width: '100%', maxWidth: 360 }}>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>
+          <div style={{ fontSize: fs(11), color: 'var(--text-muted)', marginBottom: 8 }}>
             or restore a previously exported plan
           </div>
-          <label className={styles.btnSecondary} style={{ fontSize: 12, cursor: isRestoringPlan ? 'wait' : 'pointer', display: 'inline-block' }}>
+          <label className={styles.btnSecondary} style={{ fontSize: fs(12), cursor: isRestoringPlan ? 'wait' : 'pointer', display: 'inline-block' }}>
             {isRestoringPlan ? 'Restoring…' : 'Import plan (Excel or PDF)'}
             <input
               type="file"
@@ -1123,61 +1144,9 @@ export default function PathwayPage() {
     );
   }
 
-  return (
-    <div className={styles.panel}>
-      <div className={styles.planActions} style={{ marginTop: 0 }}>
-        <button
-          type="button"
-          className={styles.btnSecondary}
-          onClick={() => router.push(panelToPath('dashboard'))}
-        >
-          ← Back to Major Detection
-        </button>
-      </div>
-      <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-        <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>{scrapedStudent?.studentId}</span>
-        {' · '}
-        {selectedPlanner.major?.name ?? selectedPlanner.course?.name ?? 'Selected planner'}
-        . Change the student or planner on the Major Detection page.
-      </div>
-
-      {restoredSession && (
-        <div className={styles.mpuEmptyAlert} style={{ marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-          <span>
-            Restored from {restoredSession.source === 'pdf' ? 'a PDF' : 'an Excel'} file exported on {new Date(restoredSession.exportDate).toLocaleDateString()}.
-            Completed and in-progress units are as of that date.
-            This file has not been verified against the student's record; confirm it before relying on it.
-            {restoreImportReport && restoreImportReport.skipped.length > 0 && (
-              <> {restoreImportReport.skipped.length} item{restoreImportReport.skipped.length !== 1 ? 's' : ''} skipped, see below.</>
-            )}
-          </span>
-          <button
-            type="button"
-            className={styles.btnSecondary}
-            style={{ fontSize: 11, whiteSpace: 'nowrap' }}
-            onClick={() => {
-              setRestoredSession(null);
-              setRestoreImportReport(null);
-            }}
-          >
-            Close restored plan
-          </button>
-        </div>
-      )}
-
-      {restoreImportReport && (
-        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>
-          Restored {restoreImportReport.restoredUnitCount} unit{restoreImportReport.restoredUnitCount !== 1 ? 's' : ''} across {restoreImportReport.restoredSemesterCount} semester{restoreImportReport.restoredSemesterCount !== 1 ? 's' : ''}.
-          {restoreImportReport.skipped.length > 0 && (
-            <ul style={{ margin: '4px 0 0 18px', padding: 0 }}>
-              {restoreImportReport.skipped.map((s, i) => (
-                <li key={i}>{s.code ? `${s.code}: ` : ''}{s.reason}</li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
-
+  // Double-major and minor opportunities: above the plan in classic, below it in Meadow.
+  const opportunitySections = (
+    <>
       {/* Double Major Opportunities */}
       {(availableDoubleMajors.length > 0 || selectedDoubleMajorId !== null) && (
         <div className={styles.pathwaySection}>
@@ -1312,6 +1281,86 @@ export default function PathwayPage() {
         </div>
       )}
 
+    </>
+  );
+
+  return (
+    <div className={styles.panel}>
+      {isMeadow ? (
+        <PageHeader
+          title="Student Pathway"
+          description="Change the student or planner on the Major Detection page."
+          meta={(
+            <>
+              <span className={styles.mMetaChip}>{scrapedStudent?.studentId === 'imported' ? 'Imported transcript' : scrapedStudent?.studentId}</span>
+              <span className={styles.mMetaChip}>{selectedPlanner.major?.name ?? selectedPlanner.course?.name ?? 'Selected planner'}</span>
+            </>
+          )}
+          actions={(
+            <button type="button" className={styles.btnSecondary} onClick={() => router.push(panelToPath('dashboard'))}>
+              <ArrowLeft aria-hidden="true" className={styles.mBtnIcon} />Back to Major Detection
+            </button>
+          )}
+        />
+      ) : (
+        <>
+      <div className={styles.planActions} style={{ marginTop: 0 }}>
+        <button
+          type="button"
+          className={styles.btnSecondary}
+          onClick={() => router.push(panelToPath('dashboard'))}
+        >
+          ← Back to Major Detection
+        </button>
+      </div>
+      <div style={{ fontSize: fs(12), color: 'var(--text-muted)' }}>
+        <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>{scrapedStudent?.studentId}</span>
+        {' · '}
+        {selectedPlanner.major?.name ?? selectedPlanner.course?.name ?? 'Selected planner'}
+        . Change the student or planner on the Major Detection page.
+      </div>
+        </>
+      )}
+
+      {restoredSession && (
+        <div className={styles.mpuEmptyAlert} style={{ marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <span>
+            Restored from {restoredSession.source === 'pdf' ? 'a PDF' : 'an Excel'} file exported on {new Date(restoredSession.exportDate).toLocaleDateString()}.
+            Completed and in-progress units are as of that date.
+            This file has not been verified against the student's record; confirm it before relying on it.
+            {restoreImportReport && restoreImportReport.skipped.length > 0 && (
+              <> {restoreImportReport.skipped.length} item{restoreImportReport.skipped.length !== 1 ? 's' : ''} skipped, see below.</>
+            )}
+          </span>
+          <button
+            type="button"
+            className={styles.btnSecondary}
+            style={{ fontSize: fs(11), whiteSpace: 'nowrap' }}
+            onClick={() => {
+              setRestoredSession(null);
+              setRestoreImportReport(null);
+            }}
+          >
+            Close restored plan
+          </button>
+        </div>
+      )}
+
+      {restoreImportReport && (
+        <div style={{ fontSize: fs(11), color: 'var(--text-muted)', marginTop: 6 }}>
+          Restored {restoreImportReport.restoredUnitCount} unit{restoreImportReport.restoredUnitCount !== 1 ? 's' : ''} across {restoreImportReport.restoredSemesterCount} semester{restoreImportReport.restoredSemesterCount !== 1 ? 's' : ''}.
+          {restoreImportReport.skipped.length > 0 && (
+            <ul style={{ margin: '4px 0 0 18px', padding: 0 }}>
+              {restoreImportReport.skipped.map((s, i) => (
+                <li key={i}>{s.code ? `${s.code}: ` : ''}{s.reason}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {!isMeadow && opportunitySections}
+
       {/* Custom Study Pathway */}
       {(() => {
         const activePlanner = selectedPlannerIdx === -1 ? manualPlanner : dashboardData?.planners?.[selectedPlannerIdx];
@@ -1360,15 +1409,9 @@ export default function PathwayPage() {
         // summary box regardless of how little (or nothing) remains to place.
         const totalUnplanned = unplannedUnits.length + injectedMinorMissingCount;
 
-        return (
-          <div>
-            <div className={styles.sectionTitle} style={{ marginTop: 20 }}>
-              Extended Study Plan
-              {isPlanEdited && <span className={styles.editedTag}>edited</span>}
-            </div>
-
-            <div style={{ background: 'var(--card-bg)', border: '1px solid rgba(244,135,113,0.35)', borderRadius: 4, padding: '12px 14px', marginBottom: 12 }}>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>
+        const summaryBox = (
+            <div className={styles.planSummary} style={{ background: 'var(--card-bg)', border: '1px solid var(--notice-border, rgba(var(--tint-red, 244,135,113),0.35))', borderRadius: radius(4), padding: 'var(--card-pad, 12px 14px)', marginBottom: 12 }}>
+              <div style={{ fontSize: fs(12), color: 'var(--text-muted)', marginBottom: 10 }}>
                 <span style={{ fontWeight: 600, color: 'var(--accent-orange)' }}>{totalUnplanned}</span> unplanned unit{totalUnplanned !== 1 ? 's' : ''}
                 {inProgressUnits.length > 0 && (
                   <span style={{ color: 'var(--accent-green)' }}> · {inProgressUnits.length} in progress this semester</span>
@@ -1377,7 +1420,7 @@ export default function PathwayPage() {
               </div>
               <button
                 className={styles.btnPrimary}
-                style={{ fontSize: 12 }}
+                style={{ fontSize: fs(12) }}
                 onClick={() => {
                   if (confirmDiscardEdits()) {
                     // Reset all active selections when regenerating the baseline pathway
@@ -1395,6 +1438,16 @@ export default function PathwayPage() {
                   : 'Generate Custom Pathway'}
               </button>
             </div>
+        );
+
+        return (
+          <div>
+            <div className={styles.sectionTitle} style={{ marginTop: 20 }}>
+              Extended Study Plan
+              {isPlanEdited && <span className={styles.editedTag}>edited</span>}
+            </div>
+
+            {(!isMeadow || !customPlan) && summaryBox}
 
             {customPlan && (() => {
               const semesters: CustomSemesterBucket[] = customPlan.semesters ?? [];
@@ -2202,7 +2255,8 @@ export default function PathwayPage() {
               const remainingMpus = customMpuList ?? getRemainingMpuUnits(activePlanner, dashboardData, takenCodes);
 
               return (
-              <div>
+              <div className={styles.planLayout}>
+                <div className={styles.planMain}>
                 {readyToGraduate ? (
                   <div className={styles.mpuEmptyAlert}>
                     {remainingMpus.length > 0
@@ -2210,7 +2264,7 @@ export default function PathwayPage() {
                       : '✓ This student has completed all requirements for this planner.'}
                   </div>
                 ) : semesters.length === 0 ? (
-                  <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '10px 0' }}>
+                  <div style={{ fontSize: fs(12), color: 'var(--text-muted)', padding: '10px 0' }}>
                     No semesters could be generated. The reasons are listed below.
                   </div>
                 ) : (
@@ -2279,13 +2333,13 @@ export default function PathwayPage() {
 
                     <div
                       key={`cp-${sem.year}-${sem.semester}`}
-                      style={{ marginBottom: 8, border: '1px solid rgba(244,135,113,0.3)', borderRadius: 4, overflow: 'hidden' }}
+                      style={{ marginBottom: 'var(--sem-card-gap, 8px)', border: '1px solid var(--sem-card-border, rgba(var(--tint-red, 244,135,113),0.3))', borderRadius: 'var(--radius-card, 4px)', overflow: 'hidden', background: 'var(--sem-card-bg, transparent)', boxShadow: 'var(--shadow-card, none)' }}
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'rgba(244,135,113,0.06)' }}>
-                        <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--accent-orange)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 'var(--sem-head-pad, 8px 12px)', background: 'var(--sem-head-bg, rgba(var(--tint-red, 244,135,113),0.06))' }}>
+                        <span style={{ fontSize: fs(11), fontFamily: 'var(--font-mono)', color: 'var(--sem-head-color, var(--accent-orange))', fontWeight: 'var(--sem-head-weight, normal)' }}>
                           YEAR {sem.year} · SEM {sem.semester} · {monthsOf(calendarTerm)}
                         </span>
-                        <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 8 }}>
+                        <span style={{ fontSize: fs(11), color: 'var(--text-muted)', marginLeft: 8 }}>
                           {sem.units.filter((u) => u.category !== 'mpu').length} units · Custom
                         </span>
                         {capacity && (
@@ -2380,10 +2434,10 @@ export default function PathwayPage() {
                       <div style={{ overflowX: 'auto' }}>
                         <table className={styles.table} style={{ tableLayout: 'fixed', width: '100%' }}>
                           <colgroup>
-                            <col style={{ width: 110 }} />
+                            <col style={{ width: colWidth(110) }} />
                             <col style={{ width: 'auto' }} />
-                            <col style={{ width: 185 }} />
-                            <col style={{ width: 150 }} />
+                            <col style={{ width: colWidth(185, 170) }} />
+                            <col style={{ width: colWidth(150, 240) }} />
                           </colgroup>
                           <thead>
                             <tr><th>Unit Code</th><th>Unit Name</th><th>Type</th><th>Edit</th></tr>
@@ -2411,10 +2465,10 @@ export default function PathwayPage() {
                                       }
                                       style={{
                                         marginLeft: 6,
-                                        fontSize: 9,
+                                        fontSize: fs(9),
                                         fontFamily: 'var(--font-mono)',
                                         color: 'var(--accent-orange)',
-                                        letterSpacing: '0.05em',
+                                        letterSpacing: tracking('0.05em'),
                                       }}
                                     >
                                       {concededPassRetakeCodes.has(normaliseCode(u.code)) ? 'RETAKE (CP)' : 'RETAKE'}
@@ -2425,10 +2479,10 @@ export default function PathwayPage() {
                                       title="Not named by the planner — chosen from its elective groups to fill an empty elective slot."
                                       style={{
                                         marginLeft: 6,
-                                        fontSize: 9,
+                                        fontSize: fs(9),
                                         fontFamily: 'var(--font-mono)',
                                         color: 'var(--accent-purple)',
-                                        letterSpacing: '0.05em',
+                                        letterSpacing: tracking('0.05em'),
                                       }}
                                     >
                                       RECOMMENDED
@@ -2439,10 +2493,10 @@ export default function PathwayPage() {
                                       title="Added from the catalogue, not on this planner. Counted as an elective."
                                       style={{
                                         marginLeft: 6,
-                                        fontSize: 9,
+                                        fontSize: fs(9),
                                         fontFamily: 'var(--font-mono)',
                                         color: 'var(--accent-blue)',
-                                        letterSpacing: '0.05em',
+                                        letterSpacing: tracking('0.05em'),
                                       }}
                                     >
                                       OUTSIDE PLANNER
@@ -2488,7 +2542,7 @@ export default function PathwayPage() {
                                           <button
                                             type="button"
                                             className={styles.btnSecondary}
-                                            style={{ fontSize: 11, padding: '3px 8px', borderColor: 'var(--accent-purple)', color: 'var(--accent-purple)' }}
+                                            style={{ fontSize: fs(11), padding: '3px 8px', borderColor: 'var(--accent-purple)', color: 'var(--accent-purple)' }}
                                             onClick={() => {
                                               openPicker({ mode: 'replace', oldCode: u.code, year: sem.year, semester: sem.semester });
                                             }}
@@ -2555,7 +2609,7 @@ export default function PathwayPage() {
                             })}
                             {sem.units.filter((u) => u.category !== 'mpu').length === 0 && (
                               <tr>
-                                <td colSpan={4} style={{ color: 'var(--text-muted)', fontSize: 11 }}>
+                                <td colSpan={4} style={{ color: 'var(--text-muted)', fontSize: fs(11) }}>
                                   No units in this semester yet.
                                 </td>
                               </tr>
@@ -2568,11 +2622,14 @@ export default function PathwayPage() {
                     );
                   })
                 )}
+                </div>
 
+                <div className={styles.planRail}>
+                {isMeadow && summaryBox}
                 <div className={styles.planActions}>
                   <button
                     className={styles.btnSecondary}
-                    style={{ fontSize: 11 }}
+                    style={{ fontSize: fs(11) }}
                     onClick={() => applyEdit(addSemester(semesters))}
                   >
                     + Add semester
@@ -2580,7 +2637,7 @@ export default function PathwayPage() {
                   {isPlanEdited && (
                     <button
                       className={styles.btnSecondary}
-                      style={{ fontSize: 11 }}
+                      style={{ fontSize: fs(11) }}
                       onClick={resetToGenerated}
                       title="Discard edits and show the scheduler's plan again"
                     >
@@ -2670,7 +2727,7 @@ export default function PathwayPage() {
                                     type="button"
                                     className={styles.btnSecondary}
                                     style={{
-                                      fontSize: 10,
+                                      fontSize: fs(10),
                                       padding: '3px 8px',
                                       borderColor: 'var(--accent-orange)',
                                       color: 'var(--accent-orange)',
@@ -2745,7 +2802,10 @@ export default function PathwayPage() {
                   return null;
                 })()}
 
+                </div>
+
                 {/* Remaining MPU units */}
+                <div className={styles.planMpu}>
                 {(() => {
                   const defaultRemainingMpus = getRemainingMpuUnits(activePlanner, dashboardData, takenCodes);
                   const activeMpus = customMpuList ?? defaultRemainingMpus;
@@ -2801,7 +2861,7 @@ export default function PathwayPage() {
                   return (
                     <div className={styles.mpuSection}>
                       <div className={styles.mpuHeader}>
-                        <div className={styles.sectionTitle} style={{ margin: 0, fontSize: 13 }}>
+                        <div className={styles.sectionTitle} style={{ margin: 0, fontSize: fs(13) }}>
                           Remaining MPU Units ({activeMpus.length})
                         </div>
                         <select
@@ -2849,10 +2909,10 @@ export default function PathwayPage() {
                         <div className={styles.mpuTableWrap}>
                           <table className={styles.table} style={{ tableLayout: 'fixed', width: '100%' }}>
                             <colgroup>
-                              <col style={{ width: 120 }} />
+                              <col style={{ width: colWidth(120) }} />
                               <col style={{ width: 'auto' }} />
-                              <col style={{ width: 140 }} />
-                              <col style={{ width: 80 }} />
+                              <col style={{ width: colWidth(140) }} />
+                              <col style={{ width: colWidth(80) }} />
                             </colgroup>
                             <thead>
                               <tr>
@@ -2892,12 +2952,16 @@ export default function PathwayPage() {
                     </div>
                   );
                 })()}
+                </div>
               </div>
               );
             })()}
           </div>
         );
       })()}
+
+      {isMeadow && <div className={styles.mOpportunities}>{opportunitySections}</div>}
+
       {/* Unit Removal Confirmation Modal */}
       {unitToRemove && (() => {
         const isCore = unitToRemove.category === 'core' || unitToRemove.category === 'major_core';
@@ -2915,7 +2979,7 @@ export default function PathwayPage() {
                   type="button"
                   className={styles.removeBtn}
                   onClick={() => setUnitToRemove(null)}
-                  style={{ background: 'transparent', border: 'none', fontSize: 13 }}
+                  style={{ background: 'transparent', border: 'none', fontSize: fs(13) }}
                 >
                   ✕
                 </button>
@@ -3026,7 +3090,7 @@ export default function PathwayPage() {
                   type="button"
                   className={styles.removeBtn}
                   onClick={() => setSemesterToDelete(null)}
-                  style={{ background: 'transparent', border: 'none', fontSize: 13 }}
+                  style={{ background: 'transparent', border: 'none', fontSize: fs(13) }}
                 >
                   ✕
                 </button>
@@ -3103,7 +3167,7 @@ export default function PathwayPage() {
                 type="button"
                 className={styles.removeBtn}
                 onClick={() => setExtraUnitTargetSemester(null)}
-                style={{ background: 'transparent', border: 'none', fontSize: 13 }}
+                style={{ background: 'transparent', border: 'none', fontSize: fs(13) }}
               >
                 ✕
               </button>

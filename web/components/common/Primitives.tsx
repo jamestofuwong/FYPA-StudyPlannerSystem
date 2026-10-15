@@ -5,7 +5,7 @@ export type BadgeClass = 'badgeGreen' | 'badgeBlue' | 'badgeYellow' | 'badgeOran
 
 export function Badge({ label, cls }: { label: string; cls: BadgeClass }) {
   const purpleStyle = cls === 'badgePurple'
-    ? { background: 'rgba(197,134,192,0.2)', color: 'var(--accent-purple)', border: '1px solid rgba(197,134,192,0.3)' }
+    ? { background: 'rgba(var(--tint-purple, 197,134,192),0.2)', color: 'var(--accent-purple)', border: '1px solid rgba(var(--tint-purple, 197,134,192),0.3)' }
     : undefined;
   return (
     <span
@@ -19,7 +19,7 @@ export function Badge({ label, cls }: { label: string; cls: BadgeClass }) {
 
 export function InlineCode({ children, red }: { children: ReactNode; red?: boolean }) {
   return (
-    <code className={styles.code} style={red ? { color: 'var(--accent-red)' } : undefined}>
+    <code className={styles.code} style={red ? { color: 'var(--code-emphasis, var(--accent-red))' } : undefined}>
       {children}
     </code>
   );

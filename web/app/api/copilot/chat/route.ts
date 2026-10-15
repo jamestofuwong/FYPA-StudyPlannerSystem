@@ -1,7 +1,9 @@
-import type { ChatMessage, WorkflowContext } from '../../../../../core/services/copilot/types';
+import type { ChatMessage, CopilotLink, WorkflowContext } from '../../../../../core/services/copilot/types';
 import { routeAndExtract } from '../../../../../core/services/copilot/copilotService';
 import { streamResponse } from '../../../../../core/services/copilot/responseFormatter';
 import { workflowRegistry, allWorkflows } from '../../../../../core/services/copilot/workflowRegistry';
+import { linksForWorkflow } from '../../../../../core/services/copilot/workflowLinks';
+import { requestDashboardHandoff } from '../../../../../core/services/copilot/handoff';
 import { ollamaStore } from '../../ollama/store';
 import { getStatus } from '../../../../../core/services/portal/portalSessionService';
 
@@ -26,6 +28,24 @@ function workflowLabel(id: string): string {
     .split('_')
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(' ');
+}
+
+/**
+ * Buttons for an answer. A link about one student also starts preparing that
+ * student's dashboard data in the background, so the page opens already
+ * populated; the handoff id travels in the link's query.
+ */
+function buildLinks(workflowId: string, params: Record<string, unknown>, data: unknown): CopilotLink[] {
+  return linksForWorkflow(workflowId, params, data).map(({ student, ...link }) => {
+    if (!student) return link;
+    try {
+      const handoff = requestDashboardHandoff(student);
+      return { ...link, query: { ...link.query, handoff } };
+    } catch (err) {
+      console.warn('[Copilot] Could not start a dashboard handoff:', err);
+      return link;
+    }
+  });
 }
 
 export async function POST(req: Request) {
@@ -135,6 +155,10 @@ export async function POST(req: Request) {
           return;
         }
 
+        // Buttons come from the workflow that ran, so they are ready even if
+        // writing the reply fails below.
+        const links = buildLinks(route.workflowId!, route.params, result.data);
+
         // ── Phase 3: Stream Response ────────────────────────────────────────
         emit({ type: 'status', message: 'Generating response…' });
 
@@ -144,10 +168,10 @@ export async function POST(req: Request) {
             full += token;
             emit({ type: 'token', content: token });
           }
-          emit({ type: 'reply', content: full, workflowId: route.workflowId });
+          emit({ type: 'reply', content: full, workflowId: route.workflowId, links });
         } catch (err) {
           console.error(`[Copilot] streamResponse failed for workflow "${route.workflowId}":`, err);
-          emit({ type: 'reply', content: `Here is what I found:\n\`\`\`\n${JSON.stringify(result.data, null, 2)}\n\`\`\``, workflowId: route.workflowId });
+          emit({ type: 'reply', content: `Here is what I found:\n\`\`\`\n${JSON.stringify(result.data, null, 2)}\n\`\`\``, workflowId: route.workflowId, links });
         }
         controller.close();
       } catch (err) {

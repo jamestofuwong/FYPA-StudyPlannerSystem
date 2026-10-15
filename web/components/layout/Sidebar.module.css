@@ -16,10 +16,10 @@
 /* Header */
 .sidebarHeader {
   padding: 10px 12px 6px;
-  font-size: 10px;
+  font-size: var(--text-caption, 10px);
   font-weight: 600;
-  letter-spacing: 1.5px;
-  text-transform: uppercase;
+  letter-spacing: var(--label-tracking, 1.5px);
+  text-transform: var(--label-case, uppercase);
   color: var(--text-muted);
   border-bottom: 1px solid var(--sidebar-border);
   display: flex;
@@ -56,7 +56,7 @@
   border: none;
   cursor: pointer;
   color: var(--text-muted);
-  font-size: 16px;
+  font-size: var(--text-title, 16px);
   padding: 2px 4px;
   line-height: 1;
   transition: color 0.15s;
@@ -64,14 +64,14 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  border-radius: 3px;
+  border-radius: var(--radius-sm, 3px);
   width: 24px;
   height: 24px;
 }
 
 .collapseBtn:hover {
   color: var(--text-white);
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(var(--overlay-rgb, 255, 255, 255), 0.08);
 }
 
 /* Search */
@@ -93,13 +93,14 @@
   width: 100%;
   background: var(--sidebar-search-bg);
   border: 1px solid var(--sidebar-border);
-  border-radius: 3px;
+  border-radius: var(--radius-control, 3px);
   color: var(--text-primary);
-  padding: 4px 8px;
-  font-size: 12px;
+  padding: var(--input-pad, 4px 8px);
+  font-size: var(--text-body-sm, 12px);
   font-family: var(--font-sans);
   outline: none;
   transition: border-color 0.15s;
+  min-height: var(--input-height, auto);
 }
 
 .searchInput:focus {
@@ -126,12 +127,12 @@
   gap: 6px;
   padding: 5px 10px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--text-body-sm, 12px);
   font-weight: 600;
   color: var(--text-primary);
   user-select: none;
   transition: background 0.1s;
-  letter-spacing: 0.2px;
+  letter-spacing: var(--label-tracking, 0.2px);
   background: none;
   border: none;
   width: 100%;
@@ -140,11 +141,11 @@
 }
 
 .sectionHeader:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--overlay-rgb, 255, 255, 255), 0.05);
 }
 
 .chevron {
-  font-size: 9px;
+  font-size: var(--text-tiny, 9px);
   color: var(--text-muted);
   transition: transform 0.2s;
   width: 10px;
@@ -157,7 +158,7 @@
 }
 
 .sectionIcon {
-  font-size: 14px;
+  font-size: var(--text-body-lg, 14px);
   width: 16px;
   text-align: center;
   flex-shrink: 0;
@@ -181,7 +182,7 @@
   gap: 8px;
   padding: 5px 10px 5px 32px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--text-body-sm, 12px);
   color: var(--text-primary);
   user-select: none;
   transition: background 0.1s;
@@ -197,7 +198,7 @@
 }
 
 .treeItem:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--overlay-rgb, 255, 255, 255), 0.05);
 }
 
 .treeItem.active {
@@ -207,7 +208,7 @@
 }
 
 .itemIcon {
-  font-size: 13px;
+  font-size: var(--text-body, 13px);
   width: 16px;
   text-align: center;
   flex-shrink: 0;
@@ -224,9 +225,9 @@
   margin-left: auto;
   background: var(--active-highlight);
   color: white;
-  font-size: 9px;
-  padding: 1px 5px;
-  border-radius: 8px;
+  font-size: var(--text-tiny, 9px);
+  padding: var(--badge-pad, 1px 5px);
+  border-radius: var(--radius-badge, 8px);
   font-weight: 600;
   flex-shrink: 0;
 }
@@ -252,7 +253,7 @@
   gap: 8px;
   padding: 5px 10px 5px 16px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--text-body-sm, 12px);
   color: var(--text-primary);
   user-select: none;
   transition: background 0.1s;
@@ -264,6 +265,299 @@
 }
 
 .actionItem:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--overlay-rgb, 255, 255, 255), 0.05);
 }   
 
+
+/* ===== Meadow design ===== */
+.mSidebar {
+  width: 256px;
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--sidebar-border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  overflow: hidden;
+  padding: 14px 12px;
+  gap: 16px;
+  transition: width 0.25s ease;
+  font-family: var(--font-sans);
+}
+
+.mCollapsed {
+  width: 72px;
+}
+
+.mBrand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 2px 4px 2px 6px;
+  min-height: 44px;
+}
+
+.mLogo {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: var(--active-highlight);
+  color: var(--on-accent, #fff);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.mLogo svg {
+  width: 21px;
+  height: 21px;
+}
+
+.mBrandText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+  white-space: nowrap;
+}
+
+.mBrandName {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 17px;
+  line-height: 1.2;
+  color: var(--text-primary);
+}
+
+.mBrandSub {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.mCollapseBtn {
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.mCollapseBtn:hover {
+  background: rgba(var(--overlay-rgb), 0.06);
+  color: var(--text-primary);
+}
+
+.mCollapseBtn svg {
+  width: 19px;
+  height: 19px;
+}
+
+.mGroups {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  flex: 1;
+  min-height: 0;
+}
+
+.mGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mGroupLabel {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 0 12px 6px;
+  white-space: nowrap;
+}
+
+.mItem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+  white-space: nowrap;
+  transition: background 0.12s, color 0.12s;
+}
+
+.mItem:hover {
+  background: rgba(var(--overlay-rgb), 0.05);
+}
+
+.mItemActive,
+.mItemActive:hover {
+  background: var(--active-bg);
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.mItemIcon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.mItemLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mFooter {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.mPortal {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  margin-bottom: 6px;
+  border-radius: 14px;
+  background: var(--main-bg);
+  border: 1px solid var(--sidebar-border);
+}
+
+.mPortalHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mPortalDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--text-muted);
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.mPortalDotOn {
+  background: var(--accent-green);
+  border-color: var(--accent-green);
+}
+
+.mPortalDotPending {
+  border-color: var(--accent-yellow);
+  border-top-color: transparent;
+  animation: mSpin 0.8s linear infinite;
+}
+
+@keyframes mSpin {
+  to { transform: rotate(360deg); }
+}
+
+.mPortalTitle {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.mPortalPending {
+  font-size: 14px;
+  color: var(--text-muted);
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+}
+
+.mPortalBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 1px solid var(--panel-border);
+  background: var(--card-bg);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.mPortalBtn svg {
+  width: 17px;
+  height: 17px;
+  flex-shrink: 0;
+}
+
+.mPortalBtn:hover {
+  border-color: var(--active-highlight);
+}
+
+.mPortalBtnPrimary {
+  background: var(--active-highlight);
+  border-color: var(--active-highlight);
+  color: var(--on-accent, #fff);
+}
+
+.mPortalBtnPrimary:hover {
+  background: var(--btn-primary-hover, var(--active-highlight));
+}
+
+/* Collapsed Meadow rail: icons only */
+.mCollapsed .mBrand {
+  flex-direction: column;
+  padding: 0;
+  gap: 10px;
+}
+
+.mCollapsed .mBrandText,
+.mCollapsed .mGroupLabel,
+.mCollapsed .mItemLabel,
+.mCollapsed .mPortalTitle,
+.mCollapsed .mPortalPending,
+.mCollapsed .mPortalBtnLabel {
+  display: none;
+}
+
+.mCollapsed .mItem {
+  justify-content: center;
+  padding: 0;
+}
+
+.mCollapsed .mGroup {
+  gap: 4px;
+}
+
+.mCollapsed .mPortal {
+  padding: 10px 6px;
+  align-items: center;
+  background: transparent;
+  border: none;
+}
+
+.mCollapsed .mPortalBtn {
+  padding: 0;
+  width: 40px;
+}
