@@ -112,6 +112,7 @@ export default function PlannerGrid({ planners }: Props) {
       result = result.filter(
         p =>
           p.courseName.toLowerCase().includes(q) ||
+          (p.courseCode?.toLowerCase().includes(q) ?? false) ||
           (p.majorName?.toLowerCase().includes(q) ?? false) ||
           p.intakeLabel.toLowerCase().includes(q),
       )
@@ -143,10 +144,10 @@ export default function PlannerGrid({ planners }: Props) {
           <input
             className={styles.searchInput}
             type="search"
-            placeholder="Search by course or major..."
+            placeholder="Search by course code, course, or major..."
             value={query}
             onChange={e => setQuery(e.target.value)}
-            aria-label="Search planners"
+            aria-label="Search planners by course code, course, or major"
           />
           {query && (
             <button
@@ -155,7 +156,7 @@ export default function PlannerGrid({ planners }: Props) {
               type="button"
               aria-label="Clear search"
             >
-              x
+              ✕
             </button>
           )}
         </div>

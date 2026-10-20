@@ -1,31 +1,8 @@
 import Link from 'next/link'
-import { revalidatePath } from 'next/cache'
-import { revalidateStudentCache, STUDENT_CACHE } from '@/lib/catalog'
-import { redirect } from 'next/navigation'
 import { prisma } from '@/lib/prisma'
+import { deletePlanner } from './actions'
+import PlannersList from './PlannersList'
 import styles from './page.module.css'
-
-async function deletePlanner(id: string) {
-  'use server'
-  await prisma.plannerTemplate.delete({ where: { id } })
-  revalidatePath('/cms/planners')
-  revalidateStudentCache(STUDENT_CACHE.planners)
-}
-
-const MONTH_NAMES: Record<number, string> = {
-  1: 'January',
-  2: 'February',
-  3: 'March',
-  4: 'April',
-  5: 'May',
-  6: 'June',
-  7: 'July',
-  8: 'August',
-  9: 'September',
-  10: 'October',
-  11: 'November',
-  12: 'December',
-}
 
 export default async function PlannersPage() {
   const planners = await prisma.plannerTemplate.findMany({
@@ -49,44 +26,18 @@ export default async function PlannersPage() {
         </div>
       </div>
 
-      <table className={styles.table}>
-        <thead>
-          <tr>
-            <th className={styles.th}>Course</th>
-            <th className={styles.th}>Major</th>
-            <th className={styles.th}>Intake</th>
-            <th className={styles.th}>Duration</th>
-            <th className={styles.th}>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {planners.map(planner => (
-            <tr key={planner.id} className={styles.tr}>
-              <td className={styles.td}>{planner.course.name}</td>
-              <td className={styles.td}>{planner.major?.name ?? '—'}</td>
-              <td className={styles.td}>
-                {planner.intake_month ? MONTH_NAMES[planner.intake_month] ?? `Month ${planner.intake_month}` : 'No month'} {planner.intake_year}
-              </td>
-              <td className={styles.td}>{Math.ceil(planner.duration_semesters / 2)} years</td>
-              <td className={styles.td}>
-                <div className={styles.rowActions}>
-                  <Link href={`/cms/planners/${planner.id}`} className={styles.btnSecondary}>Edit</Link>
-                  <form action={deletePlanner.bind(null, planner.id)}>
-                    <button type="submit" className={styles.btnDanger}>Delete</button>
-                  </form>
-                </div>
-              </td>
-            </tr>
-          ))}
-          {planners.length === 0 && (
-            <tr>
-              <td className={styles.td} colSpan={5} style={{ textAlign: 'center', color: '#6b7280' }}>
-                No planner templates found.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
+      <PlannersList
+        planners={planners.map(planner => ({
+          id: planner.id,
+          courseName: planner.course.name,
+          courseCode: planner.course.code,
+          majorName: planner.major?.name ?? null,
+          intakeYear: planner.intake_year,
+          intakeMonth: planner.intake_month,
+          durationSemesters: planner.duration_semesters,
+        }))}
+        deletePlanner={deletePlanner}
+      />
     </div>
   )
 }

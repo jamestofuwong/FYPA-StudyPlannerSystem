@@ -52,6 +52,11 @@ export default async function UnitDetailPage({ params }: Props) {
   const requiredCreditPoints = [...new Set(requisiteCreditPoints(unit.requisiteGroups, 'prerequisite'))]
   const availValue = availabilityValue(unit.availability)
   const offerText = `Unit Offer: ${availValue}`
+  const hasUnitDetails = Boolean(unit.overview?.trim()) ||
+    unit.learningOutcomes.length > 0 ||
+    unit.content.length > 0 ||
+    unit.assessment.length > 0
+
   return (
     <div className={styles.page}>
       <Nav />
@@ -81,69 +86,77 @@ export default async function UnitDetailPage({ params }: Props) {
 
           {/* Left — main content */}
           <div className={styles.content}>
-
-            {/* Overview */}
-            <section className={styles.section}>
-              <h2 className={styles.sectionTitle}>Overview</h2>
-              <p className={styles.overviewText}>{unit.overview}</p>
-            </section>
-
-            {/* Learning outcomes */}
-            {unit.learningOutcomes.length > 0 && (
+            {!hasUnitDetails ? (
               <section className={styles.section}>
-                <h2 className={styles.sectionTitle}>Unit Learning Outcomes</h2>
-                <ol className={styles.outcomeList}>
-                  {unit.learningOutcomes.map((lo, i) => (
-                    <li key={i} className={styles.outcomeItem}>{lo}</li>
-                  ))}
-                </ol>
+                <h2 className={styles.sectionTitle}>Unit details unavailable</h2>
+                <p className={styles.overviewText}>Detailed information for this unit is currently unavailable.</p>
               </section>
-            )}
+            ) : (
+              <>
+                {/* Overview */}
+                <section className={styles.section}>
+                  <h2 className={styles.sectionTitle}>Overview</h2>
+                  <p className={styles.overviewText}>{unit.overview}</p>
+                </section>
 
-            {/* Content / topics */}
-            {unit.content.length > 0 && (
-              <section className={styles.section}>
-                <h2 className={styles.sectionTitle}>Content</h2>
-                <ul className={styles.contentList}>
-                  {unit.content.map((topic, i) => (
-                    <li key={i} className={styles.contentItem}>{topic}</li>
-                  ))}
-                </ul>
-              </section>
-            )}
+                {/* Learning outcomes */}
+                {unit.learningOutcomes.length > 0 && (
+                  <section className={styles.section}>
+                    <h2 className={styles.sectionTitle}>Unit Learning Outcomes</h2>
+                    <ol className={styles.outcomeList}>
+                      {unit.learningOutcomes.map((lo, i) => (
+                        <li key={i} className={styles.outcomeItem}>{lo}</li>
+                      ))}
+                    </ol>
+                  </section>
+                )}
 
-            {/* Assessment */}
-            {unit.assessment.length > 0 && (
-              <section className={styles.section}>
-                <h2 className={styles.sectionTitle}>Assessment</h2>
-                <div className={styles.assessWrap}>
-                  <table className={styles.assessTable}>
-                    <thead>
-                      <tr className={styles.assessHeaderRow}>
-                        <th className={styles.assessColType}>Type</th>
-                        <th className={styles.assessColTask}>Task</th>
-                        <th className={styles.assessColUlo}>ULOs</th>
-                        <th className={styles.assessColWeight}>Weight</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {unit.assessment.map((item, i) => {
-                        const weightLabel = item.weightingRaw?.trim()
-                          ? item.weightingRaw
-                          : item.weight != null ? `${item.weight}%` : 'Not specified'
-                        return (
-                          <tr key={i} className={styles.assessRow}>
-                            <td className={styles.assessType}>{item.type}</td>
-                            <td className={styles.assessType}>{item.task || '—'}</td>
-                            <td className={styles.assessUlo}>{item.ulos.join(', ')}</td>
-                            <td className={styles.assessWeight}>{weightLabel}</td>
+                {/* Content / topics */}
+                {unit.content.length > 0 && (
+                  <section className={styles.section}>
+                    <h2 className={styles.sectionTitle}>Content</h2>
+                    <ul className={styles.contentList}>
+                      {unit.content.map((topic, i) => (
+                        <li key={i} className={styles.contentItem}>{topic}</li>
+                      ))}
+                    </ul>
+                  </section>
+                )}
+
+                {/* Assessment */}
+                {unit.assessment.length > 0 && (
+                  <section className={styles.section}>
+                    <h2 className={styles.sectionTitle}>Assessment</h2>
+                    <div className={styles.assessWrap}>
+                      <table className={styles.assessTable}>
+                        <thead>
+                          <tr className={styles.assessHeaderRow}>
+                            <th className={styles.assessColType}>Type</th>
+                            <th className={styles.assessColTask}>Task</th>
+                            <th className={styles.assessColUlo}>ULOs</th>
+                            <th className={styles.assessColWeight}>Weight</th>
                           </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
+                        </thead>
+                        <tbody>
+                          {unit.assessment.map((item, i) => {
+                            const weightLabel = item.weightingRaw?.trim()
+                              ? item.weightingRaw
+                              : item.weight != null ? `${item.weight}%` : 'Not specified'
+                            return (
+                              <tr key={i} className={styles.assessRow}>
+                                <td className={styles.assessType}>{item.type}</td>
+                                <td className={styles.assessType}>{item.task || '—'}</td>
+                                <td className={styles.assessUlo}>{item.ulos.join(', ')}</td>
+                                <td className={styles.assessWeight}>{weightLabel}</td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
+                )}
+              </>
             )}
 
           </div>

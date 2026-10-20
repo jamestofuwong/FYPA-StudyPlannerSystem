@@ -292,6 +292,11 @@ export default function PlannerForm({ courses, allUnits, planner }: Props) {
   const [electivePool, setElectivePool] = useState<UnitOption[]>(
     planner?.elective_pool.map(ep => ep.unit) ?? [],
   )
+  const placedUnitIds = new Set(
+    semesters.flatMap(semester =>
+      semester.units.map(unit => unit.unit_id).filter((unitId): unitId is string => unitId !== null),
+    ),
+  )
 
   // All major names for datalist suggestions
   const allMajorNames = Array.from(new Set(courses.flatMap(c => c.majors.map(m => m.name))))
@@ -348,11 +353,10 @@ export default function PlannerForm({ courses, allUnits, planner }: Props) {
   }
 
   const addUnitToSemester = (semKey: string, unit: UnitOption) => {
-    setSemesters(prev =>
-      prev.map(s => {
+    setSemesters(prev => {
+      if (prev.some(semester => semester.units.some(existing => existing.unit_id === unit.id))) return prev
+      return prev.map(s => {
         if (s.key !== semKey) return s
-        // Avoid duplicate units in same semester
-        if (s.units.some(u => u.unit_id === unit.id)) return s
         return {
           ...s,
           units: [
@@ -367,8 +371,8 @@ export default function PlannerForm({ courses, allUnits, planner }: Props) {
             },
           ],
         }
-      }),
-    )
+      })
+    })
   }
 
   const addElectiveSlot = (semKey: string) => {
@@ -614,10 +618,6 @@ export default function PlannerForm({ courses, allUnits, planner }: Props) {
               {semesters
                 .filter(s => s.year_number === year)
                 .map(sem => {
-                  const existingUnitIds = new Set(
-                    sem.units.filter(u => u.unit_id !== null).map(u => u.unit_id as string),
-                  )
-
                   return (
                     <div key={sem.key} className={styles.semesterCard}>
                       <div className={styles.semesterHeader}>
@@ -697,7 +697,7 @@ export default function PlannerForm({ courses, allUnits, planner }: Props) {
                         <SemesterUnitSearch
                           semKey={sem.key}
                           allUnits={allUnits}
-                          existingUnitIds={existingUnitIds}
+                          existingUnitIds={placedUnitIds}
                           onAdd={addUnitToSemester}
                         />
                         <button
