@@ -12,6 +12,7 @@ import { normaliseUnitCodes } from "./unitNormalizer";
 import { buildStudentProfile } from "./profileBuilder";
 import { scorePlanners } from "./scoringEngine";
 import { detectMajors } from "./majorDetector";
+import { majorEvidence } from "./majorEvidence";
 import { buildDisplayPayload } from "./outputPackager";
 
 export interface MatchingServiceInput {
@@ -70,7 +71,8 @@ export function runMatchingPipeline(input: MatchingServiceInput): MatchingServic
   const scoreRecords = scorePlanners(profile, candidatePlanners, config);
 
   // Phases 4 + 5 - Ranking + major detection
-  const detectionResult = detectMajors(scoreRecords, config, input.student);
+  const evidence = config.requireMajorEvidence === false ? undefined : majorEvidence(candidatePlanners, profile.completedUnits);
+  const detectionResult = detectMajors(scoreRecords, config, input.student, evidence);
 
   // Phase 6 - Output packaging
   const payload = buildDisplayPayload(profile, detectionResult, input.unitMasterTable);

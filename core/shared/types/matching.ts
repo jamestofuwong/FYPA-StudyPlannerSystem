@@ -36,6 +36,11 @@ export interface AlgorithmConfig {
   // Planner selection behaviour
   preferIntakeYear: boolean;       // default true
   preferIntakeSemester: boolean;   // default true
+
+  // A major is only named when the student has taken at least one unit that sits on that major's planner and on
+  // no other major's. Core units and shared electives appear on every planner, so a student who has taken only
+  // those cannot be told apart from a student of any other major. Default true.
+  requireMajorEvidence?: boolean;
 }
 
 export const DEFAULT_CONFIG: AlgorithmConfig = {
@@ -50,6 +55,7 @@ export const DEFAULT_CONFIG: AlgorithmConfig = {
   minorUnitThreshold: 3,
   preferIntakeYear: true,
   preferIntakeSemester: true,
+  requireMajorEvidence: true,
 };
 
 // ------------------------------------------------------------------
