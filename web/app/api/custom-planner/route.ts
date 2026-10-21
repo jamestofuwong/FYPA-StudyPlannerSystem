@@ -18,6 +18,14 @@ import {
 } from '../../../../core/shared/scheduling/electiveSlots';
 import { UNIT_INCLUDE, toSchedulable } from './unitMapping';
 
+/**
+ * Where the planner puts a template unit, as semesters after the intake (0 = first semester). Summer and winter
+ * placements are not regular semesters, so they have no slot.
+ */
+function plannedSlotOf(tu: { year_level: number; semester: number }): number | undefined {
+  return tu.semester === 1 || tu.semester === 2 ? (tu.year_level - 1) * 2 + (tu.semester - 1) : undefined;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -33,15 +41,6 @@ export async function POST(req: NextRequest) {
 
     if (!plannerId) {
       return NextResponse.json({ error: 'Invalid request: plannerId is required' }, { status: 400 });
-    }
-
-    let startYear: number = body.startYear;
-    let startSemester: 1 | 2 = body.startSemester;
-
-    if (typeof startYear !== 'number' || (startSemester !== 1 && startSemester !== 2)) {
-      const resolved = resolveNextStudyTerm(courseList ?? []);
-      startYear = resolved.startYear;
-      startSemester = resolved.startSemester;
     }
 
     const configCheck = validateSchedulerConfig(config);
@@ -80,6 +79,15 @@ export async function POST(req: NextRequest) {
     }
     const intakeSemester: 1 | 2 = (planner.intake_month ?? 1) >= 7 ? 2 : 1;
 
+    // Where the plan starts: given explicitly (a restored plan), or read from the transcript's calendar terms.
+    let startYear: number = body.startYear;
+    let startSemester: 1 | 2 = body.startSemester;
+    if (typeof startYear !== 'number' || (startSemester !== 1 && startSemester !== 2)) {
+      const resolved = resolveNextStudyTerm(courseList ?? [], { year: planner.intake_year, semester: intakeSemester });
+      startYear = resolved.startYear;
+      startSemester = resolved.startSemester;
+    }
+
     const normalizedCompleted = new Set(
       (completedUnitCodes as string[]).map((c) => c.trim().toUpperCase())
     );
@@ -106,7 +114,7 @@ export async function POST(req: NextRequest) {
     // The core pool is all planner units the student has not yet completed/enrolled in
     const remainingUnits: SchedulableUnit[] = planner.units
       .filter((tu) => tu.unit !== null && tu.category !== 'mpu' && !normalizedCompleted.has(tu.unit.unit_code.toUpperCase()))
-      .map((tu) => toSchedulable(tu.unit!, String(tu.category)));
+      .map((tu) => ({ ...toSchedulable(tu.unit!, String(tu.category)), plannedSlot: plannedSlotOf(tu) }));
 
     const minorIds: string[] = Array.isArray(injectedMinorIds) ? injectedMinorIds : [];
 
@@ -329,9 +337,17 @@ export async function POST(req: NextRequest) {
         alreadyPlannedCodes: remainingUnits.map((u) => u.code),
       });
 
-      for (const unit of recommended) {
-        remainingUnits.push({ ...unit, category: 'elective', recommended: true });
-      }
+      // The planner's empty elective slots are where these belong. Slots fill in planner order, so the ones
+      // still open are the latest.
+      const openSlots = planner.units
+        .filter((tu) => tu.unit === null)
+        .map(plannedSlotOf)
+        .filter((slot): slot is number => slot !== undefined)
+        .sort((a, b) => a - b)
+        .slice(-recommended.length);
+      recommended.forEach((unit, i) => {
+        remainingUnits.push({ ...unit, category: 'elective', recommended: true, plannedSlot: openSlots[i] });
+      });
     }
 
     // Final Plan Scheduling

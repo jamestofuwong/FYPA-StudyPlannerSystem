@@ -15,6 +15,8 @@
 // Pure function: no database, clock or globals. Anything it cannot place is
 // returned in unschedulableUnits with a warning saying why.
 
+import { parseTermCode } from '../classEstimation/termCode';
+
 export interface SchedulerConfig {
   maxStandardPerSemester: number;
   maxMpuPerSemester: number;
@@ -69,6 +71,13 @@ export interface SchedulableUnit {
   outsidePlanner?: boolean;
 
   requisiteGroups: RequisiteCondition[][];
+
+  /**
+   * Where the study planner puts this unit, as a count of semesters from the student's intake (0 = first
+   * semester). Lets buildCustomPlan keep a plan aligned with the planner. Omitted for units the planner never
+   * placed (a recommended elective, a unit an advisor added), which then have no preferred slot.
+   */
+  plannedSlot?: number;
 }
 
 export interface ScheduledUnit {
@@ -299,6 +308,16 @@ export function mapUnitToSchedulable(unit: RawSchedulableUnitRow, category: stri
   return { code: unit.unit_code, name: unit.unit_name, category, offeringSemesters, allOfferingTerms, requisiteGroups };
 }
 
+/**
+ * Builds the plan. Speed comes first, alignment with the study planner second.
+ *
+ * The plan is first built purely for throughput, which fixes how many semesters are needed. When the units
+ * carry their planner slot (plannedSlot), the plan is then rebuilt to follow the planner: units are taken in
+ * planner order and none is pulled ahead of its planner semester. If that is too slow the rule is relaxed one
+ * semester at a time, and the first version that finishes no later than the throughput plan (and strands no
+ * more units) is returned. A student who is on schedule therefore gets the planner back, semester for
+ * semester, and a student who is behind gets the planner's order with the slack they need to catch up.
+ */
 export function buildCustomPlan(
   remainingUnits: SchedulableUnit[],
   completedUnitCodes: string[],
@@ -307,6 +326,43 @@ export function buildCustomPlan(
   intakeSemester: 1 | 2 = 1,
   concededPassUnitCodes: string[] = [],
   config: Partial<SchedulerConfig> = DEFAULT_SCHEDULER_CONFIG
+): CustomPlanResult {
+  const fastest = buildPlanPass(remainingUnits, completedUnitCodes, startYear, startSemester, intakeSemester, concededPassUnitCodes, config);
+  if (!remainingUnits.some((u) => u.plannedSlot !== undefined)) return fastest;
+
+  const cfg = resolveSchedulerConfig(config);
+  const requisiteProblems = (r: CustomPlanResult) => r.warnings.filter((w) => w.kind === 'requisite_violation').length;
+  // When a plan finishes, not how many semesters it uses: a plan that sits out its first semester uses as many
+  // semesters as one that starts at once, but graduates a semester later.
+  const finishesAt = (r: CustomPlanResult) =>
+    r.semesters.reduce((last, sem) => Math.max(last, (sem.year - 1) * 2 + sem.semester), 0);
+  for (let slack = 0; slack <= Math.min(cfg.maxSemesters, 12); slack++) {
+    const aligned = buildPlanPass(remainingUnits, completedUnitCodes, startYear, startSemester, intakeSemester, concededPassUnitCodes, config, slack);
+    if (
+      finishesAt(aligned) <= finishesAt(fastest) &&
+      aligned.unschedulableUnits.length <= fastest.unschedulableUnits.length &&
+      requisiteProblems(aligned) <= requisiteProblems(fastest)
+    ) {
+      return aligned;
+    }
+  }
+  return fastest;
+}
+
+/**
+ * One scheduling pass. `slack` switches on planner alignment: a unit is not placed more than `slack` semesters
+ * ahead of its planner slot, and candidates are taken in planner order. Left undefined, the pass is the plain
+ * throughput schedule.
+ */
+function buildPlanPass(
+  remainingUnits: SchedulableUnit[],
+  completedUnitCodes: string[],
+  startYear: number,
+  startSemester: 1 | 2,
+  intakeSemester: 1 | 2 = 1,
+  concededPassUnitCodes: string[] = [],
+  config: Partial<SchedulerConfig> = DEFAULT_SCHEDULER_CONFIG,
+  slack?: number
 ): CustomPlanResult {
   const cfg: SchedulerConfig = resolveSchedulerConfig(config);
   const normalLoad = normalLoadFor(cfg);
@@ -373,6 +429,13 @@ export function buildCustomPlan(
           if (aIsA !== bIsA) return bIsA - aIsA;
         }
 
+        // Aligned pass: follow the study planner, earliest planner slot first. Units with no planner slot go last.
+        if (slack !== undefined) {
+          const aSlot = a.plannedSlot ?? Number.POSITIVE_INFINITY;
+          const bSlot = b.plannedSlot ?? Number.POSITIVE_INFINITY;
+          if (aSlot !== bSlot) return aSlot < bSlot ? -1 : 1;
+        }
+
         // Priority 1: Does unit A unlock other units in the pool
         const aIsPrereqFor = pool.filter((other) =>
           other.requisiteGroups.some((g) => g.some((c) => c.unitCode === a.code))
@@ -395,6 +458,11 @@ export function buildCustomPlan(
 
       for (const unit of prioritizedPool) {
         if (bucketCodes.has(normaliseCode(unit.code))) continue;
+
+        // Aligned pass: never take a unit ahead of its planner semester by more than the allowed slack
+        if (slack !== undefined && unit.plannedSlot !== undefined && unit.plannedSlot > (currentYear - 1) * 2 + (currentSem - 1) + slack) {
+          continue;
+        }
 
         // do not place Project A early unless there are literally no other placeable units
         if (isProjectPartA(unit) && !isFinalYearStretch) {
@@ -726,29 +794,51 @@ export interface NextStudyTerm {
   enrolledTermsCount: number;
 }
 
-export function resolveNextStudyTerm(courseList: Array<{ term?: string; studyPeriod?: string }>): NextStudyTerm {
-  // Collect all distinct regular study terms
-  const terms = new Set<string>();
+export function resolveNextStudyTerm(
+  courseList: Array<{ term?: string; studyPeriod?: string; status?: string }>,
+  intake?: { year: number; semester: 1 | 2 },
+): NextStudyTerm {
+  // A pre-enrolled ("Future") unit has not been started, and the plan re-places it, so its term is not one the
+  // student has been through.
+  const started = (courseList ?? []).filter((item) => !['future', 'scheduled'].includes((item.status ?? '').trim().toLowerCase()));
 
-  for (const item of courseList ?? []) {
-    const rawTerm = (item.term || item.studyPeriod || '').trim().toUpperCase();
-    // Only count regular semesters (_S1 or _S2)
-    if (rawTerm.includes('_S1') || rawTerm.includes('_S2')) {
-      terms.add(rawTerm);
+  const enrolledTermsCount = new Set(
+    started
+      .map((item) => (item.term || item.studyPeriod || '').trim().toUpperCase())
+      // Only count regular semesters (_S1 or _S2)
+      .filter((term) => term.includes('_S1') || term.includes('_S2')),
+  ).size;
+
+  // Preferred: read the calendar. The next semester is the one after the latest regular term on record, and its
+  // position in the course is how many semesters have really passed since the intake, so a deferred semester or a
+  // year off counts as time passed and every later unit lands in the calendar term it will actually run.
+  if (intake) {
+    let latest: { year: number; term: number } | null = null;
+    for (const item of started) {
+      const parsed = parseTermCode(item.term || item.studyPeriod);
+      if (!parsed || parsed.kind !== 'semester') continue;
+      if (!latest || parsed.year > latest.year || (parsed.year === latest.year && parsed.term > latest.term)) {
+        latest = { year: parsed.year, term: parsed.term };
+      }
+    }
+    if (latest) {
+      const next = latest.year * 2 + (latest.term - 1) + 1;
+      const index = next - (intake.year * 2 + (intake.semester - 1));
+      if (index >= 0) {
+        return { startYear: Math.floor(index / 2) + 1, startSemester: (index % 2 === 0 ? 1 : 2) as 1 | 2, enrolledTermsCount };
+      }
     }
   }
 
-  const termsCount = terms.size;
-
-  if (termsCount === 0) {
+  // Fallback when the terms cannot be read as calendar terms: one study semester per distinct term on record.
+  if (enrolledTermsCount === 0) {
     return { startYear: 1, startSemester: 1, enrolledTermsCount: 0 };
   }
-
-  // Each academic year has 2 standard semesters
-  const startYear = Math.floor(termsCount / 2) + 1;
-  const startSemester: 1 | 2 = termsCount % 2 === 0 ? 1 : 2;
-
-  return { startYear, startSemester, enrolledTermsCount: termsCount };
+  return {
+    startYear: Math.floor(enrolledTermsCount / 2) + 1,
+    startSemester: enrolledTermsCount % 2 === 0 ? 1 : 2,
+    enrolledTermsCount,
+  };
 }
 
 // Detects if a unit is Part A of a two-part capstone/FYP sequence (e.g., Project A)
