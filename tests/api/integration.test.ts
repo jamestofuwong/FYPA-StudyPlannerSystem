@@ -5,6 +5,7 @@ import * as plannerService from '@core/services/plannerImport/plannerImportServi
 jest.mock('@core/services/plannerImport/plannerImportService');
 
 describe('End-to-End Workflow (UIT-05)', () => {
+  // Verifies an uploaded planner PDF flows through the service to an API success response.
   test('User uploads PDF -> Service Processes -> API returns 200', async () => {
     const mockResult = { planner: { majorName: 'Cyber' }, report: 'Done' };
     (plannerService.extractPlannerFromPdf as jest.Mock).mockResolvedValue(mockResult);

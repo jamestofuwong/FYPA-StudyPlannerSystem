@@ -5,6 +5,7 @@ import path from 'node:path';
 describe('Planner Import Performance (LLM vs Manual)', () => {
   const mockPdfBuffer = Buffer.from('%PDF-1.4 mock content');
 
+  // Verifies that the manual extraction path is faster than the LLM path.
   test('Benchmark: Manual vs LLM Extraction Speed', async () => {
     //Test Manual Speed
     const startManual = performance.now();
