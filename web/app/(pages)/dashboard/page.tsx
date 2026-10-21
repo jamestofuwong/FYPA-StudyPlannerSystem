@@ -1277,7 +1277,7 @@ export default function DashboardPage() {
                   No Major Detected
                 </div>
                 <div style={{ fontSize: fs(12), color: 'var(--text-muted)', marginBottom: closest.length > 0 ? 10 : 0 }}>
-                  None of the stored planners reached the detection threshold for this student.
+                  No single planner stands out for this student yet: either none reached the detection threshold, or everything they have taken is shared by more than one major.
                   {closest.length > 0 ? ' Closest matches and their completion gaps:' : ' No planners are stored yet — upload a study planner PDF to begin.'}
                 </div>
                 {closest.map((r: any) => (

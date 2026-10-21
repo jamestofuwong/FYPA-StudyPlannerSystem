@@ -5,6 +5,9 @@ import styles from './page.module.css';
 import { useTheme, type DesignMode, type ThemePreference } from '../../../styles/themeProvider';
 import { fs, radius } from '../../../styles/tokens';
 import { PageHeader } from '../../../components/common/MeadowBits';
+import HueWheel from '../../../components/common/HueWheel';
+import type { MeadowAccent } from '../../../styles/meadowHue';
+import { accentPalette } from '../../../styles/meadowHue';
 import { Check, Monitor, Moon, Palette, RefreshCw, ScanSearch, Sun } from 'lucide-react';
 
 const THEME_OPTIONS: { value: ThemePreference; label: string; description: string }[] = [
@@ -16,7 +19,7 @@ const THEME_OPTIONS: { value: ThemePreference; label: string; description: strin
 
 const DESIGN_OPTIONS: { value: DesignMode; label: string; description: string }[] = [
   { value: 'classic', label: 'Classic', description: 'The original compact layout, styled like a code editor' },
-  { value: 'meadow',  label: 'Meadow',  description: 'Calm and roomy: larger text, softer colours, grouped navigation' },
+  { value: 'meadow',  label: 'Easy',    description: 'Calm and roomy: larger text, softer colours, grouped navigation' },
 ];
 
 type UpdateStatus =
@@ -46,7 +49,7 @@ function describeUpdate(update: UpdateStatus): { text: string; tone: 'muted' | '
 }
 
 export default function SettingsPage() {
-  const { preference, setPreference, design, setDesign } = useTheme();
+  const { preference, setPreference, design, setDesign, meadowHue, setMeadowHue, meadowShade, setMeadowShade, meadowAccent, theme } = useTheme();
   // The portal colour mode only exists in the classic design.
   const themeOptions = design === 'meadow' ? THEME_OPTIONS.filter((o) => o.value !== 'portal') : THEME_OPTIONS;
   const [update, setUpdate] = useState<UpdateStatus>({ status: 'idle' });
@@ -104,7 +107,7 @@ export default function SettingsPage() {
         onClick={() => setDesign(opt.value)}
         aria-pressed={active}
       >
-        <DesignPreview design={opt.value} />
+        <DesignPreview design={opt.value} accent={meadowAccent} />
         <span className={styles.designOptionHead}>
           <span className={styles.themeOptionLabel}>{opt.label}</span>
           {active && <span className={styles.themeOptionCheck}>✓</span>}
@@ -135,7 +138,7 @@ export default function SettingsPage() {
                 <div className={styles.mRowLabel}>Colour mode</div>
                 <div className={styles.mRowDesc}>
                   {preference === 'portal'
-                    ? 'Original Portal is a Classic theme, so Meadow is using its light colours.'
+                    ? 'Original Portal is a Classic theme, so Easy is using its light colours.'
                     : 'Light, dark, or follow your computer.'}
                 </div>
               </div>
@@ -159,6 +162,25 @@ export default function SettingsPage() {
                     );
                   })}
                 </div>
+              </div>
+            </div>
+            <div className={styles.mRow}>
+              <div className={styles.mRowText}>
+                <div className={styles.mRowLabel}>Accent colour</div>
+                <div className={styles.mRowDesc}>
+                  Pick a colour, or a shade of grey, black or white, to tint all of Easy: buttons, highlights,
+                  backgrounds and borders. The tones are adjusted so text stays easy to read, in light and dark.
+                </div>
+              </div>
+              <div className={styles.mRowControl}>
+                <HueWheel
+                  hue={meadowHue}
+                  onChange={(h) => setMeadowHue(h)}
+                  shade={meadowShade}
+                  onShade={(sh) => setMeadowShade(sh)}
+                  onReset={() => setMeadowHue(null)}
+                  accent={theme.activeHighlight}
+                />
               </div>
             </div>
           </div>
@@ -414,9 +436,10 @@ export default function SettingsPage() {
 
 // Miniature of each design, drawn in that design's own colours so the choice
 // is visible whichever design is active.
-function DesignPreview({ design }: { design: DesignMode }) {
+function DesignPreview({ design, accent }: { design: DesignMode; accent: MeadowAccent }) {
+  const m = accentPalette('light', accent);
   const c = design === 'meadow'
-    ? { ground: '#F4F6F1', side: '#FFFFFF', line: '#DCE3DA', accent: '#2D6A4F', wash: '#E4F1E9', ink: '#1E2A24', card: '#FFFFFF', radius: 6 }
+    ? { ground: m.mainBg, side: m.sidebarBg, line: m.panelBorder, accent: m.activeHighlight, wash: m.activeBg, ink: m.textPrimary, card: m.cardBg, radius: 6 }
     : { ground: '#252526', side: '#1e1e1e', line: '#3e3e42', accent: '#007acc', wash: 'rgba(0, 122, 204, 0.25)', ink: '#cccccc', card: '#333337', radius: 1 };
   return (
     <span className={styles.designPreview} style={{ background: c.ground, borderColor: c.line }} aria-hidden="true">
