@@ -47,3 +47,6 @@ cloud/.env
 # Editor
 .vscode/
 .idea/
+
+# scenario suite output (RESULTS.md is kept)
+tests/scenarios/results/
