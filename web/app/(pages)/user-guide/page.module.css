@@ -556,17 +556,24 @@
 .mGlossary dt { font-size: 15px; font-weight: 700; color: var(--text-primary); }
 .mGlossary dd { margin: 2px 0 0; font-size: 14.5px; line-height: 1.55; color: var(--text-secondary); }
 
-/* ── Classic: the same guide content, in Classic's own style ───────────────
-   The content is shared with Easy. Here each section becomes a bordered panel with a coloured icon heading,
-   the contents list sits across the top, and the Easy-only tokens fall back to Classic's values. */
+/* ── Classic: the same guide content, in Classic's own (VS Code) style ─────
+   Flat panels with 1px borders, square corners, the app's monospace upper-case labels, and plain text colour.
+   The content is shared with Easy; the Easy-only tokens fall back to Classic's values here. */
 .classicGuide {
-  --radius-card: 1rem;
-  --radius-lg: 0.75rem;
-  --font-display: inherit;
+  --radius-card: 0;
+  --radius-lg: 0;
+  --font-display: var(--font-mono);
   --shadow-card: none;
-  --guide-accent: var(--accent-blue);
+  --text-secondary: var(--text-primary);   /* Classic's secondary text is blue; the guide reads in plain text colour */
+  --guide-accent: var(--text-primary);
   max-width: 1100px;
 }
+/* sharp corners everywhere, including the numbered circles */
+.classicGuide,
+.classicGuide *,
+.classicGuide *::before,
+.classicGuide *::after { border-radius: 0 !important; box-shadow: none !important; }
+
 .classicGuide .mLayout { grid-template-columns: minmax(0, 1fr); gap: 1.5rem; }
 .classicGuide .mToc {
   order: -1;
@@ -574,40 +581,63 @@
   flex-direction: row;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem;
-  padding: 1rem;
+  gap: 0;
+  padding: 0;
   border: 1px solid var(--panel-border);
-  border-radius: var(--radius-card);
-  background-color: color-mix(in srgb, var(--panel-bg) 86%, transparent);
+  background-color: var(--panel-bg);
 }
-.classicGuide .mTocLabel { flex-basis: 100%; margin: 0 0 0.25rem; text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.75rem; }
+.classicGuide .mTocLabel {
+  flex-basis: 100%;
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--panel-border);
+  background-color: var(--sidebar-bg);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
 .classicGuide .mToc a {
-  padding: 0.3rem 0.75rem;
-  border: 1px solid var(--panel-border);
-  border-radius: 999px;
-  font-size: 0.85rem;
+  padding: 0.45rem 0.9rem;
+  border-right: 1px solid var(--panel-border);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
   color: var(--text-primary);
 }
-.classicGuide .mToc a:hover { border-color: var(--active-highlight); color: var(--active-highlight); }
-.classicGuide .mSection {
-  margin-bottom: 2rem;
-  padding: var(--card-pad, 1.5rem);
-  border: 1px solid var(--panel-border);
-  border-radius: var(--radius-card);
-  background-color: color-mix(in srgb, var(--panel-bg) 86%, transparent);
-}
+.classicGuide .mToc a:hover { background-color: var(--active-bg); color: var(--text-primary); text-decoration: underline; }
+.classicGuide .mToc a:focus-visible { outline: 1px solid var(--active-highlight); outline-offset: -1px; }
+
+.classicGuide .mSection { margin-bottom: 2.5rem; }
+/* section headings look like the app's own labels: small, spaced, upper-case, with a rule */
 .classicGuide .mSectionTitle {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  margin-bottom: 1.25rem;
-  padding-bottom: 0.75rem;
-  border-bottom: 1px solid var(--panel-border);
-  font-size: 1.5rem;
-  font-weight: 700;
+  gap: 0.6rem;
+  margin: 0 0 1rem;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-primary);
 }
-.classicTitleIcon { width: 1.5rem; height: 1.5rem; flex-shrink: 0; color: var(--guide-accent); }
-.classicGuide .mSubTitle { color: var(--guide-accent); }
+.classicGuide .mSectionTitle::after { content: ''; flex: 1; height: 1px; background-color: var(--panel-border); }
+.classicTitleIcon { width: 1rem; height: 1rem; flex-shrink: 0; color: var(--text-primary); }
+.classicGuide .mSubTitle {
+  margin: 1.5rem 0 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+}
+.classicGuide .mLead,
+.classicGuide .mText,
+.classicGuide .mList,
+.classicGuide .mStepList { font-size: 0.9rem; }
+
+/* panels: flat, bordered, VS Code grey */
 .classicGuide .mJob,
 .classicGuide .mFlowStep,
 .classicGuide .mChecks,
@@ -615,40 +645,126 @@
 .classicGuide .mGlossary,
 .classicGuide .mTerms div,
 .classicGuide .mFix,
-.classicGuide .mSheetWrap {
-  background-color: color-mix(in srgb, var(--card-bg) 72%, transparent);
-  box-shadow: none;
-}
-.classicGuide .mJob { border-radius: 0.75rem; }
-.classicGuide .mJob:hover { background-color: var(--card-hover); }
-.classicGuide .mJobIcon { border-radius: 50%; color: var(--accent-blue); background: color-mix(in srgb, var(--accent-blue) 14%, transparent); }
-.classicGuide .mJobLink { color: var(--accent-blue); }
-.classicGuide .mSteps li::before,
-.classicGuide .mFlowNum { background-color: var(--active-highlight); color: #fff; }
-.classicGuide .mResult { background-color: color-mix(in srgb, var(--accent-blue) 10%, var(--panel-bg)); }
-.classicGuide .mResult strong { color: var(--accent-blue); }
+.classicGuide .mSheetWrap,
+.classicGuide .mChatBot,
 .classicGuide .mAside {
-  background-color: color-mix(in srgb, var(--accent-blue) 12%, var(--panel-bg));
-  border-color: color-mix(in srgb, var(--accent-blue) 30%, var(--panel-border));
+  background-color: var(--panel-bg);
+  border: 1px solid var(--panel-border);
 }
-.classicGuide .mAsideWarn {
-  background-color: color-mix(in srgb, var(--accent-yellow) 10%, var(--panel-bg));
-  border-color: color-mix(in srgb, var(--accent-yellow) 32%, var(--panel-border));
-}
-.classicGuide .mTips li {
-  background-color: color-mix(in srgb, var(--accent-yellow) 10%, var(--panel-bg));
-  border: 1px solid color-mix(in srgb, var(--accent-yellow) 32%, var(--panel-border));
-}
-.classicGuide .mTips svg { color: var(--accent-yellow); }
+.classicGuide .mJob:hover,
+.classicGuide .mFix summary:hover { background-color: var(--card-hover); }
+.classicGuide .mJobIcon { background: transparent; color: var(--text-primary); border: 1px solid var(--panel-border); }
+.classicGuide .mJobTitle { font-family: var(--font-mono); font-size: 0.95rem; }
+.classicGuide .mJobLink { color: var(--text-primary); text-decoration: underline; }
+.classicGuide .mSteps li::before,
+.classicGuide .mFlowNum { background-color: var(--active-highlight); color: #fff; font-family: var(--font-mono); }
+.classicGuide .mResult { background-color: var(--card-bg); border-left: 3px solid var(--active-highlight); color: var(--text-primary); }
+.classicGuide .mResult strong { color: var(--text-primary); }
+.classicGuide .mAside { border-left: 3px solid var(--active-highlight); }
+.classicGuide .mAsideWarn { border-left-color: var(--accent-yellow); background-color: var(--panel-bg); }
+.classicGuide .mTips li { background-color: var(--panel-bg); border: 1px solid var(--panel-border); border-left: 3px solid var(--accent-yellow); }
+.classicGuide .mTips svg,
 .classicGuide .mFix summary svg,
-.classicGuide .mCheckList svg { color: var(--accent-blue); }
-.classicGuide .mTone_a { background: var(--accent-blue); }
-.classicGuide .mTone_b { background: var(--accent-purple); }
-.classicGuide .mTone_c { background: var(--accent-red); }
-.classicGuide .mChatUser { background: var(--accent-blue); }
-.classicGuide .mChatButtons span { color: var(--accent-blue); }
-.classicGuide .mVerdictYes { background: color-mix(in srgb, var(--guide-ok, #4ade80) 14%, var(--card-bg)); color: var(--guide-ok, #4ade80); }
-.classicGuide .mVerdictYes svg { color: inherit; }
-.classicGuide .mShotImg { border-radius: 0.75rem; box-shadow: none; }
-.classicGuide .mLayoutItem .mJobIcon { color: var(--accent-blue); }
-.classicGuide .mToc a:focus-visible { outline: 2px solid var(--active-highlight); outline-offset: 2px; }
+.classicGuide .mCheckList svg { color: var(--text-primary); }
+.classicGuide .mFix { margin: 0; }
+.classicGuide .mFixList { gap: 0; }
+.classicGuide .mFix + .mFix { border-top: 0; }
+.classicGuide .mFix summary { font-size: 0.9rem; }
+.classicGuide .mList code,
+.classicGuide .mAside code,
+.classicGuide .mFixBody code { background-color: var(--surface-bg); color: var(--text-primary); }
+.classicGuide .mSheet th { background-color: var(--sidebar-bg); font-family: var(--font-mono); }
+.classicGuide .mSheetReq span { color: var(--text-primary); }
+.classicGuide .mBar { border: 1px solid var(--panel-border); }
+.classicGuide .mTone_a { background: var(--active-highlight); }
+.classicGuide .mTone_b { background: var(--accent-blue); }
+.classicGuide .mTone_c { background: var(--accent-purple); }
+.classicGuide .mChat { background-color: var(--sidebar-bg); border: 1px solid var(--panel-border); }
+.classicGuide .mChatUser { background: var(--active-highlight); color: #fff; }
+.classicGuide .mChatButtons span { color: var(--text-primary); background-color: var(--panel-bg); }
+.classicGuide .mVerdictYes { background: var(--card-bg); color: var(--text-primary); border: 1px solid var(--accent-green); }
+.classicGuide .mVerdictNo { background: var(--card-bg); color: var(--text-primary); border: 1px solid var(--accent-red); }
+.classicGuide .mShotImg { border: 1px solid var(--panel-border); }
+.classicGuide .mLegend li::before { font-family: var(--font-mono); }
+.classicGuide .mGlossary dt { font-family: var(--font-mono); font-size: 0.85rem; }
+
+/* Classic packs a lot onto the screen, so the guide is set smaller and tighter than Easy's */
+.classicGuide { font-size: 13px; }
+.classicGuide.container { padding: 1.25rem 1.5rem; }
+.classicGuide .header { margin-bottom: 1.25rem; padding-bottom: 0.75rem; }
+.classicGuide .title { font-size: 1.5rem; gap: 0.5rem; }
+.classicGuide .title svg { width: 24px; height: 24px; }
+.classicGuide .subtitle { margin-top: 0.25rem; font-size: 0.85rem; }
+.classicGuide .mLayout { gap: 1rem; }
+.classicGuide .mSection { margin-bottom: 1.5rem; }
+.classicGuide .mSectionTitle { margin-bottom: 0.65rem; font-size: 0.75rem; }
+.classicGuide .mSubTitle { margin: 1rem 0 0.35rem; font-size: 0.72rem; }
+.classicGuide .mLead { margin-bottom: 10px; font-size: 13px; line-height: 1.5; }
+.classicGuide .mText { margin-top: 8px; font-size: 12.5px; line-height: 1.55; }
+.classicGuide .mList,
+.classicGuide .mStepList { margin-top: 8px; gap: 4px; font-size: 12.5px; line-height: 1.5; }
+.classicGuide .mList code,
+.classicGuide .mAside code,
+.classicGuide .mFixBody code { padding: 0 4px; font-size: 11.5px; }
+.classicGuide .mToc a { padding: 0.3rem 0.65rem; font-size: 0.72rem; }
+.classicGuide .mTocLabel { padding: 0.35rem 0.65rem; font-size: 0.65rem; }
+
+.classicGuide .mJobGrid { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; }
+.classicGuide .mJob { gap: 8px; padding: 12px 14px; }
+.classicGuide .mJobHead { gap: 8px; }
+.classicGuide .mJobIcon { width: 26px; height: 26px; }
+.classicGuide .mJobIcon svg { width: 14px; height: 14px; }
+.classicGuide .mJobTitle { font-size: 0.82rem; }
+.classicGuide .mSteps { gap: 5px; }
+.classicGuide .mSteps li { grid-template-columns: 18px 1fr; gap: 7px; font-size: 12.5px; line-height: 1.45; }
+.classicGuide .mSteps li::before { width: 18px; height: 18px; font-size: 11px; }
+.classicGuide .mResult { padding: 6px 9px; font-size: 12px; }
+.classicGuide .mJobLink { font-size: 12.5px; }
+.classicGuide .mJobLink svg { width: 12px; height: 12px; }
+
+.classicGuide .mLayoutList { gap: 0 20px; padding: 4px 14px; }
+.classicGuide .mLayoutItem { gap: 10px; padding: 9px 0; }
+.classicGuide .mItemTitle { font-size: 13px; }
+.classicGuide .mItemText { font-size: 12.5px; line-height: 1.45; }
+
+.classicGuide .mFigure { margin-top: 10px; }
+.classicGuide .mCaption { margin-top: 5px; font-size: 11.5px; }
+.classicGuide .mLegend { margin-top: 8px; gap: 6px 20px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.classicGuide .mLegend li { padding-left: 28px; font-size: 12px; line-height: 1.45; }
+.classicGuide .mLegend li::before { width: 19px; height: 19px; font-size: 11px; line-height: 19px; }
+
+.classicGuide .mAside { gap: 2px; margin-top: 10px; padding: 8px 12px; font-size: 12.5px; line-height: 1.5; }
+.classicGuide .mTips { gap: 5px; }
+.classicGuide .mTips li { gap: 8px; padding: 8px 12px; font-size: 12.5px; line-height: 1.45; }
+.classicGuide .mTips svg { width: 14px; height: 14px; margin-top: 2px; }
+
+.classicGuide .mFlow { gap: 4px; }
+.classicGuide .mFlowStep { gap: 4px; padding: 10px; font-size: 12px; line-height: 1.4; }
+.classicGuide .mFlowStep strong { font-size: 12.5px; }
+.classicGuide .mFlowNum { width: 20px; height: 20px; font-size: 11px; }
+.classicGuide .mFlowArrow { flex-basis: 14px; width: 14px; height: 14px; }
+
+.classicGuide .mSheet { font-size: 11.5px; }
+.classicGuide .mSheet th, .classicGuide .mSheet td { padding: 5px 8px; }
+.classicGuide .mSheet th span { font-size: 9.5px; }
+.classicGuide .mBar { height: 28px; }
+.classicGuide .mBarSeg { font-size: 12px; }
+.classicGuide .mBarKey { font-size: 12px; gap: 4px 14px; }
+.classicGuide .mChecks { gap: 12px; padding: 10px 12px; }
+.classicGuide .mCheckList { gap: 5px; font-size: 12px; }
+.classicGuide .mCheckList svg { width: 14px; height: 14px; }
+.classicGuide .mVerdictYes, .classicGuide .mVerdictNo { padding: 6px 10px; font-size: 12px; }
+.classicGuide .mTerms { gap: 8px; }
+.classicGuide .mTerms div { padding: 8px 12px; font-size: 12px; }
+.classicGuide .mTerms strong { font-size: 13px; }
+.classicGuide .mChat { gap: 6px; padding: 10px; }
+.classicGuide .mChatUser, .classicGuide .mChatBot { padding: 7px 10px; font-size: 12px; }
+.classicGuide .mChatButtons span { padding: 4px 10px; font-size: 11px; }
+
+.classicGuide .mFix summary { gap: 8px; padding: 8px 12px; font-size: 12.5px; }
+.classicGuide .mFix summary svg { width: 14px; height: 14px; }
+.classicGuide .mFixBody { padding: 8px 12px 10px 34px; font-size: 12.5px; line-height: 1.5; }
+.classicGuide .mGlossary { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 0 20px; padding: 2px 14px; }
+.classicGuide .mGlossary > div { padding: 7px 0; }
+.classicGuide .mGlossary dt { font-size: 12px; }
+.classicGuide .mGlossary dd { font-size: 12px; line-height: 1.45; }

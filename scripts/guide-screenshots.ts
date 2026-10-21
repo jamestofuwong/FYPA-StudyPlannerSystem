@@ -8,21 +8,25 @@
  *   - the test students from test-students/ (a few of them are loaded to show real results)
  *
  *   npx tsx scripts/guide-screenshots.ts [baseUrl] [testStudentsDir]
+ *   GUIDE_DESIGN=classic npx tsx scripts/guide-screenshots.ts     (the Classic set, in web/public/guide/classic/)
  *
- * Pictures are always taken in the Meadow design in light mode. Re-run it whenever a screen changes, then check
+ * Pictures are taken in light mode: the Easy set in the Easy design, the Classic set in the Classic design. Re-run it whenever a screen changes, then check
  * the numbers still point at the right things (it reports any callout it cannot find).
  */
 import fs from 'fs';
 import path from 'path';
 import puppeteer, { type Page } from 'puppeteer';
-import { SHOTS, type Callout, type Find, type Shot } from '../web/app/(pages)/user-guide/shots';
+import { SHOTS, CLASSIC_MAIN, shotFor, type Find, type Shot } from '../web/app/(pages)/user-guide/shots';
 
 const BASE = process.argv[2] ?? 'http://localhost:3100';
 // test-students/ sits in the repo, or one folder above it
 const STUDENTS = [process.argv[3], path.join(__dirname, '..', 'test-students'), path.join(__dirname, '..', '..', 'test-students')]
   .filter((p): p is string => !!p).map((p) => path.resolve(p)).find((p) => fs.existsSync(p)) ?? path.resolve(__dirname, '..', 'test-students');
-const OUT = path.resolve(__dirname, '..', 'web', 'public', 'guide');
+const CLASSIC = process.env.GUIDE_DESIGN === 'classic';
+const OUT = path.resolve(__dirname, '..', 'web', 'public', 'guide', CLASSIC ? 'classic' : '');
 const SCALE = 1.5;
+const MAIN_X = CLASSIC ? CLASSIC_MAIN : 256;
+const ONLY = (process.env.ONLY ?? '').split(',').filter(Boolean);
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const student = (group: string, prefix: string) => {
@@ -40,15 +44,16 @@ async function open(page: Page, route: string, viewport: Shot['viewport']) {
   await sleep(1200);
 }
 
-async function clickButton(page: Page, text: string, opts: { exact?: boolean } = {}) {
-  const ok = await page.evaluate((t, exact) => {
-    const el = [...document.querySelectorAll('button, a, [role=tab]')].find((b) => {
-      const x = (b.textContent ?? '').trim().replace(/\s+/g, ' ');
-      return exact ? x === t : x.includes(t);
+async function clickButton(page: Page, text: string, opts: { exact?: boolean; sidebar?: boolean } = {}) {
+  const ok = await page.evaluate((t, exact, sidebar, mainX) => {
+    const el = [...document.querySelectorAll('button, a, [role=tab]')].filter((b) => !sidebar || b.getBoundingClientRect().left < mainX - 4).find((b) => {
+      // an icon or emoji before the words does not count; neither does capital letters
+      const x = (b.textContent ?? '').trim().replace(/\s+/g, ' ').replace(/^[^\p{L}\p{N}]+/u, '').toLowerCase();
+      return exact ? x === t.toLowerCase() : x.includes(t.toLowerCase());
     }) as HTMLElement | undefined;
     el?.click();
     return !!el;
-  }, text, !!opts.exact);
+  }, text, !!opts.exact, !!opts.sidebar, MAIN_X);
   if (!ok) throw new Error(`button not found: ${text}`);
 }
 
@@ -92,10 +97,11 @@ async function locate(page: Page, find: Find) {
       els = [...document.querySelectorAll(f.css)].filter(visible);
     } else {
       const sel = f.tag ?? 'button, a, h1, h2, h3, h4, label, span, p, div, th, li, [role=tab], select, textarea, input';
-      const norm = (t: string) => t.trim().replace(/\s+/g, ' ');
+      const norm = (t: string) => t.trim().replace(/\s+/g, ' ').replace(/^[^\p{L}\p{N}]+/u, '').toLowerCase();
+      const want = f.text.toLowerCase();
       els = [...document.querySelectorAll(sel)].filter(visible).filter((el) => {
         const t = norm((el as HTMLElement).innerText ?? el.textContent ?? '');
-        return f.contains ? t.includes(f.text) : f.startsWith ? t.startsWith(f.text) : t === f.text;
+        return f.contains ? t.includes(want) : f.startsWith ? t.startsWith(want) : t === want;
       });
       // keep only the innermost matches
       els = els.filter((el) => !els.some((o) => o !== el && el.contains(o)));
@@ -124,19 +130,19 @@ async function stamp(page: Page, shot: Shot, key: string) {
       : place === 'l' || place === 'r' || place === 'ir' ? box.y + box.h / 2 : box.y - 8;
     badges.push({ n: c.n, x: cx - D / 2, y: cy - D / 2 });
   }
-  await page.evaluate((list) => {
+  await page.evaluate((list, isClassicShot) => {
     for (const b of list) {
       const d = document.createElement('div');
       d.setAttribute('data-guide-badge', '');
       d.textContent = String(b.n);
       Object.assign(d.style, {
-        position: 'fixed', left: `${b.x}px`, top: `${b.y}px`, width: '26px', height: '26px', borderRadius: '50%',
+        position: 'fixed', left: `${b.x}px`, top: `${b.y}px`, width: '26px', height: '26px', borderRadius: isClassicShot ? '0' : '50%',
         background: '#c2410c', color: '#fff', font: '700 14px/26px system-ui, sans-serif', textAlign: 'center',
         boxShadow: '0 0 0 2px #fff, 0 2px 6px rgba(0,0,0,.35)', zIndex: '2147483647', pointerEvents: 'none',
       });
       document.body.appendChild(d);
     }
-  }, badges);
+  }, badges, CLASSIC);
 }
 
 async function clearStamps(page: Page) {
@@ -144,7 +150,8 @@ async function clearStamps(page: Page) {
 }
 
 async function take(page: Page, key: keyof typeof SHOTS, clipOverride?: { x: number; y: number; width: number; height: number }) {
-  const shot = SHOTS[key];
+  const shot = shotFor(key, CLASSIC);
+  if (ONLY.length && !ONLY.includes(key)) return;
   await stamp(page, shot, key);
   await sleep(150);
   let clip = clipOverride ?? shot.clip ?? { x: 0, y: 0, ...shot.viewport };
@@ -154,7 +161,7 @@ async function take(page: Page, key: keyof typeof SHOTS, clipOverride?: { x: num
     if (!from || !to) { console.warn(`  ! ${key}: could not work out the crop`); missing++; }
     else {
       const y = Math.max(0, from.y - 24);
-      clip = { x: 256, y, width: shot.viewport.width - 256, height: Math.min(shot.viewport.height - y, to.y + to.h + (shot.clipExtra ?? 0) - y) };
+      clip = { x: MAIN_X, y, width: shot.viewport.width - MAIN_X, height: Math.min(shot.viewport.height - y, to.y + to.h + (shot.clipExtra ?? 0) - y) };
     }
   }
   await page.screenshot({ path: path.join(OUT, shot.file) as `${string}.webp`, type: 'webp', quality: 84, clip });
@@ -164,10 +171,10 @@ async function take(page: Page, key: keyof typeof SHOTS, clipOverride?: { x: num
 
 async function newPage(browser: Awaited<ReturnType<typeof puppeteer.launch>>, opts: { hue?: number; shade?: string; theme?: 'light' | 'dark' } = {}) {
   const page = await browser.newPage();
-  await page.evaluateOnNewDocument((accentHue, accentShade, colourMode) => {
+  await page.evaluateOnNewDocument((accentHue, accentShade, colourMode, isClassic) => {
     // tsx wraps named functions with a __name helper that does not exist inside the page
     (window as unknown as { __name: (f: unknown) => unknown }).__name = (f) => f;
-    localStorage.setItem('designPreference', 'meadow');
+    localStorage.setItem('designPreference', isClassic ? 'classic' : 'meadow');
     localStorage.setItem('themePreference', colourMode);
     // Meadow's accent colour: left unset (the original green) unless a shot asks for another
     if (accentHue !== null) localStorage.setItem('meadowHue', String(accentHue));
@@ -177,7 +184,7 @@ async function newPage(browser: Awaited<ReturnType<typeof puppeteer.launch>>, op
     const css = document.createElement('style');
     css.textContent = 'nextjs-portal{display:none!important} *{animation:none!important;transition:none!important;caret-color:transparent!important}';
     document.addEventListener('DOMContentLoaded', () => document.head.appendChild(css));
-  }, opts.hue ?? null, opts.shade ?? null, opts.theme ?? 'light');
+  }, opts.hue ?? null, opts.shade ?? null, opts.theme ?? 'light', CLASSIC);
   return page;
 }
 
@@ -187,31 +194,31 @@ async function main() {
   try {
     // ---- Major Detection: empty, import panel -------------------------------------------------------------
     let page = await newPage(browser);
-    await open(page, '/dashboard', SHOTS.layout.viewport);
+    await open(page, '/dashboard', shotFor('layout', CLASSIC).viewport);
     await take(page, 'layout');
 
     await importStudent(page, student('a_follows_the_planner_exactly', 'A03'), { year: 2026, sem: 1 });
-    await page.setViewport({ ...SHOTS.importPanel.viewport, deviceScaleFactor: SCALE });
+    await page.setViewport({ ...shotFor('importPanel', CLASSIC).viewport, deviceScaleFactor: SCALE });
     await take(page, 'importPanel');
 
     // ---- the same student, through the result tabs and on to the pathway ----------------------------------
     await load(page);
-    await page.setViewport({ ...SHOTS.results.viewport, deviceScaleFactor: SCALE });
+    await page.setViewport({ ...shotFor('results', CLASSIC).viewport, deviceScaleFactor: SCALE });
     await sleep(600);
     await take(page, 'results');
 
-    await page.setViewport({ ...SHOTS.graduation.viewport, deviceScaleFactor: SCALE });
+    await page.setViewport({ ...shotFor('graduation', CLASSIC).viewport, deviceScaleFactor: SCALE });
     await clickButton(page, 'Graduation', { exact: true });
     await sleep(1200);
     await take(page, 'graduation');
 
-    await page.setViewport({ ...SHOTS.unitPlan.viewport, deviceScaleFactor: SCALE });
+    await page.setViewport({ ...shotFor('unitPlan', CLASSIC).viewport, deviceScaleFactor: SCALE });
     await clickButton(page, 'Unit Plan', { exact: true });
     await sleep(1200);
     await take(page, 'unitPlan');
 
-    await page.setViewport({ ...SHOTS.pathway.viewport, deviceScaleFactor: SCALE });
-    await clickButton(page, 'Student Pathway', { exact: true });   // the sidebar link; the tab is the same words
+    await page.setViewport({ ...shotFor('pathway', CLASSIC).viewport, deviceScaleFactor: SCALE });
+    await clickButton(page, 'Student Pathway', { exact: true, sidebar: true });   // the sidebar link; the tab is the same words
     await sleep(6000);
     await clickButton(page, 'Generate Custom Pathway');
     await sleep(6000);
@@ -220,7 +227,7 @@ async function main() {
 
     // ---- a student with two Conceded Passes: the "Other requirements" card ------------------------------
     page = await newPage(browser);
-    await open(page, '/dashboard', SHOTS.graduationOther.viewport);
+    await open(page, '/dashboard', shotFor('graduationOther', CLASSIC).viewport);
     await importStudent(page, student('d_fails_and_exemptions', 'D07'), { year: 2025, sem: 2 });
     await load(page);
     await clickButton(page, 'Graduation', { exact: true });
@@ -261,19 +268,21 @@ async function main() {
       }],
     ];
     // ---- the same page in another accent colour -----------------------------------------------------------
-    page = await newPage(browser, { hue: 214 });
-    await open(page, '/dashboard', SHOTS.accentExample.viewport);
-    await take(page, 'accentExample');
-    await page.close();
+    if (!CLASSIC) {   // accent colours belong to Easy only
+      page = await newPage(browser, { hue: 214 });
+      await open(page, '/dashboard', shotFor('accentExample', CLASSIC).viewport);
+      await take(page, 'accentExample');
+      await page.close();
 
-    page = await newPage(browser, { shade: 'black', theme: 'dark' });
-    await open(page, '/dashboard', SHOTS.shadeExample.viewport);
-    await take(page, 'shadeExample');
-    await page.close();
+      page = await newPage(browser, { shade: 'black', theme: 'dark' });
+      await open(page, '/dashboard', shotFor('shadeExample', CLASSIC).viewport);
+      await take(page, 'shadeExample');
+      await page.close();
+    }
 
     for (const [key, route, prepare] of simple) {
       page = await newPage(browser);
-      await open(page, route, SHOTS[key].viewport);
+      await open(page, route, shotFor(key, CLASSIC).viewport);
       if (prepare) await prepare(page);
       await take(page, key);
       await page.close();

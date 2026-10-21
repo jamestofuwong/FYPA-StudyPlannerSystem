@@ -1,24 +1,28 @@
 'use client';
 
 /**
- * Building blocks for the Meadow user guide: a screenshot with its numbered legend, and the small diagrams.
+ * Building blocks for the user guide (Easy and Classic): a screenshot with its numbered legend, and the small diagrams.
  * The diagrams are plain HTML and CSS (no images) so they follow the light and dark colours of the app.
  */
 import React from 'react';
 import { ArrowRight, Check, CircleHelp, X } from 'lucide-react';
 import styles from './page.module.css';
-import { SHOTS } from './shots';
+import { SHOTS, shotFor, EASY_ONLY } from './shots';
+import { useDesign } from '../../../styles/themeProvider';
 
 // ---------------------------------------------------------------------------
 // Screenshot with a numbered legend. The numbers in the picture come from the same spec (shots.ts).
 // ---------------------------------------------------------------------------
 
 export function Shot({ id }: { id: keyof typeof SHOTS }) {
-  const shot = SHOTS[id];
+  const classic = useDesign() !== 'meadow';
+  const shot = shotFor(id, classic);
+  // Classic has its own set of pictures; the ones about Easy's own features are shared
+  const folder = classic && !EASY_ONLY.includes(id) ? 'guide/classic' : 'guide';
   return (
     <figure className={styles.mFigure}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img className={styles.mShotImg} src={`/guide/${shot.file}`} alt={shot.alt} loading="lazy" />
+      <img className={styles.mShotImg} src={`/${folder}/${shot.file}`} alt={shot.alt} loading="lazy" />
       <figcaption className={styles.mCaption}>{shot.caption}</figcaption>
       {shot.callouts.length > 0 && (
         <ol className={styles.mLegend} aria-label="What the numbers in the picture point to">

@@ -55,9 +55,40 @@ export interface Shot {
   clipTo?: Find;
   clipExtra?: number;
   callouts: Callout[];
+  /**
+   * What differs in the Classic design, which has its own screens. Callouts are listed in full when they change;
+   * otherwise the Easy ones are reused with the sidebar width adjusted.
+   */
+  classic?: Partial<Omit<Shot, 'file' | 'classic' | 'callouts'>> & {
+    /** By callout number: what to change (the new `find` is in Classic's screen), or null to leave it out. */
+    callouts?: Record<number, Partial<Callout> | null>;
+  };
 }
 
-const MAIN = 256; // the sidebar is 256px wide, so the working area starts here
+const MAIN = 256; // Easy's sidebar is 256px wide, so its working area starts here
+export const CLASSIC_MAIN = 240; // Classic's sidebar is narrower
+
+/** The picture spec for one design: Easy as written, Classic with its own overrides (its own file folder too). */
+export function shotFor(key: keyof typeof SHOTS, classic: boolean): Shot {
+  const shot = SHOTS[key];
+  if (!classic || EASY_ONLY.includes(key)) return shot;
+  const { classic: over = {}, ...base } = shot;
+  const { callouts: patch = {}, ...rest } = over;
+  const shift = (f: Find): Find => ('css' in f ? f
+    : { ...f, xMin: f.xMin === undefined ? undefined : f.xMin - (MAIN - CLASSIC_MAIN), xMax: f.xMax === undefined ? undefined : f.xMax - (MAIN - CLASSIC_MAIN) });
+  const callouts = base.callouts
+    .map((c) => {
+      const p = patch[c.n];
+      return p === null ? null : { ...c, find: shift(c.find), ...p };
+    })
+    .filter((c): c is Callout => c !== null)
+    .map((c, i) => ({ ...c, n: i + 1 }));   // numbered again, so there is no gap where one was left out
+  const clip = base.clip ? { ...base.clip, x: CLASSIC_MAIN, width: base.viewport.width - CLASSIC_MAIN } : undefined;
+  return { ...base, clip, ...rest, callouts };
+}
+
+/** Pictures about Easy's own features: the Classic guide shows these as they are. */
+export const EASY_ONLY: string[] = ['accentExample', 'shadeExample'];
 
 export const SHOTS: Record<string, Shot> = {
   layout: {
@@ -287,5 +318,50 @@ export const SHOTS: Record<string, Shot> = {
     caption: 'The same page after choosing blue on the colour wheel',
     viewport: { width: 1360, height: 640 },
     callouts: [],
+  },
+};
+
+// ---- Classic's differences -----------------------------------------------------------------------------------
+// Classic has its own screens, so some callouts point at something else or are left out. Where a callout is left
+// out, the rest are numbered again.
+
+SHOTS.layout.classic = {
+  caption: 'The main parts of the screen',
+  callouts: {
+    1: { label: 'Explorer', text: 'Every page is listed here. Click a name to open it.', find: { css: '[class*="Sidebar_explorerLabel"]' }, place: 'r' },
+    2: { find: { css: '[class*="Sidebar_sidebarHeader"] > :last-child' }, place: 'l' },
+    6: { place: 'b' },
+    7: { find: { text: 'User Guide', contains: true, tag: 'button' }, place: 'ir' },
+  },
+};
+SHOTS.results.classic = { clip: { x: CLASSIC_MAIN, y: 70, width: 1120, height: 790 }, callouts: { 1: null, 5: { place: 'ir' } } };
+SHOTS.pathway.classic = { callouts: { 2: null } };
+SHOTS.plannerImport.classic = {
+  clip: { x: CLASSIC_MAIN, y: 40, width: 1120, height: 300 },
+  callouts: { 1: null },
+};
+SHOTS.units.classic = {
+  callouts: {
+    1: { find: { css: 'input[placeholder*="Filter unit code"]' } },
+    2: null,
+  },
+};
+SHOTS.copilot.classic = {
+  callouts: {
+    1: { label: 'New chat', find: { css: '[class*="historyHeader"] button' } },
+    2: null,
+    3: null,
+  },
+};
+SHOTS.classEstimation.classic = {
+  callouts: { 1: { find: { text: 'Load current students', contains: true, xMin: CLASSIC_MAIN, yMax: 400 } } },
+};
+SHOTS.settings.classic = {
+  clip: { x: CLASSIC_MAIN, y: 70, width: 1120, height: 1000 },
+  callouts: {
+    2: { label: 'Theme', text: 'Light, dark, or follow your computer. Original Portal matches the student portal.', find: { text: 'Theme', tag: 'div, h2, h3, span' } },
+    3: null,
+    4: null,
+    7: { find: { text: 'Application Update', tag: 'div, h2, h3, span' } },
   },
 };

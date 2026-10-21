@@ -128,6 +128,22 @@ describe('Classic user guide', () => {
     expect(easyText.length).toBeGreaterThan(5000);
   });
 
+  test('shows its own Classic pictures, and each one exists', () => {
+    const { container } = renderClassic();
+    const srcs = [...container.querySelectorAll('figure img')].map((i) => i.getAttribute('src')!);
+    const classicShots = srcs.filter((src) => src.startsWith('/guide/classic/'));
+    expect(classicShots.length).toBe(Object.keys(SHOTS).length - 2);   // all but the two about Easy's accent colours
+    for (const src of srcs) expect(fs.existsSync(path.join(PUBLIC_GUIDE, src.replace('/guide/', '')))).toBe(true);
+  });
+
+  test('every classic legend is numbered 1..n with no gaps', () => {
+    const { container } = renderClassic();
+    for (const legend of container.querySelectorAll('ol[aria-label^="What the numbers"]')) {
+      const nums = [...legend.querySelectorAll('li')].map((li) => Number(li.getAttribute('value')));
+      expect(nums).toEqual(nums.map((_, i) => i + 1));
+    }
+  });
+
   test('every contents link points at a section', () => {
     const { container } = renderClassic();
     const links = [...container.querySelectorAll('nav a[href^="#guide-"]')];

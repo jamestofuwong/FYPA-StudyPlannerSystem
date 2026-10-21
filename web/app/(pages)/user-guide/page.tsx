@@ -155,7 +155,7 @@ function Guide({ classic }: { classic: boolean }) {
       {classic ? (
         <header className={styles.header}>
           <h1 className={styles.title}>
-            <BookOpen size={40} color="var(--guide-icon, #3b82f6)" /> User Documentation
+            <BookOpen size={40} color="var(--text-primary)" /> User Documentation
           </h1>
           <p className={styles.subtitle}>{GUIDE_INTRO}</p>
         </header>
