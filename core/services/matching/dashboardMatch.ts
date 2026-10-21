@@ -103,21 +103,8 @@ export async function runDashboardMatch(rawStudent: any) {
     config: { preferIntakeYear: false, secondMajorThreshold },
   });
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const payload = result.payload as any;
-  const graduationCheck = {
-    isEligible: (payload.unmatchedCore?.length === 0) && (payload.totalCredits >= 300),
-    details: {
-      creditsProgress: `${payload.totalCredits} / 300`,
-      missingCount: payload.unmatchedCore?.length || 0,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      hasFailedUnits: student.completedUnitCodes?.some((u: any) => u.grade === 'F'),
-    },
-  };
-
   return {
     data: result.payload,
-    graduationCheck,
     processingTime: result.durationMs,
   };
 }
