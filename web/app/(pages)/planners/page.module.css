@@ -451,3 +451,36 @@
   padding: 0 14px;
   font-size: 14px;
 }
+
+/* ===== Collapsible planner list ===== */
+/* The list slides shut the way the app's sidebar does: width over 0.25s, content fading over 0.15s */
+.listWrap { --list-w: 320px; position: relative; display: flex; flex-shrink: 0; min-height: 0; width: var(--list-w); transition: width 0.25s ease; }
+:global(html[data-design='meadow']) .listWrap { --list-w: 340px; }
+.listWrapCollapsed { width: 32px; border-right: 1px solid var(--panel-border); }
+.listClip { flex: 1; min-width: 0; overflow: hidden; display: flex; }
+.listClip .listPanel { flex: 0 0 var(--list-w); width: var(--list-w); opacity: 1; transition: opacity 0.15s ease; }
+.listPanelClosed { opacity: 0 !important; visibility: hidden; transition: opacity 0.15s ease, visibility 0s linear 0.25s !important; }
+@media (prefers-reduced-motion: reduce) {
+  .listWrap, .listClip .listPanel, .listPanelClosed { transition: none !important; }
+}
+.listToggle {
+  position: absolute;
+  top: 12px;
+  right: -13px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--panel-border);
+  background: var(--panel-bg);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.listToggle:hover { background: var(--card-hover); }
+.listToggle:focus-visible { outline: 2px solid var(--active-highlight); outline-offset: 1px; }
+.listToggle svg { width: 14px; height: 14px; }
+.listWrapCollapsed .listToggle { right: auto; left: 3px; }
+:global(html[data-design='meadow']) .listToggle { border-radius: 50%; background: var(--card-bg); box-shadow: var(--shadow-card); }

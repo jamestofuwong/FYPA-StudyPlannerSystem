@@ -788,9 +788,9 @@ export default function DashboardPage() {
             onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
             onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
             placeholder={
-              portalSessionStatus === 'idle'          ? 'Log in to portal via Scraper page' :
+              portalSessionStatus === 'idle'          ? 'Log in to portal' :
               portalSessionStatus === 'login-pending' ? 'Logging in to portal…' :
-              portalSessionStatus === 'login-error'   ? 'Portal login failed — retry in Scraper page' :
+              portalSessionStatus === 'login-error'   ? 'Portal login failed. Please try again.' :
               isLoadingStudentList                    ? 'Loading student list…' :
               'Student ID or name'
             }
