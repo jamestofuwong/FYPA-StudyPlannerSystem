@@ -61,6 +61,7 @@ export interface UnitDetail extends UnitListing {
 export interface PlannerSummary {
   id: string
   courseName: string
+  courseCode?: string | null
   majorName: string | null
   intakeYear: number
   intakeMonth: number

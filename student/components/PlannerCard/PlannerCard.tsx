@@ -6,22 +6,9 @@ interface Props {
   planner: PlannerSummary
 }
 
-const STOP_WORDS = new Set(['of', 'the', 'and', 'in', 'for', 'a'])
-
-function courseAbbrev(name: string): string {
-  if (/bachelor\s+of\s+computer\s+science/i.test(name)) return 'BA-CS'
-  const words = name.split(/\s+/).filter(w => !STOP_WORDS.has(w.toLowerCase()))
-  if (words.length === 0) return name.slice(0, 3).toUpperCase()
-  const parts = words.map(w => w[0].toUpperCase())
-  if (parts.length <= 2) {
-    parts[parts.length - 1] = words[words.length - 1].slice(0, 3)
-  }
-  return parts.join('')
-}
-
 export default function PlannerCard({ planner }: Props) {
   const durationYears = planner.durationYears
-  const abbrev = courseAbbrev(planner.courseName)
+  const courseCode = planner.courseCode?.trim() || 'No information'
 
   return (
     <PendingLink
@@ -31,7 +18,7 @@ export default function PlannerCard({ planner }: Props) {
       ariaLabel={`View ${planner.courseName}${planner.majorName ? ` ${planner.majorName}` : ''} planner`}
     >
       <div className={styles.bar}>
-        <span className={styles.barCode}>{abbrev}</span>
+        <span className={styles.barCode}>{courseCode}</span>
       </div>
 
       <div className={styles.content}>

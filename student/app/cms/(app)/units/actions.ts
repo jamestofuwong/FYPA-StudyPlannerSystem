@@ -75,6 +75,29 @@ function normalizedAssessments(data: UnitFormData) {
   }))
 }
 
+export async function deleteUnit(id: string) {
+  const session = await requireSession()
+
+  try {
+    await prisma.unit.delete({ where: { id } })
+  } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      (error.code === 'P2003' || error.code === 'P2014')
+    ) {
+      return { success: false as const, reason: 'in_use' as const }
+    }
+    console.error(`[CMS] unit:delete failed id=${id}`, error)
+    return { success: false as const, reason: 'failed' as const }
+  }
+
+  console.info(`[CMS] unit:deleted id=${id} by=${session.email}`)
+  revalidatePath('/cms/units')
+  revalidateStudentCache(STUDENT_CACHE.units)
+  revalidateStudentCache(STUDENT_CACHE.planners)
+  return { success: true as const }
+}
+
 export async function saveUnit(data: UnitFormData) {
   const parsed = UnitSchema.safeParse(data)
   if (!parsed.success) {
