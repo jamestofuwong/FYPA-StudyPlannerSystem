@@ -2,6 +2,7 @@ import { runMatchingPipeline } from './matchingService';
 import * as plannerRepository from '../../db/repositories/plannerRepository';
 import type { PlannerTemplate, UnitMasterEntry, CourseType } from '../../shared/types/matching';
 import { prisma } from '../../db/client';
+import { parseSecondMajorThreshold } from './secondMajorThreshold';
 
 // Priority for resolving a unit's category when it appears in multiple planners.
 // Higher value wins.
@@ -39,7 +40,7 @@ export async function runDashboardMatch(rawStudent: any) {
 
   // REQ-FUN-610: read user-configured second major threshold from SystemConfig (default 0.70)
   const thresholdRow = await prisma.systemConfig.findUnique({ where: { key: 'second_major_threshold' } }).catch(() => null);
-  const secondMajorThreshold = thresholdRow ? Math.min(1, Math.max(0, parseFloat(thresholdRow.value))) : 0.70;
+  const secondMajorThreshold = parseSecondMajorThreshold(thresholdRow?.value);
 
   const dbPlanners = await plannerRepository.getAllPlannersWithUnits();
 
@@ -102,21 +103,8 @@ export async function runDashboardMatch(rawStudent: any) {
     config: { preferIntakeYear: false, secondMajorThreshold },
   });
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const payload = result.payload as any;
-  const graduationCheck = {
-    isEligible: (payload.unmatchedCore?.length === 0) && (payload.totalCredits >= 300),
-    details: {
-      creditsProgress: `${payload.totalCredits} / 300`,
-      missingCount: payload.unmatchedCore?.length || 0,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      hasFailedUnits: student.completedUnitCodes?.some((u: any) => u.grade === 'F'),
-    },
-  };
-
   return {
     data: result.payload,
-    graduationCheck,
     processingTime: result.durationMs,
   };
 }

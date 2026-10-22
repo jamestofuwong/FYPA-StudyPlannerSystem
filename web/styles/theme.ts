@@ -1,8 +1,9 @@
 export type ThemeMode = "light" | "dark" | "portal";
 
 // The overall look: "classic" is the original compact editor-style design,
-// "meadow" is the calmer, roomier design. A design only changes colour, type
-// and layout tokens; every page behaves the same in both.
+// "meadow" is the calmer, roomier design, shown to people as "Easy" (the id is
+// kept because it is what is saved in settings). A design only changes colour,
+// type and layout tokens; every page behaves the same in both.
 export type DesignMode = "classic" | "meadow";
 
 export interface ThemeColors {

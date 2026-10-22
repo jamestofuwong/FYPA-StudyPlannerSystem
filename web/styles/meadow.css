@@ -1,5 +1,8 @@
 /*
- * Meadow design tokens.
+ * Design tokens for the "Easy" design.
+ *
+ * The design's internal id is still 'meadow' (the data-design attribute, the saved preference, this file's name
+ * and the m-prefixed class names). It was renamed Easy for people; the id stays so saved settings keep working.
  *
  * Every page's CSS reads these as `var(--token, <classic value>)`. The classic
  * design never defines them, so it keeps its exact original values; this file

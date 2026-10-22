@@ -8,7 +8,9 @@ import PlannerHeader from '../../../components/planner/PlannerHeader';
 
 import styles from './page.module.css';
 import { useDesign } from '../../../styles/themeProvider';
-import { Pencil, Search, Trash2, Upload } from 'lucide-react';
+import { ChevronsLeft, ChevronsRight, Pencil, Search, Trash2, Upload } from 'lucide-react';
+
+const LIST_OPEN_KEY = 'plannersListOpen';
 
 // ==================================================================================================================
 // Utility Functions
@@ -43,6 +45,17 @@ export default function PlannersPage() {
   const [dirtyUnits, setDirtyUnits] = useState<Record<string, Record<string, unknown>>>({});
   const [dirtyPlanner, setDirtyPlanner] = useState<Record<string, unknown>>({});
   const [editSnapshot, setEditSnapshot] = useState<any | null>(null);
+  // The planner list can be folded away to give the planner the full width; the choice is remembered
+  const [listOpen, setListOpen] = useState(true);
+  useEffect(() => {
+    try { if (localStorage.getItem(LIST_OPEN_KEY) === 'false') setListOpen(false); } catch { /* storage unavailable */ }
+  }, []);
+  const toggleList = () => {
+    setListOpen((open) => {
+      try { localStorage.setItem(LIST_OPEN_KEY, String(!open)); } catch { /* storage unavailable */ }
+      return !open;
+    });
+  };
 
   // ==================================================================================================================
   // useMemo (derived data)
@@ -419,7 +432,21 @@ export default function PlannersPage() {
     <div className={styles.layout}>
 
       {/* LEFT PANEL: The List of Planners */}
-      <div className={styles.listPanel}>
+      <div className={`${styles.listWrap} ${listOpen ? '' : styles.listWrapCollapsed}`}>
+      <button
+        type="button"
+        className={styles.listToggle}
+        onClick={toggleList}
+        aria-expanded={listOpen}
+        aria-controls="planner-list-panel"
+        aria-label={listOpen ? 'Collapse planner list' : 'Show planner list'}
+        title={listOpen ? 'Collapse planner list' : 'Show planner list'}
+      >
+        {listOpen ? <ChevronsLeft aria-hidden="true" /> : <ChevronsRight aria-hidden="true" />}
+      </button>
+      {/* The clip lets the list slide shut; the panel keeps its width so its content does not reflow */}
+      <div className={styles.listClip}>
+      <div id="planner-list-panel" className={`${styles.listPanel} ${listOpen ? '' : styles.listPanelClosed}`} aria-hidden={!listOpen}>
         {isMeadow ? (
           <div className={styles.mListHeader}>
             <div className={styles.mListTitleRow}>
@@ -528,6 +555,9 @@ export default function PlannersPage() {
             ))
           )}
         </div>
+      </div>
+      </div>
+
       </div>
 
       {/* RIGHT PANEL: The Selected Planner Details */}

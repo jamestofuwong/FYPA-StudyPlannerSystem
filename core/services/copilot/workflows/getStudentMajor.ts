@@ -2,6 +2,7 @@ import type { Workflow, WorkflowContext, WorkflowResult } from '../types';
 import { searchStudents, fetchEnrollments, fetchDegreeAudit } from '../../portal/portalSessionService';
 import { selectEnrollment } from './enrollmentSelector';
 import { runMatchingPipeline } from '../../matching/matchingService';
+import { parseSecondMajorThreshold } from '../../matching/secondMajorThreshold';
 import type { PlannerTemplate, UnitMasterEntry, CourseType } from '../../../shared/types/matching';
 
 const CATEGORY_PRIORITY: Record<string, number> = {
@@ -86,9 +87,7 @@ export const getStudentMajorWorkflow: Workflow<Input, Output> = {
 
       const scraped = await fetchDegreeAudit(student.db_id, enrollment.EnrollId, params.studentId);
 
-      const secondMajorThreshold = thresholdRow
-        ? Math.min(1, Math.max(0, parseFloat(thresholdRow.value)))
-        : 0.70;
+      const secondMajorThreshold = parseSecondMajorThreshold(thresholdRow?.value);
 
       // Build unit master table
       const masterMap = new Map<string, { category: string; priority: number }>();

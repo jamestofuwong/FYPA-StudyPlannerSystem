@@ -2,20 +2,18 @@ import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { prisma } from '../../../../core/db/client';
 import {
-  buildCustomPlan,
   validateSchedulerConfig,
   type RequisiteCondition,
   resolveNextStudyTerm,
-  calendarTermFor,
   normaliseCode,
   resolveWilPlacementMilestone,
   type SchedulableUnit,
 } from '../../../../core/services/scheduling/customPlannerScheduler';
 import {
-  blockedByRequisites,
-  countElectiveSlotsNeeded,
-  recommendElectives,
-} from '../../../../core/shared/scheduling/electiveSlots';
+  finishPlanForPlanner,
+  startPlanForPlanner,
+  type PlannerPlanInput,
+} from '../../../../core/services/scheduling/planForPlanner';
 import { UNIT_INCLUDE, toSchedulable } from './unitMapping';
 
 export async function POST(req: NextRequest) {
@@ -33,15 +31,6 @@ export async function POST(req: NextRequest) {
 
     if (!plannerId) {
       return NextResponse.json({ error: 'Invalid request: plannerId is required' }, { status: 400 });
-    }
-
-    let startYear: number = body.startYear;
-    let startSemester: 1 | 2 = body.startSemester;
-
-    if (typeof startYear !== 'number' || (startSemester !== 1 && startSemester !== 2)) {
-      const resolved = resolveNextStudyTerm(courseList ?? []);
-      startYear = resolved.startYear;
-      startSemester = resolved.startSemester;
     }
 
     const configCheck = validateSchedulerConfig(config);
@@ -80,6 +69,15 @@ export async function POST(req: NextRequest) {
     }
     const intakeSemester: 1 | 2 = (planner.intake_month ?? 1) >= 7 ? 2 : 1;
 
+    // Where the plan starts: given explicitly (a restored plan), or read from the transcript's calendar terms.
+    let startYear: number = body.startYear;
+    let startSemester: 1 | 2 = body.startSemester;
+    if (typeof startYear !== 'number' || (startSemester !== 1 && startSemester !== 2)) {
+      const resolved = resolveNextStudyTerm(courseList ?? [], { year: planner.intake_year, semester: intakeSemester });
+      startYear = resolved.startYear;
+      startSemester = resolved.startSemester;
+    }
+
     const normalizedCompleted = new Set(
       (completedUnitCodes as string[]).map((c) => c.trim().toUpperCase())
     );
@@ -103,46 +101,37 @@ export async function POST(req: NextRequest) {
       ).values(),
     ];
 
-    // The core pool is all planner units the student has not yet completed/enrolled in
-    const remainingUnits: SchedulableUnit[] = planner.units
-      .filter((tu) => tu.unit !== null && tu.category !== 'mpu' && !normalizedCompleted.has(tu.unit.unit_code.toUpperCase()))
-      .map((tu) => toSchedulable(tu.unit!, String(tu.category)));
-
     const minorIds: string[] = Array.isArray(injectedMinorIds) ? injectedMinorIds : [];
 
-    const schedule = (pool: SchedulableUnit[]) =>
-      buildCustomPlan(
-        pool,
-        completedUnitCodes as string[],
-        startYear as number,
-        startSemester as 1 | 2,
-        intakeSemester,
-        (concededPassUnitCodes as string[] | undefined) ?? [],
-        configCheck.config
-      );
-
-    // A planner records some electives as a slot with no unit_id, which the pool
-    // above drops because there is nothing to place. Count how many of those the
-    // student still owes and pick real units for them.
-    //
-    // The pool is scheduled twice on purpose: whether an elective already in the
-    // pool fills its slot is only knowable after a run, since one blocked by a
-    // requisite is never placed and leaves its slot to a recommendation. The
-    // first run answers that and is discarded; the second is the plan returned.
-
-    // Baseline simulation probe to find exact free elective slots needed
-    const probe = schedule(remainingUnits);
-    const baseElectiveSlotsNeeded = countElectiveSlotsNeeded({
-      electiveCount: planner.elective_count,
+    // The plan itself is built in core, so the student app's Plan Builder gets
+    // the same plan from the same planner. A planner records some electives as a
+    // slot with no unit_id, which has nothing to place; the shared code counts
+    // how many of those the student still owes and picks real units for them.
+    const planInput: PlannerPlanInput = {
       plannerUnits: planner.units.map((tu) => ({
         category: String(tu.category),
-        unitCode: tu.unit?.unit_code ?? null,
+        unit: tu.unit ? toSchedulable(tu.unit, String(tu.category)) : null,
+        // Where the planner puts it, so the plan can follow the planner's order
+        yearLevel: tu.year_level,
+        semester: tu.semester,
       })),
-      electiveGroupCodes: electiveGroupUnits.map((u) => u.unit_code),
-      completedUnitCodes: [...normalizedCompleted],
-      pool: remainingUnits,
-      blockedUnitCodes: blockedByRequisites(probe),
-    });
+      electiveCount: planner.elective_count,
+      electiveGroups: planner.elective_groups.map((group) =>
+        group.units.map((gu) => toSchedulable(gu.unit, 'elective')),
+      ),
+      completedUnitCodes: completedUnitCodes as string[],
+      concededPassUnitCodes: (concededPassUnitCodes as string[] | undefined) ?? [],
+      startYear: startYear as number,
+      startSemester: startSemester as 1 | 2,
+      intakeSemester,
+      config: configCheck.config,
+      // MPU units are handled in their own section on this page
+      scheduleMpu: false,
+    };
+
+    // Baseline simulation probe to find exact free elective slots needed
+    const planStart = startPlanForPlanner(planInput);
+    const baseElectiveSlotsNeeded = planStart.freeElectiveSlots;
 
     // Query Sibling Majors (Same course, year, intake)
     const siblingPlanners = await prisma.plannerTemplate.findMany({
@@ -281,61 +270,15 @@ export async function POST(req: NextRequest) {
       })
       .filter((m) => m.canFitStrictly);
 
-    // Combine and deduplicate swapped units up to baseElectiveSlotsNeeded
-    const extraUnitsToSwap = new Map<string, SchedulableUnit>();
-
-    for (const dmUnit of activeMajorUnits) {
-      extraUnitsToSwap.set(dmUnit.code.toUpperCase(), {
-        ...dmUnit,
-        category: 'double_major',
-        recommended: true,
-      });
-    }
-
-    for (const mUnit of activeMinorUnits) {
-      const code = mUnit.code.toUpperCase();
-      if (!extraUnitsToSwap.has(code)) {
-        extraUnitsToSwap.set(code, {
-          ...mUnit,
-          category: 'minor',
-          recommended: true,
-        });
-      }
-    }
-
-    // Safety Cap: never allow swapped units to exceed the total base free elective slots
-    let slotsToDeduct = 0;
-    for (const [code, unit] of extraUnitsToSwap.entries()) {
-      if (slotsToDeduct < baseElectiveSlotsNeeded) {
-        if (!remainingUnits.some((u) => u.code.toUpperCase() === code)) {
-          remainingUnits.push(unit);
-        }
-        slotsToDeduct++;
-      }
-    }
-
-    // Deduct swapped units from remaining slots
-    let electiveSlotsNeeded = Math.max(0, baseElectiveSlotsNeeded - slotsToDeduct);
-    const startCalendarTerm = calendarTermFor(startSemester, intakeSemester);
-    // If any free elective slots still remain, fill with general recommendations
-    if (electiveSlotsNeeded > 0) {
-      const recommended = recommendElectives({
-        needed: electiveSlotsNeeded,
-        preferredTerm: startCalendarTerm,
-        candidateSources: planner.elective_groups.map((group) =>
-          group.units.map((gu) => toSchedulable(gu.unit, 'elective')),
-        ),
-        completedUnitCodes: [...normalizedCompleted],
-        alreadyPlannedCodes: remainingUnits.map((u) => u.code),
-      });
-
-      for (const unit of recommended) {
-        remainingUnits.push({ ...unit, category: 'elective', recommended: true });
-      }
-    }
+    // Double major units come first, then minor units, each marked with the
+    // category they are shown under. The shared code caps them at the free slots.
+    const swappedUnits = [
+      ...activeMajorUnits.map((u) => ({ ...u, category: 'double_major' })),
+      ...activeMinorUnits.map((u) => ({ ...u, category: 'minor' })),
+    ];
 
     // Final Plan Scheduling
-    const result = schedule(remainingUnits);
+    const { result, units: remainingUnits } = finishPlanForPlanner(planInput, planStart, swappedUnits);
 
     // Pass the unscheduled SchedulableUnit objects (which carry category and creditPoints)
     const unscheduledSchedulables = remainingUnits.filter((u) =>

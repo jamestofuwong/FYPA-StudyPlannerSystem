@@ -1,0 +1,68 @@
+{
+  "file_name": "planner1",
+  "course_information": {
+    "course": "Bachelor of Computer Science",
+    "major": "Artificial Intelligence",
+    "intake": "Semester 1",
+    "requirements": {
+      "core": {"count": 8, "cp": 100},
+      "major": {"count": 8, "cp": 100},
+      "elective": {"count": 8, "cp": 100},
+      "wil": {"count": null, "cp": null}
+    },
+    "intake_year": 2022
+  },
+  "categories": {
+    "core_units": [
+      {"year_level": 1, "semester": 1, "category": "core", "unit_code": "COS10009", "unit_name": "Introduction to Programming", "prerequisite": null, "offered_in": null},
+      {"year_level": 1, "semester": 1, "category": "core", "unit_code": "COS10011", "unit_name": "Creating Web Applications", "prerequisite": "Co-requisite: COS10009", "offered_in": null},
+      {"year_level": 1, "semester": 1, "category": "core", "unit_code": "COS10003", "unit_name": "Computer and Logic Essentials", "prerequisite": null, "offered_in": null},
+      {"year_level": 1, "semester": 1, "category": "core", "unit_code": "TNE10006", "unit_name": "Networks and Switching", "prerequisite": null, "offered_in": null},
+      {"year_level": 2, "semester": 1, "category": "core", "unit_code": "COS20015", "unit_name": "Fundamentals of Data Management", "prerequisite": "COS10009", "offered_in": null},
+      {"year_level": 3, "semester": 1, "category": "core", "unit_code": "SWE40001", "unit_name": "Software Engineering Project A", "prerequisite": "COS20007", "offered_in": null},
+      {"year_level": 3, "semester": 2, "category": "core", "unit_code": "SWE40002", "unit_name": "Software Engineering Project B", "prerequisite": "SWE40001", "offered_in": null},
+      {"year_level": 3, "semester": 2, "category": "core", "unit_code": "ICT30005", "unit_name": "Professional Issues in IT", "prerequisite": "200 Credit Points", "offered_in": null}
+    ],
+    "major_units": [
+      {"year_level": 1, "semester": 2, "category": "major_core", "unit_code": "COS20007", "unit_name": "Object-oriented Programming", "prerequisite": "COS10009", "offered_in": null},
+      {"year_level": 1, "semester": 2, "category": "major_core", "unit_code": "COS20001", "unit_name": "User-Centred Design", "prerequisite": null, "offered_in": null},
+      {"year_level": 2, "semester": 1, "category": "major_core", "unit_code": "COS30018", "unit_name": "Intelligent Systems", "prerequisite": "COS20007", "offered_in": null},
+      {"year_level": 2, "semester": 1, "category": "major_core", "unit_code": "COS30019", "unit_name": "Introduction to Artificial Intelligence", "prerequisite": "COS20007", "offered_in": null},
+      {"year_level": 2, "semester": 2, "category": "major_core", "unit_code": "COS30008", "unit_name": "Data Structure and Patterns", "prerequisite": "COS20007", "offered_in": null},
+      {"year_level": 2, "semester": 2, "category": "major_core", "unit_code": "SWE20001", "unit_name": "Managing Software Projects", "prerequisite": "COS20007", "offered_in": null},
+      {"year_level": 2, "semester": 2, "category": "major_core", "unit_code": "COS30082", "unit_name": "Applied Machine Learning", "prerequisite": "COS30018 / COS30019", "offered_in": null},
+      {"year_level": 3, "semester": 1, "category": "major_core", "unit_code": "COS30081", "unit_name": "Fundamentals of Natural Language Processing", "prerequisite": "COS20015 & COS30019", "offered_in": null}
+    ],
+    "mpu_group": [],
+    "elective_groups": {
+      "elective": [
+        {"year_level": 1, "semester": 2, "category": "elective", "unit_code": "-", "unit_name": "Elective 1", "prerequisite": null, "offered_in": null},
+        {"year_level": 1, "semester": 2, "category": "elective", "unit_code": "-", "unit_name": "Elective 2", "prerequisite": null, "offered_in": null},
+        {"year_level": 2, "semester": 1, "category": "elective", "unit_code": "-", "unit_name": "Elective 3", "prerequisite": null, "offered_in": null},
+        {"year_level": 2, "semester": 2, "category": "elective", "unit_code": "-", "unit_name": "Elective 4", "prerequisite": null, "offered_in": null},
+        {"year_level": 3, "semester": 1, "category": "elective", "unit_code": "-", "unit_name": "Elective 5", "prerequisite": null, "offered_in": null},
+        {"year_level": 3, "semester": 1, "category": "elective", "unit_code": "-", "unit_name": "Elective 6", "prerequisite": null, "offered_in": null},
+        {"year_level": 3, "semester": 2, "category": "elective", "unit_code": "-", "unit_name": "Elective 7", "prerequisite": null, "offered_in": null},
+        {"year_level": 3, "semester": 2, "category": "elective", "unit_code": "-", "unit_name": "Elective 8", "prerequisite": null, "offered_in": null},
+        {"year_level": null, "semester": null, "category": "elective", "unit_code": "COS30043", "unit_name": "Interface Design and Development", "prerequisite": "COS10011 & COS20007", "offered_in": 1},
+        {"year_level": null, "semester": null, "category": "elective", "unit_code": "COS10004", "unit_name": "Computer Systems", "prerequisite": null, "offered_in": 2},
+        {"year_level": null, "semester": null, "category": "elective", "unit_code": "SWE30011", "unit_name": "IoT Programming", "prerequisite": "COS10011 & COS20007", "offered_in": 1},
+        {"year_level": null, "semester": null, "category": "elective", "unit_code": "COS20019", "unit_name": "Cloud Computing Architecture", "prerequisite": "COS10011 & TNE10006", "offered_in": 1},
+        {"year_level": null, "semester": null, "category": "elective", "unit_code": "COS30045", "unit_name": "Data Visualisation", "prerequisite": "COS10009", "offered_in": 2}
+      ],
+      "prescribed_elective": []
+    },
+    "wil_group": [],
+    "minor_groups": [
+      {
+        "minor_name": "Big Data Analytics Minor",
+        "units": [
+          {"unit_code": "COS10022", "unit_name": "Introduction to Data Science", "prerequisite": null, "offered_in": null},
+          {"unit_code": "COS10082", "unit_name": "Applied Analytics in Business", "prerequisite": null, "offered_in": 2},
+          {"unit_code": "COS20083", "unit_name": "Advanced Data Analytics", "prerequisite": "COS10022 & COS10009", "offered_in": 1},
+          {"unit_code": "COS20028", "unit_name": "Big Data Architecture and Application", "prerequisite": "COS10022 & COS20007", "offered_in": 2}
+        ]
+      }
+    ]
+  }
+}

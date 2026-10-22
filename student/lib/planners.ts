@@ -88,6 +88,7 @@ export async function getPlanners(): Promise<PlannerSummary[]> {
   return templates.map(t => ({
     id: t.id,
     courseName: t.course.name,
+    courseCode: t.course.code,
     majorName: t.major?.name ?? null,
     intakeYear: t.intake_year,
     intakeMonth: t.intake_month ?? 0,
@@ -175,6 +176,7 @@ export async function getPlannerById(id: string): Promise<PlannerDetail | null> 
   return {
     id: t.id,
     courseName: t.course.name,
+    courseCode: t.course.code,
     majorName: t.major?.name ?? null,
     intakeYear: t.intake_year,
     intakeMonth: t.intake_month ?? 0,

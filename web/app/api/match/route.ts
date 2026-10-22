@@ -8,12 +8,11 @@ export async function POST(request: Request) {
 
     if (!rawStudent) return NextResponse.json({ error: "Missing student data" }, { status: 400 });
 
-    const { data, graduationCheck, processingTime } = await runDashboardMatch(rawStudent);
+    const { data, processingTime } = await runDashboardMatch(rawStudent);
 
     return NextResponse.json({
       success: true,
       data,
-      graduationCheck,
       processingTime,
     });
 

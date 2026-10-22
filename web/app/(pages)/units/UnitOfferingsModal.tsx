@@ -50,9 +50,9 @@ export default function UnitOfferingsModal({
     // Global search query across all tables
     const [globalSearch, setGlobalSearch] = useState('');
 
-    // Collapsed state for terms (1, 2, 3, 4) and unclassified (0)
-    // By default, active terms (1, 2) and unclassified (0) can be open, or all open
-    const [collapsedSections, setCollapsedSections] = useState<Record<number, boolean>>({});
+    // Collapsed state for terms (1, 2, 3, 4) and unclassified (0). Every section starts closed.
+    const ALL_COLLAPSED: Record<number, boolean> = { 0: true, 1: true, 2: true, 3: true, 4: true };
+    const [collapsedSections, setCollapsedSections] = useState<Record<number, boolean>>(ALL_COLLAPSED);
 
     const toggleSection = (sectionId: number) => {
         setCollapsedSections((prev) => ({
@@ -62,7 +62,7 @@ export default function UnitOfferingsModal({
     };
 
     const expandAll = () => setCollapsedSections({});
-    const collapseAll = () => setCollapsedSections({ 0: true, 1: true, 2: true, 3: true, 4: true });
+    const collapseAll = () => setCollapsedSections(ALL_COLLAPSED);
 
     // Term active for adding: 1 | 2 | 3 | 4 | null
     const [activeAddTerm, setActiveAddTerm] = useState<number | null>(null);

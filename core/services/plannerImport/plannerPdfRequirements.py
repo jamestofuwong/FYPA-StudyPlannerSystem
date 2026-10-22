@@ -210,7 +210,7 @@ def extract_requirements(text):
     patterns = [
         ("core", re.compile(r'(?<!\d)(\d+)\s+Core\s+Units\b', re.IGNORECASE)),
         ("major", re.compile(r'(?<!\d)(\d+)\s+[A-Za-z][A-Za-z&/() \-]*\s+(?:Major|Discipline)\s+Units\b', re.IGNORECASE)),
-        ("elective", re.compile(r'(?<!\d)(\d+)\s+Elective\s+Units\b', re.IGNORECASE)),
+        ("elective", re.compile(r'(?<!\d)(\d+)\s+(?:Recommended\s+)?Elective\s+Units\b', re.IGNORECASE)),
         ("wil", re.compile(r'(?<!\d)(\d+)\s+(?:WIL\s+Placement|Industry\s+Training|Industry\s+Placement)\s+Unit(?:s)?\b', re.IGNORECASE)),
     ]
 

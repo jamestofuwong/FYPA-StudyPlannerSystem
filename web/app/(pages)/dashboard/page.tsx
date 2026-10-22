@@ -7,6 +7,7 @@ import { useToast } from '../../../components/providers/ToastProvider';
 import { useStudentSession } from '../../../components/providers/StudentSessionContext';
 import { panelToPath } from '../../../lib/navigation';
 import { calendarTermFor } from '../../../../core/services/scheduling/customPlannerScheduler';
+import { auditGraduation } from '../../../../core/services/graduation/graduationAudit';
 import { deriveSemesterFromMonth } from '../../../../core/services/classEstimation/scrapedStudentMapper';
 import { monthsOf } from '../pathway/terms';
 import type { ScrapedStudent, ScrapedCourseListItem } from '../../../../core/shared/types/student';
@@ -787,9 +788,9 @@ export default function DashboardPage() {
             onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
             onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
             placeholder={
-              portalSessionStatus === 'idle'          ? 'Log in to portal via Scraper page' :
+              portalSessionStatus === 'idle'          ? 'Log in to portal' :
               portalSessionStatus === 'login-pending' ? 'Logging in to portal…' :
-              portalSessionStatus === 'login-error'   ? 'Portal login failed — retry in Scraper page' :
+              portalSessionStatus === 'login-error'   ? 'Portal login failed. Please try again.' :
               isLoadingStudentList                    ? 'Loading student list…' :
               'Student ID or name'
             }
@@ -1276,7 +1277,7 @@ export default function DashboardPage() {
                   No Major Detected
                 </div>
                 <div style={{ fontSize: fs(12), color: 'var(--text-muted)', marginBottom: closest.length > 0 ? 10 : 0 }}>
-                  None of the stored planners reached the detection threshold for this student.
+                  No single planner stands out for this student yet: either none reached the detection threshold, or everything they have taken is shared by more than one major.
                   {closest.length > 0 ? ' Closest matches and their completion gaps:' : ' No planners are stored yet — upload a study planner PDF to begin.'}
                 </div>
                 {closest.map((r: any) => (
@@ -1621,111 +1622,36 @@ export default function DashboardPage() {
               );
 
               const allTranscriptUnits = [...(scrapedStudent?.student?.courseList ?? []), ...(dashboardData?.mpuCourseList ?? [])];
-              const transcriptStates = resolveUnitStates(allTranscriptUnits);
-              const transcriptCodes = new Set(
-                  [...transcriptStates].filter(([, state]) => state === 'passed').map(([code]) => code)
-              );
 
-              // Same source as the identity card: portal enrolment CP (or import sum).
-              const creditsCompleted = scrapedStudent?.student?.creditsCompleted ?? 0;
-              const creditsRequired = scrapedStudent?.student?.creditsRequired || 300;
-
-              const coreMissing = (activePlanner?.units ?? [])
-                .filter((u: any) => u.unit !== null && (u.category === 'core' || u.category === 'major_core') && !transcriptCodes.has(u.unit.unit_code?.toUpperCase()));
-
-              const prescribedMissing = (activePlanner?.units ?? [])
-                .filter((u: any) => u.unit !== null && u.category === 'prescribed_elective' && !transcriptCodes.has(u.unit.unit_code?.toUpperCase()));
-
-              const creditsOk = creditsCompleted >= creditsRequired;
-              const isEligible = (coreMissing.length + prescribedMissing.length === 0) && creditsOk;
+              // One shared audit (core/services/graduation) decides the verdict, so this tab and the
+              // copilot cannot disagree. Credits come from the same source as the identity card: the
+              // portal's enrolment figure, or the import's sum.
+              const audit = auditGraduation(activePlanner, allTranscriptUnits, {
+                creditsCompleted: scrapedStudent?.student?.creditsCompleted ?? 0,
+                creditsRequired: scrapedStudent?.student?.creditsRequired || 300,
+              });
+              const {
+                eligible: isEligible,
+                creditsCompleted,
+                creditsRequired,
+                creditsOk,
+                coreMissing,
+                prescribedMissing,
+                bars: creditBars,
+              } = audit;
               const creditPct = Math.min((creditsCompleted / creditsRequired) * 100, 100);
 
-              // Credit points actually earned per unit code, for the per-category bars
-              // below. Keyed on the highest creditsEarned across that code's rows, so a
-              // retake's zero-credit fail attempt never masks the credits from the
-              // attempt that actually passed. A row's grade disagreeing with its
-              // credits (e.g. a fail that still shows credit) is a data anomaly already
-              // surfaced separately by findGradeCreditAnomalies, not handled here.
-              const creditsEarnedByCode = new Map<string, number>();
-              for (const row of allTranscriptUnits as any[]) {
-                const code = normaliseUnitCode(row?.courseId);
-                if (!code) continue;
-                const earned = Number(row?.creditsEarned ?? 0) || 0;
-                if (earned > (creditsEarnedByCode.get(code) ?? 0)) creditsEarnedByCode.set(code, earned);
-              }
-
-              // Credits earned toward one planner category, counting only units this
-              // PLANNER names in that category and that the transcript shows passed.
-              // Independent of any custom-plan editing: this reads the real planner and
-              // the real transcript, the same two sources coreMissing/prescribedMissing
-              // above already use, not the pathway page's generated-plan totals.
-              //
-              // includeElectiveGroups additionally credits a passed unit that the
-              // planner offers only as an elective-group candidate, never as a named
-              // row in activePlanner.units, e.g. COS30045 taken from the group rather
-              // than named on the template. This is the same situation
-              // countElectiveSlotsNeeded and the custom-planner route's completedUnits
-              // handling already account for; a unit that is BOTH named and a group
-              // candidate is credited once, via the named pass, since seen starts
-              // pre-loaded with the named codes.
-              const achievedFor = (categories: string[], includeElectiveGroups = false) => {
-                const named = (activePlanner?.units ?? [])
-                  .filter((u: any) => u.unit !== null && categories.includes(u.category));
-                const seen = new Set<string>(named.map((u: any) => normaliseUnitCode(u.unit.unit_code)));
-
-                let sum = named.reduce((total: number, u: any) => {
-                  const code = normaliseUnitCode(u.unit.unit_code);
-                  return transcriptCodes.has(code) ? total + (creditsEarnedByCode.get(code) ?? 0) : total;
-                }, 0);
-
-                if (includeElectiveGroups) {
-                  const groupUnits = (activePlanner?.elective_groups ?? []).flatMap((g: any) => g.units ?? []);
-                  for (const gu of groupUnits) {
-                    const code = normaliseUnitCode(gu.unit?.unit_code);
-                    // Also skips a repeat of the same candidate across more than one group
-                    if (!code || seen.has(code)) continue;
-                    seen.add(code);
-                    if (transcriptCodes.has(code)) sum += creditsEarnedByCode.get(code) ?? 0;
-                  }
-                }
-                return sum;
-              };
-
-              // core_cp/major_cp/elective_cp/wil_cp are each independently nullable: the
-              // planner never recorded that requirement, not that it is zero. There is no
-              // mpu_cp column at all, so MPU gets no bar here. It also gets no completion
-              // count: alternates like MPU3143 (international) vs MPU3183 (local) are
-              // both listed as separate planner units, but a student only needs one of
-              // each pair, by nationality. Until that resolution exists, counting "still
-              // needed" units would flag the wrong-nationality alternate as a permanent
-              // graduation blocker instead of the data gap it actually is. Core and Major
-              // share one bar, as the Core & Major card below already treats them as one
-              // group; Elective combines elective_cp with prescribed_elective units,
-              // matching planCategories: ['elective', 'prescribed_elective'] in
-              // planValidator.ts.
-              const creditBars: { key: string; label: string; achieved: number; required: number }[] = [];
-              if (activePlanner?.core_cp != null || activePlanner?.major_cp != null) {
-                creditBars.push({
-                  key: 'core-major',
-                  label: 'Core & Major Credits',
-                  achieved: achievedFor(['core', 'major_core']),
-                  required: (activePlanner?.core_cp ?? 0) + (activePlanner?.major_cp ?? 0),
-                });
-              }
-              if (activePlanner?.elective_cp != null) {
-                creditBars.push({
-                  key: 'elective',
-                  label: 'Elective Credits',
-                  achieved: achievedFor(['elective', 'prescribed_elective'], true),
-                  required: activePlanner.elective_cp,
-                });
-              }
-              if (activePlanner?.wil_cp != null) {
-                creditBars.push({
-                  key: 'wil',
-                  label: 'WIL Credits',
-                  achieved: achievedFor(['wil']),
-                  required: activePlanner.wil_cp,
+              // Requirements that are not a named core/major/prescribed unit
+              const otherRows: { key: string; label: string; detail: string; bad: boolean }[] = [];
+              if (audit.wilMissing) otherRows.push({ key: 'wil', label: 'Work placement (WIL)', detail: `${audit.wilMissing.code} not yet passed`, bad: true });
+              if (audit.electiveShortfallUnits > 0) otherRows.push({ key: 'elective', label: 'Electives', detail: `${audit.electiveShortfallUnits} more elective unit(s) needed`, bad: true });
+              if (audit.inProgress.length > 0) otherRows.push({ key: 'progress', label: 'Still in progress', detail: audit.inProgress.join(', '), bad: false });
+              if (audit.concededPasses.length > 0) {
+                otherRows.push({
+                  key: 'conceded',
+                  label: 'Conceded Passes',
+                  detail: `${audit.concededPasses.join(', ')} (${audit.concededPasses.length} of the 1 allowed for graduation)`,
+                  bad: audit.concededOverLimit,
                 });
               }
 
@@ -1741,8 +1667,8 @@ export default function DashboardPage() {
                     </div>
                     <p className={styles.gradLead}>
                       {isEligible
-                        ? 'Core, prescribed electives, and credit requirements are met for this planner.'
-                        : 'One or more graduation requirements are still outstanding against this planner.'}
+                        ? 'Core, prescribed electives, work placement, elective and credit requirements are met for this planner.'
+                        : `Still outstanding against this planner: ${audit.reasons.join('; ')}.`}
                     </p>
                   </div>
 
@@ -1797,9 +1723,9 @@ export default function DashboardPage() {
                       ) : (
                         <div className={styles.insightList}>
                           {coreMissing.map((u: any) => (
-                            <div key={u.unit?.unit_code} className={styles.insightRow}>
-                              <InlineCode red={true}>{u.unit?.unit_code}</InlineCode>
-                              <span className={styles.insightRowName}>{u.unit?.unit_name || '—'}</span>
+                            <div key={u.code} className={styles.insightRow}>
+                              <InlineCode red={true}>{u.code}</InlineCode>
+                              <span className={styles.insightRowName}>{u.name || '—'}</span>
                               {u.semester != null && (
                                 <span className={styles.insightRowMeta}>Sem {u.semester}</span>
                               )}
@@ -1821,9 +1747,9 @@ export default function DashboardPage() {
                       ) : (
                         <div className={styles.insightList}>
                           {prescribedMissing.map((u: any) => (
-                            <div key={u.unit?.unit_code} className={styles.insightRow}>
-                              <InlineCode red={false}>{u.unit?.unit_code}</InlineCode>
-                              <span className={styles.insightRowName}>{u.unit?.unit_name || '—'}</span>
+                            <div key={u.code} className={styles.insightRow}>
+                              <InlineCode red={false}>{u.code}</InlineCode>
+                              <span className={styles.insightRowName}>{u.name || '—'}</span>
                               {u.semester != null && (
                                 <span className={styles.insightRowMeta}>Sem {u.semester}</span>
                               )}
@@ -1833,6 +1759,22 @@ export default function DashboardPage() {
                       )}
                     </div>
                     </div>
+
+                    {otherRows.length > 0 && (
+                      <div className={`${styles.insightCard} ${otherRows.some((r) => r.bad) ? styles.insightRed : styles.insightYellow}`}>
+                        <div className={styles.gradReqTop}>
+                          <span className={styles.gradReqLabel}>Other requirements</span>
+                        </div>
+                        <div className={styles.insightList}>
+                          {otherRows.map((r) => (
+                            <div key={r.key} className={styles.insightRow} data-testid={`grad-other-${r.key}`}>
+                              <span className={styles.insightRowName}>{r.label}</span>
+                              <span className={styles.insightRowMeta}>{r.detail}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                 </div>
               );
           })()}

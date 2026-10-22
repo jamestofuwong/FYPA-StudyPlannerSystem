@@ -11,6 +11,7 @@ const customJestConfig = {
   moduleNameMapper: {
   '^@core/(.*)$': '<rootDir>/core/$1',
   '^@shared/(.*)$': '<rootDir>/core/shared/$1',
+  '^@student/(.*)$': '<rootDir>/student/$1',
   '\\.module\\.css$': 'identity-obj-proxy',
   '\\.(css|less|sass|scss)$': '<rootDir>/__mocks__/styleMock.js',
   '^@/(.*)$': '<rootDir>/web/$1', 

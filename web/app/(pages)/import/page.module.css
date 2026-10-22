@@ -767,6 +767,26 @@
   font-size: var(--text-body-sm, 12px);
   color: var(--text-primary);
 }
+
+.validationWarningBox {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.validationWarning {
+  padding: 8px 10px;
+  border-radius: var(--radius-md, 4px);
+  border-left: 3px solid var(--accent-orange);
+  border-top: 1px solid rgba(var(--tint-orange, 206, 145, 120), 0.28);
+  border-right: 1px solid rgba(var(--tint-orange, 206, 145, 120), 0.28);
+  border-bottom: 1px solid rgba(var(--tint-orange, 206, 145, 120), 0.28);
+  background: rgba(var(--tint-orange, 206, 145, 120), 0.08);
+  color: var(--text-primary);
+  font-size: var(--text-small, 11px);
+  line-height: 1.5;
+}
 .fieldValueMono {
   font-size: var(--text-body-sm, 12px);
   color: var(--text-primary);
@@ -1044,7 +1064,9 @@
   padding: 14px 16px;
 }
 :global(html[data-design='meadow']) .resultGroupTitle { font-size: 15px; color: var(--text-primary); }
-:global(html[data-design='meadow']) .validationBox {
+:global(html[data-design='meadow']) .validationBox,
+:global(html[data-design='meadow']) .validationWarningBox {
   margin: 0 0 16px;
   border-radius: 12px;
 }
+:global(html[data-design='meadow']) .validationWarning { border-radius: 10px; }
