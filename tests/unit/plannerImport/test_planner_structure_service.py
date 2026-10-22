@@ -295,15 +295,33 @@ class CollectValidationIssuesTests(unittest.TestCase):
 
     # Verifies an empty Winter Term is not treated as an incomplete main semester.
     def test_empty_winter_term_is_not_flagged(self):
-        data = self._planner_with_main_semesters()
+        data = self._planner_with_main_semesters(overrides={(2, 1): []})
+        data["categories"]["core_units"].append(
+            {"unit_code": "WINTER10001", "year_level": 1, "semester": 4}
+        )
 
-        self.assertFalse(any("Winter Term" in issue for issue in collect_validation_issues(data)))
+        empty_semesters = [
+            (finding["year"], finding["semester"])
+            for finding in collect_validation_findings(data)
+            if finding["type"] == "empty_expected_semester"
+        ]
+
+        self.assertEqual(empty_semesters, [(2, 1)])
 
     # Verifies an empty Summer Term is not treated as an incomplete main semester.
     def test_empty_summer_term_is_not_flagged(self):
-        data = self._planner_with_main_semesters()
+        data = self._planner_with_main_semesters(overrides={(2, 1): []})
+        data["categories"]["core_units"].append(
+            {"unit_code": "SUMMER10001", "year_level": 1, "semester": 3}
+        )
 
-        self.assertFalse(any("Summer Term" in issue for issue in collect_validation_issues(data)))
+        empty_semesters = [
+            (finding["year"], finding["semester"])
+            for finding in collect_validation_findings(data)
+            if finding["type"] == "empty_expected_semester"
+        ]
+
+        self.assertEqual(empty_semesters, [(2, 1)])
 
     # Verifies unplaced elective options and minor memberships do not create low-count evidence.
     def test_elective_pool_and_minor_membership_do_not_count_as_placements(self):
@@ -320,16 +338,39 @@ class CollectValidationIssuesTests(unittest.TestCase):
 
         self.assertEqual(collect_validation_issues(data), [])
 
-    # Verifies repeated representations of one normalized code count only once.
-    def test_duplicate_scheduled_unit_does_not_inflate_semester_count(self):
-        data = self._planner_with_main_semesters(
-            overrides={(2, 1): ["COS20001", "COS20002", "COS20003"]}
-        )
-        data["categories"]["wil_group"].append(
-            {"unit_code": " cos-20001 ", "year_level": 2, "semester": 1}
+    # Verifies duplicate normalized codes cannot satisfy a scheduled-unit requirement.
+    def test_duplicate_scheduled_unit_does_not_inflate_requirement_count(self):
+        data = {
+            "course_information": {
+                "course": "Course",
+                "major": "Major",
+                "intake": "March",
+                "intake_year": 2025,
+                "requirements": {"major": {"count": 2}},
+            },
+            "categories": {
+                "core_units": [],
+                "major_units": [
+                    {"unit_code": "COS20001", "year_level": 1, "semester": 1},
+                    {"unit_code": " cos-20001 ", "year_level": 1, "semester": 1},
+                ],
+                "mpu_group": [],
+                "elective_groups": {"prescribed_elective": [], "elective": []},
+                "minor_groups": [],
+                "wil_group": [],
+            },
+        }
+
+        deficit = next(
+            finding
+            for finding in collect_validation_findings(data)
+            if finding["type"] == "requirement_count_deficit" and finding["section"] == "major"
         )
 
-        self.assertEqual(collect_validation_issues(data), [])
+        self.assertEqual(
+            (deficit["expected"], deficit["actual"], deficit["deficit"]),
+            (2, 1, 1),
+        )
 
     # Verifies a major is not required without evidence that the course uses one.
     def test_collect_validation_issues_does_not_require_major_without_evidence(self):
