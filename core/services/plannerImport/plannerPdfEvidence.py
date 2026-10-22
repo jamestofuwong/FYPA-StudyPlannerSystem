@@ -3,7 +3,7 @@ import re
 # ============================================================
 # STEP 1: Prepare colour values
 # ============================================================
-UNIT_MARKER_RE = r'[*#†]+'
+UNIT_MARKER_RE = r'[*#†@&]+'
 
 CODE_RE = re.compile(rf'^[A-Z]{{3}}\d{{3,5}}(?:{UNIT_MARKER_RE})?$')
 
@@ -275,7 +275,7 @@ def detect_colour_legend(pdf):
     PATTERNS = [
         (r'(?:\d+\s+)?Core\s+Units(?:\s*\(|\b)', 'core', 'widest'),
         (r'(?:\d+\s+)?(?:First\s+Major|(?:\w[\w\s]*\s+)?(?:Major|Discipline))\s+Units(?:\s*\(|\b)', 'major', 'widest'),
-        (r'(?:(?:\d+\s+)?Elective\s+Units|(?:\d+\s+)?Component\s+Units|(?:\d+\s+)?Fixed\s+Units\s*\+\s*\d+\s+Minor/Elective\s+Units)', 'elective', 'widest'),
+        (r'(?:(?:\d+\s+)?(?:Recommended\s+)?Elective\s+Units|(?:\d+\s+)?Component\s+Units|(?:\d+\s+)?Fixed\s+Units\s*\+\s*\d+\s+Minor/Elective\s+Units)', 'elective', 'widest'),
         (r'(?:Work-Integrated\s+Learning\s+Placement|\d+\s+(?:WIL\s+Placement|Industry\s+Training|Industry\s+Placement)\s+Unit(?:s)?)', 'wil_sidebar', 'narrowest'),
         (r'General\s+Studies|MPU', 'mpu', 'narrowest'),
     ]

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import styles from './page.module.css';
 import { useToast } from '../../../components/providers/ToastProvider';
 import type {
+  PlannerImportFinding,
   PlannerImportPlanner,
   PlannerImportReport,
   PlannerImportUnit,
@@ -30,13 +31,26 @@ type PlannerApiResponse = {
   report: PlannerImportReport;
 };
 
-function getResultStatusLabels(hasValidationIssues: boolean) {
-  if (hasValidationIssues) {
+function getResultStatusLabels(structuralCount: number, warningCount: number) {
+  if (structuralCount > 0) {
     return {
-      importStatus: 'Extraction Completed with Issues',
+      importStatus: 'Extraction Completed',
       validationStatus: 'Review Required',
       reviewDecision: 'Manual Review Required',
-      tone: 'signalCritical' as keyof typeof styles,
+      importTone: 'signalStrong' as keyof typeof styles,
+      validationTone: 'signalCritical' as keyof typeof styles,
+      reviewTone: 'signalCritical' as keyof typeof styles,
+    };
+  }
+
+  if (warningCount > 0) {
+    return {
+      importStatus: 'Extraction Completed',
+      validationStatus: 'Passed with Warnings',
+      reviewDecision: 'Review Recommended',
+      importTone: 'signalStrong' as keyof typeof styles,
+      validationTone: 'signalModerate' as keyof typeof styles,
+      reviewTone: 'signalModerate' as keyof typeof styles,
     };
   }
 
@@ -44,8 +58,21 @@ function getResultStatusLabels(hasValidationIssues: boolean) {
     importStatus: 'Extraction Completed',
     validationStatus: 'Passed',
     reviewDecision: 'Ready',
-    tone: 'signalStrong' as keyof typeof styles,
+    importTone: 'signalStrong' as keyof typeof styles,
+    validationTone: 'signalStrong' as keyof typeof styles,
+    reviewTone: 'signalStrong' as keyof typeof styles,
   };
+}
+
+function reportFindings(report: PlannerImportReport): PlannerImportFinding[] {
+  return report.findings ?? report.validation_issues.map((message) => ({
+    code: 'legacy-structural',
+    type: 'structural_issue',
+    category: 'structural',
+    severity: 'medium',
+    reason: message,
+    message,
+  }));
 }
 
 function flattenUnits(planner: PlannerImportPlanner | null): PlannerImportUnit[] {
@@ -136,8 +163,10 @@ export default function ImportPage() {
   const summary = useMemo(() => {
     if (!planner || !report) return null;
 
-    const validationIssues = Array.from(new Set(report.validation_issues));
-    const resultLabels = getResultStatusLabels(validationIssues.length > 0);
+    const findings = reportFindings(report);
+    const structuralFindings = findings.filter((finding) => finding.category === 'structural');
+    const qualityWarnings = findings.filter((finding) => finding.category === 'text_quality');
+    const resultLabels = getResultStatusLabels(structuralFindings.length, qualityWarnings.length);
     return {
       course: planner.course_information.course || 'Unknown course',
       major: planner.course_information.major || 'Unknown major',
@@ -148,15 +177,42 @@ export default function ImportPage() {
       elective: planner.course_information.requirements.elective,
       wil: planner.course_information.requirements.wil,
       statusLabel: resultLabels.importStatus,
-      statusTone: resultLabels.tone,
+      statusTone: resultLabels.importTone,
       validationStatusLabel: resultLabels.validationStatus,
-      validationStatusTone: resultLabels.tone,
+      validationStatusTone: resultLabels.validationTone,
       reviewDecisionLabel: resultLabels.reviewDecision,
-      reviewDecisionTone: resultLabels.tone,
-      missingCount: validationIssues.length,
-      validationIssues,
+      reviewDecisionTone: resultLabels.reviewTone,
+      missingCount: structuralFindings.length,
+      warningCount: qualityWarnings.length,
+      structuralFindings,
+      qualityWarnings,
     };
   }, [planner, report]);
+
+  // Structural issues and text-quality warnings from the import report. Classic shows them below the result
+  // summary; Easy shows them above the planner header.
+  const findingsBlock = summary ? (
+    <>
+      {summary.structuralFindings.length > 0 && (
+        <div className={styles.validationBox}>
+          {summary.structuralFindings.map((finding, index) => (
+            <div key={`${finding.code}-${finding.unit_code ?? finding.field ?? index}`} className={styles.validationIssue}>
+              {finding.message}
+            </div>
+          ))}
+        </div>
+      )}
+      {summary.qualityWarnings.length > 0 && (
+        <div className={styles.validationWarningBox}>
+          {summary.qualityWarnings.map((finding, index) => (
+            <div key={`${finding.code}-${finding.unit_code ?? index}`} className={styles.validationWarning}>
+              {finding.message}
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  ) : null;
 
   // Sync editable units when planner data changes
   useEffect(() => {
@@ -438,9 +494,10 @@ function parseIntakeMonth(intake: string): number {
       }
 
       const payload = data as PlannerApiResponse;
-      const importStatus = getResultStatusLabels(
-        payload.report.validation_issues.length > 0
-      ).importStatus;
+      const parsedFindings = reportFindings(payload.report);
+      const structuralCount = parsedFindings.filter((finding) => finding.category === 'structural').length;
+      const warningCount = parsedFindings.filter((finding) => finding.category === 'text_quality').length;
+      const labels = getResultStatusLabels(structuralCount, warningCount);
 
       setPlanner(payload.planner);
       setReport(payload.report);
@@ -448,9 +505,9 @@ function parseIntakeMonth(intake: string): number {
         {
           id: `${selectedFile.name}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           name: selectedFile.name,
-          status: importStatus,
+          status: labels.importStatus,
           detail: `${payload.report.unit_counts.core_units ?? 0} core units | ${payload.report.unit_counts.major_units ?? 0} major units | Deterministic extraction`,
-          cls: payload.report.validation_issues.length ? 'badgeOrange' : 'badgeGreen',
+          cls: structuralCount || warningCount ? 'badgeOrange' : 'badgeGreen',
         },
         ...prev.slice(0, 4),
       ]);
@@ -859,13 +916,7 @@ function parseIntakeMonth(intake: string): number {
             <>
               <div className={styles.sectionTitle}>Extracted Summary</div>
               <div className={styles.card}>
-                {isMeadow && summary.validationIssues.length > 0 && (
-                  <div className={styles.validationBox}>
-                    {summary.validationIssues.map((issue) => (
-                      <div key={issue} className={styles.validationIssue}>{issue}</div>
-                    ))}
-                  </div>
-                )}
+                {isMeadow && findingsBlock}
                 <PlannerHeader
                   course={plannerInfo.course}
                   major={plannerInfo.major}
@@ -905,16 +956,16 @@ function parseIntakeMonth(intake: string): number {
                         {summary.missingCount > 0 ? `${summary.missingCount} issue${summary.missingCount > 1 ? 's' : ''}` : 'None detected'}
                       </span>
                     </div>
+                    <div className={styles.resultBadgeRow}>
+                      <span className={styles.resultLabel}>Text Quality</span>
+                      <span className={`${styles.badge} ${styles.pillBadge} ${summary.warningCount > 0 ? styles.signalModerate : styles.signalStrong}`}>
+                        {summary.warningCount > 0 ? `${summary.warningCount} warning${summary.warningCount > 1 ? 's' : ''}` : 'No warnings'}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
-                {!isMeadow && summary.validationIssues.length > 0 && (
-                  <div className={styles.validationBox}>
-                    {summary.validationIssues.map((issue) => (
-                      <div key={issue} className={styles.validationIssue}>{issue}</div>
-                    ))}
-                  </div>
-                )}
+                {!isMeadow && findingsBlock}
               </div>
             </>
           )}
