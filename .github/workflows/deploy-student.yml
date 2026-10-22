@@ -1,0 +1,135 @@
+name: Deploy Student App
+
+# Only changes under student/ deploy anything.
+#
+#   push to main        -> staging     (Supabase dev project,  the staging Vercel project)
+#   push to production  -> production  (Supabase live project, the production Vercel project)
+#
+# Database changes (student/prisma/schema.prisma or migrations) and web app changes are told apart:
+#   - database only  -> migrate, no web deploy
+#   - web app only   -> web deploy, no migration
+#   - both           -> migrate first; the web deploy starts only if the migration succeeded
+#
+# Secrets (repository, or per environment):
+#   DATABASE_URL_DEV / DATABASE_URL_PROD   direct or session-pooler connection string (port 5432).
+#                                          Prisma migrations do not work through the transaction pooler (6543).
+#   VERCEL_TOKEN, VERCEL_ORG_ID
+#   VERCEL_PROJECT_ID_STAGING / VERCEL_PROJECT_ID_PROD   the two separate Vercel projects
+#
+# Each Vercel project is deployed to its own Production environment (`--prod`), so staging has its own stable
+# domain. The web app's own environment variables (DATABASE_URL, CMS_JWT_SECRET, ...) stay in each Vercel project,
+# under Production; `vercel pull` brings them into the build.
+# Seeding is never run here; seed by hand with `npm run db:seed:prod`.
+on:
+  push:
+    branches: [main, production]
+    paths:
+      - 'student/**'
+      - '.github/workflows/deploy-student.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-student-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # What changed in this push?
+  # ---------------------------------------------------------------------------
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      db: ${{ steps.filter.outputs.db }}
+      app: ${{ steps.filter.outputs.app }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            db:
+              - 'student/prisma/schema.prisma'
+              - 'student/prisma/migrations/**'
+            app:
+              - 'student/**'
+              - '!student/prisma/**'
+              - '!student/README.md'
+
+  # ---------------------------------------------------------------------------
+  # Database first
+  # ---------------------------------------------------------------------------
+  migrate:
+    name: Migrate ${{ github.ref_name == 'production' && 'production' || 'staging' }} database
+    needs: changes
+    # a manual run applies both, so the pipeline can be re-run end to end
+    if: needs.changes.outputs.db == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    # Add required reviewers under Settings > Environments > production to make production wait for approval.
+    environment: ${{ github.ref_name == 'production' && 'production' || null }}
+    concurrency: migrate-student-${{ github.ref_name }}
+    defaults:
+      run:
+        working-directory: student
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: student/package-lock.json
+      - run: npm ci
+      - name: Check secret is set
+        run: test -n "$DATABASE_URL" || { echo "The database URL secret for this branch is missing"; exit 1; }
+        env:
+          DATABASE_URL: ${{ github.ref_name == 'production' && secrets.DATABASE_URL_PROD || secrets.DATABASE_URL_DEV }}
+      - name: Run migrations
+        run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: ${{ github.ref_name == 'production' && secrets.DATABASE_URL_PROD || secrets.DATABASE_URL_DEV }}
+
+  # ---------------------------------------------------------------------------
+  # Then the web app, only if there was nothing to migrate or the migration succeeded
+  # ---------------------------------------------------------------------------
+  deploy:
+    name: Deploy ${{ github.ref_name == 'production' && 'production' || 'staging' }} web app
+    needs: [changes, migrate]
+    # `migrate` is skipped when there is no database change, which is fine; if it ran it must have succeeded.
+    if: >-
+      always()
+      && (needs.changes.outputs.app == 'true' || github.event_name == 'workflow_dispatch')
+      && (needs.migrate.result == 'success' || needs.migrate.result == 'skipped')
+    runs-on: ubuntu-latest
+    environment: ${{ github.ref_name == 'production' && 'production' || null }}
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      # staging and production are two separate Vercel projects
+      VERCEL_PROJECT_ID: ${{ github.ref_name == 'production' && secrets.VERCEL_PROJECT_ID_PROD || secrets.VERCEL_PROJECT_ID_STAGING }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Check secrets are set
+        run: |
+          test -n "$VERCEL_TOKEN" || { echo "VERCEL_TOKEN secret is missing"; exit 1; }
+          test -n "$VERCEL_ORG_ID" || { echo "VERCEL_ORG_ID secret is missing"; exit 1; }
+          test -n "$VERCEL_PROJECT_ID" || { echo "The VERCEL_PROJECT_ID_PROD / VERCEL_PROJECT_ID_STAGING secret for this branch is missing"; exit 1; }
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+      # Run from the repository root: the Vercel project's Root Directory is student/, and the build also reads
+      # files outside it (outputFileTracingRoot), so the whole repository is uploaded.
+      - name: Pull Vercel settings and environment variables
+        run: vercel pull --yes --environment=production --token=$VERCEL_TOKEN
+      - name: Build
+        run: vercel build --prod --token=$VERCEL_TOKEN
+      - name: Deploy
+        id: deploy
+        run: |
+          url=$(vercel deploy --prebuilt --prod --token=$VERCEL_TOKEN)
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "Deployed to $url" | tee -a "$GITHUB_STEP_SUMMARY"
