@@ -2,6 +2,7 @@ import {
   splitOfferingTerms,
   toRequisiteGroups,
   toSchedulableUnit,
+  unitRowToSchedulable,
 } from '@core/shared/scheduling/schedulableUnit';
 
 describe('splitOfferingTerms', () => {
@@ -93,5 +94,48 @@ describe('toSchedulableUnit', () => {
       allOfferingTerms: [],
       requisiteGroups: [],
     });
+  });
+});
+
+describe('unitRowToSchedulable', () => {
+  const row = {
+    unit_code: 'COS20001',
+    unit_name: 'Data Structures',
+    credit_points: '25.0',
+    offerings: [{ offered_in: 2 }, { offered_in: 4 }],
+    requisite_groups: [
+      { conditions: [{ type: 'unit', requisite_type: 'prerequisite', unit: { unit_code: 'cos10001' } }] },
+      { conditions: [
+        { type: 'unit', requisite_type: 'prerequisite', unit: { unit_code: 'COS10002' } },
+        { type: 'credit_points', credit_points: '50' },
+      ] },
+    ],
+  };
+
+  test('keeps requisite groups as alternatives, each group an AND of its conditions', () => {
+    const mapped = unitRowToSchedulable(row, 'core');
+    expect(mapped.requisiteGroups).toEqual([
+      [{ type: 'unit', requisiteType: 'prerequisite', unitCode: 'COS10001' }],
+      [
+        { type: 'unit', requisiteType: 'prerequisite', unitCode: 'COS10002' },
+        { type: 'credit_points', creditPoints: 50 },
+      ],
+    ]);
+  });
+
+  test('splits offering terms into placeable and all', () => {
+    const mapped = unitRowToSchedulable(row, 'core');
+    expect(mapped.offeringSemesters).toEqual([2]);
+    expect(mapped.allOfferingTerms).toEqual([2, 4]);
+  });
+
+  test('carries credit points only when asked, so the advisor\'s plans do not change', () => {
+    expect(unitRowToSchedulable(row, 'core').creditPoints).toBeUndefined();
+    expect(unitRowToSchedulable(row, 'core', { withCreditPoints: true }).creditPoints).toBe(25);
+  });
+
+  test('copes with a unit that has no offerings or requisites loaded', () => {
+    const mapped = unitRowToSchedulable({ unit_code: 'X', unit_name: 'X' }, 'elective');
+    expect(mapped).toMatchObject({ code: 'X', category: 'elective', offeringSemesters: [], requisiteGroups: [] });
   });
 });

@@ -108,7 +108,9 @@ describe('recommendElectives', () => {
       alreadyPlannedCodes: [],
     });
 
-    expect(codesOf(result)).toEqual(['SEM2', 'UNKNOWN', 'WINTER']);
+    // A unit with no offering data runs whenever it is wanted, so it leads;
+    // the summer/winter-only units come last, in the order the planner lists them
+    expect(codesOf(result)).toEqual(['UNKNOWN', 'SEM2', 'WINTER']);
   });
 
   test('within a source, prefers a unit whose prerequisites are completed or in the pool', () => {
