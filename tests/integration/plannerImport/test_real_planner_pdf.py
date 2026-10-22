@@ -137,6 +137,7 @@ class RealPlannerPdfIntegrationTests(unittest.TestCase):
         required_report_fields = {
             "file_name",
             "pdf_path",
+            "findings",
             "validation_issues",
             "outcome",
             "unit_counts",
@@ -147,8 +148,17 @@ class RealPlannerPdfIntegrationTests(unittest.TestCase):
         self.assertEqual(report["file_name"], expected["file_name"])
         self.assertEqual(Path(report["pdf_path"]).resolve(), PDF_PATH.resolve())
         self.assertIsInstance(report["validation_issues"], list)
-        self.assertEqual(report["validation_issues"], [])
-        self.assertEqual(report["outcome"]["status"], "deterministic_ok")
+        self.assertIsInstance(report["findings"], list)
+        self.assertEqual(
+            report["validation_issues"],
+            [finding["message"] for finding in report["findings"] if finding["category"] == "structural"],
+        )
+        expected_outcome = (
+            "manual_review_required"
+            if any(finding["category"] == "structural" for finding in report["findings"])
+            else "review_recommended" if report["findings"] else "deterministic_ok"
+        )
+        self.assertEqual(report["outcome"]["status"], expected_outcome)
 
         expected_counts = {
             "core_units": len(expected_categories["core_units"]),

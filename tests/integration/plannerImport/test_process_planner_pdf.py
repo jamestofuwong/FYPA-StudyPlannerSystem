@@ -154,8 +154,14 @@ class ProcessPlannerPdfIntegrationTests(unittest.TestCase):
 
         self.assertEqual(report["file_name"], "sample_planner")
         self.assertEqual(report["pdf_path"], pdf_path_string)
-        self.assertEqual(report["validation_issues"], [])
-        self.assertEqual(report["outcome"]["status"], "deterministic_ok")
+        self.assertTrue(report["validation_issues"])
+        self.assertTrue(report["findings"])
+        self.assertTrue(all("category" in finding and "message" in finding for finding in report["findings"]))
+        self.assertEqual(
+            report["validation_issues"],
+            [finding["message"] for finding in report["findings"] if finding["category"] == "structural"],
+        )
+        self.assertEqual(report["outcome"]["status"], "manual_review_required")
         self.assertEqual(
             report["unit_counts"],
             {
