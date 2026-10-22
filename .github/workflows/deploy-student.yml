@@ -18,7 +18,8 @@ name: Deploy Student App
 #
 # Each Vercel project is deployed to its own Production environment (`--prod`), so staging has its own stable
 # domain. The web app's own environment variables (DATABASE_URL, CMS_JWT_SECRET, ...) stay in each Vercel project,
-# under Production; `vercel pull` brings them into the build.
+# under Production. Vercel builds the app on its own servers, so it reads those variables itself, including ones
+# marked Sensitive (the CLI cannot pull those, and a build here would see them as empty).
 # Seeding is never run here; seed by hand with `npm run db:seed:prod`.
 on:
   push:
@@ -122,14 +123,11 @@ jobs:
       - name: Install Vercel CLI
         run: npm install --global vercel@latest
       # Run from the repository root: the Vercel project's Root Directory is student/, and the build also reads
-      # files outside it (outputFileTracingRoot), so the whole repository is uploaded.
-      - name: Pull Vercel settings and environment variables
-        run: vercel pull --yes --environment=production --token=$VERCEL_TOKEN
-      - name: Build
-        run: vercel build --prod --token=$VERCEL_TOKEN
+      # files outside it (outputFileTracingRoot), so the whole repository is uploaded. The build itself runs on
+      # Vercel, not on this runner, so it has the project's real environment variables.
       - name: Deploy
         id: deploy
         run: |
-          url=$(vercel deploy --prebuilt --prod --token=$VERCEL_TOKEN)
+          url=$(vercel deploy --prod --yes --token=$VERCEL_TOKEN)
           echo "url=$url" >> "$GITHUB_OUTPUT"
           echo "Deployed to $url" | tee -a "$GITHUB_STEP_SUMMARY"
