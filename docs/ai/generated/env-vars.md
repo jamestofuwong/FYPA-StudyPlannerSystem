@@ -12,11 +12,11 @@ Names only. A value never appears in this repository. Read [config-and-secrets.m
 | `APPDATA` | `scripts/db-up.js` |
 | `CI` | `playwright.config.ts` |
 | `CLASS_ESTIMATION_SOURCE` | `core/services/classEstimation/sources/resolvePortalSource.ts` |
-| `CMS_JWT_SECRET` | `student/lib/cms/auth.ts`, `student/proxy.ts` |
+| `CMS_JWT_SECRET` | `student/jest.config.js`, `student/jest.integration.config.js`, `student/lib/cms/auth.ts`, `student/proxy.ts` |
 | `CMS_SEED_EMAIL` | `student/prisma/seed.ts` |
 | `CMS_SEED_NAME` | `student/prisma/seed.ts` |
 | `CMS_SEED_PASSWORD` | `student/prisma/seed.ts` |
-| `DATABASE_URL` | `electron/main.ts`, `student/lib/prisma.ts`, `student/prisma.config.ts`, `student/prisma/seed.ts` |
+| `DATABASE_URL` | `electron/main.ts`, `student/jest.config.js`, `student/jest.integration.config.js`, `student/lib/prisma.ts` and 2 more |
 | `DATABASE_URL_UNPOOLED` | `student/lib/prisma.ts`, `student/prisma/seed.ts` |
 | `DB_HOST` | `runtime/postgres/db.ts` |
 | `DB_NAME` | `runtime/postgres/db.ts` |
