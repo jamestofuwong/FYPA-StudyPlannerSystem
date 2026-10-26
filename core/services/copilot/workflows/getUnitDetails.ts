@@ -21,7 +21,8 @@ interface Output {
 
 export const getUnitDetailsWorkflow: Workflow<Input, Output> = {
   id: 'get_unit_details',
-  description: 'Returns details about a specific unit: its name, which semesters it is offered in, and its prerequisites. Use this when the user asks about a specific unit code, what semesters a unit runs, or what prerequisites a unit has.',
+  description: 'Gives the details of ONE unit by its code (with digits, for example COS10009): its name, the semesters it is offered in and its prerequisites. Use this when the user asks about a unit code, what it is called, what it teaches, when it runs or what its prerequisites are.',
+  keywords: ['unit info', 'what is called', 'name of unit', 'about unit', 'prerequisites of', 'tell me about unit', 'title', 'description of unit'],
   params: [
     {
       name: 'unitCode',

@@ -1,3 +1,4 @@
+import { readBody, ELECTIVE_GROUP_FIELDS } from "@/lib/requestBody";
 import { NextResponse } from "next/server";
 import * as electiveGroupRepository from "../../../../core/db/repositories/electiveGroupRepository";
 
@@ -12,7 +13,9 @@ export async function GET() {
 
 export async function POST(req: Request) {
     try {
-        const body = await req.json();
+        const parsed = await readBody(req, ELECTIVE_GROUP_FIELDS);
+        if (!parsed.ok) return parsed.response;
+        const body = parsed.data;
         const newGroup = await electiveGroupRepository.createElectiveGroup(body);
         return NextResponse.json(newGroup, { status: 201 });
     } catch {

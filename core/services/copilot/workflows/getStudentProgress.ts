@@ -22,7 +22,8 @@ interface Output {
 
 export const getStudentProgressWorkflow: Workflow<Input, Output> = {
   id: 'get_student_progress',
-  description: 'Returns a snapshot of a student\'s academic progress: CGPA, credits completed vs required, grade level, current semester, and graduation date. Use this when the user asks how a student is doing, their GPA, their progress, or their academic standing.',
+  description: 'Returns a snapshot of academic progress: CGPA, credits completed against required, grade level and graduation date. Use this when the user asks how a student is doing, their GPA, credits or academic standing.',
+  keywords: ['gpa', 'cgpa', 'credits', 'how is doing', 'performance', 'standing', 'overall results'],
   params: [
     {
       name: 'studentId',

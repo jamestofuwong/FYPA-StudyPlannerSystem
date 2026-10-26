@@ -24,6 +24,7 @@ interface Output {
 export const compareTwoPlannersWorkflow: Workflow<Input, Output> = {
   id: 'compare_two_planners',
   description: 'Compares two study planners and shows which units are shared between them and which are unique to each. Use this when the user wants to know the difference between two majors or programs, or how similar two plans are.',
+  keywords: ['compare planners', 'difference between', 'shared units', 'similar', 'how similar', 'versus', 'vs', 'unique units', 'differences between majors'],
   params: [
     {
       name: 'plannerId1',

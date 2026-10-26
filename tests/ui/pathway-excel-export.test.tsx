@@ -9,10 +9,10 @@ import { ToastProvider } from '@/components/providers/ToastProvider';
 // meaningfully do (no real download). Mocked out so these tests check only
 // the wiring: the same pre-flight elective check as the PDF export, and
 // that a clean plan actually reaches the library.
-const aoaToSheet = jest.fn(() => ({}));
-const encodeCell = jest.fn(() => 'A1');
-const bookNew = jest.fn(() => ({}));
-const bookAppendSheet = jest.fn();
+const aoaToSheet = jest.fn((..._a: any[]) => ({}));
+const encodeCell = jest.fn((..._a: any[]) => 'A1');
+const bookNew = jest.fn((..._a: any[]) => ({}));
+const bookAppendSheet = jest.fn((..._a: any[]) => undefined);
 const writeFile = jest.fn();
 
 jest.mock('xlsx-js-style', () => ({

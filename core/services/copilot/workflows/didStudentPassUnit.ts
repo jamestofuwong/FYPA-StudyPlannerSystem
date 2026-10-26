@@ -21,7 +21,8 @@ const PASSING_GRADES = new Set(['A+', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-
 
 export const didStudentPassUnitWorkflow: Workflow<Input, Output> = {
   id: 'did_student_pass_unit',
-  description: 'Answers whether a student has passed a specific unit. Use this when the user asks if a student passed or completed a subject, or whether a prerequisite has been met.',
+  description: 'Answers yes or no: did a student pass or complete ONE named unit, for example to see if a prerequisite is done. Use this when the user asks if a student passed, completed or finished a unit. Not for the grade (use get_student_grade_for_unit) and not for permission to enrol (use can_student_take_unit).',
+  keywords: ['pass', 'passed', 'completed', 'done', 'finished', 'cleared', 'prerequisite done', 'prerequisite met'],
   params: [
     {
       name: 'studentId',

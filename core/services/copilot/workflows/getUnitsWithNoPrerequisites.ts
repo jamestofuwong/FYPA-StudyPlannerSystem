@@ -14,6 +14,7 @@ interface Output {
 export const getUnitsWithNoPrerequisitesWorkflow: Workflow<Record<string, never>, Output> = {
   id: 'get_units_with_no_prerequisites',
   description: 'Lists all units in the database that have no prerequisite requirements. Use this when the user asks what units a first-year student can take, what units have no prerequisites, or what units are open to all students.',
+  keywords: ['no prereqs', 'no prerequisites', 'open to all', 'first year', 'beginner', 'entry level', 'without prerequisite', 'free to take'],
   params: [],
   async execute(_params: Record<string, never>, _ctx: WorkflowContext): Promise<WorkflowResult<Output>> {
     try {

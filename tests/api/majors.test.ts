@@ -88,9 +88,9 @@ describe('Majors API', () => {
 
     const response = await PUT(request, { params: Promise.resolve({ id: '123' }) });
 
-    expect(response.status).toBe(500);
+    expect(response.status).toBe(400);
     expect(updateMajor).not.toHaveBeenCalled();
-    await expect(response.json()).resolves.toEqual({ error: 'Failed to update major' });
+    await expect(response.json()).resolves.toEqual({ error: 'The request body is not valid JSON.' });
   });
 
   test('DELETE returns success only after the repository completes', async () => {

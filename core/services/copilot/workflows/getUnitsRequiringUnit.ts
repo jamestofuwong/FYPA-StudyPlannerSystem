@@ -17,7 +17,8 @@ interface Output {
 
 export const getUnitsRequiringUnitWorkflow: Workflow<Input, Output> = {
   id: 'get_units_requiring_unit',
-  description: 'Reverse prerequisite lookup — finds all units that require a given unit as a prerequisite. Use this when the user asks what units depend on a unit, what can be unlocked after completing a unit, or which units list a unit as a prerequisite.',
+  description: 'Finds the units that need ONE named unit as a prerequisite (reverse lookup), for any student. Use this when the user asks which units depend on a unit, what a unit unlocks or what units follow it. Not about what one student can take now (use get_available_units_for_student).',
+  keywords: ['unlock', 'unlocks', 'depend on', 'leads to', 'next units', 'after completing', 'what follows', 'required by', 'dependents'],
   params: [
     {
       name: 'unitCode',

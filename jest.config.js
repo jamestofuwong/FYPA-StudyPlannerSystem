@@ -7,6 +7,8 @@ const createJestConfig = nextJest({
 
 const customJestConfig = {
   setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
+  // These run with their own configs: integration-db needs a database, student/ has its own app, e2e uses Playwright
+  testPathIgnorePatterns: ['/node_modules/', '<rootDir>/tests/integration-db/', '<rootDir>/student/', '<rootDir>/e2e/'],
   testEnvironment: 'node',
   moduleNameMapper: {
   '^@core/(.*)$': '<rootDir>/core/$1',

@@ -55,7 +55,7 @@ describe('Courses API Endpoint (UIT-03)', () => {
       updated_at: timestamp,
     };
     createCourse.mockResolvedValue(created);
-    const payload = { name: 'New Course', course_type: 'bachelor' };
+    const payload = { name: 'New Course', code: null };
     const req = new Request('http://localhost/api/courses', {
       method: 'POST',
       body: JSON.stringify(payload),
@@ -85,7 +85,7 @@ describe('Courses API Endpoint (UIT-03)', () => {
     await expect(response.json()).resolves.toEqual({ error: 'Server error creating course' });
   });
 
-  test('POST rejects malformed JSON without calling the repository', async () => {
+  test('POST rejects malformed JSON with 400, without calling the repository', async () => {
     const req = new Request('http://localhost/api/courses', {
       method: 'POST',
       body: '{invalid',
@@ -93,7 +93,16 @@ describe('Courses API Endpoint (UIT-03)', () => {
 
     const response = await POST(req);
 
-    expect(response.status).toBe(500);
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ error: 'The request body is not valid JSON.' });
+    expect(createCourse).not.toHaveBeenCalled();
+  });
+
+  test('POST rejects a field that is not a course column (id, created_at, or a typo) with 400', async () => {
+    for (const payload of [{ name: 'X', id: 'abc' }, { name: 'X', created_at: '1999-01-01' }, { name: 'X', nmae: 'typo' }, {}]) {
+      const response = await POST(new Request('http://localhost/api/courses', { method: 'POST', body: JSON.stringify(payload) }));
+      expect(response.status).toBe(400);
+    }
     expect(createCourse).not.toHaveBeenCalled();
   });
 });

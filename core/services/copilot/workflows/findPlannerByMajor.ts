@@ -23,7 +23,8 @@ interface Output {
 
 export const findPlannerByMajorWorkflow: Workflow<Input, Output> = {
   id: 'find_planner_by_major',
-  description: 'Searches for study planners by major or course name. Returns matching planner IDs and intake years. Use this when the user asks what planner exists for a specific major or program, or wants to find a planner ID before running get_planner_details.',
+  description: 'Searches for planners by a major or course name and returns their ids and intake years, to find which planner exists. Use this when the user asks whether a planner exists for a major, or needs a planner id. To see the units inside a planner use get_planner_details.',
+  keywords: ['planner for', 'plan for', 'find planner', 'which planner', 'planner id', 'is there a planner'],
   params: [
     {
       name: 'majorName',

@@ -27,7 +27,8 @@ interface Output {
 
 export const getPlannerDetailsWorkflow: Workflow<Input, Output> = {
   id: 'get_planner_details',
-  description: 'Returns the full structure of a specific study planner: course, major, intake year, and all required units grouped by year and semester. Use this when the user wants to know what units are in a specific plan or program.',
+  description: 'Returns the full content of ONE named planner: course, major, intake and every unit by year and semester. Use this when the user wants to see, open or read a planner, or what units a plan or a year of a plan contains. Not for searching which planners exist (use find_planner_by_major).',
+  keywords: ['show planner', 'what is in', 'contents', 'structure', 'year 1', 'year 2', 'year 3', 'units in plan', 'layout', 'schedule of planner'],
   params: [
     {
       name: 'plannerId',

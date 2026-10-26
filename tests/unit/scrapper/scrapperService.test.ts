@@ -39,12 +39,19 @@ describe('Scraper Service', () => {
     expect(result.logs.every((log) => typeof log === 'string')).toBe(true);
   });
 
-  test.each(steps)('%s reports unsuccessful adapter results without throwing', async (step) => {
+  // A missing student stops the scrape with an error, so the page can show its retry message (the other steps only log).
+  test.each(steps.filter((s) => s !== 'enter-student-id'))('%s reports unsuccessful adapter results without throwing', async (step) => {
     const adapter = mockAdapter(false);
 
     const result = await service.runScraperStep(step, adapter, { studentId: '123' });
 
     expect(result.logs.length).toBeGreaterThan(0);
+  });
+
+  test('enter-student-id throws when the student is not in the portal list', async () => {
+    const adapter = mockAdapter(false);
+
+    await expect(service.runScraperStep('enter-student-id', adapter, { studentId: '123' })).rejects.toThrow();
   });
 
   test.each([

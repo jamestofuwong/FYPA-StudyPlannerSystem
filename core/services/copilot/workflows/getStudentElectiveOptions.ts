@@ -25,7 +25,8 @@ interface Output {
 
 export const getStudentElectiveOptionsWorkflow: Workflow<Input, Output> = {
   id: 'get_student_elective_options',
-  description: 'Shows which elective units from a planner\'s elective pool a student has not yet taken and is eligible to take. Use this when the user asks what electives a student can choose, what elective options are left, or what free electives are available.',
+  description: 'Lists the elective units in a planner that a student has not yet taken and can take. Use this when the user asks which electives a student can choose or what elective options are left.',
+  keywords: ['elective', 'electives', 'free elective', 'choose elective', 'pick elective', 'elective choices'],
   params: [
     {
       name: 'studentId',

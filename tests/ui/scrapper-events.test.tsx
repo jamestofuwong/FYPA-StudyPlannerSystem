@@ -5,7 +5,7 @@ import { ScraperProvider, useScraperContext } from '@/components/providers/Scrap
 import { PortalAuthProvider } from '@/components/providers/PortalAuthContext';
 import { ToastProvider } from '@/components/providers/ToastProvider';
 
-describe('ScraperContext: Webview Events (Lines 597-617)', () => {
+describe('ScraperContext: Webview Events', () => {
   test('handles webview load failure and cleanup', async () => {
     const removeSpy = jest.fn();
     const addSpy = jest.fn();
@@ -37,7 +37,7 @@ describe('ScraperContext: Webview Events (Lines 597-617)', () => {
     await act(async () => {
       (window as any).__scraperTestWebview = mockWebview; 
       
-      // Trigger unmount to hit the cleanup branch (Lines 615-617)
+      // Unmount to run the cleanup
       unmount();
     });
 

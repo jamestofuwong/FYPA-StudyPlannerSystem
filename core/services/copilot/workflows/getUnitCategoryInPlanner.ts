@@ -18,7 +18,8 @@ interface Output {
 
 export const getUnitCategoryInPlannerWorkflow: Workflow<Input, Output> = {
   id: 'get_unit_category_in_planner',
-  description: 'Checks what category (core, major_core, elective, wil, etc.) a specific unit appears as in a given study planner, and which year/semester it is scheduled in. Use this when the user asks whether a unit is a core or elective in a specific program, or when a unit is scheduled.',
+  description: 'Gives the category (core, major core, elective, WIL) and the year and semester of ONE unit in ONE named planner. Use this when the user asks if a unit is core or elective in a program, or when it is scheduled there. Not for all planners (use get_planners_containing_unit).',
+  keywords: ['core or elective', 'category of unit', 'which year', 'when is scheduled', 'what type', 'is it core', 'scheduled in'],
   params: [
     {
       name: 'plannerId',

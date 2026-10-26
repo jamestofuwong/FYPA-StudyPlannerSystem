@@ -55,11 +55,15 @@ SELECT add_prereq_credits('ICT30005', 200);
 SELECT add_prereq_and_group('COS20028', ARRAY['COS10022', 'COS20007']);
 SELECT add_prereq_and_group('COS20083', ARRAY['COS10022', 'COS10009']);
 SELECT add_prereq_and_group('COS30015', ARRAY['COS10009', 'COS10026', 'TNE10006']);
+SELECT add_prereq_and_group('COS30015', ARRAY['COS10009', 'COS10011', 'TNE10006']);
 SELECT add_prereq_and_group('COS30020', ARRAY['COS10009', 'COS10026']);
 SELECT add_prereq_and_group('COS30041', ARRAY['COS20007', 'COS10011']);
 SELECT add_prereq_and_group('COS30043', ARRAY['COS20007', 'COS10026']);
 SELECT add_prereq_and_group('COS30081', ARRAY['COS20015', 'COS30019']);
 
+-- COS10011 is the first-year web unit of the planners up to 2022, COS10026 of the later ones (COS10011 is an antirequisite of
+-- COS10026). A unit is allowed when any group is met, so each of these has one group for each web unit.
+SELECT add_prereq_and_group('SWE30011', ARRAY['COS10026', 'COS20007']);
 SELECT add_prereq_and_group('SWE30011', ARRAY['COS10011', 'COS20007']);
 SELECT add_prereq_and_group('SWE30012', ARRAY['SWE30011', 'COS20007']);
 

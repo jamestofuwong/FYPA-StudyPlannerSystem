@@ -1,25 +1,36 @@
 # Study Planner System
 
-A locally deployed desktop application designed to assist Academic Advisors (Heads of Departments) in tracking student academic progression.
+Two products in one repository, for Swinburne Sarawak:
 
-## Overview
+- **Desktop app** (Windows and macOS) for academic advisors and Heads of Department. It finds the major of a student, checks graduation, builds study pathways, imports study planner PDFs, forecasts class sizes and answers questions with a local AI. It runs on one computer with its own database. It does not store student records: student data stays in memory.
+- **Student web app** (`student/`) with public planner and unit pages, a plan builder and a CMS. It runs on Vercel with a Supabase database.
 
-The Study Planner System automates the detection of student majors, matches completed units against official study planners, imports student enrollment data, processes planner PDFs, and exports structured data to Excel. This is a full-scale Final Year Project (FYP) intended for real operational use.
+Built with Electron 41, Next.js 16, React 19, TypeScript, Prisma, embedded PostgreSQL, Ollama and a Python PDF extractor.
 
-## Core Features
+## Start
 
-- **Dashboard**: Unit Matching Visualization (Core Units, Electives, Missing Required Units)
-- **Student Data Import**: Web scraping from existing university management portal or manual entry
-- **Planner PDF Processing**: Extract unit codes and names from official planner PDFs
-- **Excel Export**: Export student records, planner templates, and analytics summaries
+```bash
+npm install
+cp .env.example .env          # and web/.env.example to web/.env (see the files)
+npm run dev                   # the first start downloads Ollama
+```
 
-## Tech Stack
+The student app: `cd student && npm install && cp .env.example .env && npm run dev`.
 
-- **Frontend**: Electron, Next.js, TypeScript
-- **Backend**: Next.js (served locally via HTTPS)
-- **Database**: PostgreSQL
-- **Other**: OCR engine (Tesseract or equivalent), Excel generation library
+## Check your work
 
-## Deployment
+```bash
+npm run verify        # typecheck, lint, docs check and the fast tests
+npm run verify:full   # also the integration, student and browser tests
+```
 
-This system is designed as a monolithic desktop application with local API separation. It must run entirely on the host machine with no cloud database or external storage of student data.
+## Where to read
+
+| You are | Read |
+|---|---|
+| An AI coding agent, or a developer who works with one | [AGENTS.md](AGENTS.md) (rules, commands, and which document to read for which task) |
+| A new developer | The Developer Guide (a Word file, kept next to the repository), or [docs/ai](docs/ai) |
+| Looking for a module | The `README.md` in its folder (`core/services/*`, `core/db`, `electron`, `web`, `student`, ...) |
+| An advisor who uses the app | The Setup and User Guide (a Word file), or the **User Guide** page in the app |
+
+Tests: [tests/README.md](tests/README.md). Deployment and release: [docs/ai/deployment.md](docs/ai/deployment.md).

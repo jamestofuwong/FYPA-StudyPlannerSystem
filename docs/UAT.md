@@ -14,9 +14,7 @@
 | Major Matching | Automatic major detection from academic record |
 | Study Plan | Plan viewing, semester layout |
 | Export | PDF/Excel report generation |
-| Cloud Sync | Sync status, planner upload to cloud |
 | Settings | Privacy withdrawal, app preferences |
-| Cloud Portal (Admin) | Planner list, approval workflow, export |
 
 ### 1.2 Out of Scope
 
@@ -37,7 +35,6 @@
 |---|---|
 | Application | Installed production build (v1.0.0) |
 | OS | macOS or Windows (tester's own machine) |
-| Cloud Portal | https://fyp.jameswong.work |
 | Database | Fresh install — no prior data |
 | Tester | End user (student), not the developer |
 
@@ -304,35 +301,7 @@
 
 ---
 
-### Module 7: Cloud Sync
-
----
-
-**TC-SYN-001: Cloud sync status is visible**
-
-| Field | Detail |
-|---|---|
-| Precondition | App is running |
-| Steps | 1. Navigate to Cloud Sync |
-| Expected Result | The sync status (last synced time, connection status) is displayed |
-| Pass / Fail | |
-| Tester Notes | |
-
----
-
-**TC-SYN-002: Planner is accessible on the cloud portal after sync**
-
-| Field | Detail |
-|---|---|
-| Precondition | A planner has been synced to the cloud |
-| Steps | 1. Open the cloud portal at https://fyp.jameswong.work <br> 2. Log in <br> 3. Navigate to Planners |
-| Expected Result | The synced planner appears in the portal |
-| Pass / Fail | |
-| Tester Notes | |
-
----
-
-### Module 8: Settings
+### Module 7: Settings
 
 ---
 
@@ -343,70 +312,6 @@
 | Precondition | App is running |
 | Steps | 1. Click Settings in the navigation |
 | Expected Result | Settings page loads without errors |
-| Pass / Fail | |
-| Tester Notes | |
-
----
-
-### Module 9: Cloud Portal (Admin)
-
----
-
-**TC-CLD-001: Planner list loads on the portal**
-
-| Field | Detail |
-|---|---|
-| Precondition | Logged into the cloud portal |
-| Steps | 1. Navigate to Planners |
-| Expected Result | A list of planners is shown with status indicators |
-| Pass / Fail | |
-| Tester Notes | |
-
----
-
-**TC-CLD-002: Planner can be approved**
-
-| Field | Detail |
-|---|---|
-| Precondition | A planner with draft status is visible |
-| Steps | 1. Click on a draft planner <br> 2. Click Approve |
-| Expected Result | Planner status changes to Active |
-| Pass / Fail | |
-| Tester Notes | |
-
----
-
-**TC-CLD-003: Planner can be archived**
-
-| Field | Detail |
-|---|---|
-| Precondition | An active planner is visible |
-| Steps | 1. Click on an active planner <br> 2. Click Archive |
-| Expected Result | Planner status changes to Archived and is no longer visible to the local app |
-| Pass / Fail | |
-| Tester Notes | |
-
----
-
-**TC-CLD-004: Planner can be exported from the portal**
-
-| Field | Detail |
-|---|---|
-| Precondition | An active planner is visible |
-| Steps | 1. Click on an active planner <br> 2. Click Export |
-| Expected Result | A file is downloaded |
-| Pass / Fail | |
-| Tester Notes | |
-
----
-
-**TC-CLD-005: Draft or archived planners cannot be exported**
-
-| Field | Detail |
-|---|---|
-| Precondition | A draft or archived planner is visible |
-| Steps | 1. Click on the planner <br> 2. Attempt to export |
-| Expected Result | Export is blocked with an appropriate message |
 | Pass / Fail | |
 | Tester Notes | |
 
@@ -426,7 +331,7 @@
 
 | Metric | Value |
 |---|---|
-| Total Test Cases | 27 |
+| Total Test Cases | 20 |
 | Passed | |
 | Failed | |
 | Blocked | |

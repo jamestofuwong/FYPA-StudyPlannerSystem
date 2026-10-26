@@ -50,3 +50,11 @@ cloud/.env
 
 # scenario suite output (RESULTS.md is kept)
 tests/scenarios/results/
+
+# test output
+test-results/
+playwright-report/
+
+# regenerated on every test run
+tests/unit/copilot/ROUTING-RESULTS.md
+tests/unit/copilot/ROUTING-OLLAMA-RESULTS.md

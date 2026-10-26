@@ -41,6 +41,7 @@ const PASSING_GRADES = new Set(['A+', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-
 export const checkStudentWilStatusWorkflow: Workflow<Input, Output> = {
   id: 'check_student_wil_status',
   description: 'Checks whether a student has completed their Work Integrated Learning (WIL) unit or industry placement. Use this when the user asks if a student has done WIL, their internship, or work placement.',
+  keywords: ['wil', 'work placement', 'internship', 'intern', 'industry placement', 'placement', 'work integrated learning'],
   params: [
     {
       name: 'studentId',

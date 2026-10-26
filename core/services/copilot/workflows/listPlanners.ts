@@ -7,7 +7,8 @@ interface Output {
 
 export const listPlannersWorkflow: Workflow<Record<string, never>, Output> = {
   id: 'list_planners',
-  description: 'Lists all study planner templates stored in the system. Use this when the user asks what planners, majors, or programs are available.',
+  description: 'Lists EVERY study planner in the system, with no filter. Use this when the user asks which planners, majors, programs or study plans exist or are available. Not for one intake year and not for one major.',
+  keywords: ['all planners', 'every planner', 'all majors', 'all programs', 'study plans', 'what do we offer', 'available planners', 'what exists'],
   params: [],
   async execute(_params: Record<string, never>, _ctx: WorkflowContext): Promise<WorkflowResult<Output>> {
     try {

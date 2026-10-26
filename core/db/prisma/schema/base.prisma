@@ -1,6 +1,6 @@
-// Shared schema — used by both the local Electron app and the cloud app.
-// Edit this file to change any table that both apps share.
-// For cloud-only tables, see cloud.prisma in this same folder.
+// Schema of the desktop app (embedded PostgreSQL). The student web app has its own schema in student/prisma.
+// The migrations are in the `migrations` folder next to this file. This file must describe exactly what they build:
+// tests/integration-db/migrations.test.ts fails when it does not (run `prisma migrate diff`, see docs/ai/data-model.md).
 
 generator client {
   provider = "prisma-client-js"
@@ -20,6 +20,7 @@ model Course {
   updated_at DateTime          @default(now()) @updatedAt @db.Timestamptz
   majors     Major[]
   templates  PlannerTemplate[]
+  @@index([code], map: "idx_courses_code")
 
   @@map("courses")
 }
@@ -27,13 +28,14 @@ model Course {
 model Major {
   id         String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   course_id  String            @db.Uuid
-  course     Course            @relation(fields: [course_id], references: [id], onDelete: Restrict)
+  course     Course            @relation(fields: [course_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
   name       String            @db.VarChar(255)
   created_at DateTime          @default(now()) @db.Timestamptz
   updated_at DateTime          @default(now()) @updatedAt @db.Timestamptz
   templates  PlannerTemplate[]
 
   @@unique([course_id, name])
+  @@index([course_id], map: "idx_majors_course")
   @@map("majors")
 }
 
@@ -43,7 +45,7 @@ model Unit {
   unit_name            String                   @db.VarChar(255)
   is_active            Boolean                  @default(true)
   replaced_by_unit_id  String?                  @db.Uuid
-  replaced_by          Unit?                    @relation("UnitReplacement", fields: [replaced_by_unit_id], references: [id], onDelete: SetNull)
+  replaced_by          Unit?                    @relation("UnitReplacement", fields: [replaced_by_unit_id], references: [id], onDelete: SetNull, onUpdate: NoAction)
   replaces_units       Unit[]                   @relation("UnitReplacement")
   created_at           DateTime                 @default(now()) @db.Timestamptz
   updated_at           DateTime                 @default(now()) @updatedAt @db.Timestamptz
@@ -53,26 +55,31 @@ model Unit {
   requisite_conditions UnitRequisiteCondition[] @relation("RequisiteUnit")
   elective_group_units ElectiveGroupUnit[]
   minor_units          MinorUnit[]
+  @@index([unit_code], map: "idx_units_code")
+  @@index([is_active], map: "idx_units_active")
+  @@index([replaced_by_unit_id], map: "idx_units_replaced_by")
 
   @@map("units")
 }
 
 model UnitOffering {
   unit_id    String   @db.Uuid
-  unit       Unit     @relation(fields: [unit_id], references: [id], onDelete: Cascade)
+  unit       Unit     @relation(fields: [unit_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   offered_in Int      @map("offered_in") @db.SmallInt
   created_at DateTime @default(now()) @db.Timestamptz
   updated_at DateTime @default(now()) @updatedAt @db.Timestamptz
 
   @@id([unit_id, offered_in])
+  @@index([offered_in], map: "idx_unit_offerings_term")
   @@map("unit_offerings")
 }
 
 model UnitRequisiteGroup {
   id         String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   unit_id    String                   @db.Uuid
-  unit       Unit                     @relation(fields: [unit_id], references: [id], onDelete: Cascade)
+  unit       Unit                     @relation(fields: [unit_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   conditions UnitRequisiteCondition[]
+  @@index([unit_id], map: "idx_requisite_group_unit")
 
   @@map("unit_requisite_groups")
 }
@@ -80,13 +87,15 @@ model UnitRequisiteGroup {
 model UnitRequisiteCondition {
   id                 String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   group_id           String             @db.Uuid
-  group              UnitRequisiteGroup @relation(fields: [group_id], references: [id], onDelete: Cascade)
+  group              UnitRequisiteGroup @relation(fields: [group_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   type               String             @db.VarChar(20)
   unit_id            String?            @db.Uuid
-  unit               Unit?              @relation("RequisiteUnit", fields: [unit_id], references: [id], onDelete: Cascade)
+  unit               Unit?              @relation("RequisiteUnit", fields: [unit_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   credit_points      Decimal?           @db.Decimal(5, 1)
   requisite_type     String?            @db.VarChar(20)
   external_requisite String?            @db.VarChar(255)
+  @@index([group_id], map: "idx_requisite_cond_group")
+  @@index([unit_id], map: "idx_requisite_cond_unit")
 
   @@map("unit_requisite_conditions")
 }
@@ -94,9 +103,9 @@ model UnitRequisiteCondition {
 model PlannerTemplate {
   id                 String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   course_id          String          @db.Uuid
-  course             Course          @relation(fields: [course_id], references: [id], onDelete: Restrict)
+  course             Course          @relation(fields: [course_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
   major_id           String?         @db.Uuid
-  major              Major?          @relation(fields: [major_id], references: [id], onDelete: Restrict)
+  major              Major?          @relation(fields: [major_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
   intake_year        Int             @db.SmallInt
   intake_month       Int?            @db.SmallInt
   course_type        String          @default("bachelor") @db.VarChar(50)
@@ -116,6 +125,9 @@ model PlannerTemplate {
   minors             Minor[]
 
   @@unique([course_id, major_id, intake_year, intake_month])
+  @@index([course_id], map: "idx_planner_course")
+  @@index([course_id, major_id], map: "idx_planner_course_major")
+  @@index([course_id, intake_year, intake_month], map: "idx_planner_course_intake")
   @@map("planner_templates")
 }
 
@@ -131,9 +143,9 @@ enum unit_category {
 model TemplateUnit {
   id                  String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   planner_template_id String          @db.Uuid
-  template            PlannerTemplate @relation(fields: [planner_template_id], references: [id], onDelete: Cascade)
+  template            PlannerTemplate @relation(fields: [planner_template_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   unit_id             String?         @db.Uuid
-  unit                Unit?           @relation(fields: [unit_id], references: [id], onDelete: Restrict)
+  unit                Unit?           @relation(fields: [unit_id], references: [id], onDelete: Restrict, onUpdate: NoAction)
   category            unit_category
   year_level          Int             @db.SmallInt
   semester            Int             @db.SmallInt
@@ -141,25 +153,28 @@ model TemplateUnit {
   updated_at          DateTime        @default(now()) @updatedAt @db.Timestamptz
 
   @@unique([planner_template_id, unit_id])
+  @@index([planner_template_id], map: "idx_template_units_template")
+  @@index([unit_id], map: "idx_template_units_unit")
   @@map("template_units")
 }
 
 model ElectiveGroup {
   id                  String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   planner_template_id String              @db.Uuid
-  template            PlannerTemplate     @relation(fields: [planner_template_id], references: [id], onDelete: Cascade)
+  template            PlannerTemplate     @relation(fields: [planner_template_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   created_at          DateTime            @default(now()) @db.Timestamptz
   updated_at          DateTime            @default(now()) @updatedAt @db.Timestamptz
   units               ElectiveGroupUnit[]
+  @@index([planner_template_id], map: "idx_elective_group_template")
 
   @@map("elective_groups")
 }
 
 model ElectiveGroupUnit {
   elective_group_id String        @db.Uuid
-  elective_group    ElectiveGroup @relation(fields: [elective_group_id], references: [id], onDelete: Cascade)
+  elective_group    ElectiveGroup @relation(fields: [elective_group_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   unit_id           String        @db.Uuid
-  unit              Unit          @relation(fields: [unit_id], references: [id], onDelete: Cascade)
+  unit              Unit          @relation(fields: [unit_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@id([elective_group_id, unit_id])
   @@map("elective_group_units")
@@ -168,23 +183,25 @@ model ElectiveGroupUnit {
 model Minor {
   id                  String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   planner_template_id String          @db.Uuid
-  template            PlannerTemplate @relation(fields: [planner_template_id], references: [id], onDelete: Cascade)
+  template            PlannerTemplate @relation(fields: [planner_template_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   name                String          @db.VarChar(255)
   created_at          DateTime        @default(now()) @db.Timestamptz
   updated_at          DateTime        @default(now()) @updatedAt @db.Timestamptz
   units               MinorUnit[]
 
   @@unique([planner_template_id, name])
+  @@index([planner_template_id], map: "idx_minors_planner")
   @@map("minors")
 }
 
 model MinorUnit {
   minor_id String @db.Uuid
-  minor    Minor  @relation(fields: [minor_id], references: [id], onDelete: Cascade)
+  minor    Minor  @relation(fields: [minor_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   unit_id  String @db.Uuid
-  unit     Unit   @relation(fields: [unit_id], references: [id], onDelete: Cascade)
+  unit     Unit   @relation(fields: [unit_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@id([minor_id, unit_id])
+  @@index([unit_id], map: "idx_minor_units_unit")
   @@map("minor_units")
 }
 
@@ -212,6 +229,7 @@ model SecurityIncidentLog {
   severity    String   @default("warning") @db.VarChar(20)
   message     String
   occurred_at DateTime @default(now()) @db.Timestamptz
+  @@index([occurred_at(sort: Desc)], map: "idx_incident_occurred")
 
   @@map("security_incident_log")
 }
@@ -224,17 +242,11 @@ model AuditLog {
   old_value    Json?
   new_value    Json?
   performed_at DateTime @default(now()) @db.Timestamptz
+  @@index([performed_at(sort: Desc)], map: "idx_audit_performed")
 
   @@map("audit_log")
 }
 
-model SchemaMigration {
-  version     String   @id @db.VarChar(50)
-  description String?
-  applied_at  DateTime @default(now()) @db.Timestamptz
-
-  @@map("schema_migrations")
-}
 
 // ======================================================================
 // Class estimation run history (Phase 8)

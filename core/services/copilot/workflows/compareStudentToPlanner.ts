@@ -32,7 +32,8 @@ const IN_PROGRESS_STATUSES = new Set(['enrolled', 'in progress', 'current', 'reg
 
 export const compareStudentToPlannerWorkflow: Workflow<Input, Output> = {
   id: 'compare_student_to_planner',
-  description: 'Compares a student\'s completed units against a specific study planner to show which units are done, in progress, and still outstanding. Use this when the user asks how a student is tracking against a plan, what units they still need, or whether they are on track.',
+  description: 'Compares a student with ONE study planner and lists which units are done, in progress and outstanding, unit by unit. Use this when the user asks how a student is tracking against a plan or wants the done and not done picture. Not a one-line verdict (use is_student_on_track).',
+  keywords: ['compare', 'tracking', 'done and not done', 'against plan', 'vs planner', 'in progress', 'outstanding', 'status against plan'],
   params: [
     {
       name: 'studentId',

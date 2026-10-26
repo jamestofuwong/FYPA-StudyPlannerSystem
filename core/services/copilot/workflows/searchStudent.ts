@@ -18,7 +18,8 @@ interface Output {
 
 export const searchStudentWorkflow: Workflow<Input, Output> = {
   id: 'search_student',
-  description: 'Searches for students by name or student ID. Returns matching student IDs and names. Use this when the user wants to find or look up a student.',
+  description: 'Looks up a student by name or student ID and returns the matching IDs and names. Use this when the user wants to find, look up or identify a student, or gives only a student ID. Not for grades or progress.',
+  keywords: ['find', 'look up', 'lookup', 'who is', 'identify', 'search', 'student record'],
   params: [
     {
       name: 'studentId',

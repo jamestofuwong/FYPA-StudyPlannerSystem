@@ -15,7 +15,7 @@ jest.mock('@/components/providers/ToastProvider', () => ({
 global.URL.createObjectURL = jest.fn();
 global.URL.revokeObjectURL = jest.fn();
 
-describe('ExportModal Component Deep Coverage', () => {
+describe('ExportModal', () => {
   const mockInput = {
     studentId: '123',
     student: { studentName: 'Test Student' },
@@ -62,7 +62,7 @@ describe('ExportModal Component Deep Coverage', () => {
         expect(exportBtn).toBeDisabled();
     });
 
-    test('handles API export failure (Targets catch block / Line 86)', async () => {
+    test('handles API export failure', async () => {
         global.fetch = jest.fn().mockResolvedValue({
         ok: false,
         json: () => Promise.resolve({ error: 'Database Export Error' })
@@ -78,13 +78,13 @@ describe('ExportModal Component Deep Coverage', () => {
         const exportBtn = screen.getByRole('button', { name: /Export/i });
         fireEvent.click(exportBtn);
 
-        // Verify the catch block logic triggers the Toast
+        // The error message shows in a toast
         await waitFor(() => {
         expect(mockShowToast).toHaveBeenCalledWith('Database Export Error', 'error');
         });
     });
 
-    test('handles unexpected network crash (Targets deep catch block)', async () => {
+    test('handles unexpected network crash', async () => {
         global.fetch = jest.fn().mockRejectedValue(new Error('Network Crash'));
 
         render(
@@ -99,7 +99,7 @@ describe('ExportModal Component Deep Coverage', () => {
             expect(mockShowToast).toHaveBeenCalledWith('Network Crash', 'error');
         });
     });
-    test('ExportModal Helper: handles various intake months (Line 6-57 coverage)', () => {
+    test('ExportModal: shows the intake month of the planner', () => {
         const months = [
         { name: 'July', expected: 'July' },
         { name: 'February', expected: 'February' }
@@ -116,25 +116,7 @@ describe('ExportModal Component Deep Coverage', () => {
         });
     });
 
-    test('ExportModal: Correctly handles null planner fields in subtext (Line 42+)', () => {
-    const minimalInput = { ...mockInput, planner: { course: null, major: null } };
-    render(<ToastProvider><ExportModal exportInput={minimalInput} onClose={jest.fn()} /></ToastProvider>);
-    expect(screen.getByText(/Export Report/i)).toBeInTheDocument();
-    });
-
-    test('ExportModal: Simulates successful blob download trigger (Line 74-83)', async () => {
-        global.fetch = jest.fn().mockResolvedValue({
-            ok: true,
-            blob: () => Promise.resolve(new Blob(['data'], { type: 'application/vnd.ms-excel' }))
-        });
-        
-        render(<ToastProvider><ExportModal exportInput={mockInput} onClose={jest.fn()} /></ToastProvider>);
-        fireEvent.click(screen.getByRole('button', { name: /Export/i }));
-        
-        await waitFor(() => expect(global.URL.createObjectURL).toHaveBeenCalled());
-        });
-
-    test('ExportModal: Complete download lifecycle (Lines 74-83)', async () => {
+    test('ExportModal: Complete download lifecycle', async () => {
         const clickSpy = jest.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
 
         global.fetch = jest.fn().mockResolvedValue({
@@ -154,21 +136,7 @@ describe('ExportModal Component Deep Coverage', () => {
         clickSpy.mockRestore();
         });
 
-    test('ExportModal: Handles API crash (Line 83 catch block)', async () => {
-        // Force a network-level rejection
-        global.fetch = jest.fn().mockRejectedValue(new Error('Network Crash'));
-
-        render(<ToastProvider><ExportModal exportInput={mockInput} onClose={mockOnClose} /></ToastProvider>);
-        
-        const exportBtn = screen.getByRole('button', { name: /Export \(/i });
-        fireEvent.click(exportBtn);
-
-        await waitFor(() => {
-        expect(mockShowToast).toHaveBeenCalledWith('Network Crash', 'error');
-        });
-    });
-
-    test('ExportModal: respects availableSections prop (Line 15+)', () => {
+    test('ExportModal: respects availableSections prop', () => {
         const restrictedSections: any[] = ['student_profile'];
         render(
             <ToastProvider>
@@ -186,21 +154,7 @@ describe('ExportModal Component Deep Coverage', () => {
         expect(screen.queryByText(/Major Matching/i)).not.toBeInTheDocument();
     });
 
-    test('ExportModal: handles JSON parsing failure (Line 57)', async () => {
-        global.fetch = jest.fn().mockResolvedValue({
-        ok: false,
-        json: () => Promise.reject(new Error('Invalid JSON'))
-        });
-
-        render(<ToastProvider><ExportModal exportInput={mockInput} onClose={jest.fn()} /></ToastProvider>);
-        fireEvent.click(screen.getByRole('button', { name: /Export/i }));
-
-        await waitFor(() => {
-        expect(mockShowToast).toHaveBeenCalledWith(expect.stringContaining('Export failed'), 'error');
-        });
-    });
-
-    test('ExportModal: closes on overlay click (Line 114)', () => {
+    test('ExportModal: closes on overlay click', () => {
         const mockOnClose = jest.fn();
         render(<ToastProvider><ExportModal exportInput={mockInput} onClose={mockOnClose} /></ToastProvider>);
         
@@ -217,7 +171,7 @@ describe('ExportModal Component Deep Coverage', () => {
         expect(mockOnClose).toHaveBeenCalled();
     });
 
-  test('ExportModal: toggles individual sections (Line 29-32)', () => {
+  test('ExportModal: toggles individual sections', () => {
     render(<ToastProvider><ExportModal exportInput={mockInput} onClose={jest.fn()} /></ToastProvider>);
     
     const checkbox = screen.getByLabelText(/Student Profile/i);
@@ -225,12 +179,12 @@ describe('ExportModal Component Deep Coverage', () => {
     fireEvent.click(checkbox);
     expect(screen.getByRole('button', { name: /Export \(3\)/i })).toBeInTheDocument();
     
-    // 2. Re-check (Hits the 'else' branch of toggleSection)
+    // 2. Re-check
     fireEvent.click(checkbox);
     expect(screen.getByRole('button', { name: /Export \(4\)/i })).toBeInTheDocument();
   });
 
-  test('ExportModal: handles server error with invalid JSON body (Lines 56-57)', async () => {
+  test('ExportModal: handles server error with invalid JSON body', async () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: false,
       // Simulate a server crash that returns HTML instead of JSON
@@ -246,19 +200,4 @@ describe('ExportModal Component Deep Coverage', () => {
     });
   });
 
-  test('ExportModal: handles malformed JSON error from server (Lines 56-57)', async () => {
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: false,
-      json: () => Promise.reject(new SyntaxError('Unexpected token < in JSON'))
-    });
-
-    render(<ToastProvider><ExportModal exportInput={mockInput} onClose={jest.fn()} /></ToastProvider>);
-    
-    fireEvent.click(screen.getByRole('button', { name: /Export/i }));
-
-    // Verify the .catch(() => ({})) logic on line 57 triggers the default error toast
-    await waitFor(() => {
-      expect(mockShowToast).toHaveBeenCalledWith('Export failed.', 'error');
-    });
-  });
 });

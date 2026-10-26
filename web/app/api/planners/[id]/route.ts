@@ -1,3 +1,4 @@
+import { readBody, PLANNER_UPDATE_FIELDS } from "@/lib/requestBody";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import * as plannerRepository from "../../../../../core/db/repositories/plannerRepository";
@@ -24,7 +25,9 @@ export async function PUT(
 ) {
   const { id } = await params;
   try {
-    const body = await req.json();
+    const parsed = await readBody(req, PLANNER_UPDATE_FIELDS, { partial: true });
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.data;
     const updatedPlanner = await plannerRepository.updatePlannerDetails(id, body);
     return NextResponse.json(updatedPlanner, { status: 200 });
   } catch {

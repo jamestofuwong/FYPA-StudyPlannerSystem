@@ -29,7 +29,8 @@ const PASSING_GRADES = new Set([
 
 export const canStudentTakeUnitWorkflow: Workflow<Input, Output> = {
   id: 'can_student_take_unit',
-  description: 'Checks whether a student is eligible to enrol in a specific unit, based on their completed units and the unit\'s prerequisite, corequisite, and antirequisite rules. Use this when the user asks if a student can take a unit next semester, or whether they have met the requirements.',
+  description: 'Checks whether a student is allowed to enrol in ONE named unit, from their completed units and the unit rules (prerequisites, corequisites, antirequisites). Use this when the user asks if a student can take, enrol in, or has met the requirements for a specific unit. Not for listing all options (use get_available_units_for_student).',
+  keywords: ['allowed to take', 'eligible', 'enrol in', 'register for', 'take next semester', 'meet the requirements', 'meet prerequisites'],
   params: [
     {
       name: 'studentId',

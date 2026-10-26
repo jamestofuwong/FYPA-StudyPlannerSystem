@@ -25,7 +25,8 @@ interface Output {
 
 export const getUnitsBySemesterWorkflow: Workflow<Input, Output> = {
   id: 'get_units_by_semester',
-  description: 'Lists all units offered in a given semester or term (1 = Semester 1, 2 = Semester 2, 3 = Summer Term, 4 = Winter Term). Use this when the user asks what units are available in a particular semester.',
+  description: 'Lists ALL units offered in one semester or term (1, 2, summer or winter). Use this when the user asks which units run or are available in a semester. Not for one named unit.',
+  keywords: ['sem', 'sem 1', 'sem 2', 'summer term', 'winter term', 'offered in semester', 'run in semester', 'what runs'],
   params: [
     {
       name: 'semester',

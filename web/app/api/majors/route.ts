@@ -1,3 +1,4 @@
+import { readBody, MAJOR_FIELDS } from "@/lib/requestBody";
 import { NextResponse } from "next/server";
 import * as majorRepository from "../../../../core/db/repositories/majorRepository";
 
@@ -12,7 +13,9 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
+    const parsed = await readBody(req, MAJOR_FIELDS);
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.data;
     const newMajor = await majorRepository.createMajor(body);
     return NextResponse.json(newMajor, { status: 201 });
   } catch {

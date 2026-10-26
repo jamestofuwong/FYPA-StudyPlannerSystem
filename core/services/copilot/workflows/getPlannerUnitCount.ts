@@ -13,7 +13,8 @@ interface Output {
 
 export const getPlannerUnitCountWorkflow: Workflow<Input, Output> = {
   id: 'get_planner_unit_count',
-  description: 'Returns the total number of units in a specific study planner, broken down by category (core, major_core, elective, etc.). Use this when the user asks how many units are in a plan or how many core/elective units a program has.',
+  description: 'Counts the units in ONE planner by category (core, major core, elective, WIL). Use this when the user asks how many units, core units or electives a plan or program has. Not for the electives that a student can still choose (use get_student_elective_options).',
+  keywords: ['how many units', 'count', 'number of units', 'core units', 'how many electives', 'total units'],
   params: [
     {
       name: 'plannerId',

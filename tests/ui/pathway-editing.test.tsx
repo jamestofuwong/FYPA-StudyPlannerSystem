@@ -136,6 +136,8 @@ beforeEach(() => {
           success: true,
           data: generatedPlan(),
           units: PLAN_UNITS,
+          // section one of the elective picker: the planner's own elective list
+          electiveCandidates: PLAN_UNITS.filter((u) => u.category === 'elective'),
           intakeSemester: 1,
           requirements: REQUIREMENTS,
           completedUnits: [],
@@ -163,6 +165,16 @@ const confirmRemove = async (code: string) => {
   fireEvent.click(await screen.findByRole('button', { name: 'Remove Unit' }));
 };
 
+/**
+ * Electives are not offered back by name. An advisor adds an "Elective Slot" to a semester, then chooses the unit for
+ * it in the elective picker (the same picker that Swap opens).
+ */
+const fillSlotWith = async (pickerIndex: number, code: string) => {
+  fireEvent.change(pickers()[pickerIndex], { target: { value: 'ELECTIVE' } });
+  fireEvent.click(await screen.findByText('+ Select Unit'));
+  fireEvent.click(await within(await screen.findByRole('dialog')).findByText(code));
+};
+
 describe('pathway editing', () => {
   test('removing a unit offers it again in the add-unit picker', async () => {
     render(<Harness />);
@@ -181,10 +193,11 @@ describe('pathway editing', () => {
     render(<Harness />);
     await generate();
 
-    const advRow = screen.getByText('ADV').closest('tr') as HTMLElement;
-    fireEvent.change(within(advRow).getByTitle('Move to another semester'), { target: { value: '1-1' } });
+    const advRow = () => screen.getByText('ADV').closest('tr') as HTMLElement;
+    fireEvent.change(within(advRow()).getByTitle('Move to another semester'), { target: { value: '1-1' } });
 
-    expect(await screen.findByText(/ADV needs INTRO, which is not in this plan/i)).toBeTruthy();
+    // the row carries the warning (the banner repeats it). The row is a new element after the move.
+    await waitFor(() => expect(within(advRow()).getByText(/ADV needs INTRO, which is not in this plan/i)).toBeTruthy());
   });
 
   test('a fifth standard unit shows over capacity on the semester header', async () => {
@@ -223,21 +236,25 @@ describe('pathway editing', () => {
     await confirmRemove('E1');
     await screen.findByText(/Electives total/i);
 
-    // Put it back in the other semester, so the category total is whole again
-    fireEvent.change(pickers()[0], { target: { value: 'E1' } });
+    // Fill a slot in the other semester with the same unit, so the category total is whole again
+    await fillSlotWith(0, 'E1');
 
     await waitFor(() => expect(screen.queryByText(/Electives total/i)).toBeNull());
   });
 
-  test("a summer/winter unit's warning survives an unrelated edit", async () => {
+  // A summer/winter-only unit that is not in a semester is handled by the break milestones, so the plan warning
+  // banner does not repeat it, before or after an unrelated edit. The unit is still offered in the add-unit picker.
+  test("an unplaced summer/winter unit raises no plan warning, before or after an unrelated edit", async () => {
     render(<Harness />);
     await generate();
 
-    expect(screen.getByText(/ICT20016\*Optional is only offered in summer\/winter/i)).toBeTruthy();
+    expect(screen.queryByText(/ICT20016\*Optional is only offered in summer\/winter/i)).toBeNull();
+    expect(within(pickers()[0]).getByText(/^ICT20016\*Optional ·.*only runs in winter/)).toBeTruthy();
 
     await confirmRemove('C1');
 
-    expect(screen.getByText(/ICT20016\*Optional is only offered in summer\/winter/i)).toBeTruthy();
+    expect(screen.queryByText(/ICT20016\*Optional is only offered in summer\/winter/i)).toBeNull();
+    expect(within(pickers()[0]).getByText(/^ICT20016\*Optional ·.*only runs in winter/)).toBeTruthy();
   });
 
   test('placing the summer/winter unit replaces the carried warning', async () => {
@@ -476,7 +493,7 @@ describe('terms named by month', () => {
 
   test('a unit placed by hand in a term it does not run says so, not "could not be fitted"', async () => {
     // Aug/Sep only. Slot 2 of a September intake is a Feb/Mar term.
-    const augSepOnly = planUnit('COS10082', 'Applied Analytics', 'elective', {
+    const augSepOnly = planUnit('COS10082', 'Applied Analytics', 'core', {
       offeringSemesters: [2],
       allOfferingTerms: [2],
     });
@@ -590,6 +607,7 @@ describe('prescribed electives are compulsory', () => {
             success: true,
             data: plan,
             units: [...PLAN_UNITS, PRESCRIBED, SPARE],
+            electiveCandidates: [...PLAN_UNITS.filter((u) => u.category === 'elective'), SPARE],
             intakeSemester: 1,
             requirements: [
               { category: 'core', creditPoints: 62.5, unitCount: 5, planCategories: ['core'] },
@@ -603,16 +621,20 @@ describe('prescribed electives are compulsory', () => {
     }) as unknown as typeof fetch;
   });
 
+  // C4 is core and deliberately left out of the generated plan, so its own "required to graduate" warning is there from
+  // the start. These tests look at what is said about SWE30009 and the elective total, and leave C4's warning alone.
+  const compulsoryText = () =>
+    screen.queryAllByText(/required to graduate but .* not in this plan/i).map((el) => el.textContent ?? '').join(' ');
+
   test('removing a prescribed elective reports it as compulsory missing', async () => {
     render(<Harness />);
     await generate();
 
-    expect(screen.queryByText(/required to graduate/i)).toBeNull();
+    expect(compulsoryText()).not.toMatch(/SWE30009/);
 
     await confirmRemove('SWE30009');
 
-    const missing = await screen.findByText(/required to graduate but .* not in this plan/i);
-    expect(missing.textContent).toMatch(/SWE30009/);
+    await waitFor(() => expect(compulsoryText()).toMatch(/SWE30009/));
   });
 
   test('replacing it with another elective does not silence the warning', async () => {
@@ -620,15 +642,14 @@ describe('prescribed electives are compulsory', () => {
     await generate();
 
     await confirmRemove('SWE30009');
-    await screen.findByText(/required to graduate but .* not in this plan/i);
+    await waitFor(() => expect(compulsoryText()).toMatch(/SWE30009/));
 
     // The credit total adds up again, but the compulsory unit is still missing
-    fireEvent.change(pickers()[1], { target: { value: 'E3' } });
+    await fillSlotWith(1, 'E3');
 
     await waitFor(() => expect(screen.getByText('E3')).toBeTruthy());
     expect(screen.queryByText(/Electives total/i)).toBeNull();
-    const missing = screen.getByText(/required to graduate but .* not in this plan/i);
-    expect(missing.textContent).toMatch(/SWE30009/);
+    expect(compulsoryText()).toMatch(/SWE30009/);
   });
 
   test('a plain elective removed and replaced raises nothing', async () => {
@@ -636,13 +657,11 @@ describe('prescribed electives are compulsory', () => {
     await generate();
 
     await confirmRemove('E1');
-    fireEvent.change(pickers()[1], { target: { value: 'E3' } });
+    await fillSlotWith(1, 'E3');
 
     await waitFor(() => expect(screen.getByText('E3')).toBeTruthy());
-    // C4 is core and deliberately unplaced, so its own warning stands; the
-    // swapped-out elective raises none of its own
-    const compulsory = screen.queryAllByText(/required to graduate but .* not in this plan/i);
-    expect(compulsory.map((el) => el.textContent ?? '').join(' ')).not.toMatch(/E1/);
+    // the swapped-out elective raises no warning of its own
+    expect(compulsoryText()).not.toMatch(/E1/);
     expect(screen.queryByText(/Electives total/i)).toBeNull();
   });
 });

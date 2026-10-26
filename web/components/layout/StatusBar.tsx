@@ -12,7 +12,6 @@ const PANEL_LABELS: Record<PanelId, string> = {
     planners: 'Study Planners',
     units: 'Units',
     settings: 'Settings',
-    "cloud-sync": 'Cloud Sync',
     "user-guide": 'User Guide', 
     "class-estimation": 'Class Estimation',
     copilot: 'AI Copilot',

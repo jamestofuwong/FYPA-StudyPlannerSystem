@@ -1,7 +1,6 @@
 // @ts-nocheck
 /**
- * Coverage tests for advisorScraperService.ts
- * Targets lines 43-244 (all runScraperStep branches) and 312-313 (runAllSteps login detection)
+ * Tests for advisorScraperService.ts: every runScraperStep step, and login detection in runAllSteps.
  */
 
 import {
@@ -62,7 +61,7 @@ describe('advisorScraperService – URL helpers', () => {
 });
 
 // ---------------------------------------------------------------------------
-// runScraperStep – go-degree (line ~148)
+// runScraperStep – go-degree
 // ---------------------------------------------------------------------------
 
 describe('runScraperStep – go-degree', () => {
@@ -76,7 +75,7 @@ describe('runScraperStep – go-degree', () => {
 });
 
 // ---------------------------------------------------------------------------
-// runScraperStep – open-degree-iframe (line ~155)
+// runScraperStep – open-degree-iframe
 // ---------------------------------------------------------------------------
 
 describe('runScraperStep – open-degree-iframe', () => {
@@ -100,7 +99,7 @@ describe('runScraperStep – open-degree-iframe', () => {
 });
 
 // ---------------------------------------------------------------------------
-// runScraperStep – click-student-dropdown (line ~165)
+// runScraperStep – click-student-dropdown
 // ---------------------------------------------------------------------------
 
 describe('runScraperStep – click-student-dropdown', () => {
@@ -127,7 +126,7 @@ describe('runScraperStep – click-student-dropdown', () => {
 });
 
 // ---------------------------------------------------------------------------
-// runScraperStep – wait-for-kendo-list (line ~179)
+// runScraperStep – wait-for-kendo-list
 // ---------------------------------------------------------------------------
 
 describe('runScraperStep – wait-for-kendo-list', () => {
@@ -149,7 +148,7 @@ describe('runScraperStep – wait-for-kendo-list', () => {
 });
 
 // ---------------------------------------------------------------------------
-// runScraperStep – open-student-dropdown (line ~188)
+// runScraperStep – open-student-dropdown
 // ---------------------------------------------------------------------------
 
 describe('runScraperStep – open-student-dropdown', () => {
@@ -187,7 +186,7 @@ describe('runScraperStep – open-student-dropdown', () => {
 });
 
 // ---------------------------------------------------------------------------
-// runScraperStep – enter-student-id (line ~200)
+// runScraperStep – enter-student-id
 // ---------------------------------------------------------------------------
 
 describe('runScraperStep – enter-student-id', () => {
@@ -214,17 +213,16 @@ describe('runScraperStep – enter-student-id', () => {
     expect(result.studentName).toBeUndefined();
   });
 
-  test('logs error when enter-student-id fails', async () => {
+  test('throws the portal error when enter-student-id fails, so the scrape stops and the page can offer a retry', async () => {
     const adapter = makeAdapter({
       executeJavaScript: jest.fn().mockResolvedValue({ success: false, error: 'Student not found in list' }),
     });
-    const result = await runScraperStep('enter-student-id', adapter, { studentId: 'INVALID' });
-    expect(result.logs.some((l) => l.includes('Student not found in list'))).toBe(true);
+    await expect(runScraperStep('enter-student-id', adapter, { studentId: 'INVALID' })).rejects.toThrow('Student not found in list');
   });
 });
 
 // ---------------------------------------------------------------------------
-// runScraperStep – click-dropdown (line ~215)
+// runScraperStep – click-dropdown
 // ---------------------------------------------------------------------------
 
 describe('runScraperStep – click-dropdown', () => {
@@ -246,7 +244,7 @@ describe('runScraperStep – click-dropdown', () => {
 });
 
 // ---------------------------------------------------------------------------
-// runScraperStep – select-dropdown (line ~225)
+// runScraperStep – select-dropdown
 // ---------------------------------------------------------------------------
 
 describe('runScraperStep – select-dropdown', () => {
@@ -289,7 +287,7 @@ describe('runScraperStep – select-dropdown', () => {
 });
 
 // ---------------------------------------------------------------------------
-// runScraperStep – scrape-program-data (line ~237)
+// runScraperStep – scrape-program-data
 // ---------------------------------------------------------------------------
 
 describe('runScraperStep – scrape-program-data', () => {
@@ -351,11 +349,11 @@ describe('runScraperStep – unknown stepId', () => {
 });
 
 // ---------------------------------------------------------------------------
-// runAllSteps – lines 312-313 (login detection mid-pipeline)
+// runAllSteps – login detection mid-pipeline
 // ---------------------------------------------------------------------------
 
 describe('runAllSteps', () => {
-  test('stops and returns loginDetected=true when MS login URL detected (lines 312-313)', async () => {
+  test('stops and returns loginDetected=true when MS login URL detected', async () => {
     let callCount = 0;
     const adapter = makeAdapter({
       executeJavaScript: jest.fn().mockResolvedValue({}),
@@ -372,7 +370,7 @@ describe('runAllSteps', () => {
     expect(result.logs.some((l) => l.includes('Microsoft login required'))).toBe(true);
   });
 
-  test('completes all steps and returns loginDetected=undefined when no login redirect', async () => {
+  test('stops with the portal error when the student is not found, and does not run the later steps', async () => {
     const adapter = makeAdapter({
       executeJavaScript: jest.fn()
         // open-degree-iframe: no iframe
@@ -392,9 +390,9 @@ describe('runAllSteps', () => {
         .mockResolvedValueOnce(false),
       getURL: jest.fn().mockReturnValue('https://portal.example.com'),
     });
-    const result = await runAllSteps(adapter, { studentId: 'S001' });
-    expect(result.loginDetected).toBeUndefined();
-    expect(result.scrapeResult?.scraped).toBe(false);
+    await expect(runAllSteps(adapter, { studentId: 'S001' })).rejects.toThrow('not found');
+    // the five steps up to enter-student-id ran. click-dropdown, select-dropdown and scrape-program-data did not.
+    expect(adapter.executeJavaScript).toHaveBeenCalledTimes(5);
   });
 
   test('carries scrapeResult through to final return', async () => {

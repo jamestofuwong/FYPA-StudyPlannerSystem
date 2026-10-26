@@ -22,7 +22,8 @@ const isMpu = (desc: string) => desc.toLowerCase().includes('mata pelajaran umum
 
 export const getStudentEnrollmentHistoryWorkflow: Workflow<Input, Output> = {
   id: 'get_student_enrollment_history',
-  description: 'Lists all programs and degree enrollments a student has ever been registered under, including MPU. Use this when the user asks what programs a student is or was enrolled in, or whether a student transferred or has multiple enrollments.',
+  description: 'Lists every program that a student was ever enrolled in, including MPU. Use this when the user asks which programs a student is or was enrolled in, or whether they transferred, changed course or have more than one enrollment.',
+  keywords: ['transfer', 'transferred', 'change course', 'changed course', 'switched course', 'multiple enrollments', 'previous program', 'before', 'history of programs'],
   params: [
     {
       name: 'studentId',

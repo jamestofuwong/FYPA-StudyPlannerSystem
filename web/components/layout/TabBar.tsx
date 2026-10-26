@@ -20,7 +20,6 @@ const TAB_META: Record<PanelId, TabMeta> = {
     scraping: { id: 'scraping', icon: '🕷️', label: 'Data Scraping' },
     planners: { id: 'planners', icon: '✅', label: 'Study Planners' },
     units: { id: 'units', icon: '📝', label: 'Units' },
-    'cloud-sync': { id: 'cloud-sync', icon: '☁️', label: 'Cloud Sync' },
     settings: { id: 'settings', icon: '⚙️', label: 'Settings' },
     'user-guide': { id: 'user-guide', icon: '📖', label: 'User Guide' },
     copilot: { id: 'copilot', icon: '🤖', label: 'AI Copilot' },

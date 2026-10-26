@@ -3,7 +3,7 @@ import React from 'react';
 import { renderHook, act } from '@testing-library/react';
 import { PortalAuthProvider, usePortalAuth } from '@/components/providers/PortalAuthContext';
 
-test('PortalAuthContext: exercises session reset logic (Lines 43-44)', async () => {
+test('PortalAuthContext: exercises session reset logic', async () => {
   const wrapper = ({ children }: { children: React.ReactNode }) => (
     <PortalAuthProvider>{children}</PortalAuthProvider>
   );
@@ -18,7 +18,7 @@ test('PortalAuthContext: exercises session reset logic (Lines 43-44)', async () 
   expect(result.current).toBeDefined();
 });
 
-test('usePortalAuth: throws error when used outside provider (Line 62)', () => {
+test('usePortalAuth: throws error when used outside provider', () => {
   const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
   
   expect(() => renderHook(() => usePortalAuth())).toThrow(/must be used inside PortalAuthProvider/i);
