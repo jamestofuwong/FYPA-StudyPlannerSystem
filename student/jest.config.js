@@ -4,6 +4,10 @@
 //
 // The student app has its own aliases (@/ means student/, not web/), so it has its own Jest config. Jest itself comes
 // from the repository root.
+// next/jest loads next.config.ts, and that file stops when DATABASE_URL or CMS_JWT_SECRET is missing. On a computer
+// without student/.env (a fresh clone, CI) the tests could not start. These placeholders are used only when no value is set.
+process.env.DATABASE_URL ||= 'postgresql://unused:unused@127.0.0.1:1/unused';
+process.env.CMS_JWT_SECRET ||= 'test-secret-test-secret-test-secret-123456';
 const nextJest = require('next/jest');
 const createJestConfig = nextJest({ dir: './' });
 
