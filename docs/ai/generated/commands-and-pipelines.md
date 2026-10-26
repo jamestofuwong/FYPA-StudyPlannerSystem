@@ -29,7 +29,7 @@
 | `test:all` | `npm test && npm run test:integration && npm run test:student && npm run test:student:integration && npm run...` |
 | `verify` | `npm run typecheck && npm run lint && npm run docs:check && npm test` |
 | `verify:full` | `npm run verify && npm run typecheck:student && npm run test:integration && npm run test:student && npm run ...` |
-| `postinstall` | `patch-package && prisma generate --schema core/db/prisma/schema` |
+| `postinstall` | `node scripts/apply-patches.js && prisma generate --schema core/db/prisma/schema` |
 | `backtest` | `cross-env DOTENV_CONFIG_QUIET=true tsx scripts/backtest.ts` |
 | `docs:facts` | `tsx scripts/docs-facts.ts` |
 | `docs:check` | `tsx scripts/docs-check.ts` |

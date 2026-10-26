@@ -58,3 +58,4 @@ playwright-report/
 # regenerated on every test run
 tests/unit/copilot/ROUTING-RESULTS.md
 tests/unit/copilot/ROUTING-OLLAMA-RESULTS.md
+.patches-applicable-*
