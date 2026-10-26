@@ -12,15 +12,24 @@ A normal Next.js 16 (App Router) site for students (public pages and a plan buil
 | `proxy.ts` | Verifies the CMS JWT for `/cms/*` and sets a Content-Security-Policy with a nonce on every response and request (Next.js 16 name for what used to be `middleware.ts`). |
 | `lib/catalog.ts` | Cached reads (`unstable_cache` with tags) and `revalidateStudentCache(tag)`. |
 | `lib/generate-plan.ts`, `plan-builder.ts` | Plan building (calls the shared scheduler). |
-| `lib/cms/` | `auth.ts` (JWT), `session.ts`, `rateLimit.ts`, `schemas.ts` (zod). |
+| `lib/cms/` | `auth.ts` (JWT), `session.ts`, `rateLimit.ts`, `schemas.ts` (zod), `permissions.ts` (roles and access levels, pure), `access.ts` (checks against the database), `issueSession.ts`. |
 | `lib/prisma.ts` | The Prisma client with the `pg` adapter. `DATABASE_URL_UNPOOLED`, when set (even empty), replaces `DATABASE_URL` at run time. |
-| `prisma/` | Schema, 3 migrations, `seed.ts`. |
+| `prisma/` | Schema, 4 migrations, `seed.ts`. |
 | `data/`, `scripts/` | Official unit detail data and the script that fetches it. |
 | `next.config.ts` | Fails the build when `DATABASE_URL` or `CMS_JWT_SECRET` is missing. Sets security headers (HSTS, X-Frame-Options and others). |
 
 ## Commands (run in `student/`)
 
 `npm run dev`, `npm run build`, `npm run db:migrate` (development), `npm run db:seed` (needs `CMS_SEED_*`), `npm run db:migrate:prod` and `npm run db:seed:prod` (read `.env.production`). The full list is generated: [commands](../docs/ai/generated/commands-and-pipelines.md). Tests run from the repository root: `npm run test:student`, `npm run test:student:integration`.
+
+## CMS accounts and access
+
+- Two roles. A **superadmin** has full access to every section and manages accounts (`/cms/users`). An **admin** has one level per section: `none`, `view` or `edit`. The sections are `units`, `planners`, `faq`, `contacts` and `hod` (`CMS_MODULES` in `lib/cms/permissions.ts`). Add a section there, in the sidebar and in the checks below.
+- Every account can change its own name, email and password in `/cms/account`.
+- Role, permissions and the active flag are read from the database on every request (`getCurrentUser`), not from the token, so a change applies at once and a deactivated account is refused.
+- Every Server Action in `app/cms` must call `requireAccess('<section>', 'edit')` before it changes data, and every page must call `requirePageAccess('<section>')`. Hiding a button is only for the user. A view-only page is wrapped in `ReadOnly`.
+- Rules: nobody can remove, deactivate or delete their own account, and the last active superadmin cannot be removed. A new password or a deactivation ends the sessions of that account. Existing accounts became superadmins in the migration that added roles.
+- Tests: `tests/unit/permissions.test.ts`, `tests/integration/cms-accounts.test.ts`, `e2e/student/cms-accounts.spec.ts`.
 
 ## Rules
 

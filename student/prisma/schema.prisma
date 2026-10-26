@@ -304,11 +304,21 @@ model HeadOfDepartment {
   @@map("heads_of_department")
 }
 
+enum CmsRole {
+  superadmin
+  admin
+}
+
 model CmsUser {
   id             String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   email          String            @unique @db.VarChar(255)
   password_hash  String            @db.Text
   name           String            @db.VarChar(255)
+  // superadmin: full access to every module and manages accounts. admin: access set per module in `permissions`.
+  role           CmsRole           @default(admin)
+  // { "<module>": "none" | "view" | "edit" }. A module that is missing means "none". Ignored for a superadmin.
+  permissions    Json              @default("{}")
+  active         Boolean           @default(true)
   created_at     DateTime          @default(now()) @db.Timestamptz
   updated_at     DateTime          @default(now()) @updatedAt @db.Timestamptz
   refresh_tokens CmsRefreshToken[]

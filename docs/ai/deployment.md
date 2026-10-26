@@ -48,7 +48,7 @@ Secrets: `DATABASE_URL_DEV`, `DATABASE_URL_PROD`, `VERCEL_TOKEN`, `VERCEL_ORG_ID
 4. Disconnect the Git repository in each Vercel project (`student/vercel.json` also sets `git.deploymentEnabled` to false). Actions must be the only deployer.
 5. Add the GitHub secrets. Create a GitHub environment named `production`. Add required reviewers if you want an approval gate.
 6. Run Actions, Deploy Student App, Run workflow on `main`. It creates the tables in staging and deploys staging.
-7. Seed staging from your computer: put the staging URL in `student/.env.production`, set the `CMS_SEED_*` values, run `npm run db:seed:prod`.
+7. Seed staging from your computer: put the staging URL in `student/.env.production`, set the `CMS_SEED_*` values, run `npm run db:seed:prod`. The seeded account is a superadmin. It creates the other accounts in the CMS (`/cms/users`).
 8. Merge `main` into `production`. Run the workflow on `production`. Seed production in the same way.
 9. Open the site and sign in at `/cms/login`.
 

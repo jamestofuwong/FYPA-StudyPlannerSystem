@@ -1,7 +1,9 @@
 import { prisma } from '@/lib/prisma'
+import { requirePageAccess } from '@/lib/cms/access'
 import PlannerForm from '../PlannerForm'
 
 export default async function NewPlannerPage() {
+  await requirePageAccess('planners', 'edit')
   const [courses, allUnits] = await Promise.all([
     prisma.course.findMany({ include: { majors: true }, orderBy: { name: 'asc' } }),
     prisma.unit.findMany({ orderBy: { unit_code: 'asc' }, select: { id: true, unit_code: true, unit_name: true } }),

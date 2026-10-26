@@ -1,5 +1,7 @@
 import { notFound } from 'next/navigation'
 import { prisma } from '@/lib/prisma'
+import { requirePageAccess } from '@/lib/cms/access'
+import ReadOnly from '../../ReadOnly'
 import UnitForm from '../UnitForm'
 
 function pendingContent(snapshot: unknown): unknown {
@@ -26,6 +28,7 @@ function pendingSourceUrl(snapshot: unknown): string | null {
 }
 
 export default async function EditUnitPage({ params }: { params: Promise<{ id: string }> }) {
+  const { canEdit } = await requirePageAccess('units')
   const { id } = await params
 
   const [unit, allUnits] = await Promise.all([
@@ -88,9 +91,11 @@ export default async function EditUnitPage({ params }: { params: Promise<{ id: s
       : [],
   )
   return (
+    <ReadOnly readOnly={!canEdit}>
     <div style={{ padding: 32 }}>
       <h1 style={{ fontSize: 28, fontWeight: 700, color: '#111827', marginBottom: 32 }}>Edit Unit</h1>
       <UnitForm unit={unitForForm} allUnits={unitOptions} pendingUpdates={pendingUpdates} />
     </div>
+  </ReadOnly>
   )
 }

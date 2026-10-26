@@ -4,7 +4,7 @@ import { revalidateStudentCache, STUDENT_CACHE } from '@/lib/catalog'
 import { redirect } from 'next/navigation'
 import { prisma } from '@/lib/prisma'
 import { PlannerSchema } from '@/lib/cms/schemas'
-import { getSession } from '@/lib/cms/session'
+import { requireAccess } from '@/lib/cms/access'
 
 interface SemesterUnitInput {
   unit_id: string | null
@@ -44,7 +44,7 @@ export async function savePlanner(data: PlannerFormData) {
   if (new Set(placedUnitIds).size !== placedUnitIds.length) {
     throw new Error('A unit can only appear once in a planner template.')
   }
-  const session = await getSession()
+  const session = await requireAccess('planners', 'edit')
 
   const plannerId = await prisma.$transaction(async tx => {
     let course = await tx.course.findFirst({ where: { name: d.course_name } })
@@ -133,7 +133,7 @@ export async function savePlanner(data: PlannerFormData) {
 }
 
 export async function deletePlanner(id: string) {
-  const session = await getSession()
+  const session = await requireAccess('planners', 'edit')
   try {
     await prisma.plannerTemplate.delete({ where: { id } })
   } catch (error) {

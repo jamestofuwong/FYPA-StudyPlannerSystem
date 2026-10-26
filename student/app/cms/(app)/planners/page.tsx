@@ -1,10 +1,12 @@
 import Link from 'next/link'
 import { prisma } from '@/lib/prisma'
+import { requirePageAccess } from '@/lib/cms/access'
 import { deletePlanner } from './actions'
 import PlannersList from './PlannersList'
 import styles from './page.module.css'
 
 export default async function PlannersPage() {
+  const { canEdit } = await requirePageAccess('planners')
   const planners = await prisma.plannerTemplate.findMany({
     include: { course: true, major: true },
     orderBy: [{ intake_year: 'desc' }, { intake_month: 'asc' }],
@@ -19,11 +21,13 @@ export default async function PlannersPage() {
             {planners.length} planner template{planners.length !== 1 ? 's' : ''}
           </p>
         </div>
-        <div className={styles.actions}>
-          <Link href="/cms/planners/new" className={styles.btnPrimary}>
-            New Planner
-          </Link>
-        </div>
+        {canEdit && (
+          <div className={styles.actions}>
+            <Link href="/cms/planners/new" className={styles.btnPrimary}>
+              New Planner
+            </Link>
+          </div>
+        )}
       </div>
 
       <PlannersList
@@ -37,6 +41,7 @@ export default async function PlannersPage() {
           durationSemesters: planner.duration_semesters,
         }))}
         deletePlanner={deletePlanner}
+        canEdit={canEdit}
       />
     </div>
   )

@@ -2963,7 +2963,7 @@ async function seedCmsUser() {
     return
   }
   await prisma.cmsUser.create({
-    data: { email, password_hash: await hashPassword(password), name },
+    data: { email, password_hash: await hashPassword(password), name, role: 'superadmin' },
   })
   console.log(`Created CMS user: ${email} / ${password}`)
 }

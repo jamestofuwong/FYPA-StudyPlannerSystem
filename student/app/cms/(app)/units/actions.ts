@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { UnitSchema } from '@/lib/cms/schemas'
-import { getSession, requireSession } from '@/lib/cms/session'
+import { requireAccess } from '@/lib/cms/access'
 import { fetchOfficialUnitDetail } from '@/lib/unit-detail-official-fetch'
 import {
   applyUnitDetailSection,
@@ -76,7 +76,7 @@ function normalizedAssessments(data: UnitFormData) {
 }
 
 export async function deleteUnit(id: string) {
-  const session = await requireSession()
+  const session = await requireAccess('units', 'edit')
 
   try {
     await prisma.unit.delete({ where: { id } })
@@ -104,7 +104,7 @@ export async function saveUnit(data: UnitFormData) {
     throw new Error(parsed.error.issues[0]?.message ?? 'Invalid unit data')
   }
   const d = parsed.data
-  const session = await getSession()
+  const session = await requireAccess('units', 'edit')
 
   if (d.id) {
     const unitId = d.id
@@ -211,7 +211,7 @@ export async function saveUnit(data: UnitFormData) {
 }
 
 export async function checkOfficialUnitUpdates(unitId: string) {
-  await requireSession()
+  await requireAccess('units', 'edit')
 
   const unit = await prisma.unit.findUnique({
     where: { id: unitId },
@@ -269,7 +269,7 @@ export async function reviewUnitDetailUpdate(
   sectionValue: string,
   decision: ReviewDecision,
 ) {
-  await requireSession()
+  await requireAccess('units', 'edit')
   if (!UNIT_DETAIL_SECTIONS.includes(sectionValue as UnitDetailSectionKey)) {
     throw new Error('Invalid Unit Detail section')
   }

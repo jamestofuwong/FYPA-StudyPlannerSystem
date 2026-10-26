@@ -15,6 +15,8 @@ interface UnitRow {
 
 interface Props {
   units: UnitRow[]
+  /** False for a view-only account: no delete and no add. */
+  canEdit?: boolean
   deleteUnit: (id: string) => Promise<
     | { success: true }
     | { success: false; reason: 'in_use' | 'failed' }
@@ -32,7 +34,7 @@ function getPageItems(current: number, total: number): PageItem[] {
 
 const PAGE_SIZES = [10, 20, 50]
 
-export default function UnitsList({ units, deleteUnit }: Props) {
+export default function UnitsList({ units, deleteUnit, canEdit = true }: Props) {
   const [query, setQuery] = useState('')
   const [activeYear, setActiveYear] = useState<number | null>(null)
   const [page, setPage] = useState(1)
@@ -125,7 +127,7 @@ export default function UnitsList({ units, deleteUnit }: Props) {
         <div className={styles.empty}>
           <p className={styles.emptyTitle}>{units.length === 0 ? 'No units have been added yet.' : 'No units match your search or filters.'}</p>
           <p className={styles.emptySubtitle}>{units.length === 0 ? 'Add a unit to get started.' : 'Adjust your search or clear the filters to see more units.'}</p>
-          {units.length === 0 && <Link href="/cms/units/new" className={styles.btnSecondary}>Add the first unit</Link>}
+          {canEdit && units.length === 0 && <Link href="/cms/units/new" className={styles.btnSecondary}>Add the first unit</Link>}
         </div>
       ) : (
         <table className={styles.table}>
@@ -147,8 +149,8 @@ export default function UnitsList({ units, deleteUnit }: Props) {
                 <td className={styles.td}>{unit.credit_points}</td>
                 <td className={styles.td}>
                   <div className={styles.rowActions}>
-                    <Link href={`/cms/units/${unit.id}`} className={styles.btnSecondary}>Edit</Link>
-                    <button type="button" className={styles.btnDanger} onClick={() => { setDeleteTarget(unit); setDeleteError(null) }}>Delete</button>
+                    <Link href={`/cms/units/${unit.id}`} className={styles.btnSecondary}>{canEdit ? 'Edit' : 'View'}</Link>
+                    {canEdit && <button type="button" className={styles.btnDanger} onClick={() => { setDeleteTarget(unit); setDeleteError(null) }}>Delete</button>}
                   </div>
                 </td>
               </tr>

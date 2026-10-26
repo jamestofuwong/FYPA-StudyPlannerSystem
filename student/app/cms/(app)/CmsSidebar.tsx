@@ -4,21 +4,40 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import styles from './CmsSidebar.module.css'
+import type { CmsModule, Permissions } from '@/lib/cms/permissions'
 
 interface Props {
-  user: { name: string; email: string }
+  user: { name: string; email: string; role: 'superadmin' | 'admin'; permissions: Permissions }
 }
 
-const NAV = [
+type NavItem =
+  | { section: string }
+  | { label: string; href: string; exact?: boolean; module?: CmsModule; superadminOnly?: boolean }
+
+const NAV: NavItem[] = [
   { label: 'Dashboard', href: '/cms/dashboard', exact: true },
   { section: 'Content' },
-  { label: 'Units', href: '/cms/units' },
-  { label: 'Planners', href: '/cms/planners' },
+  { label: 'Units', href: '/cms/units', module: 'units' },
+  { label: 'Planners', href: '/cms/planners', module: 'planners' },
   { section: 'Help' },
-  { label: 'FAQ', href: '/cms/help/faq' },
-  { label: 'Contacts', href: '/cms/help/contacts' },
-  { label: 'Heads of Department', href: '/cms/help/hod' },
-] as const
+  { label: 'FAQ', href: '/cms/help/faq', module: 'faq' },
+  { label: 'Contacts', href: '/cms/help/contacts', module: 'contacts' },
+  { label: 'Heads of Department', href: '/cms/help/hod', module: 'hod' },
+  { section: 'Administration' },
+  { label: 'Accounts', href: '/cms/users', superadminOnly: true },
+  { label: 'My account', href: '/cms/account' },
+]
+
+/** Leaves out the links that this account cannot open, and the section titles that are left without a link. */
+function visibleNav(user: Props['user']): NavItem[] {
+  const allowed = NAV.filter(item => {
+    if ('section' in item) return true
+    if (item.superadminOnly) return user.role === 'superadmin'
+    if (item.module) return user.permissions[item.module] !== 'none'
+    return true
+  })
+  return allowed.filter((item, i) => !('section' in item) || (i + 1 < allowed.length && !('section' in allowed[i + 1])))
+}
 
 export default function CmsSidebar({ user }: Props) {
   const pathname = usePathname()
@@ -44,7 +63,7 @@ export default function CmsSidebar({ user }: Props) {
       </div>
 
       <nav className={styles.nav} aria-label="CMS navigation">
-        {NAV.map((item, i) => {
+        {visibleNav(user).map((item, i) => {
           if ('section' in item) {
             return (
               <div key={`section-${i}`} className={styles.sectionLabel}>
@@ -53,7 +72,7 @@ export default function CmsSidebar({ user }: Props) {
             )
           }
 
-          const isActive = 'exact' in item && item.exact
+          const isActive = item.exact
             ? pathname === item.href
             : pathname === item.href || pathname.startsWith(item.href + '/')
 

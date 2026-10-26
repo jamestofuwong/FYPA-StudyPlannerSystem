@@ -89,8 +89,22 @@ describe('login', () => {
     expect(spy).not.toHaveBeenCalled();
   });
 
-  test('the e-mail is matched exactly: a different case is a different (unknown) account', async () => {
-    expect((await doLogin({ email: 'EDITOR@example.com' })).status).toBe(401);
+  test('the e-mail is matched without regard to letter case, because two accounts cannot differ only by case', async () => {
+    expect((await doLogin({ email: 'EDITOR@example.com' })).status).toBe(200);
+  });
+
+  test('a deactivated account cannot sign in, and gets the same answer as a wrong password', async () => {
+    await prisma.cmsUser.update({ where: { email: EMAIL }, data: { active: false } });
+    const res = await doLogin();
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: 'Invalid credentials' });
+    expect(await prisma.cmsRefreshToken.count()).toBe(0);
+  });
+
+  test('a deactivated account cannot refresh an existing session', async () => {
+    const c = cookiesOf(await doLogin());
+    await prisma.cmsUser.update({ where: { email: EMAIL }, data: { active: false } });
+    expect((await refresh(post('/api/cms/auth/refresh', undefined, { cookies: { cms_refresh: c.cms_refresh.value } }))).status).toBe(401);
   });
 });
 

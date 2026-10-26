@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
       include: { user: true },
     })
 
-    if (!stored) return NextResponse.json({ error: 'Invalid or expired refresh token' }, { status: 401 })
+    if (!stored || !stored.user.active) return NextResponse.json({ error: 'Invalid or expired refresh token' }, { status: 401 })
 
     // Rotate: delete old, create new
     const newRefreshToken = generateRefreshToken()

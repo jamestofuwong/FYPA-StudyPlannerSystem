@@ -140,3 +140,49 @@ export const GeneratePlanSchema = z.object({
   }),
   completedUnitCodes: z.array(z.string().trim().min(1)),
 })
+
+// ─── Accounts ─────────────────────────────────────────────────────────────────
+
+export const PASSWORD_MIN_LENGTH = 10
+
+const NewPassword = z
+  .string()
+  .min(PASSWORD_MIN_LENGTH, `Password must be at least ${PASSWORD_MIN_LENGTH} characters`)
+  .max(128, 'Password too long')
+
+const Email = z.string().trim().toLowerCase().email('Invalid email address').max(255)
+const PersonName = z.string().trim().min(1, 'Name is required').max(255)
+
+export const ProfileSchema = z.object({
+  name: PersonName,
+  email: Email,
+  currentPassword: z.string().min(1, 'Enter your current password to save changes').max(128),
+})
+
+export const ChangePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1, 'Enter your current password').max(128),
+    newPassword: NewPassword,
+    confirmPassword: z.string(),
+  })
+  .refine(v => v.newPassword === v.confirmPassword, { message: 'The new passwords do not match', path: ['confirmPassword'] })
+  .refine(v => v.newPassword !== v.currentPassword, { message: 'The new password must be different from the current one', path: ['newPassword'] })
+
+const AccessLevelSchema = z.enum(['none', 'view', 'edit'])
+
+export const CreateAccountSchema = z.object({
+  name: PersonName,
+  email: Email,
+  password: NewPassword,
+  role: z.enum(['superadmin', 'admin']),
+  permissions: z.record(z.string(), AccessLevelSchema).default({}),
+})
+
+export const UpdateAccountSchema = z.object({
+  name: PersonName,
+  email: Email,
+  role: z.enum(['superadmin', 'admin']),
+  permissions: z.record(z.string(), AccessLevelSchema).default({}),
+  active: z.boolean(),
+  newPassword: z.union([z.literal(''), NewPassword]).optional().default(''),
+})
