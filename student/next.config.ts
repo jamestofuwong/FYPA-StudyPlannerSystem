@@ -24,6 +24,7 @@ const securityHeaders = [
 ]
 
 const nextConfig: NextConfig = {
+  distDir: process.env.STUDENT_E2E === '1' ? '.next-e2e' : '.next',
   typescript: { ignoreBuildErrors: true },
   serverExternalPackages: ['pg', '@prisma/adapter-pg'],
   outputFileTracingRoot: path.join(__dirname, '..'),
