@@ -5,6 +5,7 @@ node_modules
 
 # Testing
 coverage
+test-results/
 
 # Next.js
 .next/
@@ -42,6 +43,8 @@ web/.env
 cloud/.env
 
 # TypeScript
+.next-e2e/
+.next-e2e-core-*/
 *.tsbuildinfo
 
 # Editor

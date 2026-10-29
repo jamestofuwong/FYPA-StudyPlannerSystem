@@ -19,6 +19,10 @@
     "release": "npm run build && npm run build:python && electron-builder --publish always",
     "test": "jest",
     "test:watch": "jest --watch",
+    "test:e2e:class-estimation": "node --test tests/e2e/class-estimation.test.cjs",
+    "test:e2e:copilot": "node --test tests/e2e/copilot.test.cjs",
+    "test:e2e:core-flows": "node tests/e2e/helpers/run-core-flows.cjs",
+    "test:copilot:core": "jest --runInBand tests/api/copilot-core.test.ts",
     "test:coverage": "jest --coverage",
     "postinstall": "patch-package && prisma generate --schema core/db/prisma/schema",
     "backtest": "cross-env DOTENV_CONFIG_QUIET=true tsx scripts/backtest.ts"

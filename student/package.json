@@ -8,6 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "test:e2e": "playwright test",
+    "test:e2e:full": "node tests/e2e/helpers/run.cjs",
+    "test:e2e:typecheck": "tsc --noEmit -p tests/e2e/tsconfig.json",
     "test:e2e:ui": "playwright test --ui",
     "fetch:unit-details": "tsx scripts/fetch-unit-details.ts",
     "db:generate": "prisma generate",

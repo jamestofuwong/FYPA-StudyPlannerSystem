@@ -6,6 +6,7 @@ const createJestConfig = nextJest({
 })
 
 const customJestConfig = {
+  testPathIgnorePatterns: ['/node_modules/', '<rootDir>/tests/e2e/', '<rootDir>/student/tests/e2e/'],
   setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
   testEnvironment: 'node',
   moduleNameMapper: {
