@@ -8,8 +8,8 @@ The short version for people is `tests/README.md`. This file is the version for 
 |---|---|---|---|
 | Unit, contract, component, mocked API | `npm test` | `tests/unit`, `tests/core`, `tests/ui`, `tests/api` | Nothing |
 | Integration (real PostgreSQL) | `npm run test:integration` | `tests/integration-db` | Nothing. `tests/helpers/embeddedDb.js` starts a throw-away database. |
-| Student app | `npm run test:student`, `npm run test:student:integration` | `student/tests` | Nothing. Run from the root. They use `student/jest.config.js`. |
-| End-to-end (Chromium) | `npm run test:e2e` | `e2e/` | `npx playwright install chromium` once |
+| Student app | `npm run test:student`, `npm run test:student:integration` | `student/tests` (CMS accounts: `student/tests/unit/permissions.test.ts`, `student/tests/integration/cms-accounts.test.ts`) | Nothing. Run from the root. They use `student/jest.config.js`. |
+| End-to-end (Chromium) | `npm run test:e2e` | `e2e/` (the student app and its CMS accounts: `e2e/student`) | `npx playwright install chromium` once |
 | Real-model routing (opt in) | `RUN_OLLAMA_TESTS=1 npx jest tests/unit/copilot/routing-ollama.test.ts` | `tests/unit/copilot` | Ollama running on port 11435 with `qwen2.5:3b` |
 | Scenario suite (50 students) | `SCENARIO_DB_URL=<url> npx jest tests/scenarios` | `tests/scenarios` | A database with the planners. Skipped without the variable. |
 | Python | `core/services/plannerImport/.venv/bin/python -m unittest discover -s tests/unit/plannerImport -p "test_*.py"` | `tests/unit/plannerImport`, `tests/integration/plannerImport` | The Python virtual environment |
@@ -61,4 +61,4 @@ Details are in [the copilot README](../../core/services/copilot/README.md). Shor
 
 ## User acceptance testing
 
-The plan and the form are in `docs/UAT.md` and `docs/UAT-form.html`.
+The plan and the form are in `docs/UAT.md` and `docs/UAT-form.html`. Both are generated from `docs/uat/uat-data.js` by `npm run docs:uat`. Edit the data file, not the two outputs. Every case points to a client requirement (R1 to R11), and the acceptance rule is: all Must cases pass and no Critical or Major defect is open.

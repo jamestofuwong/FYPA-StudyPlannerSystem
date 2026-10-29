@@ -32,6 +32,7 @@
 | `postinstall` | `node scripts/apply-patches.js && prisma generate --schema core/db/prisma/schema` |
 | `backtest` | `cross-env DOTENV_CONFIG_QUIET=true tsx scripts/backtest.ts` |
 | `docs:facts` | `tsx scripts/docs-facts.ts` |
+| `docs:uat` | `node scripts/build-uat.js` |
 | `docs:check` | `tsx scripts/docs-check.ts` |
 
 ## Student app scripts (run in `student/`)

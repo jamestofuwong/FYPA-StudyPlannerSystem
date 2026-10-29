@@ -50,8 +50,7 @@ jobs:
 
       # ── 4b. Apply patches (patch-package skipped by --ignore-scripts above) ──
       - name: Apply patches
-        if: matrix.platform == 'win'
-        run: npx patch-package
+        run: node scripts/apply-patches.js
 
       # ── 5. Download platform-specific Ollama binary ──────────────────────────
       - name: Download Ollama binary

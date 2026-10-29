@@ -49,4 +49,4 @@ Five SQL files in `runtime/postgres/scripts/seed` (units, prerequisites, courses
 
 ## Student app
 
-Own schema: `student/prisma/schema.prisma` (Prisma 7 with the `pg` adapter, 22 models). It holds the same catalogue (Course, Major, Unit, PlannerTemplate and others), unit detail tables, help content (FAQ, Head of Department and others) and CMS users with refresh tokens. Migrations: `student/prisma/migrations`. The two schemas are not linked. A change to one does not change the other.
+Own schema: `student/prisma/schema.prisma` (Prisma 7 with the `pg` adapter, 22 models). It holds the same catalogue (Course, Major, Unit, PlannerTemplate and others), unit detail tables, help content (FAQ, Head of Department and others) and CMS users (a role, an access level for each section and an active flag) with refresh tokens. Migrations: `student/prisma/migrations`. The two schemas are not linked. A change to one does not change the other.

@@ -63,6 +63,8 @@ Do not "fix" these back to the usual way. Read [docs/ai/nextjs-differences.md](d
 5. Every student-app page must render per request. The Content-Security-Policy in `student/proxy.ts` uses a new nonce for each request, and Next.js can put it on its scripts only while it renders that request. `student/app/layout.tsx` calls `await connection()` for this. Do not make a student page static (`dynamic = 'force-static'`, `generateStaticParams` without care), and do not drop the policy from the request headers. Either one blocks every script, and the page does nothing when clicked. `e2e/student` tests this on a production build.
 6. Never commit `.env` files or secret values. Use names only (see [config-and-secrets](docs/ai/config-and-secrets.md)).
 7. The files in `docs/ai/generated/` are written by `npm run docs:facts`. Edit the code and regenerate. Never edit them by hand.
+8. Every CMS Server Action in `student/app/cms` calls `requireAccess('<section>', 'edit')` before it changes data, and every CMS page calls `requirePageAccess('<section>')`. The role and the access levels come from the database on each request, not from the token. Hiding a button is not a protection. See [student/README.md](student/README.md).
+9. When a routing test of the AI Copilot fails, change the code (descriptions, keywords, the router), not the test. The tests state what a user expects.
 
 ## How to verify a change
 

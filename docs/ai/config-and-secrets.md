@@ -58,7 +58,7 @@ Never put a value in Git, an email or a chat. Give the new owner access to the a
 | Supabase database password | No, only reset | Reset in Supabase, then update `DATABASE_URL` in Vercel and `DATABASE_URL_DEV` or `DATABASE_URL_PROD` in GitHub. |
 | `CMS_JWT_SECRET` | Yes, in Vercel | Make a new random value and redeploy. Every CMS user signs in again. |
 | `VERCEL_TOKEN` | No | Create a new token. Delete the old one. |
-| CMS administrator password | No | Set a new one in the CMS or with the seed script. |
+| CMS account password | No (only a hash is stored) | The person changes it in the CMS (`/cms/account`), or a superadmin sets a new one in `/cms/users`. If every superadmin lost it, seed again with a new `CMS_SEED_EMAIL`. The seed never changes an existing account. |
 
 Rotate `CMS_JWT_SECRET` at once if it was ever shown on a screen, in a chat or in a log.
 

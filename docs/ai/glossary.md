@@ -19,4 +19,5 @@
 | Portal | The university student system (CampusNexus). The desktop app reads it with Puppeteer and REST calls. |
 | HoD | Head of Department. Uses class estimation. |
 | CMS | The editing pages of the student app (`/cms/*`), with their own JWT login. |
+| Superadmin, admin | The two CMS roles. A superadmin can edit every section and manages accounts. An admin has one level for each section: none, view or edit (`student/lib/cms/permissions.ts`). |
 | Singleton on `globalThis` | One shared object that survives Next.js hot reload (the Prisma client, the portal session, the estimation store). |

@@ -38,4 +38,47 @@ if (applied > 0) {
   status = spawnSync(bin, ['--patch-dir', tmpName], { cwd: root, stdio: 'inherit', shell: process.platform === 'win32' }).status ?? 1;
 }
 fs.rmSync(tmp, { recursive: true, force: true });
+
+// ---------------------------------------------------------------------------------------------------------------------
+// The embedded PostgreSQL programs in a packaged app.
+//
+// Each @embedded-postgres/<platform> package finds its programs (initdb, pg_ctl, postgres) from import.meta.url. In the
+// packaged app (asar: true) that path is inside app.asar, where the operating system cannot run a program: the database
+// fails with "spawn ENOTDIR" and the whole app has no data. electron-builder unpacks the programs to
+// app.asar.unpacked, so the package must look there first.
+//
+// This rewrites dist/index.js of every installed platform package (macOS, Linux, Windows) in the same way. It does not
+// need a patch file for each platform, and it can run more than once.
+// ---------------------------------------------------------------------------------------------------------------------
+const pgScope = path.join(root, 'node_modules', '@embedded-postgres');
+if (fs.existsSync(pgScope)) {
+  for (const pkg of fs.readdirSync(pgScope)) {
+    const file = path.join(pgScope, pkg, 'dist', 'index.js');
+    if (!fs.existsSync(file)) continue;
+    const current = fs.readFileSync(file, 'utf8');
+    if (current.includes('app.asar.unpacked')) continue;          // already done (for example by the Windows patch)
+    const ext = pkg.startsWith('windows') ? '.exe' : '';
+    fs.writeFileSync(file, `import path from 'path';
+import { fileURLToPath } from 'url';
+import { existsSync } from 'fs';
+// Written by scripts/apply-patches.js. In a packaged Electron app (asar: true), import.meta.url is inside app.asar, where
+// the operating system cannot run a program. Look in app.asar.unpacked first.
+function resolvedBinDir() {
+  var rp = (typeof process !== 'undefined') && process.resourcesPath;
+  if (rp) {
+    var unpacked = path.join(rp, 'app.asar.unpacked', 'node_modules', '@embedded-postgres', '${pkg}', 'native', 'bin');
+    if (existsSync(unpacked)) return unpacked;
+  }
+  var __dirname_fallback = path.dirname(fileURLToPath(import.meta.url));
+  return path.resolve(__dirname_fallback, '..', 'native', 'bin');
+}
+var _binDir = resolvedBinDir();
+export const pg_ctl = path.join(_binDir, 'pg_ctl${ext}');
+export const initdb = path.join(_binDir, 'initdb${ext}');
+export const postgres = path.join(_binDir, 'postgres${ext}');
+`);
+    console.log(`apply-patches: ${pkg} now looks in app.asar.unpacked first`);
+  }
+}
+
 process.exit(status);
