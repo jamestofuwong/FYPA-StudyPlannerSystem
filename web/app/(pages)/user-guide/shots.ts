@@ -359,7 +359,7 @@ SHOTS.classEstimation.classic = {
 SHOTS.settings.classic = {
   clip: { x: CLASSIC_MAIN, y: 70, width: 1120, height: 1000 },
   callouts: {
-    2: { label: 'Theme', text: 'Light, dark, or follow your computer. Original Portal matches the student portal.', find: { text: 'Theme', tag: 'div, h2, h3, span' } },
+    2: { label: 'Theme', text: 'Light, dark, or follow your computer.', find: { text: 'Theme', tag: 'div, h2, h3, span' } },
     3: null,
     4: null,
     7: { find: { text: 'Application Update', tag: 'div, h2, h3, span' } },

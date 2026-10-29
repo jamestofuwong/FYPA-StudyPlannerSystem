@@ -4,7 +4,7 @@ The UI has two designs from one set of components.
 
 | Design | User name | Code id | Files |
 |---|---|---|---|
-| Classic | Classic | `classic` | `variables.css` (colour modes: light, dark, portal), `theme.ts` |
+| Classic | Classic | `classic` | `variables.css` (colour modes: light, dark), `theme.ts` |
 | Easy | Easy | `meadow` | `meadow.css`, `meadowHue.ts` (the accent colour and shade) |
 
 The id `meadow` is what is saved in `localStorage` (`designPreference`), so it stays. Other saved keys: `themePreference`, `meadowHue`, `meadowShade`.

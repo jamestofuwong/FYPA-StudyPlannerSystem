@@ -14,7 +14,6 @@ const THEME_OPTIONS: { value: ThemePreference; label: string; description: strin
   { value: 'system', label: 'System',          description: 'Follows your OS theme preference' },
   { value: 'light',  label: 'Light',           description: 'Always use the light theme' },
   { value: 'dark',   label: 'Dark',            description: 'Always use the dark theme' },
-  { value: 'portal', label: 'Original Portal', description: 'Matches the student portal — dark sidebar, white content, steel blue accents' },
 ];
 
 const DESIGN_OPTIONS: { value: DesignMode; label: string; description: string }[] = [
@@ -50,8 +49,6 @@ function describeUpdate(update: UpdateStatus): { text: string; tone: 'muted' | '
 
 export default function SettingsPage() {
   const { preference, setPreference, design, setDesign, meadowHue, setMeadowHue, meadowShade, setMeadowShade, meadowAccent, theme } = useTheme();
-  // The portal colour mode only exists in the classic design.
-  const themeOptions = design === 'meadow' ? THEME_OPTIONS.filter((o) => o.value !== 'portal') : THEME_OPTIONS;
   const [update, setUpdate] = useState<UpdateStatus>({ status: 'idle' });
   const appVersion = process.env.APP_VERSION ?? '—';
 
@@ -137,14 +134,12 @@ export default function SettingsPage() {
               <div className={styles.mRowText}>
                 <div className={styles.mRowLabel}>Colour mode</div>
                 <div className={styles.mRowDesc}>
-                  {preference === 'portal'
-                    ? 'Original Portal is a Classic theme, so Easy is using its light colours.'
-                    : 'Light, dark, or follow your computer.'}
+                  Light, dark, or follow your computer.
                 </div>
               </div>
               <div className={styles.mRowControl}>
                 <div className={styles.mModes}>
-                  {themeOptions.map((opt) => {
+                  {THEME_OPTIONS.map((opt) => {
                     const active = preference === opt.value;
                     const Icon = MODE_ICONS[opt.value as keyof typeof MODE_ICONS] ?? Monitor;
                     return (
@@ -279,7 +274,7 @@ export default function SettingsPage() {
       <div className={styles.card}>
         <div className={styles.cardTitle}>Theme</div>
         <div className={styles.themeOptions}>
-          {themeOptions.map((opt) => {
+          {THEME_OPTIONS.map((opt) => {
             const active = preference === opt.value;
             return (
               <button
