@@ -46,6 +46,7 @@ function ClassicSidebar({
                 {allItems.map((item, idx) => (
                     <button
                         key={`${item.id}-${idx}`}
+                        data-tour={`nav-${item.id}`}
                         className={`${styles.treeItem} ${activePanel === item.id ? styles.active : ''}`}
                         onClick={() => onNavigate(item.id)}
                     >
@@ -106,6 +107,7 @@ function MeadowSidebar({
         return (
             <button
                 key={id}
+                data-tour={`nav-${id}`}
                 className={`${styles.mItem} ${active ? styles.mItemActive : ''}`}
                 onClick={() => onNavigate(id)}
                 aria-current={active ? 'page' : undefined}

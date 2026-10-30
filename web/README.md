@@ -16,6 +16,7 @@ A Next.js 16 (App Router) app in `web/`, not at the repository root. Electron st
 | `components/privacy`, `components/planner`, `ExportModal.tsx` | The privacy notice, planner table pieces, the Excel export dialog. |
 | `styles/` | Themes ([README](styles/README.md)). |
 | `lib/` | `navigation.ts` (panel registry), `panelIcons.ts`, `copilotLinks.ts`, `resultsSheet.ts` (Excel results parser), `privacyNoticeContent.ts` (notice text and `NOTICE_VERSION`), `scrollToTop.ts`. |
+| `components/tour`, `lib/tour` | The interactive walkthroughs (see below). |
 | `public/guide` | Screenshots for the user guide page (Easy, and Classic in `web/public/guide/classic`). |
 
 ## Rules
@@ -26,6 +27,18 @@ A Next.js 16 (App Router) app in `web/`, not at the repository root. Electron st
 - Make every page work in both designs (Classic and Easy). Easy styles use the `m` classes in the page CSS module and the shared components.
 - Call the Electron bridge only with a guard (`window.xAPI?.fn()`). The page must run in a plain browser.
 - Add the page to the user guide (`app/(pages)/user-guide/GuideParts.tsx`, `shots.ts`) when it is a user-visible feature.
+
+## Walkthroughs
+
+Each job in the user guide has a **Walk me through it** button. It starts a walkthrough that highlights the real buttons and says what to do, step by step, on the real pages.
+
+- The steps are in `lib/tour/tours.ts`: one walkthrough for each job of `app/(pages)/user-guide/page.tsx`, with the same id as the `tour` of the job. A test checks that every job has one.
+- A step names a page (`path`), a `target` and the text. The target uses the same finder as the user-guide screenshots (`lib/tour/findElement.ts`: visible text, or a CSS selector). Use `{ meadow, classic }` when Easy and Classic do not show the same thing.
+- `missing` says what to do when the target is not on the screen yet (for example "Load a student first"). The card waits and picks the target up when it appears. Give every step that needs data a `missing` text.
+- `advanceOnClick` moves on when the person presses the highlighted thing.
+- `components/tour/TourProvider.tsx` holds the state (kept in `sessionStorage`, so a reload goes on at the same step) and opens the page of each step. `TourOverlay.tsx` draws the highlight and the card. They are in `app/(pages)/layout.tsx`. The highlight lets every click through, so the whole app stays usable.
+- The sidebar buttons have `data-tour="nav-<panel>"`, so that a step can point at them in both designs.
+- Tests: `tests/ui/walkthrough.test.tsx` (data, finder, card placement, behaviour) and `e2e/walkthrough.spec.ts` (every step, in both designs, on the real pages). If a page changes and a step cannot find its target, the e2e test fails.
 
 ## Add a panel
 

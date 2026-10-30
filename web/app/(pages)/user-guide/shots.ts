@@ -7,24 +7,8 @@
  * app's screens change, see the header of scripts/guide-screenshots.ts.
  */
 
-/** How the screenshot script finds the thing a callout points at on the page. */
-export type Find =
-  | { css: string; nth?: number }
-  | {
-      /** Visible text of the element. Exact match unless `startsWith` or `contains` is set. */
-      text: string;
-      startsWith?: boolean;
-      contains?: boolean;
-      /** Restrict to a kind of element, as a CSS selector. */
-      tag?: string;
-      nth?: number;
-      /** Only elements to the right of this x (252 skips the sidebar). */
-      xMin?: number;
-      /** Only elements to the left of this x (252 keeps to the sidebar). */
-      xMax?: number;
-      /** Only elements above this y (60 keeps to the tab bar). */
-      yMax?: number;
-    };
+import type { Find } from '../../../lib/tour/types';
+export type { Find };
 
 /** Where the number sits relative to the thing it points at; 'ir' is inside its right edge. */
 export type Place = 'tl' | 'tr' | 'l' | 'r' | 'b' | 't' | 'ir';

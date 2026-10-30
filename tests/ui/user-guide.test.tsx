@@ -7,6 +7,10 @@ import UserGuide from '@/app/(pages)/user-guide/page';
 import { SHOTS } from '@/app/(pages)/user-guide/shots';
 import { ThemeProvider } from '@/styles/themeProvider';
 import { PANEL_PATHS } from '@/lib/navigation';
+import { TourProvider } from '@/components/tour/TourProvider';
+
+// The layout of the app provides the walkthroughs to the guide (each job has a button). A test provides them too.
+jest.mock('next/navigation', () => ({ useRouter: () => ({ push: jest.fn() }), usePathname: () => '/user-guide' }));
 
 // The Meadow guide leans on pictures with numbered callouts and a contents list. These checks keep them honest:
 // every contents link has a section, every picture exists on disk, every legend is numbered the way its picture is.
@@ -17,7 +21,7 @@ function renderGuide() {
   localStorage.clear();
   localStorage.setItem('themePreference', 'light');
   localStorage.setItem('designPreference', 'meadow');
-  return render(<ThemeProvider><UserGuide /></ThemeProvider>);
+  return render(<ThemeProvider><TourProvider><UserGuide /></TourProvider></ThemeProvider>);
 }
 
 describe('Meadow user guide', () => {
@@ -110,7 +114,7 @@ describe('Classic user guide', () => {
     localStorage.clear();
     localStorage.setItem('themePreference', 'dark');
     localStorage.setItem('designPreference', 'classic');
-    return render(<ThemeProvider><UserGuide /></ThemeProvider>);
+    return render(<ThemeProvider><TourProvider><UserGuide /></TourProvider></ThemeProvider>);
   }
 
   test('has the same sections, pictures and wording as the Easy guide', () => {

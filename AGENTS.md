@@ -121,4 +121,5 @@ For a person, the long form of all this is the Developer Guide (a Word file, `St
 
 - A document states a rule and names the file or test that enforces it. It does not copy code or line numbers.
 - When you add a panel, route, workflow, bridge function or variable, run `npm run docs:facts`.
+- When you add a job to the user guide (`web/app/(pages)/user-guide/page.tsx`), add its walkthrough in `web/lib/tour/tours.ts`. When you rename a button that a walkthrough points at, change its step. `npx jest tests/ui/walkthrough.test.tsx` and `e2e/walkthrough.spec.ts` check them.
 - When you add a folder under `core/services`, add a `README.md` in it. `npm run docs:check` fails if you do not.

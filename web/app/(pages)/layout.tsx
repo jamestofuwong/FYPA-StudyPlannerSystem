@@ -15,6 +15,8 @@ import { PortalAuthProvider } from '../../components/providers/PortalAuthContext
 import { ScraperProvider } from '../../components/providers/ScraperContext';
 import { StudentSessionProvider } from '../../components/providers/StudentSessionContext';
 import CopilotHandoffLoader from '../../components/providers/CopilotHandoffLoader';
+import { TourProvider } from '../../components/tour/TourProvider';
+import TourOverlay from '../../components/tour/TourOverlay';
 import { panelFromPathname, panelToPath, type PanelId } from '../../lib/navigation';
 import { useDesign } from '../../styles/themeProvider';
 import { fs, radius } from '../../styles/tokens';
@@ -121,6 +123,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       <ScraperProvider>
       <StudentSessionProvider>
       <ToastProvider>
+      <TourProvider>
         <CopilotHandoffLoader />
         <div className={styles.shell}>
           {!isMeadow && <TopBar />}
@@ -146,6 +149,8 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           {!isMeadow && <StatusBar activePanel={activePanel} />}
         </div>
         <PortalLoginModal />
+        {/* The interactive walkthrough (started from the User Guide) */}
+        <TourOverlay />
         {/* Shutdown overlay — shown while services are stopping */}
         {shuttingDown && (
           <div style={{
@@ -208,6 +213,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             onAcknowledged={() => setShowPrivacyModal(false)}
           />
         )}
+      </TourProvider>
       </ToastProvider>
       </StudentSessionProvider>
       </ScraperProvider>
