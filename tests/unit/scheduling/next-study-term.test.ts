@@ -30,6 +30,14 @@ describe('resolveNextStudyTerm', () => {
       expect(calendarTermFor(r.startSemester, 1)).toBe(2);
     });
 
+    // Transcripts may number an Aug/Sept intake's semesters from the intake: SEP is S1, FEB is S2.
+    it('reads intake-numbered codes by their month', () => {
+      const sep2024 = { year: 2024, semester: 2 as const };
+      expect(resolveNextStudyTerm([row('2024_SEP_S1')], sep2024)).toMatchObject({ startYear: 1, startSemester: 2 });   // 2025 Feb/Mar
+      expect(resolveNextStudyTerm([row('2024_SEP_S1'), row('2025_FEB_S2')], sep2024)).toMatchObject({ startYear: 2, startSemester: 1 });
+      expect(resolveNextStudyTerm([row('2024_FEB_S1')], { year: 2024, semester: 1 })).toMatchObject({ startYear: 1, startSemester: 2 });   // 2024 Aug/Sept
+    });
+
     it('starts after a semester that is in progress', () => {
       const r = resolveNextStudyTerm([row('2025_SEP_S2'), row('2026_MAR_S1', 'Current')], SEP_2025);
       expect(r).toMatchObject({ startYear: 2, startSemester: 1 });
