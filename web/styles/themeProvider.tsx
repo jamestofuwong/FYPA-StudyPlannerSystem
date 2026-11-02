@@ -1,21 +1,74 @@
 "use client";
 
 import { createContext, useContext, useEffect, useRef, useState } from "react";
-import { themes } from "./theme";
+import { paletteFor, type DesignMode, type ThemeColors } from "./theme";
+import {
+  DEFAULT_ACCENT, DEFAULT_MEADOW_HUE, MEADOW_TOKEN_KEYS, accentPalette, accentTokens, isMeadowShade, normalizeHue,
+  type MeadowAccent, type MeadowShade,
+} from "./meadowHue";
 
-type ThemeMode = "light" | "dark" | "portal";
-export type ThemePreference = "system" | "light" | "dark" | "portal";
+type ThemeMode = "light" | "dark";
+export type ThemePreference = "system" | "light" | "dark";
+export type { DesignMode };
 
 interface ThemeContextType {
   mode: ThemeMode;
   preference: ThemePreference;
   setPreference: (p: ThemePreference) => void;
-  theme: typeof themes.light;
+  design: DesignMode;
+  setDesign: (d: DesignMode) => void;
+  /** The hue (0 to 359) Meadow is tinted with. The original green unless the user picked another. */
+  meadowHue: number;
+  /** Tints Meadow with a hue; null goes back to the original green. Replaces any shade. */
+  setMeadowHue: (hue: number | null) => void;
+  /** The shade (grey, black or white) Meadow uses instead of a colour, or null when it is using a hue. */
+  meadowShade: MeadowShade | null;
+  /** Gives Meadow a shade instead of a colour; null goes back to the original green. Replaces any hue. */
+  setMeadowShade: (shade: MeadowShade | null) => void;
+  /** What Meadow is tinted with right now, whichever kind it is. */
+  meadowAccent: MeadowAccent;
+  theme: ThemeColors;
 }
 
 const ThemeContext = createContext<ThemeContextType | null>(null);
 
 const STORAGE_KEY = "themePreference";
+const DESIGN_STORAGE_KEY = "designPreference";
+const HUE_STORAGE_KEY = "meadowHue";
+
+const SHADE_STORAGE_KEY = "meadowShade";
+
+/** The palette for a design in a colour mode, with Meadow tinted by its accent (null is the original green). */
+function paletteWithAccent(design: DesignMode, mode: ThemeMode, accent: MeadowAccent | null): ThemeColors {
+  return design === "meadow"
+    ? accentPalette(mode === "dark" ? "dark" : "light", accent ?? DEFAULT_ACCENT)
+    : paletteFor(design, mode);
+}
+
+function readStoredHue(): number | null {
+  try {
+    const raw = localStorage.getItem(HUE_STORAGE_KEY);
+    if (raw === null || raw.trim() === "") return null;
+    const n = Number(raw);
+    return Number.isFinite(n) ? normalizeHue(n) : null;
+  } catch {
+    return null;
+  }
+}
+
+function readStoredShade(): MeadowShade | null {
+  try {
+    const raw = localStorage.getItem(SHADE_STORAGE_KEY);
+    return isMeadowShade(raw) ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+function accentOf(hue: number | null, shade: MeadowShade | null): MeadowAccent | null {
+  if (shade) return { type: "shade", shade };
+  return hue === null ? null : { type: "hue", hue };
+}
 
 async function detectSystemTheme(): Promise<ThemeMode> {
   if (
@@ -36,13 +89,18 @@ async function detectSystemTheme(): Promise<ThemeMode> {
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [mode, setMode] = useState<ThemeMode>("light");
   const [preference, setPreferenceState] = useState<ThemePreference>("system");
+  const [design, setDesignState] = useState<DesignMode>("classic");
+  const [meadowHue, setMeadowHueState] = useState<number | null>(null);
+  const [meadowShade, setMeadowShadeState] = useState<MeadowShade | null>(null);
   const preferenceRef = useRef<ThemePreference>("system");
 
-  const applyTheme = (theme: ThemeMode) => {
+  const applyTheme = (theme: ThemeMode, activeDesign: DesignMode, accent: MeadowAccent | null) => {
     const root = document.documentElement;
     root.dataset.theme = theme;
+    // Meadow's type, spacing and shape tokens hang off this attribute (styles/meadow.css).
+    root.dataset.design = activeDesign;
 
-    const palette = themes[theme];
+    const palette = paletteWithAccent(activeDesign, theme, accent);
 
     root.style.setProperty("--sidebar-bg", palette.sidebarBg);
     root.style.setProperty("--sidebar-search-bg", palette.sidebarSearchBg);
@@ -82,13 +140,53 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     root.style.setProperty("--button-bg", palette.buttonBg);
     root.style.setProperty("--btn-secondary-bg", palette.btnSecondaryBg);
 
+    // Meadow's stylesheet holds a few brand greens of its own (hover, overlays, shadows). They follow a custom
+    // hue through inline overrides, which are removed again for the original green and for the classic design.
+    for (const key of MEADOW_TOKEN_KEYS) root.style.removeProperty(key);
+    if (activeDesign === "meadow") {
+      for (const [key, value] of Object.entries(accentTokens(theme === "dark" ? "dark" : "light", accent ?? DEFAULT_ACCENT))) {
+        root.style.setProperty(key, value);
+      }
+    }
+
     document.body.style.background = palette.mainBg;
     document.body.style.color = palette.textPrimary;
   };
 
   useEffect(() => {
-    applyTheme(mode);
-  }, [mode]);
+    applyTheme(mode, design, accentOf(meadowHue, meadowShade));
+  }, [mode, design, meadowHue, meadowShade]);
+
+  const setDesign = (d: DesignMode) => {
+    setDesignState(d);
+    localStorage.setItem(DESIGN_STORAGE_KEY, d);
+  };
+
+  // A hue and a shade are alternatives: choosing one clears the other, and null goes back to the original green.
+  const setMeadowHue = (hue: number | null) => {
+    setMeadowShadeState(null);
+    try { localStorage.removeItem(SHADE_STORAGE_KEY); } catch {}
+    if (hue === null) {
+      setMeadowHueState(null);
+      try { localStorage.removeItem(HUE_STORAGE_KEY); } catch {}
+      return;
+    }
+    const next = normalizeHue(hue);
+    setMeadowHueState(next);
+    try { localStorage.setItem(HUE_STORAGE_KEY, String(next)); } catch {}
+  };
+
+  const setMeadowShade = (shade: MeadowShade | null) => {
+    setMeadowHueState(null);
+    try { localStorage.removeItem(HUE_STORAGE_KEY); } catch {}
+    if (shade === null || !isMeadowShade(shade)) {
+      setMeadowShadeState(null);
+      try { localStorage.removeItem(SHADE_STORAGE_KEY); } catch {}
+      return;
+    }
+    setMeadowShadeState(shade);
+    try { localStorage.setItem(SHADE_STORAGE_KEY, shade); } catch {}
+  };
 
   const setPreference = (p: ThemePreference) => {
     preferenceRef.current = p;
@@ -105,11 +203,17 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     let cleanup = () => {};
 
     const initTheme = async () => {
+      if (localStorage.getItem(DESIGN_STORAGE_KEY) === "meadow") setDesignState("meadow");
+      // A shade wins if both are somehow stored
+      const storedShade = readStoredShade();
+      setMeadowShadeState(storedShade);
+      setMeadowHueState(storedShade ? null : readStoredHue());
+
       const saved = localStorage.getItem(STORAGE_KEY) as ThemePreference | null;
       const pref: ThemePreference =
-        saved === "light" || saved === "dark" || saved === "system" || saved === "portal"
+        saved === "light" || saved === "dark" || saved === "system"
           ? saved
-          : "system";
+          : "system";                   // an unknown value (for example the removed "portal" mode) becomes "system"
 
       preferenceRef.current = pref;
       setPreferenceState(pref);
@@ -149,7 +253,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <ThemeContext.Provider
-      value={{ mode, preference, setPreference, theme: themes[mode] }}
+      value={{
+        mode, preference, setPreference, design, setDesign,
+        meadowHue: meadowHue ?? DEFAULT_MEADOW_HUE, setMeadowHue,
+        meadowShade, setMeadowShade,
+        meadowAccent: accentOf(meadowHue, meadowShade) ?? DEFAULT_ACCENT,
+        theme: paletteWithAccent(design, mode, accentOf(meadowHue, meadowShade)),
+      }}
     >
       {children}
     </ThemeContext.Provider>
@@ -160,4 +270,11 @@ export function useTheme() {
   const context = useContext(ThemeContext);
   if (!context) throw new Error("useTheme must be inside ThemeProvider");
   return context;
+}
+
+// Layout components read the active design to pick their Meadow markup.
+// Outside a ThemeProvider (e.g. a component rendered on its own in a test)
+// this falls back to the classic design instead of throwing.
+export function useDesign(): DesignMode {
+  return useContext(ThemeContext)?.design ?? "classic";
 }

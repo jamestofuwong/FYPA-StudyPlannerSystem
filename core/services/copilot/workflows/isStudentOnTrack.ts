@@ -28,7 +28,8 @@ const PASSING_GRADES = new Set([
 
 export const isStudentOnTrackWorkflow: Workflow<Input, Output> = {
   id: 'is_student_on_track',
-  description: 'Determines whether a student is on track to graduate by comparing how many planner units they have completed against the total required, and cross-referencing with their official credit progress. Use this when the user asks if a student is on track, behind, or ahead in their studies.',
+  description: 'Judges whether a student is on track, behind or ahead of schedule, by comparing planner units completed with credit progress. Use this when the user asks if a student is on track, keeping up or behind. Not for the graduation decision (use check_graduation_status) and not a unit-by-unit list (use compare_student_to_planner).',
+  keywords: ['on track', 'behind', 'ahead', 'schedule', 'keeping up', 'falling behind', 'pace', 'on time'],
   params: [
     {
       name: 'studentId',

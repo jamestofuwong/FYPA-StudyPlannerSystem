@@ -92,3 +92,52 @@ export function toSchedulableUnit(input: SchedulableUnitInput): SchedulableUnit 
     ...(creditPoints !== undefined && Number.isFinite(creditPoints) ? { creditPoints } : {}),
   };
 }
+
+
+/**
+ * A unit as either app's database returns it, with its offerings and requisite
+ * groups included. The two Prisma schemas use the same column names for this, so
+ * one structural type covers both without importing either client.
+ */
+export type UnitRow = {
+  unit_code: string;
+  unit_name: string;
+  credit_points?: unknown;
+  offerings?: ReadonlyArray<{ offered_in: number }> | null;
+  requisite_groups?: ReadonlyArray<{
+    conditions?: ReadonlyArray<{
+      type: string;
+      credit_points?: unknown;
+      requisite_type?: string | null;
+      unit?: { unit_code: string } | null;
+    }> | null;
+  }> | null;
+};
+
+/**
+ * Maps a database unit to the scheduler's shape.
+ *
+ * Credit points are only carried when asked for: the advisor has never passed
+ * them, and its plans would change if it started to.
+ */
+export function unitRowToSchedulable(
+  unit: UnitRow,
+  category: string,
+  options: { withCreditPoints?: boolean } = {},
+): SchedulableUnit {
+  return toSchedulableUnit({
+    code: unit.unit_code,
+    name: unit.unit_name,
+    category,
+    offeringTerms: (unit.offerings ?? []).map((o) => o.offered_in),
+    requisiteGroups: (unit.requisite_groups ?? []).map((group) =>
+      (group.conditions ?? []).map((c) => ({
+        type: c.type,
+        unitCode: c.unit?.unit_code ?? null,
+        creditPoints: c.credit_points as RequisiteConditionInput['creditPoints'],
+        requisiteType: c.requisite_type,
+      })),
+    ),
+    ...(options.withCreditPoints ? { creditPoints: unit.credit_points as SchedulableUnitInput['creditPoints'] } : {}),
+  });
+}

@@ -1,20 +1,47 @@
 'use client'
 
-import { useState, useMemo, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useMemo } from 'react'
 import type { UnitListing } from '@student/lib/types'
+import { formatPrerequisiteText } from '@student/lib/requisites'
+import { usePendingNavigation } from '@student/components/common/PendingNavigation'
 import styles from './UnitCatalog.module.css'
 
 interface Props {
   units: UnitListing[]
+  yearLevels: number[]
 }
 
 const PAGE_SIZE = 15
-const LEVELS = [1, 2, 3, 4]
 
-function unitLevel(code: string): number {
-  const match = code.match(/\d/)
-  return match ? parseInt(match[0]) : 0
+function formatAvailability(availability: string[] | undefined): string {
+  if (!availability || availability.length === 0) return '—'
+
+  const semesterNums: string[] = []
+  const others: string[] = []
+
+  for (const term of availability) {
+    const semester = term.match(/^Semester (\d+)$/)
+    if (semester) {
+      semesterNums.push(semester[1])
+      continue
+    }
+    if (term === 'Summer Term') {
+      others.push('Summer')
+      continue
+    }
+    if (term === 'Winter Term') {
+      others.push('Winter')
+      continue
+    }
+    others.push(term)
+  }
+
+  const parts: string[] = []
+  if (semesterNums.length > 0) {
+    parts.push(`Semester ${semesterNums.join(' & ')}`)
+  }
+  parts.push(...others)
+  return parts.join(', ')
 }
 
 function pageRange(current: number, total: number): (number | '…')[] {
@@ -24,19 +51,16 @@ function pageRange(current: number, total: number): (number | '…')[] {
   return [1, '…', current - 1, current, current + 1, '…', total]
 }
 
-export default function UnitCatalog({ units }: Props) {
-  const router = useRouter()
+export default function UnitCatalog({ units, yearLevels }: Props) {
+  const navigation = usePendingNavigation('Loading unit details...')
   const [query, setQuery]           = useState('')
   const [activeLevel, setActiveLevel] = useState<number | null>(null)
   const [page, setPage]             = useState(1)
 
-  // Reset to page 1 whenever filters change
-  useEffect(() => { setPage(1) }, [query, activeLevel])
-
   const filtered = useMemo(() => {
     let result = units
     if (activeLevel !== null) {
-      result = result.filter(u => unitLevel(u.code) === activeLevel)
+      result = result.filter(u => u.yearLevel === activeLevel)
     }
     const q = query.trim().toLowerCase()
     if (q) {
@@ -68,13 +92,19 @@ export default function UnitCatalog({ units }: Props) {
             type="search"
             placeholder="Search by code or unit name…"
             value={query}
-            onChange={e => setQuery(e.target.value)}
+            onChange={e => {
+              setQuery(e.target.value)
+              setPage(1)
+            }}
             aria-label="Search units"
           />
           {query && (
             <button
               className={styles.searchClear}
-              onClick={() => setQuery('')}
+              onClick={() => {
+                setQuery('')
+                setPage(1)
+              }}
               type="button"
               aria-label="Clear search"
             >✕</button>
@@ -87,14 +117,20 @@ export default function UnitCatalog({ units }: Props) {
             <button
               type="button"
               className={`${styles.chip} ${activeLevel === null ? styles.chipActive : ''}`}
-              onClick={() => setActiveLevel(null)}
+              onClick={() => {
+                setActiveLevel(null)
+                setPage(1)
+              }}
             >All</button>
-            {LEVELS.map(level => (
+            {yearLevels.map(level => (
               <button
                 key={level}
                 type="button"
                 className={`${styles.chip} ${activeLevel === level ? styles.chipActive : ''}`}
-                onClick={() => setActiveLevel(activeLevel === level ? null : level)}
+                onClick={() => {
+                  setActiveLevel(activeLevel === level ? null : level)
+                  setPage(1)
+                }}
               >Year {level}</button>
             ))}
           </div>
@@ -114,7 +150,11 @@ export default function UnitCatalog({ units }: Props) {
           <p className={styles.emptySubtitle}>Try adjusting your search or filter.</p>
           <button
             className={styles.emptyReset}
-            onClick={() => { setQuery(''); setActiveLevel(null) }}
+            onClick={() => {
+              setQuery('')
+              setActiveLevel(null)
+              setPage(1)
+            }}
             type="button"
           >Clear filters</button>
         </div>
@@ -134,27 +174,30 @@ export default function UnitCatalog({ units }: Props) {
                 {paginated.map(unit => (
                   <tr
                     key={unit.code}
-                    className={styles.unitRow}
-                    onClick={() => router.push(`/units/${unit.code}`)}
+                    className={`${styles.unitRow} ${navigation.activePendingHref === `/units/${unit.code}` ? styles.unitRowPending : ''}`}
+                    onClick={() => navigation.push(`/units/${unit.code}`)}
                     tabIndex={0}
-                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') router.push(`/units/${unit.code}`) }}
+                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') navigation.push(`/units/${unit.code}`) }}
                     role="link"
                     aria-label={`View ${unit.name}`}
                   >
                     <td className={styles.cellCode}>{unit.code}</td>
                     <td className={styles.cellName}>{unit.name}</td>
                     <td className={styles.cellPrereq}>
-                      {unit.prerequisites && unit.prerequisites.length > 0
-                        ? unit.prerequisites.join(', ')
-                        : 'Nil'}
+                      {formatPrerequisiteText(unit.requisiteGroups, unit.prerequisites)}
                     </td>
                     <td className={styles.cellAvail}>
                       <span className={styles.availText}>
-                        {unit.availability && unit.availability.length > 0
-                          ? unit.availability.join(' · ')
-                          : '—'}
+                        {formatAvailability(unit.availability)}
                       </span>
-                      <span className={styles.viewHint} aria-hidden="true">View unit →</span>
+                      <span className={styles.viewHint} aria-hidden="true">
+                        View unit
+                        {navigation.activePendingHref === `/units/${unit.code}` ? (
+                          <span className={styles.inlineSpinner} />
+                        ) : (
+                          <span>→</span>
+                        )}
+                      </span>
                     </td>
                   </tr>
                 ))}

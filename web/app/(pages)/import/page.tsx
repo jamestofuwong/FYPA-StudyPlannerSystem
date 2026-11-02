@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import styles from './page.module.css';
 import { useToast } from '../../../components/providers/ToastProvider';
 import type {
+  PlannerImportFinding,
   PlannerImportPlanner,
   PlannerImportReport,
   PlannerImportUnit,
@@ -12,6 +13,10 @@ import type {
 
 import CourseListTable, { getSemesterOrder, getSemesterLabel } from '../../../components/planner/CourseListTable';
 import PlannerHeader from '../../../components/planner/PlannerHeader';
+import { fs } from '../../../styles/tokens';
+import { PageHeader } from '../../../components/common/MeadowBits';
+import { useDesign } from '../../../styles/themeProvider';
+import { FileText, FileUp } from 'lucide-react';
 
 type ImportHistoryItem = {
   id: string;
@@ -26,13 +31,26 @@ type PlannerApiResponse = {
   report: PlannerImportReport;
 };
 
-function getResultStatusLabels(hasValidationIssues: boolean) {
-  if (hasValidationIssues) {
+function getResultStatusLabels(structuralCount: number, warningCount: number) {
+  if (structuralCount > 0) {
     return {
-      importStatus: 'Extraction Completed with Issues',
+      importStatus: 'Extraction Completed',
       validationStatus: 'Review Required',
       reviewDecision: 'Manual Review Required',
-      tone: 'signalCritical' as keyof typeof styles,
+      importTone: 'signalStrong' as keyof typeof styles,
+      validationTone: 'signalCritical' as keyof typeof styles,
+      reviewTone: 'signalCritical' as keyof typeof styles,
+    };
+  }
+
+  if (warningCount > 0) {
+    return {
+      importStatus: 'Extraction Completed',
+      validationStatus: 'Passed with Warnings',
+      reviewDecision: 'Review Recommended',
+      importTone: 'signalStrong' as keyof typeof styles,
+      validationTone: 'signalModerate' as keyof typeof styles,
+      reviewTone: 'signalModerate' as keyof typeof styles,
     };
   }
 
@@ -40,8 +58,21 @@ function getResultStatusLabels(hasValidationIssues: boolean) {
     importStatus: 'Extraction Completed',
     validationStatus: 'Passed',
     reviewDecision: 'Ready',
-    tone: 'signalStrong' as keyof typeof styles,
+    importTone: 'signalStrong' as keyof typeof styles,
+    validationTone: 'signalStrong' as keyof typeof styles,
+    reviewTone: 'signalStrong' as keyof typeof styles,
   };
+}
+
+function reportFindings(report: PlannerImportReport): PlannerImportFinding[] {
+  return report.findings ?? report.validation_issues.map((message) => ({
+    code: 'legacy-structural',
+    type: 'structural_issue',
+    category: 'structural',
+    severity: 'medium',
+    reason: message,
+    message,
+  }));
 }
 
 function flattenUnits(planner: PlannerImportPlanner | null): PlannerImportUnit[] {
@@ -97,6 +128,8 @@ export default function ImportPage() {
   const isProcessingReq = useRef(false);
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  // Meadow walks through choose → read → review → save; classic keeps its layout.
+  const isMeadow = useDesign() === 'meadow';
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [pdfPaneWidth, setPdfPaneWidth] = useState<number | null>(null);
   const [isResizing, setIsResizing] = useState(false);
@@ -130,8 +163,10 @@ export default function ImportPage() {
   const summary = useMemo(() => {
     if (!planner || !report) return null;
 
-    const validationIssues = Array.from(new Set(report.validation_issues));
-    const resultLabels = getResultStatusLabels(validationIssues.length > 0);
+    const findings = reportFindings(report);
+    const structuralFindings = findings.filter((finding) => finding.category === 'structural');
+    const qualityWarnings = findings.filter((finding) => finding.category === 'text_quality');
+    const resultLabels = getResultStatusLabels(structuralFindings.length, qualityWarnings.length);
     return {
       course: planner.course_information.course || 'Unknown course',
       major: planner.course_information.major || 'Unknown major',
@@ -142,15 +177,42 @@ export default function ImportPage() {
       elective: planner.course_information.requirements.elective,
       wil: planner.course_information.requirements.wil,
       statusLabel: resultLabels.importStatus,
-      statusTone: resultLabels.tone,
+      statusTone: resultLabels.importTone,
       validationStatusLabel: resultLabels.validationStatus,
-      validationStatusTone: resultLabels.tone,
+      validationStatusTone: resultLabels.validationTone,
       reviewDecisionLabel: resultLabels.reviewDecision,
-      reviewDecisionTone: resultLabels.tone,
-      missingCount: validationIssues.length,
-      validationIssues,
+      reviewDecisionTone: resultLabels.reviewTone,
+      missingCount: structuralFindings.length,
+      warningCount: qualityWarnings.length,
+      structuralFindings,
+      qualityWarnings,
     };
   }, [planner, report]);
+
+  // Structural issues and text-quality warnings from the import report. Classic shows them below the result
+  // summary; Easy shows them above the planner header.
+  const findingsBlock = summary ? (
+    <>
+      {summary.structuralFindings.length > 0 && (
+        <div className={styles.validationBox}>
+          {summary.structuralFindings.map((finding, index) => (
+            <div key={`${finding.code}-${finding.unit_code ?? finding.field ?? index}`} className={styles.validationIssue}>
+              {finding.message}
+            </div>
+          ))}
+        </div>
+      )}
+      {summary.qualityWarnings.length > 0 && (
+        <div className={styles.validationWarningBox}>
+          {summary.qualityWarnings.map((finding, index) => (
+            <div key={`${finding.code}-${finding.unit_code ?? index}`} className={styles.validationWarning}>
+              {finding.message}
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  ) : null;
 
   // Sync editable units when planner data changes
   useEffect(() => {
@@ -432,9 +494,10 @@ function parseIntakeMonth(intake: string): number {
       }
 
       const payload = data as PlannerApiResponse;
-      const importStatus = getResultStatusLabels(
-        payload.report.validation_issues.length > 0
-      ).importStatus;
+      const parsedFindings = reportFindings(payload.report);
+      const structuralCount = parsedFindings.filter((finding) => finding.category === 'structural').length;
+      const warningCount = parsedFindings.filter((finding) => finding.category === 'text_quality').length;
+      const labels = getResultStatusLabels(structuralCount, warningCount);
 
       setPlanner(payload.planner);
       setReport(payload.report);
@@ -442,9 +505,9 @@ function parseIntakeMonth(intake: string): number {
         {
           id: `${selectedFile.name}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           name: selectedFile.name,
-          status: importStatus,
+          status: labels.importStatus,
           detail: `${payload.report.unit_counts.core_units ?? 0} core units | ${payload.report.unit_counts.major_units ?? 0} major units | Deterministic extraction`,
-          cls: payload.report.validation_issues.length ? 'badgeOrange' : 'badgeGreen',
+          cls: structuralCount || warningCount ? 'badgeOrange' : 'badgeGreen',
         },
         ...prev.slice(0, 4),
       ]);
@@ -663,11 +726,7 @@ function parseIntakeMonth(intake: string): number {
   );
 
   // ── Before file selected: full-width drop zone ────────────────────────────
-  if (!selectedFile) {
-    return (
-      <div className={styles.panel}>
-        {fileInput}
-        <div className={styles.sectionTitle}>PDF Planner Import &amp; OCR</div>
+  const dropZone = (
         <div
           role="button"
           tabIndex={0}
@@ -680,17 +739,16 @@ function parseIntakeMonth(intake: string): number {
           onDragLeave={() => setIsDragging(false)}
           onDrop={handleDrop}
         >
-          <div className={styles.dropIcon}>PDF</div>
+          {isMeadow
+            ? <span className={styles.mDropIcon} aria-hidden="true"><FileUp /></span>
+            : <div className={styles.dropIcon}>PDF</div>}
           <div className={styles.dropTitle}>Drag and drop a study planner PDF here</div>
           <div className={styles.dropSubtitle}>or click to browse files. Parsed data stays inside the app flow.</div>
           <div className={styles.dropMeta}>No file selected</div>
         </div>
+  );
 
-        {/* Import history below the drop zone */}
-        {history.length > 0 && (
-          <>
-            <div className={styles.sectionTitle} style={{ marginTop: 8 }}>Import History</div>
-            <div className={styles.card}>
+  const historyCard = (
               <div className={styles.historyList}>
                 {history.map((item) => (
                   <div key={item.id} className={styles.historyRow}>
@@ -704,6 +762,45 @@ function parseIntakeMonth(intake: string): number {
                   </div>
                 ))}
               </div>
+  );
+
+  if (!selectedFile && isMeadow) {
+    return (
+      <div className={styles.panel}>
+        {fileInput}
+        <PageHeader
+          title="Import a study planner"
+          description="Turn an official study planner PDF into a planner that students can be matched against. You can check and correct everything before it is saved."
+        />
+        <ol className={styles.mSteps}>
+          <li className={styles.mStepActive}><span>1</span>Choose the PDF</li>
+          <li><span>2</span>Read it and check the details</li>
+          <li><span>3</span>Save to Study planners</li>
+        </ol>
+        {dropZone}
+        {history.length > 0 && (
+          <section className={styles.mHistory}>
+            <h2 className={styles.mHistoryTitle}>Import history</h2>
+            <div className={styles.card}>{historyCard}</div>
+          </section>
+        )}
+      </div>
+    );
+  }
+
+  if (!selectedFile) {
+    return (
+      <div className={styles.panel}>
+        {fileInput}
+        <div className={styles.sectionTitle}>PDF Planner Import &amp; OCR</div>
+        {dropZone}
+
+        {/* Import history below the drop zone */}
+        {history.length > 0 && (
+          <>
+            <div className={styles.sectionTitle} style={{ marginTop: 8 }}>Import History</div>
+            <div className={styles.card}>
+              {historyCard}
             </div>
           </>
         )}
@@ -742,7 +839,14 @@ function parseIntakeMonth(intake: string): number {
 
           {/* Import Configuration */}
           <div className={styles.importStickyHeader}>
+            {isMeadow ? (
+              <div className={styles.mHeaderTitle}>
+                <span className={styles.importHeaderTitle}>{planner ? 'Check the details, then save' : 'Read the PDF'}</span>
+                <span className={styles.mHeaderSub}>{planner ? 'Fix anything the PDF reader got wrong. Nothing is saved until you confirm.' : 'The reader pulls out the course, intake and units.'}</span>
+              </div>
+            ) : (
             <div className={styles.importHeaderTitle}>Import Configuration</div>
+            )}
             <div className={styles.importHeaderActions}>
               <button
                 className={styles.btnSecondary}
@@ -767,6 +871,18 @@ function parseIntakeMonth(intake: string): number {
               </button>
             </div>
           </div>
+          {isMeadow ? (
+            <div className={styles.mFileCard}>
+              <span className={styles.mFileIcon} aria-hidden="true"><FileText /></span>
+              <div className={styles.mFileText}>
+                <span className={styles.mFileName}>{selectedFile.name}</span>
+                <span className={styles.mFileState}>{planner ? 'Read · review the details below' : 'Not read yet'}</span>
+              </div>
+              <button className={planner ? styles.btnSecondary : styles.btnPrimary} onClick={handleParse} disabled={isParsing}>
+                {isParsing && !planner ? 'Reading…' : planner ? 'Read again' : 'Read PDF'}
+              </button>
+            </div>
+          ) : (
           <div className={styles.card}>
             <div className={styles.formGrid2}>
               <div className={styles.formGroup}>
@@ -785,10 +901,11 @@ function parseIntakeMonth(intake: string): number {
               </button>
             </div>
           </div>
+          )}
 
           {/* Parsing spinner */}
           {isParsing && !planner && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 0', color: 'var(--text-muted)', fontSize: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 0', color: 'var(--text-muted)', fontSize: fs(12) }}>
               <div className={styles.spinner} />
               Parsing PDF...
             </div>
@@ -799,6 +916,7 @@ function parseIntakeMonth(intake: string): number {
             <>
               <div className={styles.sectionTitle}>Extracted Summary</div>
               <div className={styles.card}>
+                {isMeadow && findingsBlock}
                 <PlannerHeader
                   course={plannerInfo.course}
                   major={plannerInfo.major}
@@ -838,16 +956,16 @@ function parseIntakeMonth(intake: string): number {
                         {summary.missingCount > 0 ? `${summary.missingCount} issue${summary.missingCount > 1 ? 's' : ''}` : 'None detected'}
                       </span>
                     </div>
+                    <div className={styles.resultBadgeRow}>
+                      <span className={styles.resultLabel}>Text Quality</span>
+                      <span className={`${styles.badge} ${styles.pillBadge} ${summary.warningCount > 0 ? styles.signalModerate : styles.signalStrong}`}>
+                        {summary.warningCount > 0 ? `${summary.warningCount} warning${summary.warningCount > 1 ? 's' : ''}` : 'No warnings'}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
-                {summary.validationIssues.length > 0 && (
-                  <div className={styles.validationBox}>
-                    {summary.validationIssues.map((issue) => (
-                      <div key={issue} className={styles.validationIssue}>{issue}</div>
-                    ))}
-                  </div>
-                )}
+                {!isMeadow && findingsBlock}
               </div>
             </>
           )}

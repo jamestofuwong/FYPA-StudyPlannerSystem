@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useCallback, useContext, useState, type ReactNode } from 'react';
+import { fs, radius } from '../../styles/tokens';
 
 export type ToastType = 'success' | 'error' | 'info';
 
@@ -75,9 +76,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               background: 'var(--card-bg)',
               border: `1px solid var(--panel-border)`,
               borderLeft: `3px solid ${BORDER[toast.type]}`,
-              borderRadius: 4,
+              borderRadius: radius(4),
               padding: '10px 16px',
-              fontSize: 12,
+              fontSize: fs(12),
               color: 'var(--text-primary)',
               display: 'flex',
               alignItems: 'center',

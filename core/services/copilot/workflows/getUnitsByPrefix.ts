@@ -18,7 +18,8 @@ interface Output {
 
 export const getUnitsByPrefixWorkflow: Workflow<Input, Output> = {
   id: 'get_units_by_prefix',
-  description: 'Lists all units that share a given unit code prefix (e.g. all COS units, all SWE units, all MPU units). Use this when the user wants to browse units in a subject area or department.',
+  description: 'Lists the units that start with a code PREFIX WITHOUT digits (for example COS, SWE, MPU). Use this when the user wants to browse the units of a subject area or department. Not for one unit code with digits (use get_unit_details).',
+  keywords: ['start with', 'begin with', 'prefix', 'all cos', 'subject area', 'department', 'list units', 'browse units'],
   params: [
     {
       name: 'prefix',

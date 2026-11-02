@@ -66,7 +66,7 @@ function runMigrations(): Promise<void> {
 
     console.log('[DB] Running Prisma migrations (migrate deploy)...');
 
-    // Setting cwd to core/db makes Prisma look in core/db/prisma/migrations
+    // Setting cwd to core/db makes Prisma look in core/db/prisma/schema/migrations
     const proc = fork(
       prismaCliPath,
       ['migrate', 'deploy', `--schema=${schemaPath}`],

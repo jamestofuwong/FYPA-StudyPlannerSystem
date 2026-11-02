@@ -5,6 +5,8 @@ import { prisma } from '@core/db/client';
 jest.mock('@core/db/client', () => ({
   prisma: {
     plannerTemplate: { findUnique: jest.fn(), findMany: jest.fn() },
+    // The route lists every MPU unit for the advisor's add dropdown
+    unit: { findMany: jest.fn().mockResolvedValue([]) },
   },
 }));
 

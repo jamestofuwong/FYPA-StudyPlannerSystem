@@ -5,6 +5,7 @@ import { generatePlan } from '@student/lib/plan-builder'
 import type { GenerationResult } from '@student/lib/plan-builder'
 import type { PlannerCourseOption } from '@student/lib/planners'
 import type { SemesterBlock, UnitListing } from '@student/lib/types'
+import { formatRequisiteGroups, type RequisiteGroup } from '@student/lib/requisites'
 import SemesterTable from '@student/components/SemesterTable/SemesterTable'
 import ElectivePool from '@student/components/ElectivePool/ElectivePool'
 import CategoryLegend, { categoriesInPlan } from '@student/components/CategoryLegend/CategoryLegend'
@@ -36,6 +37,86 @@ function missingPrerequisites(prerequisites: string[] | undefined, completed: Se
   return (prerequisites ?? [])
     .map(code => code.trim().toUpperCase())
     .filter(code => code && !completed.has(code))
+}
+
+function completedCreditPointsBefore(
+  semesters: { unitCodes: string[] }[],
+  index: number,
+  units: UnitListing[],
+): number {
+  const creditPointsByCode = new Map(units.map(unit => [unit.code.trim().toUpperCase(), unit.creditPoints]))
+  return semesters
+    .slice(0, index)
+    .flatMap(semester => semester.unitCodes)
+    .map(code => creditPointsByCode.get(code.trim().toUpperCase()) ?? 0)
+    .reduce((total, points) => total + points, 0)
+}
+
+function missingRequisiteGroupReasons(
+  groups: RequisiteGroup[] | undefined,
+  completedCodes: Set<string>,
+  completedCreditPoints: number,
+): string[] {
+  const prerequisiteGroups = (groups ?? [])
+    .map(group => group.filter(condition => (condition.requisiteType ?? 'prerequisite') === 'prerequisite'))
+    .filter(group => group.length > 0)
+
+  if (prerequisiteGroups.length === 0) return []
+
+  const groupResults = prerequisiteGroups.map(group => {
+    const missing: string[] = []
+    const satisfied = group.every(condition => {
+      if (condition.type === 'unit' && condition.unitCode) {
+        const code = condition.unitCode.trim().toUpperCase()
+        if (completedCodes.has(code)) return true
+        missing.push(code)
+        return false
+      }
+      if (condition.type === 'credit_points' && condition.creditPoints != null) {
+        if (completedCreditPoints >= condition.creditPoints) return true
+        missing.push(`${condition.creditPoints} cp`)
+        return false
+      }
+      return true
+    })
+    return { satisfied, missing }
+  })
+
+  if (groupResults.some(result => result.satisfied)) return []
+  return [...groupResults].sort((a, b) => a.missing.length - b.missing.length)[0]?.missing ?? []
+}
+
+function prerequisiteBlockReasons(
+  unit: UnitListing | undefined,
+  completedCodes: Set<string>,
+  completedCreditPoints: number,
+): string[] {
+  const groupedReasons = missingRequisiteGroupReasons(unit?.requisiteGroups, completedCodes, completedCreditPoints)
+  if (groupedReasons.length > 0) return groupedReasons
+  return missingPrerequisites(unit?.prerequisites, completedCodes)
+}
+
+function prerequisiteRequirementText(unit: UnitListing): string | null {
+  const creditPointRequirements = [
+    ...new Set(
+      (unit.requisiteGroups ?? [])
+        .flatMap(group => group)
+        .filter(condition =>
+          (condition.requisiteType ?? 'prerequisite') === 'prerequisite' &&
+          condition.type === 'credit_points' &&
+          condition.creditPoints != null,
+        )
+        .map(condition => condition.creditPoints!)
+        .filter(points => Number.isFinite(points) && points > 0),
+    ),
+  ].sort((a, b) => a - b)
+
+  if (creditPointRequirements.length > 0) {
+    return creditPointRequirements.map(points => `${points} cp`).join(' / ')
+  }
+
+  return formatRequisiteGroups(unit.requisiteGroups, 'prerequisite') ??
+    (unit.prerequisites && unit.prerequisites.length > 0 ? unit.prerequisites.join(', ') : null)
 }
 
 /** Units listed in earlier semesters only. A prerequisite in this semester does not unlock another unit here. */
@@ -72,13 +153,99 @@ interface CompletedSemester {
 }
 
 const DRAFT_KEY = 'plan-builder-draft'
+const RESULT_CACHE_KEY = 'plan-builder-result-cache'
+const RESULT_CACHE_VERSION = 6
 
 interface PlanBuilderDraft {
   selectedCourseId: string
   selectedPlannerId: string
+  selectedSecondMajorId: string
   intakeYear: number
   intakeMonth: number
   completedSemesters: CompletedSemester[]
+}
+
+interface CachedGenerationResult {
+  semesters: SemesterBlock[]
+  completedCodes: string[]
+  electivePool: GenerationResult['electivePool']
+}
+
+interface PlanResultCache {
+  version: number
+  key: string
+  result: CachedGenerationResult
+}
+
+function normalizeCompletedSemesters(semesters: CompletedSemester[]): string[][] {
+  return semesters.map(semester =>
+    semester.unitCodes
+      .map(code => code.trim().toUpperCase())
+      .filter(Boolean)
+      .sort(),
+  )
+}
+
+function resultCacheKey({
+  plannerId,
+  secondMajorId,
+  intakeYear,
+  intakeMonth,
+  completedSemesters,
+}: {
+  plannerId: string
+  secondMajorId?: string
+  intakeYear: number
+  intakeMonth: number
+  completedSemesters: CompletedSemester[]
+}): string {
+  return JSON.stringify({
+    plannerId,
+    secondMajorId: secondMajorId || '',
+    intakeYear,
+    intakeMonth,
+    completedSemesters: normalizeCompletedSemesters(completedSemesters),
+  })
+}
+
+function serializeResult(result: GenerationResult): CachedGenerationResult {
+  return {
+    semesters: result.semesters,
+    electivePool: result.electivePool,
+    completedCodes: [...result.completedCodes],
+  }
+}
+
+function deserializeResult(result: CachedGenerationResult): GenerationResult {
+  return {
+    semesters: result.semesters,
+    electivePool: result.electivePool,
+    completedCodes: new Set(result.completedCodes),
+  }
+}
+
+function readCachedResult(key: string): GenerationResult | null {
+  try {
+    const raw = sessionStorage.getItem(RESULT_CACHE_KEY)
+    if (!raw) return null
+    const cache = JSON.parse(raw) as Partial<PlanResultCache>
+    if (cache.version !== RESULT_CACHE_VERSION || cache.key !== key || !cache.result) return null
+    return deserializeResult(cache.result)
+  } catch {
+    return null
+  }
+}
+
+function writeCachedResult(key: string, result: GenerationResult) {
+  try {
+    sessionStorage.setItem(RESULT_CACHE_KEY, JSON.stringify({
+      version: RESULT_CACHE_VERSION,
+      key,
+      result: serializeResult(result),
+    }))
+  } catch {
+    // Ignore quota / private-mode failures
+  }
 }
 
 function parseCompletedSemesters(raw: unknown): CompletedSemester[] {
@@ -110,6 +277,7 @@ function readDraft(): PlanBuilderDraft | null {
       return {
         selectedCourseId: data.selectedCourseId,
         selectedPlannerId: typeof data.selectedPlannerId === 'string' ? data.selectedPlannerId : '',
+        selectedSecondMajorId: typeof data.selectedSecondMajorId === 'string' ? data.selectedSecondMajorId : '',
         intakeYear: typeof data.intakeYear === 'number' ? data.intakeYear : currentYear,
         intakeMonth: typeof data.intakeMonth === 'number' ? data.intakeMonth : 3,
         completedSemesters,
@@ -120,6 +288,7 @@ function readDraft(): PlanBuilderDraft | null {
     return {
       selectedCourseId: '',
       selectedPlannerId: '',
+      selectedSecondMajorId: '',
       intakeYear: currentYear,
       intakeMonth: 3,
       completedSemesters,
@@ -166,6 +335,7 @@ export default function PlanBuilderClient({
   // ── Config ──
   const [selectedCourseId, setSelectedCourseId]   = useState('')
   const [selectedPlannerId, setSelectedPlannerId] = useState('')
+  const [selectedSecondMajorId, setSelectedSecondMajorId] = useState('')
   const [intakeYear, setIntakeYear]               = useState(new Date().getFullYear())
   const [intakeMonth, setIntakeMonth]             = useState(3)
 
@@ -187,6 +357,8 @@ export default function PlanBuilderClient({
 
   const selectedCourse  = plannerOptions.find(c => c.courseId === selectedCourseId)
   const majors          = selectedCourse?.majors ?? []
+  const primaryMajorId  = majors.find(m => m.plannerId === selectedPlannerId)?.majorId ?? null
+  const secondMajorOptions = (selectedCourse?.secondMajors ?? []).filter(m => m.majorId !== primaryMajorId)
   const canGenerate     = Boolean(selectedPlannerId)
 
   const allCompletedCodes = completedSemesters.flatMap(s => s.unitCodes)
@@ -196,12 +368,23 @@ export default function PlanBuilderClient({
     if (draft) {
       const course = plannerOptions.find(c => c.courseId === draft.selectedCourseId)
       const plannerOk = course?.majors.some(m => m.plannerId === draft.selectedPlannerId)
+      const secondMajorOk = course?.secondMajors.some(m => m.majorId === draft.selectedSecondMajorId)
       setSelectedCourseId(course ? course.courseId : '')
       setSelectedPlannerId(plannerOk ? draft.selectedPlannerId : '')
+      setSelectedSecondMajorId(secondMajorOk ? draft.selectedSecondMajorId : '')
       setIntakeYear(draft.intakeYear)
       setIntakeMonth(draft.intakeMonth)
       setCompletedSemesters(draft.completedSemesters)
       semCounter.current = nextSemCounter(draft.completedSemesters)
+      if (plannerOk) {
+        setResult(readCachedResult(resultCacheKey({
+          plannerId: draft.selectedPlannerId,
+          secondMajorId: secondMajorOk ? draft.selectedSecondMajorId : '',
+          intakeYear: draft.intakeYear,
+          intakeMonth: draft.intakeMonth,
+          completedSemesters: draft.completedSemesters,
+        })))
+      }
     }
     setDraftReady(true)
   }, [])
@@ -211,21 +394,40 @@ export default function PlanBuilderClient({
     writeDraft({
       selectedCourseId,
       selectedPlannerId,
+      selectedSecondMajorId,
       intakeYear,
       intakeMonth,
       completedSemesters,
     })
-  }, [draftReady, selectedCourseId, selectedPlannerId, intakeYear, intakeMonth, completedSemesters])
+  }, [draftReady, selectedCourseId, selectedPlannerId, selectedSecondMajorId, intakeYear, intakeMonth, completedSemesters])
 
-  function handleCourseChange(id: string) {
-    setSelectedCourseId(id)
-    setSelectedPlannerId('')
+  function clearGeneratedPlan() {
     setResult(null)
     setError(null)
   }
 
+  function handleCourseChange(id: string) {
+    setSelectedCourseId(id)
+    setSelectedPlannerId('')
+    setSelectedSecondMajorId('')
+    clearGeneratedPlan()
+  }
+
+  function handlePrimaryMajorChange(plannerId: string) {
+    setSelectedPlannerId(plannerId)
+    const nextPrimaryMajorId = majors.find(m => m.plannerId === plannerId)?.majorId ?? null
+    setSelectedSecondMajorId(current => !plannerId || current === nextPrimaryMajorId ? '' : current)
+    clearGeneratedPlan()
+  }
+
+  function handleSecondMajorChange(majorId: string) {
+    setSelectedSecondMajorId(majorId)
+    clearGeneratedPlan()
+  }
+
   // ── Semester management ──
   function addSemester() {
+    clearGeneratedPlan()
     semCounter.current++
     setCompletedSemesters(prev => [
       ...prev,
@@ -234,17 +436,23 @@ export default function PlanBuilderClient({
   }
 
   function removeSemester(id: string) {
+    clearGeneratedPlan()
     setCompletedSemesters(prev => prev.filter(s => s.id !== id))
     if (activeAddSem === id) closeAddUnit()
   }
 
   // ── Unit management ──
   function addUnitToSem(semId: string, code: string) {
+    clearGeneratedPlan()
     setCompletedSemesters(prev => {
       const index = prev.findIndex(semester => semester.id === semId)
       if (index < 0) return prev
       const unit = units.find(item => item.code === code)
-      const missing = missingPrerequisites(unit?.prerequisites, completedCodesBefore(prev, index))
+      const missing = prerequisiteBlockReasons(
+        unit,
+        completedCodesBefore(prev, index),
+        completedCreditPointsBefore(prev, index, units),
+      )
       if (missing.length > 0) return prev
       return prev.map(semester =>
         semester.id === semId ? { ...semester, unitCodes: [...semester.unitCodes, code] } : semester,
@@ -253,6 +461,7 @@ export default function PlanBuilderClient({
   }
 
   function removeUnitFromSem(semId: string, code: string) {
+    clearGeneratedPlan()
     setCompletedSemesters(prev =>
       prev.map(s => s.id === semId ? { ...s, unitCodes: s.unitCodes.filter(c => c !== code) } : s)
     )
@@ -269,11 +478,9 @@ export default function PlanBuilderClient({
   }
 
   function renderAddOption(unit: UnitListing, semesterId: string, semesterIndex: number) {
-    const missing = missingPrerequisites(
-      unit.prerequisites,
-      completedCodesBefore(completedSemesters, semesterIndex),
-    )
+    const missing = addBlockReasons(unit, semesterIndex)
     const blocked = missing.length > 0
+    const requirement = prerequisiteRequirementText(unit)
     return (
       <li
         key={unit.code}
@@ -290,12 +497,27 @@ export default function PlanBuilderClient({
         <span className={styles.addDropdownName}>
           <span className={styles.addDropdownNameText}>{unit.name}</span>
         </span>
-        {blocked ? (
-          <span className={styles.addDropdownNeed}>Pre-requisites: {missing.join(', ')}</span>
-        ) : (
-          <span className={styles.addDropdownPlus} aria-hidden="true">+</span>
-        )}
+        <span className={styles.addDropdownMeta}>
+          {requirement && (
+            <span className={styles.addDropdownRequirement}>
+              Required: <span className={styles.addDropdownRequirementValue}>{requirement}</span>
+            </span>
+          )}
+          {blocked && !requirement ? (
+            <span className={styles.addDropdownNeed}>{missing.join(', ')}</span>
+          ) : !blocked ? (
+            <span className={styles.addDropdownPlus} aria-hidden="true">+</span>
+          ) : null}
+        </span>
       </li>
+    )
+  }
+
+  function addBlockReasons(unit: UnitListing, semesterIndex: number) {
+    return prerequisiteBlockReasons(
+      unit,
+      completedCodesBefore(completedSemesters, semesterIndex),
+      completedCreditPointsBefore(completedSemesters, semesterIndex, units),
     )
   }
 
@@ -332,17 +554,42 @@ export default function PlanBuilderClient({
   // ── Generate ──
   async function handleGenerate() {
     if (!canGenerate) return
+    const cacheKey = resultCacheKey({
+      plannerId: selectedPlannerId,
+      secondMajorId: selectedSecondMajorId,
+      intakeYear,
+      intakeMonth,
+      completedSemesters,
+    })
+    const cachedResult = readCachedResult(cacheKey)
+    if (cachedResult) {
+      setResult(cachedResult)
+      setError(null)
+      setTimeout(() => {
+        document.getElementById('generated-plan')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }, 100)
+      return
+    }
+
     setIsGenerating(true)
     setError(null)
     try {
       const res = await generatePlan({
-        config: { plannerId: selectedPlannerId, intakeYear, intakeMonth },
+        config: {
+          plannerId: selectedPlannerId,
+          secondMajorId: selectedSecondMajorId || undefined,
+          intakeYear,
+          intakeMonth,
+        },
         completedSemesters: completedSemesters.map(semester => ({ unitCodes: semester.unitCodes })),
       })
       if (!res) {
         setError('No plan template found for the selected configuration. Try a different course or major.')
       } else {
         setResult(res)
+        if (!res.warnings || res.warnings.length === 0) {
+          writeCachedResult(cacheKey, res)
+        }
         setTimeout(() => {
           document.getElementById('generated-plan')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
         }, 100)
@@ -394,7 +641,7 @@ export default function PlanBuilderClient({
               id="major"
               className={styles.select}
               value={selectedPlannerId}
-              onChange={e => { setSelectedPlannerId(e.target.value); setResult(null); setError(null) }}
+              onChange={e => handlePrimaryMajorChange(e.target.value)}
               disabled={!selectedCourseId}
               tabIndex={selectedCourseId ? 0 : -1}
             >
@@ -405,13 +652,50 @@ export default function PlanBuilderClient({
             </select>
           </div>
 
+          <div
+            className={`${styles.field} ${!selectedCourseId ? styles.fieldHidden : ''}`}
+            aria-hidden={!selectedCourseId}
+          >
+            <label className={styles.label} htmlFor="secondMajor">
+              Second Major
+            </label>
+            <select
+              id="secondMajor"
+              className={styles.select}
+              value={selectedSecondMajorId}
+              onChange={e => handleSecondMajorChange(e.target.value)}
+              disabled={!selectedCourseId || !selectedPlannerId}
+              tabIndex={selectedCourseId ? 0 : -1}
+            >
+              <option value="">No second major</option>
+              {secondMajorOptions.map(m => (
+                <option key={m.majorId} value={m.majorId}>{m.majorName}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </section>
+
+      <div className={styles.divider} />
+
+      {/* ── Section 2: Completed Semesters ── */}
+      <section className={styles.section}>
+        <div className={styles.sectionHeader}>
+          <span className={styles.sectionNum}>2</span>
+          <div>
+            <h2 className={styles.sectionTitle}>Intake</h2>
+            <p className={styles.sectionSubtitle}>Select your intake month and year.</p>
+          </div>
+        </div>
+
+        <div className={styles.intakeGrid}>
           <div className={styles.field}>
             <label className={styles.label} htmlFor="intakeMonth">Intake Month</label>
             <select
               id="intakeMonth"
               className={styles.select}
               value={intakeMonth}
-              onChange={e => setIntakeMonth(Number(e.target.value))}
+              onChange={e => { setIntakeMonth(Number(e.target.value)); clearGeneratedPlan() }}
             >
               {MONTH_OPTIONS.map(m => (
                 <option key={m.value} value={m.value}>{m.label}</option>
@@ -424,22 +708,22 @@ export default function PlanBuilderClient({
             <input
               id="intakeYear"
               type="number"
-              className={styles.select}
+              className={`${styles.select} ${styles.numberInput}`}
               value={intakeYear}
               min={2000}
               max={2099}
-              onChange={e => setIntakeYear(Number(e.target.value))}
+              onChange={e => { setIntakeYear(Number(e.target.value)); clearGeneratedPlan() }}
             />
           </div>
         </div>
+
       </section>
 
       <div className={styles.divider} />
 
-      {/* ── Section 2: Completed Semesters ── */}
       <section className={styles.section}>
         <div className={styles.sectionHeader}>
-          <span className={styles.sectionNum}>2</span>
+          <span className={styles.sectionNum}>3</span>
           <div>
             <h2 className={styles.sectionTitle}>Units Completed</h2>
             <p className={styles.sectionSubtitle}>
@@ -452,6 +736,12 @@ export default function PlanBuilderClient({
         <div className={styles.completedTablesWrap}>
           {completedSemesters.map((sem, idx) => {
             const isAddActive = activeAddSem === sem.id
+            const visibleAddUnits = courseName
+              ? [...suggestedAddUnits, ...otherAddUnits]
+              : filteredAddUnits
+            const selectableAddUnits = visibleAddUnits.filter(unit => addBlockReasons(unit, idx).length === 0)
+            const lockedAddUnits = visibleAddUnits.filter(unit => addBlockReasons(unit, idx).length > 0)
+            const showDropdownSections = selectableAddUnits.length > 0 && lockedAddUnits.length > 0
             return (
               <div key={sem.id} className={styles.completedTable}>
 
@@ -513,22 +803,22 @@ export default function PlanBuilderClient({
                       aria-label="Filter units to add"
                     />
 
-                    {filteredAddUnits.length > 0 ? (
+                    {visibleAddUnits.length > 0 ? (
                       <ul className={styles.addDropdown} role="listbox" aria-label="Units you can add">
-                        {courseName && suggestedAddUnits.length > 0 && otherAddUnits.length > 0 && (
-                          <li className={styles.addDropdownGroup} role="presentation">Suggested for your course</li>
+                        {showDropdownSections && (
+                          <li className={styles.addDropdownGroup} role="presentation">Available units</li>
                         )}
-                        {(courseName ? suggestedAddUnits : filteredAddUnits).map(unit =>
+                        {selectableAddUnits.map(unit =>
                           renderAddOption(unit, sem.id, idx),
                         )}
-                        {otherAddUnits.length > 0 && suggestedAddUnits.length > 0 && (
+                        {lockedAddUnits.length > 0 && (
                           <>
-                            <li className={styles.addDropdownGroup} role="presentation">Other units</li>
-                            {otherAddUnits.map(unit => renderAddOption(unit, sem.id, idx))}
+                            {showDropdownSections && (
+                              <li className={styles.addDropdownGroup} role="presentation">Locked by prerequisites</li>
+                            )}
+                            {lockedAddUnits.map(unit => renderAddOption(unit, sem.id, idx))}
                           </>
                         )}
-                        {otherAddUnits.length > 0 && suggestedAddUnits.length === 0 &&
-                          otherAddUnits.map(unit => renderAddOption(unit, sem.id, idx))}
                       </ul>
                     ) : (
                       <div className={styles.addDropdownEmpty}>
@@ -582,6 +872,11 @@ export default function PlanBuilderClient({
       </div>
 
       {error && <div className={styles.errorBox} role="alert">{error}</div>}
+      {result?.warnings?.map(warning => (
+        <div key={warning} className={styles.warningBox} role="status">
+          {warning}
+        </div>
+      ))}
 
       {/* ── Generated Plan ── */}
       {result && (
@@ -635,6 +930,12 @@ export default function PlanBuilderClient({
                   <span className={styles.summaryLabel}>Major</span>
                   <span className={styles.summaryValue}>
                     {majors.find(m => m.plannerId === selectedPlannerId)?.majorName ?? '—'}
+                  </span>
+                </div>
+                <div className={styles.summaryRow}>
+                  <span className={styles.summaryLabel}>Second Major</span>
+                  <span className={styles.summaryValue}>
+                    {secondMajorOptions.find(m => m.majorId === selectedSecondMajorId)?.majorName ?? 'None'}
                   </span>
                 </div>
                 <hr className={styles.summaryDivider} />

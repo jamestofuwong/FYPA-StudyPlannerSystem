@@ -74,7 +74,7 @@ describe('Scraper API Endpoint', () => {
   });
 
   //NEGATIVE PATHS: Malformed Payload
-  describe("Scraper API - Malformed Payload (Line 39, 45)", () => {
+  describe("Scraper API - Malformed Payload", () => {
     test("POST: should return 400 if JSON body is invalid", async () => {
       const req = new NextRequest('http://localhost/api/scraper', {
         method: 'POST',

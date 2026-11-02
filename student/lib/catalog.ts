@@ -2,7 +2,7 @@ import 'server-only'
 import { revalidateTag, unstable_cache } from 'next/cache'
 import { prisma } from './prisma'
 import { getPlannerById, getPlannerOptions, getPlanners } from './planners'
-import { getUnit, getUnits } from './units'
+import { getPlannerYearLevels, getUnit, getUnits } from './units'
 import type { StudentHelp } from './catalog-types'
 
 export const STUDENT_CACHE = {
@@ -35,26 +35,30 @@ async function readHelp(): Promise<StudentHelp> {
   return { faqs, generalEnquiries, itHelpDesk, hods }
 }
 
-export const getCachedPlanners = unstable_cache(getPlanners, ['student-planners'], {
+export const getCachedPlanners = unstable_cache(getPlanners, ['student-planners-v4'], {
   tags: [STUDENT_CACHE.planners],
 })
 
-export const getCachedPlanner = unstable_cache(getPlannerById, ['student-planner'], {
+export const getCachedPlanner = unstable_cache(getPlannerById, ['student-planner-v4'], {
   tags: [STUDENT_CACHE.planners],
 })
 
-export const getCachedPlannerOptions = unstable_cache(getPlannerOptions, ['student-planner-options'], {
+export const getCachedPlannerOptions = unstable_cache(getPlannerOptions, ['student-planner-options-v4'], {
   tags: [STUDENT_CACHE.planners],
 })
 
-export const getCachedUnits = unstable_cache(getUnits, ['student-units'], {
+export const getCachedUnits = unstable_cache(getUnits, ['student-units-v4'], {
   tags: [STUDENT_CACHE.units],
 })
 
-export const getCachedUnit = unstable_cache(getUnit, ['student-unit'], {
+export const getCachedPlannerYearLevels = unstable_cache(getPlannerYearLevels, ['student-planner-year-levels-v4'], {
+  tags: [STUDENT_CACHE.planners],
+})
+
+export const getCachedUnit = unstable_cache(getUnit, ['student-unit-v4'], {
   tags: [STUDENT_CACHE.units],
 })
 
-export const getCachedHelp = unstable_cache(readHelp, ['student-help'], {
+export const getCachedHelp = unstable_cache(readHelp, ['student-help-v4'], {
   tags: [STUDENT_CACHE.help],
 })

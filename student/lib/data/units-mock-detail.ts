@@ -37,9 +37,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'Introduction to object-oriented concepts',
     ],
     assessment: [
-      { title: 'Programming Assignments (×3)', type: 'Assignment', weight: 45, ulos: [1, 2, 4, 5] },
-      { title: 'Laboratory Exercises', type: 'Lab', weight: 15, ulos: [1, 3, 6] },
-      { title: 'Final Examination', type: 'Examination', weight: 40, ulos: [1, 2, 3, 4] },
+      { type: 'Assignment', weight: 45, ulos: [1, 2, 4, 5] },
+      { type: 'Lab', weight: 15, ulos: [1, 3, 6] },
+      { type: 'Examination', weight: 40, ulos: [1, 2, 3, 4] },
     ],
   },
 
@@ -67,9 +67,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'Testing and debugging strategies',
     ],
     assessment: [
-      { title: 'Programming Assignments (×3)', type: 'Assignment', weight: 45, ulos: [1, 2, 3, 4] },
-      { title: 'Laboratory Exercises', type: 'Lab', weight: 15, ulos: [2, 5] },
-      { title: 'Final Examination', type: 'Examination', weight: 40, ulos: [1, 3, 5, 6] },
+      { type: 'Assignment', weight: 45, ulos: [1, 2, 3, 4] },
+      { type: 'Lab', weight: 15, ulos: [2, 5] },
+      { type: 'Examination', weight: 40, ulos: [1, 3, 5, 6] },
     ],
   },
 
@@ -99,9 +99,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'Introduction to accounting standards and ethics',
     ],
     assessment: [
-      { title: 'Assignments (×2)', type: 'Assignment', weight: 40, ulos: [2, 3, 4, 5] },
-      { title: 'Mid-Semester Test', type: 'Quiz', weight: 20, ulos: [1, 2] },
-      { title: 'Final Examination', type: 'Examination', weight: 40, ulos: [1, 2, 3, 5, 6] },
+      { type: 'Assignment', weight: 40, ulos: [2, 3, 4, 5] },
+      { type: 'Quiz', weight: 20, ulos: [1, 2] },
+      { type: 'Examination', weight: 40, ulos: [1, 2, 3, 5, 6] },
     ],
   },
 
@@ -131,9 +131,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'Global business and international trade',
     ],
     assessment: [
-      { title: 'Business Analysis Report', type: 'Assignment', weight: 30, ulos: [1, 2, 3, 4] },
-      { title: 'Group Presentation', type: 'Presentation', weight: 30, ulos: [4, 5, 6] },
-      { title: 'Final Examination', type: 'Examination', weight: 40, ulos: [1, 2, 3, 6] },
+      { type: 'Assignment', weight: 30, ulos: [1, 2, 3, 4] },
+      { type: 'Presentation', weight: 30, ulos: [4, 5, 6] },
+      { type: 'Examination', weight: 40, ulos: [1, 2, 3, 6] },
     ],
   },
 
@@ -163,9 +163,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'Fiscal policy: government spending and taxation',
     ],
     assessment: [
-      { title: 'Problem Sets (×2)', type: 'Assignment', weight: 30, ulos: [1, 2, 3, 4] },
-      { title: 'Mid-Semester Examination', type: 'Examination', weight: 30, ulos: [1, 2, 3] },
-      { title: 'Final Examination', type: 'Examination', weight: 40, ulos: [4, 5, 6] },
+      { type: 'Assignment', weight: 30, ulos: [1, 2, 3, 4] },
+      { type: 'Examination', weight: 30, ulos: [1, 2, 3] },
+      { type: 'Examination', weight: 40, ulos: [4, 5, 6] },
     ],
   },
 
@@ -195,9 +195,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'Ethics in information systems',
     ],
     assessment: [
-      { title: 'Spreadsheet & Database Assignments (×2)', type: 'Assignment', weight: 40, ulos: [3, 4] },
-      { title: 'Business IS Analysis Report', type: 'Assignment', weight: 20, ulos: [1, 2, 5, 6] },
-      { title: 'Final Examination', type: 'Examination', weight: 40, ulos: [1, 2, 5, 6] },
+      { type: 'Assignment', weight: 40, ulos: [3, 4] },
+      { type: 'Assignment', weight: 20, ulos: [1, 2, 5, 6] },
+      { type: 'Examination', weight: 40, ulos: [1, 2, 5, 6] },
     ],
   },
 
@@ -227,9 +227,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'Contemporary management challenges: globalisation, diversity, technology',
     ],
     assessment: [
-      { title: 'Case Study Report', type: 'Assignment', weight: 30, ulos: [1, 2, 3] },
-      { title: 'Group Presentation', type: 'Presentation', weight: 30, ulos: [4, 5, 6] },
-      { title: 'Final Examination', type: 'Examination', weight: 40, ulos: [1, 2, 4, 5, 6] },
+      { type: 'Assignment', weight: 30, ulos: [1, 2, 3] },
+      { type: 'Presentation', weight: 30, ulos: [4, 5, 6] },
+      { type: 'Examination', weight: 40, ulos: [1, 2, 4, 5, 6] },
     ],
   },
 
@@ -259,9 +259,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'Recurrence relations and sequences',
     ],
     assessment: [
-      { title: 'Problem Sets (×3)', type: 'Assignment', weight: 30, ulos: [1, 2, 3, 4] },
-      { title: 'Mid-Semester Test', type: 'Quiz', weight: 30, ulos: [1, 2, 3] },
-      { title: 'Final Examination', type: 'Examination', weight: 40, ulos: [1, 2, 4, 5, 6] },
+      { type: 'Assignment', weight: 30, ulos: [1, 2, 3, 4] },
+      { type: 'Quiz', weight: 30, ulos: [1, 2, 3] },
+      { type: 'Examination', weight: 40, ulos: [1, 2, 4, 5, 6] },
     ],
   },
 
@@ -291,9 +291,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'Chi-squared tests for association',
     ],
     assessment: [
-      { title: 'Statistical Analysis Assignments (×2)', type: 'Assignment', weight: 40, ulos: [1, 2, 3, 4] },
-      { title: 'Mid-Semester Test', type: 'Quiz', weight: 20, ulos: [1, 2, 3] },
-      { title: 'Final Examination', type: 'Examination', weight: 40, ulos: [3, 4, 5, 6] },
+      { type: 'Assignment', weight: 40, ulos: [1, 2, 3, 4] },
+      { type: 'Quiz', weight: 20, ulos: [1, 2, 3] },
+      { type: 'Examination', weight: 40, ulos: [3, 4, 5, 6] },
     ],
   },
 
@@ -323,9 +323,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'Introduction to network security concepts',
     ],
     assessment: [
-      { title: 'Laboratory Reports (×3)', type: 'Lab', weight: 30, ulos: [3, 4, 5] },
-      { title: 'Configuration Assignment', type: 'Assignment', weight: 30, ulos: [4, 5, 6] },
-      { title: 'Final Examination', type: 'Examination', weight: 40, ulos: [1, 2, 3, 6] },
+      { type: 'Lab', weight: 30, ulos: [3, 4, 5] },
+      { type: 'Assignment', weight: 30, ulos: [4, 5, 6] },
+      { type: 'Examination', weight: 40, ulos: [1, 2, 3, 6] },
     ],
   },
 
@@ -357,9 +357,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'Marketing plan structure and development',
     ],
     assessment: [
-      { title: 'Marketing Plan', type: 'Assignment', weight: 40, ulos: [2, 3, 4, 6] },
-      { title: 'Consumer Behaviour Case Study', type: 'Assignment', weight: 20, ulos: [1, 5] },
-      { title: 'Final Examination', type: 'Examination', weight: 40, ulos: [1, 2, 3, 5, 6] },
+      { type: 'Assignment', weight: 40, ulos: [2, 3, 4, 6] },
+      { type: 'Assignment', weight: 20, ulos: [1, 5] },
+      { type: 'Examination', weight: 40, ulos: [1, 2, 3, 5, 6] },
     ],
   },
 
@@ -390,9 +390,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'Testing object-oriented software',
     ],
     assessment: [
-      { title: 'Programming Project', type: 'Project', weight: 40, ulos: [1, 2, 3, 4, 6] },
-      { title: 'Assignment', type: 'Assignment', weight: 20, ulos: [5, 7] },
-      { title: 'Final Examination', type: 'Examination', weight: 40, ulos: [1, 2, 3, 5] },
+      { type: 'Project', weight: 40, ulos: [1, 2, 3, 4, 6] },
+      { type: 'Assignment', weight: 20, ulos: [5, 7] },
+      { type: 'Examination', weight: 40, ulos: [1, 2, 3, 5] },
     ],
   },
 
@@ -422,9 +422,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'Presentations and oral technical communication',
     ],
     assessment: [
-      { title: 'Technical Report', type: 'Assignment', weight: 35, ulos: [1, 2, 3, 4] },
-      { title: 'User Guide', type: 'Assignment', weight: 35, ulos: [1, 2, 3, 4, 5] },
-      { title: 'Oral Presentation', type: 'Presentation', weight: 30, ulos: [1, 5, 6] },
+      { type: 'Assignment', weight: 35, ulos: [1, 2, 3, 4] },
+      { type: 'Assignment', weight: 35, ulos: [1, 2, 3, 4, 5] },
+      { type: 'Presentation', weight: 30, ulos: [1, 5, 6] },
     ],
   },
 
@@ -454,9 +454,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'Cloud security and compliance',
     ],
     assessment: [
-      { title: 'Cloud Deployment Lab Reports (×3)', type: 'Lab', weight: 40, ulos: [3, 4, 5] },
-      { title: 'Cloud Architecture Design', type: 'Assignment', weight: 30, ulos: [1, 2, 5, 6] },
-      { title: 'Final Examination', type: 'Examination', weight: 30, ulos: [1, 2, 4, 6] },
+      { type: 'Lab', weight: 40, ulos: [3, 4, 5] },
+      { type: 'Assignment', weight: 30, ulos: [1, 2, 5, 6] },
+      { type: 'Examination', weight: 30, ulos: [1, 2, 4, 6] },
     ],
   },
 
@@ -486,9 +486,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'Database performance and indexing',
     ],
     assessment: [
-      { title: 'Database Design Project', type: 'Project', weight: 50, ulos: [1, 2, 3, 6] },
-      { title: 'SQL Assignments (×2)', type: 'Assignment', weight: 20, ulos: [3, 4, 5] },
-      { title: 'Final Examination', type: 'Examination', weight: 30, ulos: [1, 2, 4, 6] },
+      { type: 'Project', weight: 50, ulos: [1, 2, 3, 6] },
+      { type: 'Assignment', weight: 20, ulos: [3, 4, 5] },
+      { type: 'Examination', weight: 30, ulos: [1, 2, 4, 6] },
     ],
   },
 
@@ -518,9 +518,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'Dividend policy: theories and evidence',
     ],
     assessment: [
-      { title: 'Financial Analysis Assignments (×2)', type: 'Assignment', weight: 40, ulos: [1, 2, 3, 4] },
-      { title: 'Mid-Semester Test', type: 'Quiz', weight: 20, ulos: [1, 2, 3] },
-      { title: 'Final Examination', type: 'Examination', weight: 40, ulos: [2, 3, 4, 5, 6] },
+      { type: 'Assignment', weight: 40, ulos: [1, 2, 3, 4] },
+      { type: 'Quiz', weight: 20, ulos: [1, 2, 3] },
+      { type: 'Examination', weight: 40, ulos: [2, 3, 4, 5, 6] },
     ],
   },
 
@@ -550,9 +550,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'Workplace health and safety and employment law',
     ],
     assessment: [
-      { title: 'HR Policy Report', type: 'Assignment', weight: 35, ulos: [1, 2, 4, 6] },
-      { title: 'Recruitment & Selection Simulation', type: 'Assignment', weight: 25, ulos: [2, 3, 5] },
-      { title: 'Final Examination', type: 'Examination', weight: 40, ulos: [1, 3, 4, 5, 6] },
+      { type: 'Assignment', weight: 35, ulos: [1, 2, 4, 6] },
+      { type: 'Assignment', weight: 25, ulos: [2, 3, 5] },
+      { type: 'Examination', weight: 40, ulos: [1, 3, 4, 5, 6] },
     ],
   },
 
@@ -582,9 +582,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'Systems proposal and documentation standards',
     ],
     assessment: [
-      { title: 'Systems Analysis & Design Project', type: 'Project', weight: 50, ulos: [2, 3, 4, 5, 6] },
-      { title: 'Modelling Assignments (×2)', type: 'Assignment', weight: 20, ulos: [3, 4] },
-      { title: 'Final Examination', type: 'Examination', weight: 30, ulos: [1, 2, 5, 6] },
+      { type: 'Project', weight: 50, ulos: [2, 3, 4, 5, 6] },
+      { type: 'Assignment', weight: 20, ulos: [3, 4] },
+      { type: 'Examination', weight: 30, ulos: [1, 2, 5, 6] },
     ],
   },
 
@@ -614,9 +614,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'Communicating analytics results to stakeholders',
     ],
     assessment: [
-      { title: 'Data Analysis Reports (×2)', type: 'Assignment', weight: 40, ulos: [2, 3, 4, 5] },
-      { title: 'Analytics Case Study', type: 'Assignment', weight: 20, ulos: [1, 5, 6] },
-      { title: 'Final Examination', type: 'Examination', weight: 40, ulos: [1, 3, 4, 5, 6] },
+      { type: 'Assignment', weight: 40, ulos: [2, 3, 4, 5] },
+      { type: 'Assignment', weight: 20, ulos: [1, 5, 6] },
+      { type: 'Examination', weight: 40, ulos: [1, 3, 4, 5, 6] },
     ],
   },
 
@@ -646,9 +646,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'Eigenvalues and eigenvectors: computation and applications',
     ],
     assessment: [
-      { title: 'Problem Sets (×3)', type: 'Assignment', weight: 30, ulos: [1, 2, 3, 4] },
-      { title: 'Mid-Semester Test', type: 'Quiz', weight: 30, ulos: [1, 2, 4] },
-      { title: 'Final Examination', type: 'Examination', weight: 40, ulos: [1, 2, 3, 5, 6] },
+      { type: 'Assignment', weight: 30, ulos: [1, 2, 3, 4] },
+      { type: 'Quiz', weight: 30, ulos: [1, 2, 4] },
+      { type: 'Examination', weight: 40, ulos: [1, 2, 3, 5, 6] },
     ],
   },
 
@@ -678,9 +678,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'Chi-squared tests: goodness of fit and independence',
     ],
     assessment: [
-      { title: 'Statistical Assignments (×2)', type: 'Assignment', weight: 40, ulos: [1, 2, 3, 4] },
-      { title: 'Mid-Semester Test', type: 'Quiz', weight: 20, ulos: [1, 2, 3] },
-      { title: 'Final Examination', type: 'Examination', weight: 40, ulos: [3, 4, 5, 6] },
+      { type: 'Assignment', weight: 40, ulos: [1, 2, 3, 4] },
+      { type: 'Quiz', weight: 20, ulos: [1, 2, 3] },
+      { type: 'Examination', weight: 40, ulos: [3, 4, 5, 6] },
     ],
   },
 
@@ -710,9 +710,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'Architecture documentation and review',
     ],
     assessment: [
-      { title: 'Design Pattern Implementation', type: 'Assignment', weight: 30, ulos: [2, 3, 4] },
-      { title: 'Architecture Analysis Report', type: 'Assignment', weight: 30, ulos: [1, 3, 5, 6] },
-      { title: 'Final Examination', type: 'Examination', weight: 40, ulos: [1, 2, 4, 5] },
+      { type: 'Assignment', weight: 30, ulos: [2, 3, 4] },
+      { type: 'Assignment', weight: 30, ulos: [1, 3, 5, 6] },
+      { type: 'Examination', weight: 40, ulos: [1, 2, 4, 5] },
     ],
   },
 
@@ -742,9 +742,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'Emerging wireless: Wi-Fi 6E and cellular integration',
     ],
     assessment: [
-      { title: 'Lab Reports (×3)', type: 'Lab', weight: 30, ulos: [1, 3, 4] },
-      { title: 'Wireless Network Design', type: 'Assignment', weight: 30, ulos: [2, 3, 5, 6] },
-      { title: 'Final Examination', type: 'Examination', weight: 40, ulos: [1, 2, 5, 6] },
+      { type: 'Lab', weight: 30, ulos: [1, 3, 4] },
+      { type: 'Assignment', weight: 30, ulos: [2, 3, 5, 6] },
+      { type: 'Examination', weight: 40, ulos: [1, 2, 5, 6] },
     ],
   },
 
@@ -776,9 +776,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'Distributed databases and the CAP theorem',
     ],
     assessment: [
-      { title: 'Database Administration Assignments (×2)', type: 'Assignment', weight: 40, ulos: [2, 3, 4] },
-      { title: 'Mid-Semester Test', type: 'Quiz', weight: 20, ulos: [1, 3, 5] },
-      { title: 'Final Examination', type: 'Examination', weight: 40, ulos: [1, 4, 5, 6] },
+      { type: 'Assignment', weight: 40, ulos: [2, 3, 4] },
+      { type: 'Quiz', weight: 20, ulos: [1, 3, 5] },
+      { type: 'Examination', weight: 40, ulos: [1, 4, 5, 6] },
     ],
   },
 
@@ -808,9 +808,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'Operating system fundamentals: processes, threads, scheduling',
     ],
     assessment: [
-      { title: 'Assembly Programming Assignments (×2)', type: 'Assignment', weight: 40, ulos: [2, 3] },
-      { title: 'Mid-Semester Test', type: 'Quiz', weight: 20, ulos: [1, 4, 5] },
-      { title: 'Final Examination', type: 'Examination', weight: 40, ulos: [1, 3, 4, 5, 6] },
+      { type: 'Assignment', weight: 40, ulos: [2, 3] },
+      { type: 'Quiz', weight: 20, ulos: [1, 4, 5] },
+      { type: 'Examination', weight: 40, ulos: [1, 3, 4, 5, 6] },
     ],
   },
 
@@ -843,9 +843,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'Iterator and Composite design patterns',
     ],
     assessment: [
-      { title: 'Programming Assignments (×2)', type: 'Assignment', weight: 40, ulos: [1, 2, 3, 5, 7] },
-      { title: 'Mid-Semester Test', type: 'Quiz', weight: 20, ulos: [1, 4] },
-      { title: 'Final Examination', type: 'Examination', weight: 40, ulos: [1, 2, 3, 4, 6] },
+      { type: 'Assignment', weight: 40, ulos: [1, 2, 3, 5, 7] },
+      { type: 'Quiz', weight: 20, ulos: [1, 4] },
+      { type: 'Examination', weight: 40, ulos: [1, 2, 3, 4, 6] },
     ],
   },
 
@@ -875,8 +875,8 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'Ethics in artificial intelligence systems',
     ],
     assessment: [
-      { title: 'AI Implementation Assignments (×2)', type: 'Assignment', weight: 50, ulos: [1, 2, 3, 4, 5] },
-      { title: 'Final Examination', type: 'Examination', weight: 50, ulos: [1, 2, 3, 5, 6] },
+      { type: 'Assignment', weight: 50, ulos: [1, 2, 3, 4, 5] },
+      { type: 'Examination', weight: 50, ulos: [1, 2, 3, 5, 6] },
     ],
   },
 
@@ -908,9 +908,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'Digital forensics and incident response fundamentals',
     ],
     assessment: [
-      { title: 'Laboratory Reports (×4)', type: 'Lab', weight: 40, ulos: [2, 3, 4, 5] },
-      { title: 'Security Audit Report', type: 'Assignment', weight: 25, ulos: [1, 6, 7] },
-      { title: 'Final Examination', type: 'Examination', weight: 35, ulos: [1, 2, 5, 7] },
+      { type: 'Lab', weight: 40, ulos: [2, 3, 4, 5] },
+      { type: 'Assignment', weight: 25, ulos: [1, 6, 7] },
+      { type: 'Examination', weight: 35, ulos: [1, 2, 5, 7] },
     ],
   },
 
@@ -940,9 +940,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'Ethics, privacy, and regulation in IoT',
     ],
     assessment: [
-      { title: 'IoT Prototype Project', type: 'Project', weight: 50, ulos: [1, 2, 3, 4, 5] },
-      { title: 'Laboratory Reports (×3)', type: 'Lab', weight: 20, ulos: [2, 3] },
-      { title: 'Final Examination', type: 'Examination', weight: 30, ulos: [1, 4, 5, 6] },
+      { type: 'Project', weight: 50, ulos: [1, 2, 3, 4, 5] },
+      { type: 'Lab', weight: 20, ulos: [2, 3] },
+      { type: 'Examination', weight: 30, ulos: [1, 4, 5, 6] },
     ],
   },
 
@@ -973,9 +973,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'AI ethics, safety, and societal impact',
     ],
     assessment: [
-      { title: 'Assignment 1 – Search Algorithms', type: 'Assignment', weight: 25, ulos: [2, 3] },
-      { title: 'Assignment 2 – Intelligent Agent', type: 'Assignment', weight: 35, ulos: [4, 5, 6] },
-      { title: 'Final Examination', type: 'Examination', weight: 40, ulos: [1, 2, 4, 6, 7] },
+      { type: 'Assignment', weight: 25, ulos: [2, 3] },
+      { type: 'Assignment', weight: 35, ulos: [4, 5, 6] },
+      { type: 'Examination', weight: 40, ulos: [1, 2, 4, 6, 7] },
     ],
   },
 
@@ -1005,9 +1005,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'AI ethics, bias, and responsible deployment',
     ],
     assessment: [
-      { title: 'Practical Assignments (×2)', type: 'Assignment', weight: 40, ulos: [2, 3, 4] },
-      { title: 'AI Application Report', type: 'Assignment', weight: 20, ulos: [1, 5, 6] },
-      { title: 'Final Examination', type: 'Examination', weight: 40, ulos: [1, 3, 4, 5, 6] },
+      { type: 'Assignment', weight: 40, ulos: [2, 3, 4] },
+      { type: 'Assignment', weight: 20, ulos: [1, 5, 6] },
+      { type: 'Examination', weight: 40, ulos: [1, 3, 4, 5, 6] },
     ],
   },
 
@@ -1037,9 +1037,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'Network management: SNMP and monitoring tools',
     ],
     assessment: [
-      { title: 'Laboratory Reports (×3)', type: 'Lab', weight: 30, ulos: [2, 5] },
-      { title: 'Network Design Assignment', type: 'Assignment', weight: 30, ulos: [1, 2, 3, 4] },
-      { title: 'Final Examination', type: 'Examination', weight: 40, ulos: [1, 3, 4, 5, 6] },
+      { type: 'Lab', weight: 30, ulos: [2, 5] },
+      { type: 'Assignment', weight: 30, ulos: [1, 2, 3, 4] },
+      { type: 'Examination', weight: 40, ulos: [1, 3, 4, 5, 6] },
     ],
   },
 
@@ -1069,9 +1069,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'Forensic reporting: structure, content, and expert testimony',
     ],
     assessment: [
-      { title: 'Forensic Investigation Labs (×3)', type: 'Lab', weight: 45, ulos: [2, 3, 4, 5] },
-      { title: 'Forensic Report', type: 'Assignment', weight: 25, ulos: [1, 6] },
-      { title: 'Final Examination', type: 'Examination', weight: 30, ulos: [1, 2, 3, 6] },
+      { type: 'Lab', weight: 45, ulos: [2, 3, 4, 5] },
+      { type: 'Assignment', weight: 25, ulos: [1, 6] },
+      { type: 'Examination', weight: 30, ulos: [1, 2, 3, 6] },
     ],
   },
 
@@ -1101,9 +1101,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'Usability testing: methods and iterative design',
     ],
     assessment: [
-      { title: 'UI Design Project', type: 'Project', weight: 50, ulos: [2, 3, 4, 6] },
-      { title: 'Usability Evaluation Report', type: 'Assignment', weight: 20, ulos: [1, 5, 6] },
-      { title: 'Final Examination', type: 'Examination', weight: 30, ulos: [1, 3, 5, 6] },
+      { type: 'Project', weight: 50, ulos: [2, 3, 4, 6] },
+      { type: 'Assignment', weight: 20, ulos: [1, 5, 6] },
+      { type: 'Examination', weight: 30, ulos: [1, 3, 5, 6] },
     ],
   },
 
@@ -1133,9 +1133,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'Narrative visualisation and data storytelling',
     ],
     assessment: [
-      { title: 'Visualisation Assignments (×2)', type: 'Assignment', weight: 40, ulos: [1, 2, 3, 4] },
-      { title: 'Interactive Dashboard Project', type: 'Project', weight: 40, ulos: [3, 5, 6] },
-      { title: 'Final Examination', type: 'Examination', weight: 20, ulos: [1, 2, 4, 6] },
+      { type: 'Assignment', weight: 40, ulos: [1, 2, 3, 4] },
+      { type: 'Project', weight: 40, ulos: [3, 5, 6] },
+      { type: 'Examination', weight: 20, ulos: [1, 2, 4, 6] },
     ],
   },
 
@@ -1165,9 +1165,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'Prototype demonstration and project retrospective',
     ],
     assessment: [
-      { title: 'Project Proposal & Plan', type: 'Assignment', weight: 20, ulos: [1, 2, 3] },
-      { title: 'Working Prototype', type: 'Project', weight: 50, ulos: [3, 4, 6] },
-      { title: 'Demonstration & Presentation', type: 'Presentation', weight: 30, ulos: [5, 6] },
+      { type: 'Assignment', weight: 20, ulos: [1, 2, 3] },
+      { type: 'Project', weight: 50, ulos: [3, 4, 6] },
+      { type: 'Presentation', weight: 30, ulos: [5, 6] },
     ],
   },
 
@@ -1198,9 +1198,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'Ethics in machine learning: bias, fairness, and transparency',
     ],
     assessment: [
-      { title: 'Machine Learning Pipeline Project', type: 'Project', weight: 40, ulos: [2, 3, 4, 5, 6] },
-      { title: 'Assignments (×2)', type: 'Assignment', weight: 30, ulos: [1, 2, 3, 7] },
-      { title: 'Final Examination', type: 'Examination', weight: 30, ulos: [1, 4, 5, 7] },
+      { type: 'Project', weight: 40, ulos: [2, 3, 4, 5, 6] },
+      { type: 'Assignment', weight: 30, ulos: [1, 2, 3, 7] },
+      { type: 'Examination', weight: 30, ulos: [1, 4, 5, 7] },
     ],
   },
 
@@ -1230,9 +1230,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'Final reflection: learning outcomes and future directions',
     ],
     assessment: [
-      { title: 'Placement Supervisor Report', type: 'Lab', weight: 30, ulos: [1, 3, 5] },
-      { title: 'Reflective Journal', type: 'Assignment', weight: 30, ulos: [2, 4, 5] },
-      { title: 'Professional Portfolio & Presentation', type: 'Presentation', weight: 40, ulos: [1, 2, 4, 6] },
+      { type: 'Lab', weight: 30, ulos: [1, 3, 5] },
+      { type: 'Assignment', weight: 30, ulos: [2, 4, 5] },
+      { type: 'Presentation', weight: 40, ulos: [1, 2, 4, 6] },
     ],
   },
 
@@ -1262,9 +1262,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'EA in digital transformation programs',
     ],
     assessment: [
-      { title: 'Enterprise Architecture Model', type: 'Assignment', weight: 40, ulos: [2, 3, 4, 5] },
-      { title: 'EA Strategy Report', type: 'Assignment', weight: 30, ulos: [1, 5, 6] },
-      { title: 'Final Examination', type: 'Examination', weight: 30, ulos: [1, 2, 3, 6] },
+      { type: 'Assignment', weight: 40, ulos: [2, 3, 4, 5] },
+      { type: 'Assignment', weight: 30, ulos: [1, 5, 6] },
+      { type: 'Examination', weight: 30, ulos: [1, 2, 3, 6] },
     ],
   },
 
@@ -1295,9 +1295,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'Project closure: lessons learned and handover',
     ],
     assessment: [
-      { title: 'Project Plan', type: 'Assignment', weight: 40, ulos: [1, 2, 3, 4] },
-      { title: 'Risk Management Report', type: 'Assignment', weight: 20, ulos: [5, 7] },
-      { title: 'Final Examination', type: 'Examination', weight: 40, ulos: [1, 5, 6, 7] },
+      { type: 'Assignment', weight: 40, ulos: [1, 2, 3, 4] },
+      { type: 'Assignment', weight: 20, ulos: [5, 7] },
+      { type: 'Examination', weight: 40, ulos: [1, 5, 6, 7] },
     ],
   },
 
@@ -1327,9 +1327,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'Strategic leadership and governance',
     ],
     assessment: [
-      { title: 'Strategic Analysis Report', type: 'Assignment', weight: 40, ulos: [1, 2, 3, 6] },
-      { title: 'Case Study Presentation', type: 'Presentation', weight: 20, ulos: [3, 4, 6] },
-      { title: 'Final Examination', type: 'Examination', weight: 40, ulos: [1, 2, 4, 5, 6] },
+      { type: 'Assignment', weight: 40, ulos: [1, 2, 3, 6] },
+      { type: 'Presentation', weight: 20, ulos: [3, 4, 6] },
+      { type: 'Examination', weight: 40, ulos: [1, 2, 4, 5, 6] },
     ],
   },
 
@@ -1359,9 +1359,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'Ethical leadership and corporate governance',
     ],
     assessment: [
-      { title: 'Leadership Reflection Portfolio', type: 'Assignment', weight: 35, ulos: [3, 4, 6] },
-      { title: 'Leadership Case Analysis', type: 'Assignment', weight: 25, ulos: [1, 2, 5] },
-      { title: 'Final Examination', type: 'Examination', weight: 40, ulos: [1, 2, 3, 5, 6] },
+      { type: 'Assignment', weight: 35, ulos: [3, 4, 6] },
+      { type: 'Assignment', weight: 25, ulos: [1, 2, 5] },
+      { type: 'Examination', weight: 40, ulos: [1, 2, 3, 5, 6] },
     ],
   },
 
@@ -1391,9 +1391,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'Communicating statistical results: tables, figures, and reports',
     ],
     assessment: [
-      { title: 'Modelling Assignments (×2)', type: 'Assignment', weight: 40, ulos: [1, 2, 3, 4] },
-      { title: 'Data Analysis Project', type: 'Project', weight: 30, ulos: [3, 5, 6] },
-      { title: 'Final Examination', type: 'Examination', weight: 30, ulos: [1, 2, 4, 5, 6] },
+      { type: 'Assignment', weight: 40, ulos: [1, 2, 3, 4] },
+      { type: 'Project', weight: 30, ulos: [3, 5, 6] },
+      { type: 'Examination', weight: 30, ulos: [1, 2, 4, 5, 6] },
     ],
   },
 
@@ -1423,9 +1423,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'Continuous integration and automated testing pipelines',
     ],
     assessment: [
-      { title: 'Test Plan & Test Cases', type: 'Assignment', weight: 30, ulos: [1, 2, 4] },
-      { title: 'Automated Testing Implementation', type: 'Assignment', weight: 40, ulos: [3, 5, 6] },
-      { title: 'Final Examination', type: 'Examination', weight: 30, ulos: [1, 2, 5, 6] },
+      { type: 'Assignment', weight: 30, ulos: [1, 2, 4] },
+      { type: 'Assignment', weight: 40, ulos: [3, 5, 6] },
+      { type: 'Examination', weight: 30, ulos: [1, 2, 5, 6] },
     ],
   },
 
@@ -1455,9 +1455,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'Network security auditing and compliance',
     ],
     assessment: [
-      { title: 'Security Configuration Labs (×3)', type: 'Lab', weight: 40, ulos: [2, 3, 4, 5] },
-      { title: 'Secure Network Design', type: 'Assignment', weight: 30, ulos: [1, 2, 6] },
-      { title: 'Final Examination', type: 'Examination', weight: 30, ulos: [1, 3, 5, 6] },
+      { type: 'Lab', weight: 40, ulos: [2, 3, 4, 5] },
+      { type: 'Assignment', weight: 30, ulos: [1, 2, 6] },
+      { type: 'Examination', weight: 30, ulos: [1, 3, 5, 6] },
     ],
   },
 
@@ -1489,9 +1489,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'Network automation and programmability',
     ],
     assessment: [
-      { title: 'Distributed Systems Implementation', type: 'Assignment', weight: 40, ulos: [3, 4, 6] },
-      { title: 'SDN Configuration Project', type: 'Project', weight: 30, ulos: [2, 5] },
-      { title: 'Final Examination', type: 'Examination', weight: 30, ulos: [1, 2, 3, 5, 6] },
+      { type: 'Assignment', weight: 40, ulos: [3, 4, 6] },
+      { type: 'Project', weight: 30, ulos: [2, 5] },
+      { type: 'Examination', weight: 30, ulos: [1, 2, 3, 5, 6] },
     ],
   },
 
@@ -1521,9 +1521,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'Red team vs. blue team exercises and purple teaming',
     ],
     assessment: [
-      { title: 'Security Architecture Design', type: 'Assignment', weight: 40, ulos: [2, 3, 5, 6] },
-      { title: 'Threat Modelling Report', type: 'Assignment', weight: 30, ulos: [1, 4, 6] },
-      { title: 'Final Examination', type: 'Examination', weight: 30, ulos: [1, 2, 3, 4] },
+      { type: 'Assignment', weight: 40, ulos: [2, 3, 5, 6] },
+      { type: 'Assignment', weight: 30, ulos: [1, 4, 6] },
+      { type: 'Examination', weight: 30, ulos: [1, 2, 3, 4] },
     ],
   },
 
@@ -1553,9 +1553,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'Capstone data analysis project',
     ],
     assessment: [
-      { title: 'Data Analysis Project', type: 'Project', weight: 50, ulos: [1, 2, 3, 5, 6] },
-      { title: 'Assignments (×2)', type: 'Assignment', weight: 30, ulos: [1, 3, 4, 5] },
-      { title: 'Final Examination', type: 'Examination', weight: 20, ulos: [2, 3, 5, 6] },
+      { type: 'Project', weight: 50, ulos: [1, 2, 3, 5, 6] },
+      { type: 'Assignment', weight: 30, ulos: [1, 3, 4, 5] },
+      { type: 'Examination', weight: 20, ulos: [2, 3, 5, 6] },
     ],
   },
 
@@ -1585,9 +1585,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'Project demonstration and viva preparation',
     ],
     assessment: [
-      { title: 'Project Report', type: 'Assignment', weight: 50, ulos: [1, 2, 4, 5] },
-      { title: 'Working Implementation', type: 'Project', weight: 30, ulos: [3, 4] },
-      { title: 'Viva Presentation', type: 'Presentation', weight: 20, ulos: [5, 6] },
+      { type: 'Assignment', weight: 50, ulos: [1, 2, 4, 5] },
+      { type: 'Project', weight: 30, ulos: [3, 4] },
+      { type: 'Presentation', weight: 20, ulos: [5, 6] },
     ],
   },
 
@@ -1617,9 +1617,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'Model deployment and inference optimisation',
     ],
     assessment: [
-      { title: 'Deep Learning Assignments (×2)', type: 'Assignment', weight: 40, ulos: [1, 2, 3, 6] },
-      { title: 'Research Project', type: 'Project', weight: 40, ulos: [4, 5, 6] },
-      { title: 'Final Examination', type: 'Examination', weight: 20, ulos: [1, 3, 4, 5] },
+      { type: 'Assignment', weight: 40, ulos: [1, 2, 3, 6] },
+      { type: 'Project', weight: 40, ulos: [4, 5, 6] },
+      { type: 'Examination', weight: 20, ulos: [1, 3, 4, 5] },
     ],
   },
 
@@ -1649,9 +1649,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'Milestone presentations and progress reviews',
     ],
     assessment: [
-      { title: 'Project Proposal & Requirements Specification', type: 'Assignment', weight: 30, ulos: [1, 2, 7] },
-      { title: 'System Design & Architecture', type: 'Assignment', weight: 30, ulos: [3, 4, 7] },
-      { title: 'Working Prototype & Presentation', type: 'Presentation', weight: 40, ulos: [4, 5, 6] },
+      { type: 'Assignment', weight: 30, ulos: [1, 2, 7] },
+      { type: 'Assignment', weight: 30, ulos: [3, 4, 7] },
+      { type: 'Presentation', weight: 40, ulos: [4, 5, 6] },
     ],
   },
 
@@ -1681,9 +1681,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'Professional project closure',
     ],
     assessment: [
-      { title: 'Completed System & Test Evidence', type: 'Project', weight: 40, ulos: [1, 2, 3] },
-      { title: 'Handover Documentation', type: 'Assignment', weight: 20, ulos: [3, 4] },
-      { title: 'Final Stakeholder Presentation', type: 'Presentation', weight: 40, ulos: [5, 6] },
+      { type: 'Project', weight: 40, ulos: [1, 2, 3] },
+      { type: 'Assignment', weight: 20, ulos: [3, 4] },
+      { type: 'Presentation', weight: 40, ulos: [5, 6] },
     ],
   },
 
@@ -1713,9 +1713,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'Sentiment analysis, text classification, and question answering',
     ],
     assessment: [
-      { title: 'NLP Pipeline Assignments (×2)', type: 'Assignment', weight: 40, ulos: [1, 2, 3, 4] },
-      { title: 'NLP Application Project', type: 'Project', weight: 40, ulos: [5, 6] },
-      { title: 'Final Examination', type: 'Examination', weight: 20, ulos: [2, 3, 4, 5] },
+      { type: 'Assignment', weight: 40, ulos: [1, 2, 3, 4] },
+      { type: 'Project', weight: 40, ulos: [5, 6] },
+      { type: 'Examination', weight: 20, ulos: [2, 3, 4, 5] },
     ],
   },
 
@@ -1745,9 +1745,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'Ethics and corporate social responsibility in strategy',
     ],
     assessment: [
-      { title: 'Strategic Innovation Plan', type: 'Assignment', weight: 40, ulos: [1, 2, 4, 5] },
-      { title: 'Case Analysis & Presentation', type: 'Presentation', weight: 30, ulos: [3, 4, 6] },
-      { title: 'Final Examination', type: 'Examination', weight: 30, ulos: [1, 2, 3, 6] },
+      { type: 'Assignment', weight: 40, ulos: [1, 2, 4, 5] },
+      { type: 'Presentation', weight: 30, ulos: [3, 4, 6] },
+      { type: 'Examination', weight: 30, ulos: [1, 2, 3, 6] },
     ],
   },
 
@@ -1777,9 +1777,9 @@ export const MOCK_UNIT_DETAILS: Record<string, DetailExtra> = {
       'Engineering leadership and decision-making frameworks',
     ],
     assessment: [
-      { title: 'Software Architecture & Design Project', type: 'Project', weight: 50, ulos: [1, 3, 4, 6] },
-      { title: 'CD Pipeline Implementation', type: 'Assignment', weight: 25, ulos: [2, 5] },
-      { title: 'Final Examination', type: 'Examination', weight: 25, ulos: [1, 3, 5, 6] },
+      { type: 'Project', weight: 50, ulos: [1, 3, 4, 6] },
+      { type: 'Assignment', weight: 25, ulos: [2, 5] },
+      { type: 'Examination', weight: 25, ulos: [1, 3, 5, 6] },
     ],
   },
 }

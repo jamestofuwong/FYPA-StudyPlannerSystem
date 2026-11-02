@@ -30,7 +30,8 @@ const IN_PROGRESS_STATUSES = new Set(['enrolled', 'in progress', 'current', 'reg
 
 export const getPlannerMissingUnitsWorkflow: Workflow<Input, Output> = {
   id: 'get_planner_missing_units',
-  description: 'Returns only the list of units a student still needs to complete from a specific planner. Use this when the user asks what units a student is missing, what they still need to take, or how many units are left.',
+  description: 'Lists by name the units that a student has NOT taken from a planner. Use this when the user asks which units a student is missing or has not taken from a plan. Not for counts of what is left.',
+  keywords: ['missing', 'lacks', 'has not taken', 'not taken', 'which units missing', 'gaps'],
   params: [
     {
       name: 'studentId',

@@ -31,7 +31,8 @@ const PASSING_GRADES = new Set([
 
 export const getStudentAvailableUnitsFromPlannerWorkflow: Workflow<Input, Output> = {
   id: 'get_student_available_units_from_planner',
-  description: 'Shows which units in a study planner a student has not yet completed. Use this when the user wants to see what a student still needs to finish, or how many units remain in their plan.',
+  description: 'Counts the planner units that a student has not completed yet, and lists them. Use this when the user asks how many units remain or what is left to finish in the plan. Not for the full done and not done comparison.',
+  keywords: ['units left', 'remaining', 'how many left', 'still need to finish', 'to complete', 'remaining units', 'outstanding'],
   params: [
     {
       name: 'studentId',

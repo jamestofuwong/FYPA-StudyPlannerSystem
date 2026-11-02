@@ -1,5 +1,6 @@
 import { extractPlannerFromPdf } from '@core/services/plannerImport/plannerImportService';
 import { spawn } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
 
 jest.mock('node:child_process', () => ({
   spawn: jest.fn().mockReturnValue({
@@ -14,7 +15,7 @@ jest.mock('node:child_process', () => ({
 
 describe('Planner import process failures', () => {
   const successPayload = {
-    planner: { majorName: 'Computer Science' },
+    planner: { majorName: 'Computer Science', course: 'Café München' },
     report: 'Imported successfully',
   };
 
@@ -33,30 +34,39 @@ describe('Planner import process failures', () => {
     jest.clearAllMocks();
   });
 
-  test('returns the parsed result and sanitizes the uploaded filename', async () => {
-    (spawn as jest.Mock).mockReturnValueOnce(successfulChild());
+  // Verifies the uploaded PDF is passed through a sanitized temp file and UTF-8 results are decoded.
+  test('writes a sanitized temporary PDF, decodes UTF-8 JSON, and cleans up after success', async () => {
+    const pdfBuffer = Buffer.from('pdf');
+    let tempFile: string | undefined;
+    (spawn as jest.Mock).mockImplementationOnce((_executable: string, args: string[]) => {
+      tempFile = args[1];
+      expect(readFileSync(args[1])).toEqual(pdfBuffer);
+      return successfulChild();
+    });
 
-    const result = await extractPlannerFromPdf(Buffer.from('pdf'), {
+    const result = await extractPlannerFromPdf(pdfBuffer, {
       filename: '../My Planner (Final)',
-      useLlm: false,
     });
 
     expect(result).toEqual(successPayload);
-    expect(spawn).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.arrayContaining([
-        expect.stringMatching(/My_Planner__Final_\.pdf$/),
-        '--no-llm',
-      ]),
-      expect.objectContaining({
-        env: expect.objectContaining({
-          STUDY_PLANNER_OLLAMA_URL: 'http://127.0.0.1:11434',
-        }),
-        stdio: ['ignore', 'pipe', 'pipe'],
+    const [executable, args, options] = (spawn as jest.Mock).mock.calls[0];
+    expect(executable).toBe(process.env.PYTHON_EXECUTABLE?.trim() || 'python3');
+    expect(args).toHaveLength(2);
+    expect(args[0]).toMatch(/[\\/]plannerStructureService\.py$/);
+    expect(args[1]).toMatch(/My_Planner__Final_\.pdf$/);
+    expect(options).toEqual(expect.objectContaining({
+      cwd: process.cwd(),
+      env: expect.objectContaining({
+        PYTHONIOENCODING: 'utf-8',
+        PYTHONUTF8: '1',
       }),
-    );
+      stdio: ['ignore', 'pipe', 'pipe'],
+    }));
+    expect(tempFile).toBeDefined();
+    expect(existsSync(tempFile!)).toBe(false);
   });
 
+  // Verifies packaged Electron runs the bundled extractor binary.
   test('uses the packaged extractor binary when Electron resourcesPath is available', async () => {
     const processWithResources = process as NodeJS.Process & { resourcesPath?: string };
     const originalDescriptor = Object.getOwnPropertyDescriptor(process, 'resourcesPath');
@@ -83,47 +93,12 @@ describe('Planner import process failures', () => {
     }
   });
 
-  test('preserves an explicitly configured Ollama URL', async () => {
-    const previousUrl = process.env.STUDY_PLANNER_OLLAMA_URL;
-    process.env.STUDY_PLANNER_OLLAMA_URL = 'http://localhost:9999';
-    (spawn as jest.Mock).mockReturnValueOnce(successfulChild());
-
-    try {
-      await extractPlannerFromPdf(Buffer.from('pdf'));
-
-      expect(spawn).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.any(Array),
-        expect.objectContaining({
-          env: expect.objectContaining({
-            STUDY_PLANNER_OLLAMA_URL: 'http://localhost:9999',
-          }),
-        }),
-      );
-    } finally {
-      if (previousUrl === undefined) {
-        delete process.env.STUDY_PLANNER_OLLAMA_URL;
-      } else {
-        process.env.STUDY_PLANNER_OLLAMA_URL = previousUrl;
-      }
-    }
-  });
-
-  test('passes model and retry options to the parser process', async () => {
-    const options = { useLlm: false, model: 'gpt-4', llmRetries: 3 };
-
-    await expect(extractPlannerFromPdf(Buffer.from(''), options)).rejects.toThrow('Simulated Error');
-    expect(spawn).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.arrayContaining(['--model', 'gpt-4', '--llm-retries', '3']),
-      expect.any(Object),
-    );
-  });
-
+  // Verifies a structured error returned by the extractor becomes a service error.
   test('surfaces a structured parser error', async () => {
     await expect(extractPlannerFromPdf(Buffer.from(''))).rejects.toThrow('Simulated Error');
   });
 
+  // Verifies empty subprocess output is rejected as missing JSON.
   test('rejects an empty parser response', async () => {
     (spawn as jest.Mock).mockReturnValueOnce({
       stdout: {
@@ -136,6 +111,7 @@ describe('Planner import process failures', () => {
     await expect(extractPlannerFromPdf(Buffer.from(''))).rejects.toThrow("no JSON output");
   });
 
+  // Verifies JSON without the planner result contract is rejected.
   test('rejects a parser response with an unexpected shape', async () => {
     (spawn as jest.Mock).mockReturnValueOnce({
       stdout: {
@@ -145,6 +121,8 @@ describe('Planner import process failures', () => {
       stderr: { on: jest.fn() },
       on: (evt: string, cb: (value: number) => void) => evt === 'close' && cb(0),
     });
-    await expect(extractPlannerFromPdf(Buffer.from(''))).rejects.toThrow("unexpected payload shape");
+    await expect(extractPlannerFromPdf(Buffer.from(''))).rejects.toThrow(
+      'Planner import returned no valid JSON payload.',
+    );
   });
 });

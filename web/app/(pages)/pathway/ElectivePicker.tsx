@@ -20,6 +20,8 @@ type Props = {
   loading: boolean;
   /** Calendar term the choice will run in, for the offering hint. */
   term: 1 | 2;
+  /** Optional callback to check if prerequisites are unmet for a given unit */
+  getUnmetPrereqReason?: (unit: SchedulableUnit) => string | null;
   /** Set only when the advisor picks the semester too, as when filling a gap. */
   slots?: PickerSlot[];
   slotKey?: string;
@@ -40,6 +42,7 @@ export default function ElectivePicker({
   prefixes,
   loading,
   term,
+  getUnmetPrereqReason,
   slots,
   slotKey,
   onSlotChange,
@@ -61,16 +64,31 @@ export default function ElectivePicker({
 
   const renderOption = (unit: SchedulableUnit, source: PickerSource) => {
     const hint = offeringHint(unit, term);
+    const isOffered = !unit.offeringSemesters || unit.offeringSemesters.length === 0 || unit.offeringSemesters.includes(term);
+    const unmetPrereqReason = getUnmetPrereqReason?.(unit) ?? null;
+    const isSelectable = isOffered && !unmetPrereqReason;
+
+    // Show why a unit is disabled (not offered, or a prerequisite is unmet). A unit with no placeable semester is
+    // still selectable, but it says where it runs ("only runs in winter") or that its offering is unknown.
+    const statusHint = !isOffered
+      ? hint
+      : unmetPrereqReason
+      ? unmetPrereqReason
+      : hint || null;
+
     return (
       <li key={unit.code}>
         <button
           type="button"
           className={styles.catalogueItem}
-          onClick={() => onChoose(unit, source)}
+          disabled={!isSelectable}
+          style={!isSelectable ? { opacity: 0.38, cursor: 'not-allowed' } : undefined}
+          title={!isSelectable ? (statusHint ?? undefined) : undefined}
+          onClick={() => isSelectable && onChoose(unit, source)}
         >
           <span className={styles.catalogueCode}>{unit.code}</span>
           <span className={styles.catalogueName}>{unit.name}</span>
-          {hint && <span className={styles.catalogueHint}>· {hint}</span>}
+          {statusHint && <span className={styles.catalogueHint}>· {statusHint}</span>}
         </button>
       </li>
     );

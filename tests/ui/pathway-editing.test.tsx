@@ -136,6 +136,8 @@ beforeEach(() => {
           success: true,
           data: generatedPlan(),
           units: PLAN_UNITS,
+          // section one of the elective picker: the planner's own elective list
+          electiveCandidates: PLAN_UNITS.filter((u) => u.category === 'elective'),
           intakeSemester: 1,
           requirements: REQUIREMENTS,
           completedUnits: [],
@@ -163,6 +165,16 @@ const confirmRemove = async (code: string) => {
   fireEvent.click(await screen.findByRole('button', { name: 'Remove Unit' }));
 };
 
+/**
+ * Electives are not offered back by name. An advisor adds an "Elective Slot" to a semester, then chooses the unit for
+ * it in the elective picker (the same picker that Swap opens).
+ */
+const fillSlotWith = async (pickerIndex: number, code: string) => {
+  fireEvent.change(pickers()[pickerIndex], { target: { value: 'ELECTIVE' } });
+  fireEvent.click(await screen.findByText('+ Select Unit'));
+  fireEvent.click(await within(await screen.findByRole('dialog')).findByText(code));
+};
+
 describe('pathway editing', () => {
   test('removing a unit offers it again in the add-unit picker', async () => {
     render(<Harness />);
@@ -181,10 +193,11 @@ describe('pathway editing', () => {
     render(<Harness />);
     await generate();
 
-    const advRow = screen.getByText('ADV').closest('tr') as HTMLElement;
-    fireEvent.change(within(advRow).getByTitle('Move to another semester'), { target: { value: '1-1' } });
+    const advRow = () => screen.getByText('ADV').closest('tr') as HTMLElement;
+    fireEvent.change(within(advRow()).getByTitle('Move to another semester'), { target: { value: '1-1' } });
 
-    expect(await screen.findByText(/ADV needs INTRO, which is not in this plan/i)).toBeTruthy();
+    // the row carries the warning (the banner repeats it). The row is a new element after the move.
+    await waitFor(() => expect(within(advRow()).getByText(/ADV needs INTRO, which is not in this plan/i)).toBeTruthy());
   });
 
   test('a fifth standard unit shows over capacity on the semester header', async () => {
@@ -223,21 +236,25 @@ describe('pathway editing', () => {
     await confirmRemove('E1');
     await screen.findByText(/Electives total/i);
 
-    // Put it back in the other semester, so the category total is whole again
-    fireEvent.change(pickers()[0], { target: { value: 'E1' } });
+    // Fill a slot in the other semester with the same unit, so the category total is whole again
+    await fillSlotWith(0, 'E1');
 
     await waitFor(() => expect(screen.queryByText(/Electives total/i)).toBeNull());
   });
 
-  test("a summer/winter unit's warning survives an unrelated edit", async () => {
+  // A summer/winter-only unit that is not in a semester is handled by the break milestones, so the plan warning
+  // banner does not repeat it, before or after an unrelated edit. The unit is still offered in the add-unit picker.
+  test("an unplaced summer/winter unit raises no plan warning, before or after an unrelated edit", async () => {
     render(<Harness />);
     await generate();
 
-    expect(screen.getByText(/ICT20016\*Optional is only offered in summer\/winter/i)).toBeTruthy();
+    expect(screen.queryByText(/ICT20016\*Optional is only offered in summer\/winter/i)).toBeNull();
+    expect(within(pickers()[0]).getByText(/^ICT20016\*Optional ·.*only runs in winter/)).toBeTruthy();
 
     await confirmRemove('C1');
 
-    expect(screen.getByText(/ICT20016\*Optional is only offered in summer\/winter/i)).toBeTruthy();
+    expect(screen.queryByText(/ICT20016\*Optional is only offered in summer\/winter/i)).toBeNull();
+    expect(within(pickers()[0]).getByText(/^ICT20016\*Optional ·.*only runs in winter/)).toBeTruthy();
   });
 
   test('placing the summer/winter unit replaces the carried warning', async () => {
@@ -476,7 +493,7 @@ describe('terms named by month', () => {
 
   test('a unit placed by hand in a term it does not run says so, not "could not be fitted"', async () => {
     // Aug/Sep only. Slot 2 of a September intake is a Feb/Mar term.
-    const augSepOnly = planUnit('COS10082', 'Applied Analytics', 'elective', {
+    const augSepOnly = planUnit('COS10082', 'Applied Analytics', 'core', {
       offeringSemesters: [2],
       allOfferingTerms: [2],
     });
@@ -590,6 +607,7 @@ describe('prescribed electives are compulsory', () => {
             success: true,
             data: plan,
             units: [...PLAN_UNITS, PRESCRIBED, SPARE],
+            electiveCandidates: [...PLAN_UNITS.filter((u) => u.category === 'elective'), SPARE],
             intakeSemester: 1,
             requirements: [
               { category: 'core', creditPoints: 62.5, unitCount: 5, planCategories: ['core'] },
@@ -603,16 +621,20 @@ describe('prescribed electives are compulsory', () => {
     }) as unknown as typeof fetch;
   });
 
+  // C4 is core and deliberately left out of the generated plan, so its own "required to graduate" warning is there from
+  // the start. These tests look at what is said about SWE30009 and the elective total, and leave C4's warning alone.
+  const compulsoryText = () =>
+    screen.queryAllByText(/required to graduate but .* not in this plan/i).map((el) => el.textContent ?? '').join(' ');
+
   test('removing a prescribed elective reports it as compulsory missing', async () => {
     render(<Harness />);
     await generate();
 
-    expect(screen.queryByText(/required to graduate/i)).toBeNull();
+    expect(compulsoryText()).not.toMatch(/SWE30009/);
 
     await confirmRemove('SWE30009');
 
-    const missing = await screen.findByText(/required to graduate but .* not in this plan/i);
-    expect(missing.textContent).toMatch(/SWE30009/);
+    await waitFor(() => expect(compulsoryText()).toMatch(/SWE30009/));
   });
 
   test('replacing it with another elective does not silence the warning', async () => {
@@ -620,15 +642,14 @@ describe('prescribed electives are compulsory', () => {
     await generate();
 
     await confirmRemove('SWE30009');
-    await screen.findByText(/required to graduate but .* not in this plan/i);
+    await waitFor(() => expect(compulsoryText()).toMatch(/SWE30009/));
 
     // The credit total adds up again, but the compulsory unit is still missing
-    fireEvent.change(pickers()[1], { target: { value: 'E3' } });
+    await fillSlotWith(1, 'E3');
 
     await waitFor(() => expect(screen.getByText('E3')).toBeTruthy());
     expect(screen.queryByText(/Electives total/i)).toBeNull();
-    const missing = screen.getByText(/required to graduate but .* not in this plan/i);
-    expect(missing.textContent).toMatch(/SWE30009/);
+    expect(compulsoryText()).toMatch(/SWE30009/);
   });
 
   test('a plain elective removed and replaced raises nothing', async () => {
@@ -636,13 +657,11 @@ describe('prescribed electives are compulsory', () => {
     await generate();
 
     await confirmRemove('E1');
-    fireEvent.change(pickers()[1], { target: { value: 'E3' } });
+    await fillSlotWith(1, 'E3');
 
     await waitFor(() => expect(screen.getByText('E3')).toBeTruthy());
-    // C4 is core and deliberately unplaced, so its own warning stands; the
-    // swapped-out elective raises none of its own
-    const compulsory = screen.queryAllByText(/required to graduate but .* not in this plan/i);
-    expect(compulsory.map((el) => el.textContent ?? '').join(' ')).not.toMatch(/E1/);
+    // the swapped-out elective raises no warning of its own
+    expect(compulsoryText()).not.toMatch(/E1/);
     expect(screen.queryByText(/Electives total/i)).toBeNull();
   });
 });
@@ -772,5 +791,142 @@ describe('removing a unit asks for confirmation', () => {
     card = within(await waitFor(() => modalCard()));
     expect(card.getByText(/Credit Shortfall/)).toBeTruthy();
     expect(card.queryByText(/Compulsory Core Unit/)).toBeNull();
+  });
+});
+
+describe('deleting a semester', () => {
+  const deleteButtons = () => screen.getAllByLabelText(/^Delete Year \d+ Semester \d+$/i);
+  const overlay = () => document.querySelector('[class*="modalOverlay"]') as HTMLElement;
+  const modalCard = () => document.querySelector('[class*="modalCard"]') as HTMLElement;
+
+  test('deleting an empty semester needs no confirmation and removes it', async () => {
+    render(<Harness />);
+    await generate();
+
+    fireEvent.click(screen.getByText('+ Add semester'));
+    await screen.findByText(/YEAR 2 · SEM 1/i);
+    expect(deleteButtons()).toHaveLength(3);
+
+    fireEvent.click(deleteButtons()[2]);
+
+    expect(screen.queryByText(/Delete this semester\?/i)).toBeNull();
+    await waitFor(() => expect(deleteButtons()).toHaveLength(2));
+    expect(screen.queryByText(/YEAR 2 · SEM 1/i)).toBeNull();
+  });
+
+  test('deleting a semester with units opens the same modal shell used for unit removal, naming the unit count', async () => {
+    render(<Harness />);
+    await generate();
+
+    // Y1 S1 holds INTRO, C1, C2, C3 (4 units)
+    fireEvent.click(deleteButtons()[0]);
+
+    const card = within(await waitFor(() => modalCard()));
+    expect(card.getByText(/Delete this semester\?/)).toBeTruthy();
+    expect(card.getByText(/4 units will be returned to the unplaced pool/i)).toBeTruthy();
+  });
+
+  test('a compulsory core unit and a broken prerequisite chain are both surfaced, reusing the unit-removal modal\'s own checks', async () => {
+    render(<Harness />);
+    await generate();
+
+    // Y1 S1 holds INTRO/C1/C2/C3, all core; ADV in Y1 S2 needs INTRO
+    fireEvent.click(deleteButtons()[0]);
+
+    const card = within(await waitFor(() => modalCard()));
+    expect(card.getByText(/Compulsory Core Units?:/)).toBeTruthy();
+    expect(card.getByText(/INTRO, C1, C2, C3/)).toBeTruthy();
+    expect(card.getByText(/Broken Prerequisite Chain/)).toBeTruthy();
+    expect(card.getByText(/depend on INTRO/i)).toBeTruthy();
+  });
+
+  test('clicking Cancel closes the modal with no change to the plan', async () => {
+    render(<Harness />);
+    await generate();
+
+    fireEvent.click(deleteButtons()[0]);
+    await screen.findByText(/Delete this semester\?/);
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+
+    expect(screen.queryByText(/Delete this semester\?/)).toBeNull();
+    expect(screen.getByText('C1', { selector: 'code' })).toBeTruthy();
+    expect(screen.getByText('INTRO', { selector: 'code' })).toBeTruthy();
+    expect(screen.queryByText('edited')).toBeNull();
+  });
+
+  test('clicking the overlay also closes the modal with no change, same as the unit-removal modal', async () => {
+    render(<Harness />);
+    await generate();
+
+    fireEvent.click(deleteButtons()[0]);
+    await screen.findByText(/Delete this semester\?/);
+    fireEvent.click(overlay());
+
+    expect(screen.queryByText(/Delete this semester\?/)).toBeNull();
+    expect(screen.getByText('C1', { selector: 'code' })).toBeTruthy();
+  });
+
+  test('confirming via "Delete Semester" removes the semester, returns its units to the picker, marks the plan edited, and toasts', async () => {
+    render(<Harness />);
+    await generate();
+
+    expect(within(pickers()[1]).queryByText(/^C1 ·/)).toBeNull();
+
+    fireEvent.click(deleteButtons()[0]);
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete Semester' }));
+
+    await waitFor(() => expect(screen.queryByText('C1', { selector: 'code' })).toBeNull());
+    expect(screen.queryByText('INTRO', { selector: 'code' })).toBeNull();
+    // The only remaining semester's picker now offers C1 again
+    expect(within(pickers()[0]).getByText(/^C1 ·/)).toBeTruthy();
+    expect(await screen.findByText('edited')).toBeTruthy();
+    expect(await screen.findByText(/Removed Year 1 Semester 1\. 4 units returned to the unplaced pool\./i)).toBeTruthy();
+  });
+
+  test('a recommended unit in the deleted semester is dropped the same way Remove would drop it', async () => {
+    const withRecommended = () => ({
+      semesters: [
+        {
+          year: 1,
+          semester: 1 as const,
+          units: [
+            { code: 'INTRO', name: 'Intro to Programming', category: 'core' },
+            { code: 'REC1', name: 'Recommended Unit', category: 'elective', recommended: true },
+          ],
+        },
+        { year: 1, semester: 2 as const, units: [{ code: 'ADV', name: 'Advanced Programming', category: 'core' }] },
+      ],
+      unschedulableUnits: [],
+      warnings: [],
+    });
+    global.fetch = jest.fn((url: string) => {
+      if (String(url).includes('/api/custom-planner')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            success: true,
+            data: withRecommended(),
+            units: PLAN_UNITS,
+            intakeSemester: 1,
+            requirements: REQUIREMENTS,
+            completedUnits: [],
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    }) as unknown as typeof fetch;
+
+    render(<Harness />);
+    await generate();
+
+    expect(screen.getByText('RECOMMENDED')).toBeTruthy();
+
+    fireEvent.click(deleteButtons()[0]);
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete Semester' }));
+
+    // Same end state removeUnit('REC1') would leave: the row (and its
+    // RECOMMENDED tag) is simply gone, no special handling either way
+    await waitFor(() => expect(screen.queryByText('REC1', { selector: 'code' })).toBeNull());
+    expect(screen.queryByText('RECOMMENDED')).toBeNull();
   });
 });

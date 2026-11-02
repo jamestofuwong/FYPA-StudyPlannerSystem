@@ -55,9 +55,28 @@ export type PlannerImportPlanner = {
   };
 };
 
+export type PlannerImportFinding = {
+  code: string;
+  type: string;
+  category: 'structural' | 'text_quality';
+  severity: 'high' | 'medium' | 'low';
+  reason: string;
+  message: string;
+  section?: string;
+  field?: string;
+  unit_code?: string;
+  year?: number;
+  semester?: number;
+  expected?: number;
+  actual?: number;
+  deficit?: number;
+};
+
 export type PlannerImportReport = {
   file_name: string;
   pdf_path: string;
+  findings: PlannerImportFinding[];
+  // Compatibility view containing structural findings only.
   validation_issues: string[];
   outcome: {
     status: string;

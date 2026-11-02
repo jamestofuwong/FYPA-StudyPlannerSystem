@@ -217,7 +217,7 @@ describe("Matching Engine Phase 2 & 3 (Jest)", () => {
       expect(payload.studentID).toBe("102785914");
     });
 
-    test("Packager - Status Detected (Line 89)", () => {
+    test("Packager - Status Detected", () => {
       const primary = makeScoreRecord({ matchPct: 90 });
       const detection = { 
         primaryMajor: primary, 
@@ -227,23 +227,23 @@ describe("Matching Engine Phase 2 & 3 (Jest)", () => {
       };
       const payload = buildDisplayPayload(makeProfile({ studentID: "123" }), detection, []);
       
-      // This triggers the branch where topAlternatives returns empty
+      // A detected major has no alternatives
       expect(payload.topAlternatives).toHaveLength(0);
     });
   });
 
-  test("Zero-Requirement Safety Coverage (Lines 77, 195, 211, 233)", () => {
+  test("A planner with no requirements scores 25%", () => {
     // 1. Create a planner where every category is empty/zero
     const hollowPlanner = makePlanner({
-      requiredCore: [],               // Triggers Line 163-164 (approx)
-      requiredMajorCore: new Set([]), // Triggers Line 176-177 (approx)
-      prescribedElectiveCategories: [], // Triggers Line 186/206 (approx)
-      freeElectiveSlotsRequired: 0,   // Triggers Line 233 (approx)
+      requiredCore: [],
+      requiredMajorCore: new Set([]),
+      prescribedElectiveCategories: [],
+      freeElectiveSlotsRequired: 0,
     });
 
     const student = makeProfile();
     
-    // 2. This execution hits the 'if (len === 0)' branches
+    // 2. Score it
     const results = scorePlanners(student, [hollowPlanner], DEFAULT_CONFIG);
 
     // Empty core/majorCore score 0 (not 1.0) by design; prescribed+free with 0 slots score 1.0
@@ -251,10 +251,10 @@ describe("Matching Engine Phase 2 & 3 (Jest)", () => {
     expect(results[0].matchPct).toBe(25);
   });
 
-  test("Detector Edge Cases - No Major and Empty List (Line 62+)", () => {
+  test("Detector Edge Cases - No Major and Empty List", () => {
     const student = makeRawStudent();
     
-    // 1. Test completely empty results (Line 108)
+    // 1. Test completely empty results
     const resultEmpty = detectMajors([], DEFAULT_CONFIG, student);
     expect(resultEmpty.status).toBe("noMajorDetected");
 
@@ -264,14 +264,4 @@ describe("Matching Engine Phase 2 & 3 (Jest)", () => {
     expect(resultLow.status).toBe("noMajorDetected");
   });
 
-  test("Coverage Booster: Zero Requirements (Lines 77, 195, 211, 233)", () => {
-    const hollowPlanner = makePlanner({
-      requiredCore: [],               // Triggers Line 77
-      prescribedElectiveCategories: [], // Triggers Line 195/211
-      freeElectiveSlotsRequired: 0,   // Triggers Line 233
-    });
-    
-    const results = scorePlanners(makeProfile(), [hollowPlanner], DEFAULT_CONFIG);
-    expect(results[0].matchPct).toBe(25);
-  });
 });

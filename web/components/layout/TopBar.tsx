@@ -1,38 +1,11 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
 import styles from './TopBar.module.css';
-
-type SessionStatus = 'idle' | 'login-pending' | 'logged-in' | 'login-error';
+import { usePortalSession } from './usePortalSession';
 
 export default function TopBar() {
-  const [sessionStatus, setSessionStatus] = useState<SessionStatus>('idle');
-
-  // Poll portal session status every 2s
-  const fetchStatus = useCallback(async () => {
-    try {
-      const res = await fetch('/api/scraper/status');
-      if (!res.ok) return;
-      const data = await res.json();
-      setSessionStatus(data.sessionStatus ?? 'idle');
-    } catch { /* ignore */ }
-  }, []);
-
-  useEffect(() => {
-    void fetchStatus();
-    const id = setInterval(fetchStatus, 2000);
-    return () => clearInterval(id);
-  }, [fetchStatus]);
-
-  const handleLogin = async () => {
-    await fetch('/api/scraper/login', { method: 'POST' });
-    setSessionStatus('login-pending');
-  };
-
-  const handleLogout = async () => {
-    await fetch('/api/scraper/logout', { method: 'POST' });
-    setSessionStatus('idle');
-  };
+  // Polls the portal session status every 2s
+  const { sessionStatus, login: handleLogin, logout: handleLogout } = usePortalSession();
 
   return (
     <header className={styles.topbar}>

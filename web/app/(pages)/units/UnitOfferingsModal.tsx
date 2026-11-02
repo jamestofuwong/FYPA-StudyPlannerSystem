@@ -3,6 +3,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import styles from './page.module.css';
 import SyncOfferingsPreviewModal from './SyncOfferingsPreviewModal';
+import { fs } from '../../../styles/tokens';
 
 type UnitWithOfferings = {
     id?: string;
@@ -49,9 +50,9 @@ export default function UnitOfferingsModal({
     // Global search query across all tables
     const [globalSearch, setGlobalSearch] = useState('');
 
-    // Collapsed state for terms (1, 2, 3, 4) and unclassified (0)
-    // By default, active terms (1, 2) and unclassified (0) can be open, or all open
-    const [collapsedSections, setCollapsedSections] = useState<Record<number, boolean>>({});
+    // Collapsed state for terms (1, 2, 3, 4) and unclassified (0). Every section starts closed.
+    const ALL_COLLAPSED: Record<number, boolean> = { 0: true, 1: true, 2: true, 3: true, 4: true };
+    const [collapsedSections, setCollapsedSections] = useState<Record<number, boolean>>(ALL_COLLAPSED);
 
     const toggleSection = (sectionId: number) => {
         setCollapsedSections((prev) => ({
@@ -61,7 +62,7 @@ export default function UnitOfferingsModal({
     };
 
     const expandAll = () => setCollapsedSections({});
-    const collapseAll = () => setCollapsedSections({ 0: true, 1: true, 2: true, 3: true, 4: true });
+    const collapseAll = () => setCollapsedSections(ALL_COLLAPSED);
 
     // Term active for adding: 1 | 2 | 3 | 4 | null
     const [activeAddTerm, setActiveAddTerm] = useState<number | null>(null);
@@ -241,7 +242,7 @@ export default function UnitOfferingsModal({
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <div>
                             <h3 className={styles.modalTitle}>Unit Offerings Manager</h3>
-                            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                            <span style={{ fontSize: fs(11), color: 'var(--text-muted)' }}>
                                 Organize scheduled unit offerings across semesters and classify pending units.
                             </span>
                         </div>
@@ -267,7 +268,7 @@ export default function UnitOfferingsModal({
                             <input
                                 type="search"
                                 className={styles.dropdownSearchInput}
-                                style={{ width: '100%', paddingLeft: 30, height: 34, fontSize: 13 }}
+                                style={{ width: '100%', paddingLeft: 30, height: 34, fontSize: fs(13) }}
                                 placeholder="Search by unit code or name across all semesters..."
                                 value={globalSearch}
                                 onChange={(e) => setGlobalSearch(e.target.value)}
@@ -280,7 +281,7 @@ export default function UnitOfferingsModal({
                             <button
                                 type="button"
                                 className={styles.addUnitInlineBtn}
-                                style={{ fontSize: 11, padding: '4px 8px' }}
+                                style={{ fontSize: fs(11), padding: '4px 8px' }}
                                 onClick={expandAll}
                                 title="Expand all semester tables"
                             >
@@ -289,7 +290,7 @@ export default function UnitOfferingsModal({
                             <button
                                 type="button"
                                 className={styles.addUnitInlineBtn}
-                                style={{ fontSize: 11, padding: '4px 8px' }}
+                                style={{ fontSize: fs(11), padding: '4px 8px' }}
                                 onClick={collapseAll}
                                 title="Collapse all semester tables"
                             >
@@ -317,7 +318,7 @@ export default function UnitOfferingsModal({
                                     style={{ cursor: 'pointer', userSelect: 'none' }}
                                     onClick={() => toggleSection(term.id)}
                                 >
-                                    <span style={{ marginRight: 6, fontSize: 12, opacity: 0.6 }}>
+                                    <span style={{ marginRight: 6, fontSize: fs(12), opacity: 0.6 }}>
                                         {isCollapsed ? '▸' : '▾'}
                                     </span>
                                     <span className={styles.termLabel}>{term.name} Offerings</span>
@@ -456,7 +457,7 @@ export default function UnitOfferingsModal({
                                     style={{ cursor: 'pointer', userSelect: 'none' }}
                                     onClick={() => toggleSection(0)}
                                 >
-                                    <span style={{ marginRight: 6, fontSize: 12, opacity: 0.6 }}>
+                                    <span style={{ marginRight: 6, fontSize: fs(12), opacity: 0.6 }}>
                                         {isUnclassifiedCollapsed ? '▸' : '▾'}
                                     </span>
                                     <span className={styles.termLabel}>Unclassified Units (No Semesters Assigned)</span>

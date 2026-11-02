@@ -6,6 +6,8 @@ import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import styles from './Nav.module.css'
 
+const NAVIGATION_TIMEOUT_MS = 8000
+
 const NAV_ITEMS = [
   { label: 'Planners', href: '/' },
   { label: 'Units', href: '/units' },
@@ -32,36 +34,36 @@ function isModifiedClick(event: React.MouseEvent) {
 export default function Nav() {
   const pathname = usePathname()
   const [pendingHref, setPendingHref] = useState<string | null>(null)
-  const [showSpinner, setShowSpinner] = useState(false)
+  const activePendingHref = pendingHref && pendingHref !== pathname ? pendingHref : null
 
   useEffect(() => {
-    setPendingHref(null)
-    setShowSpinner(false)
-  }, [pathname])
+    if (!activePendingHref) return
 
-  useEffect(() => {
-    if (!pendingHref) {
-      setShowSpinner(false)
-      return
-    }
+    const timeout = window.setTimeout(() => {
+      setPendingHref(null)
+    }, NAVIGATION_TIMEOUT_MS)
 
-    const frame = requestAnimationFrame(() => setShowSpinner(true))
-    return () => cancelAnimationFrame(frame)
-  }, [pendingHref])
+    return () => window.clearTimeout(timeout)
+  }, [activePendingHref])
 
   function onNavigate(event: React.MouseEvent<HTMLAnchorElement>, href: string) {
     if (isModifiedClick(event) || pathname === href) return
     setPendingHref(href)
   }
 
-  const displayPath = pendingHref ?? pathname
+  const displayPath = activePendingHref ?? pathname
 
   return (
     <>
       <header className={styles.header}>
         <div className={styles.inner}>
 
-          <Link href="/" className={styles.logoLink} onClick={event => onNavigate(event, '/')}>
+          <Link
+            href="/"
+            prefetch={false}
+            className={styles.logoLink}
+            onClick={event => onNavigate(event, '/')}
+          >
             <Image
               src="/swinburne-logo.jpg"
               alt="Swinburne University of Technology Sarawak"
@@ -80,6 +82,7 @@ export default function Nav() {
                   <Link
                     key={href}
                     href={href}
+                    prefetch={false}
                     className={`${styles.navItem} ${active ? styles.navItemActive : ''}`}
                     aria-current={active ? 'page' : undefined}
                     onClick={event => onNavigate(event, href)}
@@ -94,7 +97,7 @@ export default function Nav() {
         </div>
       </header>
 
-      {showSpinner && (
+      {activePendingHref && (
         <div className={styles.loadingOverlay} role="status" aria-live="polite" aria-label="Loading">
           <span className={styles.spinner} aria-hidden="true" />
           <span className={styles.loadingLabel}>Loading</span>

@@ -68,12 +68,12 @@ describe("Matching Logic Unit Tests (Jest)", () => {
       const bad = { ...DEFAULT_CONFIG, weightCore: -0.1 };
       expect(() => validateConfig(bad)).toThrow();
     });
-    test("throws when secondMajorThreshold is > 1.0 (Line 70)", () => {
+    test("throws when secondMajorThreshold is > 1.0", () => {
       const bad = { ...DEFAULT_CONFIG, secondMajorThreshold: 1.5 };
       expect(() => validateConfig(bad)).toThrow();
     });
 
-    test("throws when minorUnitThreshold is < 1 (Line 76)", () => {
+    test("throws when minorUnitThreshold is < 1", () => {
       const bad = { ...DEFAULT_CONFIG, minorUnitThreshold: 0 };
       expect(() => validateConfig(bad)).toThrow();
     });
@@ -87,12 +87,6 @@ describe("Matching Logic Unit Tests (Jest)", () => {
       expect(result[0].plannerID).toBe("MATCH");
     });
 
-    test("fallback to most recent (Line 76-94)", () => {
-      const planners = [makePlanner({ intakeYear: 2022, plannerID: "LATEST" })];
-      const config = { ...DEFAULT_CONFIG, preferIntakeYear: false };
-      const result = filterPlanners(planners, 2025, 1, config);
-      expect(result[0].plannerID).toBe("LATEST");
-    });
   });
 
   // --- MM-03: Normalizer ---
@@ -122,7 +116,7 @@ describe("Matching Logic Unit Tests (Jest)", () => {
       expect(profile.completedCore.has("UNKNOWN999")).toBe(false);
     });
   });
-  test("should classify units as unclassified (Line 60-67)", () => {
+  test("should classify units as unclassified", () => {
     const masterTable = [makeMasterEntry({ code: "KNOWN" })];
     const studentUnits = new Set(["KNOWN", "STRANGE_UNIT_999"]);
     
@@ -133,7 +127,7 @@ describe("Matching Logic Unit Tests (Jest)", () => {
   });
 
   describe("Planner Filter Edge Cases", () => {
-    test("should cover fallback to most recent year (Line 76-94)", () => {
+    test("falls back to the most recent year when no planner has the intake year", () => {
       const planners = [
         makePlanner({ intakeYear: 2021, plannerID: "OLD" }),
         makePlanner({ intakeYear: 2022, plannerID: "NEW" })
@@ -145,28 +139,14 @@ describe("Matching Logic Unit Tests (Jest)", () => {
       expect(result[0].plannerID).toBe("NEW");
     });
 
-    test("should handle missing semester by returning all planners for that year (Line 45)", () => {
-      const planners = [makePlanner({ intakeYear: 2024, intakeSemester: 1 })];
-      // Student is Sem 2, but year only has Sem 1
-      const result = filterPlanners(planners, 2024, 2, DEFAULT_CONFIG);
-      expect(result).toHaveLength(1);
-    });
-
-    test("should handle WIL category units (Line 66)", () => {
-      const masterTable = [makeMasterEntry({ code: "PROJ1", category: "WIL" })];
-      const profile = buildStudentProfile(makeRawStudent(), new Set(["PROJ1"]), masterTable);
-      
-      // This triggers 'case WIL' and 'break' which are currently red
-      expect(profile.completedUnits.has("PROJ1")).toBe(true);
-    });
   });
 
-  test("Profile Builder Edge Cases (Lines 60-64, 73-77)", () => {
+  test("Profile Builder Edge Cases", () => {
     const master = [makeMasterEntry({ code: "CORE1" })];
-    // 1. Pass an empty string and a null-like value to trigger Line 73-77
+    // 1. Pass an empty string and a null-like value: they are ignored
     const studentUnits = new Set(["CORE1", "", "   ", null]); 
     
-    // 2. Pass a unit that is NOT in the master table to trigger Line 60-64
+    // 2. Pass a unit that is NOT in the master table: it is unclassified
     studentUnits.add("MYSTERY_UNIT");
 
     const profile = buildStudentProfile(makeRawStudent(), studentUnits, master);

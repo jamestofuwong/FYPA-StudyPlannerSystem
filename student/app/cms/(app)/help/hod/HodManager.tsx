@@ -1,10 +1,11 @@
 'use client'
-import { useState, useTransition } from 'react'
+import { Fragment, useRef, useState, useTransition } from 'react'
 import { saveHods } from './hod-actions'
 import styles from './page.module.css'
 
 interface Hod {
   id?: string
+  rowKey: string
   faculty: string
   department: string
   name: string
@@ -13,13 +14,15 @@ interface Hod {
 }
 
 interface Props {
-  initialHods: Hod[]
+  initialHods: Omit<Hod, 'rowKey'>[]
 }
 
 export default function HodManager({ initialHods }: Props) {
+  const nextRowKey = useRef(0)
   const [hods, setHods] = useState<Hod[]>(
     initialHods.map((h, i) => ({
       id: h.id,
+      rowKey: h.id ?? `initial-${i}`,
       faculty: h.faculty,
       department: h.department,
       name: h.name,
@@ -46,7 +49,7 @@ export default function HodManager({ initialHods }: Props) {
     const newIndex = hods.length
     setHods(prev => [
       ...prev,
-      { faculty: '', department: '', name: '', email: '', position: prev.length + 1 },
+      { rowKey: `new-${nextRowKey.current++}`, faculty: '', department: '', name: '', email: '', position: prev.length + 1 },
     ])
     setEditingIndex(newIndex)
     markDirty()
@@ -125,7 +128,7 @@ export default function HodManager({ initialHods }: Props) {
           </thead>
           <tbody>
             {hods.map((hod, index) => (
-              <>
+              <Fragment key={hod.rowKey}>
                 <tr key={`row-${index}`} className={styles.tr}>
                   <td className={styles.td}>{hod.faculty || <em style={{ color: '#9ca3af' }}>—</em>}</td>
                   <td className={styles.td}>{hod.department || <em style={{ color: '#9ca3af' }}>—</em>}</td>
@@ -196,7 +199,7 @@ export default function HodManager({ initialHods }: Props) {
                     </td>
                   </tr>
                 )}
-              </>
+              </Fragment>
             ))}
             {hods.length === 0 && (
               <tr>

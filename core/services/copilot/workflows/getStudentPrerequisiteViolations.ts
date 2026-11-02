@@ -35,6 +35,7 @@ const CATEGORY_PRIORITY: Record<string, number> = {
 export const getStudentPrerequisiteViolationsWorkflow: Workflow<Input, Output> = {
   id: 'get_student_prerequisite_violations',
   description: 'Checks whether a student has any prerequisite, corequisite, or antirequisite violations in their unit history. Use this when the user asks about a student\'s prerequisite issues, rule violations, or whether they took units out of order.',
+  keywords: ['violation', 'violations', 'out of order', 'rule breach', 'prerequisite problem', 'antirequisite', 'corequisite', 'without meeting prerequisite', 'took unit too early'],
   params: [
     {
       name: 'studentId',

@@ -60,17 +60,18 @@ export const UnitSchema = z.object({
   assessments: z
     .array(
       z.object({
-        title: z.string().trim().min(1, 'Assessment title is required').max(255),
         type: z.string().trim().min(1, 'Assessment type is required').max(100),
-        weight: z.number().int().min(0, 'Weight must be 0–100').max(100, 'Weight must be 0–100'),
+        task: z.string().max(255).nullable().optional().default(null),
+        weight: z.number().int().min(0, 'Weight must be 0–100').max(100, 'Weight must be 0–100').nullable().optional().default(null),
+        weighting_raw: z.string().max(2000).nullable().optional().default(null),
         ulos: z.array(z.number().int().min(1)),
         position: z.number().int().min(1),
       })
     )
     .refine(
       (items) => {
-        if (items.length === 0) return true
-        return items.reduce((sum, a) => sum + a.weight, 0) === 100
+        if (items.length === 0 || items.some(a => a.weight === null)) return true
+        return items.reduce((sum, a) => sum + (a.weight ?? 0), 0) === 100
       },
       { message: 'Assessment weights must sum to 100%' }
     ),
@@ -138,4 +139,50 @@ export const GeneratePlanSchema = z.object({
     plannerId: UUID,
   }),
   completedUnitCodes: z.array(z.string().trim().min(1)),
+})
+
+// ─── Accounts ─────────────────────────────────────────────────────────────────
+
+export const PASSWORD_MIN_LENGTH = 10
+
+const NewPassword = z
+  .string()
+  .min(PASSWORD_MIN_LENGTH, `Password must be at least ${PASSWORD_MIN_LENGTH} characters`)
+  .max(128, 'Password too long')
+
+const Email = z.string().trim().toLowerCase().email('Invalid email address').max(255)
+const PersonName = z.string().trim().min(1, 'Name is required').max(255)
+
+export const ProfileSchema = z.object({
+  name: PersonName,
+  email: Email,
+  currentPassword: z.string().min(1, 'Enter your current password to save changes').max(128),
+})
+
+export const ChangePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1, 'Enter your current password').max(128),
+    newPassword: NewPassword,
+    confirmPassword: z.string(),
+  })
+  .refine(v => v.newPassword === v.confirmPassword, { message: 'The new passwords do not match', path: ['confirmPassword'] })
+  .refine(v => v.newPassword !== v.currentPassword, { message: 'The new password must be different from the current one', path: ['newPassword'] })
+
+const AccessLevelSchema = z.enum(['none', 'view', 'edit'])
+
+export const CreateAccountSchema = z.object({
+  name: PersonName,
+  email: Email,
+  password: NewPassword,
+  role: z.enum(['superadmin', 'admin']),
+  permissions: z.record(z.string(), AccessLevelSchema).default({}),
+})
+
+export const UpdateAccountSchema = z.object({
+  name: PersonName,
+  email: Email,
+  role: z.enum(['superadmin', 'admin']),
+  permissions: z.record(z.string(), AccessLevelSchema).default({}),
+  active: z.boolean(),
+  newPassword: z.union([z.literal(''), NewPassword]).optional().default(''),
 })

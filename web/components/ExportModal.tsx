@@ -8,6 +8,7 @@ import {
   type ExportSection,
   type ExportInput,
 } from '../../core/shared/types/export';
+import { fs } from '../styles/tokens';
 
 const ALL_SECTIONS: ExportSection[] = ['student_profile', 'major_match', 'unit_plan', 'study_planner'];
 
@@ -116,7 +117,7 @@ export default function ExportModal({ exportInput, onClose, availableSections }:
                 <span>
                   <span className={styles.sectionLabel}>{EXPORT_SECTION_LABELS[section]}</span>
                   {section === 'study_planner' && plannerSubtext && (
-                    <span style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                    <span style={{ display: 'block', fontSize: fs(11), color: 'var(--text-muted)', marginTop: 2 }}>
                       {plannerSubtext}
                     </span>
                   )}

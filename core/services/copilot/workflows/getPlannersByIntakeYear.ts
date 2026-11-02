@@ -21,7 +21,8 @@ interface Output {
 
 export const getPlannersByIntakeYearWorkflow: Workflow<Input, Output> = {
   id: 'get_planners_by_intake_year',
-  description: 'Lists all study planners available for a specific intake year. Use this when the user asks what programs or majors are available for a given year, or how many planners exist for a particular intake.',
+  description: 'Lists the planners of ONE intake year. Use this when the user names a year and asks which planners, programs or majors exist for it. It needs a year: not for all planners.',
+  keywords: ['intake', 'intake year', 'cohort', 'started in', 'batch', 'year of entry', 'for 2025'],
   params: [
     {
       name: 'intakeYear',

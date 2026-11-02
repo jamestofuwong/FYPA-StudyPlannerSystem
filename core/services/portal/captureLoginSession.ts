@@ -55,6 +55,43 @@ function isSsoInProgress(url: string): boolean {
   }
 }
 
+// ─── Navigation helper ─────────────────────────────────────────────────────────
+
+function shortUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    return `${u.hostname}${u.pathname}`;
+  } catch {
+    return url;
+  }
+}
+
+/**
+ * Opens a page, says where it ended up, and tries a slow page one more time. On another computer or network the portal
+ * can answer slowly or send the hidden browser somewhere else. The log then shows which step and which address.
+ */
+async function go(
+  page: Page,
+  url: string,
+  label: string,
+  log: (msg: string) => void,
+  options: { waitUntil: 'domcontentloaded' | 'networkidle0'; timeout?: number } = { waitUntil: 'domcontentloaded' },
+): Promise<void> {
+  const ATTEMPTS = 2;
+  for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
+    try {
+      const res = await page.goto(url, options);
+      log(`${label}: HTTP ${res?.status() ?? '?'}, now at ${shortUrl(page.url())}`);
+      return;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const timedOut = err instanceof Error && err.name === 'TimeoutError';
+      log(`${label} failed (try ${attempt} of ${ATTEMPTS}): ${message}. The browser is at ${shortUrl(page.url())}.`);
+      if (!timedOut || attempt === ATTEMPTS) throw err;
+    }
+  }
+}
+
 // ─── Portal navigation (shared between headed and headless phase) ─────────────
 
 async function runPortalNavigation(
@@ -75,7 +112,7 @@ async function runPortalNavigation(
   });
 
   log('Navigating to Degree1…');
-  await page.goto(DEGREE1_URL, { waitUntil: 'domcontentloaded' });
+  await go(page, DEGREE1_URL, 'Degree1', log);
 
   let iframeSrc = await page.evaluate((): string | null => {
     const iframe = document.querySelector('iframe');
@@ -84,9 +121,9 @@ async function runPortalNavigation(
 
   if (!iframeSrc) {
     log('Iframe not found — running fallback: Dashboard1 → loginstu → Degree1…');
-    await page.goto(FALLBACK_DASHBOARD1_URL,    { waitUntil: 'domcontentloaded' });
-    await page.goto(FALLBACK_STUDENT_LOGIN_URL, { waitUntil: 'domcontentloaded' });
-    await page.goto(FALLBACK_DEGREE1_URL,       { waitUntil: 'domcontentloaded' });
+    await go(page, FALLBACK_DASHBOARD1_URL,    'Dashboard1', log);
+    await go(page, FALLBACK_STUDENT_LOGIN_URL, 'loginstu',   log);
+    await go(page, FALLBACK_DEGREE1_URL,       'Degree1 (second try)', log);
 
     iframeSrc = await page.evaluate((): string | null => {
       const iframe = document.querySelector('iframe');
@@ -100,7 +137,7 @@ async function runPortalNavigation(
   log(`Found PortalExtension iframe: ${iframeSrc}`);
 
   log('Loading PortalExtension (waiting for Angular startup)…');
-  await page.goto(iframeSrc, { waitUntil: 'networkidle0', timeout: IDLE_TIMEOUT_MS });
+  await go(page, iframeSrc, 'PortalExtension', log, { waitUntil: 'networkidle0', timeout: IDLE_TIMEOUT_MS });
 
   return iframeSrc;
 }
@@ -176,6 +213,7 @@ export async function captureLoginSession(
   });
 
   let ssoCookies: CookieParam[] = [];
+  let userAgent: string | null = null;
 
   try {
     // Reuse the default about:blank tab instead of opening a second one
@@ -200,6 +238,8 @@ export async function captureLoginSession(
 
     // Capture SSO cookies before closing the visible browser
     ssoCookies = await headedBrowser.cookies() as CookieParam[];
+    // The hidden browser would otherwise call itself "HeadlessChrome", and the portal can answer that differently.
+    userAgent = await headedBrowser.userAgent().catch(() => null);
   } finally {
     await headedBrowser.close();
     log('Browser closed — continuing session capture in background…');
@@ -219,9 +259,13 @@ export async function captureLoginSession(
     const page: Page = await headlessBrowser.newPage();
     page.setDefaultNavigationTimeout(NAV_TIMEOUT_MS);
 
+    if (userAgent) await page.setUserAgent({ userAgent });
+    log(`Background browser: ${userAgent ?? 'default user agent'}`);
+
     // Transfer SSO cookies into the headless session
     if (ssoCookies.length > 0) {
       await page.setCookie(...ssoCookies);
+      log(`Carried ${ssoCookies.length} sign-in cookies into the background browser.`);
     }
 
     await runPortalNavigation(page, log, (token) => { capturedToken = token; });

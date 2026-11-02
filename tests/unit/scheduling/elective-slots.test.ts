@@ -108,7 +108,9 @@ describe('recommendElectives', () => {
       alreadyPlannedCodes: [],
     });
 
-    expect(codesOf(result)).toEqual(['SEM2', 'UNKNOWN', 'WINTER']);
+    // A unit with no offering data runs whenever it is wanted, so it leads;
+    // the summer/winter-only units come last, in the order the planner lists them
+    expect(codesOf(result)).toEqual(['UNKNOWN', 'SEM2', 'WINTER']);
   });
 
   test('within a source, prefers a unit whose prerequisites are completed or in the pool', () => {
@@ -308,8 +310,14 @@ describe('countElectiveSlotsNeeded', () => {
     ).toBe(4);
   });
 
-  test('a completed unit in neither the planner nor its groups counts toward nothing', () => {
-    expect(countElectiveSlotsNeeded({ ...baseline, completedUnitCodes: ['XFER100'] })).toBe(4);
+  // Any passed unit that is not compulsory fills an elective slot, whether or not the planner or a group names it
+  // (credit transfer, or a unit from another major). This is the same rule as the graduation audit.
+  test('a completed unit that no planner or group names still counts as an elective', () => {
+    expect(countElectiveSlotsNeeded({ ...baseline, completedUnitCodes: ['XFER100'] })).toBe(3);
+  });
+
+  test('MPU units and non-academic training modules never count as electives', () => {
+    expect(countElectiveSlotsNeeded({ ...baseline, completedUnitCodes: ['MPU3123', 'AIMFECS'] })).toBe(4);
   });
 
   // A plain elective can be swapped for another, so a blocked one frees its

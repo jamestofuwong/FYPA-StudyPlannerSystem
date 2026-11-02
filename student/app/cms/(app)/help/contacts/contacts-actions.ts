@@ -3,7 +3,7 @@ import { revalidatePath } from 'next/cache'
 import { revalidateStudentCache, STUDENT_CACHE } from '@/lib/catalog'
 import { prisma } from '@/lib/prisma'
 import { GeneralEnquiriesSchema, ItHelpDeskSchema } from '@/lib/cms/schemas'
-import { getSession } from '@/lib/cms/session'
+import { requireAccess } from '@/lib/cms/access'
 
 export async function saveGeneralEnquiries(formData: FormData) {
   const raw = {
@@ -15,11 +15,11 @@ export async function saveGeneralEnquiries(formData: FormData) {
 
   const parsed = GeneralEnquiriesSchema.safeParse(raw)
   if (!parsed.success) {
-    throw new Error(parsed.error.errors[0]?.message ?? 'Invalid contact data')
+    throw new Error(parsed.error.issues[0]?.message ?? 'Invalid contact data')
   }
   const data = parsed.data
 
-  const session = await getSession()
+  const session = await requireAccess('contacts', 'edit')
   const existing = await prisma.generalEnquiries.findFirst()
   if (existing) {
     await prisma.generalEnquiries.update({ where: { id: existing.id }, data })
@@ -44,11 +44,11 @@ export async function saveItHelpDesk(formData: FormData) {
 
   const parsed = ItHelpDeskSchema.safeParse(raw)
   if (!parsed.success) {
-    throw new Error(parsed.error.errors[0]?.message ?? 'Invalid IT Help Desk data')
+    throw new Error(parsed.error.issues[0]?.message ?? 'Invalid IT Help Desk data')
   }
   const data = parsed.data
 
-  const session = await getSession()
+  const session = await requireAccess('contacts', 'edit')
   const existing = await prisma.itHelpDesk.findFirst()
   if (existing) {
     await prisma.itHelpDesk.update({ where: { id: existing.id }, data })

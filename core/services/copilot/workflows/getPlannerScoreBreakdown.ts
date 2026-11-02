@@ -51,7 +51,8 @@ function toMatchingCategory(cat: string): UnitMasterEntry['category'] | null {
 
 export const getPlannerScoreBreakdownWorkflow: Workflow<Input, Output> = {
   id: 'get_planner_score_breakdown',
-  description: 'Runs the major matching pipeline for a student against a specific planner and returns a detailed score breakdown: core match %, major core score, missing units per category. Use this when the user wants to know how well a student matches a specific major or plan.',
+  description: 'Shows how well a student matches ONE planner: core match percentage, major core score and missing units per category. Use this when the user asks how well or how closely a student matches a major, why they got a major score, or for the match percentage.',
+  keywords: ['match', 'match percentage', 'score', 'how well', 'why this major', 'fit', 'similarity'],
   params: [
     {
       name: 'studentId',

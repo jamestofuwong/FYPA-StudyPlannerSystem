@@ -21,13 +21,14 @@ import {
 export function detectMajors(
   scoreRecords: PlannerScoreRecord[],
   config: AlgorithmConfig,
-  student: RawStudentInput & { manualOverride?: string }
+  student: RawStudentInput & { manualOverride?: string },
+  evidence?: ReadonlyMap<string, number>
 ): DetectionResult {
   // Phase 4 - rank by majorCoreScore, tiebreak by matchPct
   const ranked = mergeSort(scoreRecords);
 
   // Phase 5 - detection logic
-  return assignMajors(ranked, config, student.manualOverride);
+  return assignMajors(ranked, config, student.manualOverride, evidence);
 }
 
 // --- Phase 4 - Ranking -------------------------------
@@ -87,7 +88,8 @@ function compare(a: PlannerScoreRecord, b: PlannerScoreRecord): number {
 function assignMajors(
   ranked: PlannerScoreRecord[],
   config: AlgorithmConfig,
-  manualOverride?: string
+  manualOverride?: string,
+  evidence?: ReadonlyMap<string, number>
 ): DetectionResult {
   // Empty list edge case
   if (ranked.length === 0) {
@@ -104,6 +106,17 @@ function assignMajors(
 
   // No major detected: rank-1 matchPct is below noMajorThreshold
   if (rank1.matchPct / 100 < config.noMajorThreshold) {
+    return {
+      primaryMajor: null,
+      secondMajor: null,
+      status: "noMajorDetected",
+      rankedPlanners: ranked,
+    };
+  }
+
+  // No evidence: the top-ranked major has no unit that points to it and to no other major (see majorEvidence).
+  // A manual override is the advisor's decision, so it is never second-guessed here.
+  if (!manualOverride && evidence && (evidence.get(rank1.majorName) ?? 0) === 0) {
     return {
       primaryMajor: null,
       secondMajor: null,

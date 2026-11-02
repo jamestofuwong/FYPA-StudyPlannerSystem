@@ -10,6 +10,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'config.plannerId is required' }, { status: 400 })
   }
   if (
+    config.secondMajorId !== undefined &&
+    typeof config.secondMajorId !== 'string'
+  ) {
+    return NextResponse.json({ error: 'config.secondMajorId must be a string' }, { status: 400 })
+  }
+  if (
     !Array.isArray(input?.completedSemesters) ||
     input.completedSemesters.some(
       semester => !semester || !Array.isArray(semester.unitCodes) ||
@@ -39,5 +45,6 @@ export async function POST(req: Request) {
     semesters: result.semesters,
     electivePool: result.electivePool,
     completedCodes: [...result.completedCodes],
+    warnings: result.warnings,
   })
 }

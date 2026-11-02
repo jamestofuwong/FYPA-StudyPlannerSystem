@@ -16,6 +16,10 @@ import {
   parseTypedRetentionPercent,
   retentionRateToPercent,
 } from '../../../../core/services/classEstimation/retention';
+import { fs } from '../../../styles/tokens';
+import { useDesign } from '../../../styles/themeProvider';
+import { PageHeader } from '../../../components/common/MeadowBits';
+import { ArrowRight, Check, FileSpreadsheet, FileUp, Globe } from 'lucide-react';
 
 /** What /api/class-estimation/preview returns: the preview itself plus the semester it was run for. */
 type PreviewResponse = EstimationPreview & {
@@ -569,6 +573,9 @@ export default function ClassEstimationPage() {
   };
 
   const isLoggedIn = sessionStatus === 'logged-in';
+  // Meadow moves the portal login button from the top bar into the sidebar.
+  const isMeadow = useDesign() === 'meadow';
+  const loginButtonPlace = isMeadow ? 'sidebar' : 'top bar';
   const isRunning  = runStatus === 'running';
 
   // Two ways in: the live portal, which needs a login, and DPA files exported from it, which do not.
@@ -641,6 +648,35 @@ export default function ClassEstimationPage() {
     <div className={styles.panel} ref={rootRef}>
 
       {/* ── Page header ─────────────────────────────────────────────────────── */}
+      {isMeadow ? (
+        <>
+          <PageHeader
+            title="Class estimation"
+            description="How many students to expect in each unit next semester, worked out from current students' transcripts."
+            actions={
+              <Link href="/class-estimation/report" className={styles.reportLink}>
+                Head of Department view <ArrowRight aria-hidden="true" />
+              </Link>
+            }
+          />
+          {/* Where the three steps stand, so the next thing to do is obvious before scrolling. */}
+          <nav className={styles.mStepper} aria-label="Estimation steps">
+            {[
+              { n: 1, title: 'Load students', done: loadedCount > 0 && !isRunning, status: isRunning ? 'Reading…' : loadedCount > 0 ? `${loadedCount.toLocaleString()} loaded` : 'Not started' },
+              { n: 2, title: 'Run the estimate', done: Boolean(preview), status: preview ? `For ${preview.target?.label ?? academicNow.label}` : loadedCount > 0 ? 'Ready to run' : 'Needs students' },
+              { n: 3, title: 'Save it', done: runs.length > 0, status: runs.length > 0 ? `${runs.length.toLocaleString()} saved` : 'Nothing saved yet' },
+            ].map((step) => (
+              <a key={step.n} href={`#ce-step-${step.n}`} className={`${styles.mStep} ${step.done ? styles.mStepDone : ''}`}>
+                <span className={styles.mStepNum} aria-hidden="true">{step.done ? <Check /> : step.n}</span>
+                <span className={styles.mStepText}>
+                  <span className={styles.mStepTitle}>{step.title}</span>
+                  <span className={styles.mStepStatus}>{step.status}</span>
+                </span>
+              </a>
+            ))}
+          </nav>
+        </>
+      ) : (
       <div className={styles.header}>
         <div>
           <h1 className={styles.title}>Class Estimation</h1>
@@ -654,9 +690,11 @@ export default function ClassEstimationPage() {
           Head of Department view →
         </Link>
       </div>
+      )}
 
       {/* ── Step 1: load students ────────────────────────────────────────────── */}
       <Step
+        id="ce-step-1"
         number={1}
         title="Load current students"
         explainer="Choose where transcripts come from. Each student's record is read once and kept in memory only, never saved."
@@ -683,7 +721,10 @@ export default function ClassEstimationPage() {
               onClick={() => setSource(option.id)}
               disabled={isRunning || importStatus === 'working'}
             >
-              <span>{option.label}</span>
+              {isMeadow && (
+                <span className={styles.mSourceIcon} aria-hidden="true">{option.id === 'portal' ? <Globe /> : <FileSpreadsheet />}</span>
+              )}
+              <span className={styles.sourceOptionLabel}>{option.label}</span>
               <span className={styles.sourceOptionHint}>{option.hint}</span>
             </button>
           ))}
@@ -699,6 +740,7 @@ export default function ClassEstimationPage() {
               onDragLeave={() => setDragging(false)}
               onDrop={(e) => { e.preventDefault(); setDragging(false); addFiles(e.dataTransfer.files); }}
             >
+              {isMeadow && <FileUp className={styles.mDropIcon} aria-hidden="true" />}
               {files.length === 0
                 ? 'Drag DPA files here, or click to choose. One file per student, or one sheet holding many.'
                 : `${files.length} file(s) ready. Drop more to replace this selection.`}
@@ -770,10 +812,10 @@ export default function ClassEstimationPage() {
           <div className={styles.subPanel}>
             <div className={styles.statusRow}>
               <span className={styles.statusDot} style={{ background: isLoggedIn ? 'var(--accent-green)' : 'var(--text-muted)' }} />
-              <span style={{ fontSize: 12, color: isLoggedIn ? 'var(--accent-green)' : 'var(--text-muted)' }}>
+              <span style={{ fontSize: fs(12), color: isLoggedIn ? 'var(--accent-green)' : 'var(--text-muted)' }}>
                 {isLoggedIn
                   ? `Connected · ${studentCount.toLocaleString()} students available`
-                  : 'Not connected. Log in to the portal with the button in the top bar first.'}
+                  : `Not connected. Log in to the portal with the button in the ${loginButtonPlace} first.`}
               </span>
             </div>
 
@@ -856,11 +898,13 @@ export default function ClassEstimationPage() {
 
       {/* ── Step 2: estimate ─────────────────────────────────────────────────── */}
       <Step
+        id="ce-step-2"
         number={2}
         title="Estimate next semester"
         explainer="Works out which units each loaded student still needs, which of those they can take next semester, and adds them up per unit."
         done={Boolean(preview)}
       >
+        <div className={styles.estimateSetup}>
         <div className={styles.targetRow}>
           <span className={styles.targetLabel}>Estimating for</span>
           <span className={styles.targetValue}>{preview?.target?.label ?? academicNow.label}</span>
@@ -895,6 +939,7 @@ export default function ClassEstimationPage() {
           <button className={styles.btnPrimary} disabled={previewStatus === 'loading' || isRunning || loadedCount === 0} onClick={runPreview}>
             {previewStatus === 'loading' ? 'Estimating…' : preview ? 'Estimate again' : 'Run estimate'}
           </button>
+        </div>
         </div>
         {loadedCount === 0 && !preview && <p className={styles.hintText}>Load students in step 1 first.</p>}
         {previewError && <div className={styles.errorBox} style={{ marginTop: 12 }}>{previewError}</div>}
@@ -1111,6 +1156,7 @@ export default function ClassEstimationPage() {
 
       {/* ── Step 3: save ─────────────────────────────────────────────────────── */}
       <Step
+        id="ce-step-3"
         number={3}
         title="Save the estimate"
         explainer="Save records of the per-unit figures and their settings."

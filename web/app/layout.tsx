@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import React from "react";
 import "../styles/variables.css";
 import "../styles/globals.css";
+import "../styles/meadow.css";
 import { ThemeProvider } from "../styles/themeProvider";
 
 export const metadata: Metadata = {

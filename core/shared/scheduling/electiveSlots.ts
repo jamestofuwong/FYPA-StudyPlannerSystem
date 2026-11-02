@@ -174,14 +174,21 @@ export function recommendElectives(input: RecommendElectivesInput): SchedulableU
         // Score 1: Runs in target term
         // Score 2: Runs in single non-target regular term
         // Score 3: Summer/Winter only
+        // A unit with no offering data at all is unrestricted. One recorded as
+        // summer or winter alone has no semester either, but is not unrestricted:
+        // the scheduler can never place it, so it must not rank as versatile.
+        const unrestricted = unit.offeringSemesters.length === 0 && offersRegularSemester(unit);
+
         const isBothSemesters =
-          unit.offeringSemesters.length === 0 ||
+          unrestricted ||
           (unit.offeringSemesters.includes(1) && unit.offeringSemesters.includes(2));
 
+        // With no preferred term, any regular semester will do
         const runsInTarget =
-          targetTerm === undefined ||
-          unit.offeringSemesters.length === 0 ||
-          unit.offeringSemesters.includes(targetTerm);
+          unrestricted ||
+          (targetTerm === undefined
+            ? unit.offeringSemesters.length > 0
+            : unit.offeringSemesters.includes(targetTerm));
 
         const versatilityScore = isBothSemesters
           ? 0

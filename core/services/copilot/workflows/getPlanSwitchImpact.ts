@@ -34,7 +34,8 @@ const PASSING_GRADES = new Set([
 
 export const getPlanSwitchImpactWorkflow: Workflow<Input, Output> = {
   id: 'get_plan_switch_impact',
-  description: 'Shows the impact of a student switching to a different study planner: which of their completed units would count towards the new plan, which units they would still need to take, and which completed units would become excess. Use this when the user asks what happens if a student changes major or switches program.',
+  description: 'Shows what happens when a student switches to a different planner: which completed units count towards the new plan, which units are still needed and which completed units become excess. Use this when the user asks what happens if a student changes major, program or planner.',
+  keywords: ['switch', 'change major', 'change planner', 'move to', 'transfer to', 'what carries over', 'excess units', 'credit transfer', 'switching program'],
   params: [
     {
       name: 'studentId',

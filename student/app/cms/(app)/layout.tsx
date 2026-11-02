@@ -1,17 +1,17 @@
 import { redirect } from 'next/navigation'
-import { getSession } from '@/lib/cms/session'
+import { getCurrentUser } from '@/lib/cms/access'
 import CmsSidebar from './CmsSidebar'
 import styles from './layout.module.css'
 
 export default async function CmsAppLayout({ children }: { children: React.ReactNode }) {
-  const session = await getSession()
-  if (!session) {
+  const user = await getCurrentUser()
+  if (!user) {
     redirect('/cms/login')
   }
 
   return (
     <div className={styles.shell}>
-      <CmsSidebar user={{ name: session.name, email: session.email }} />
+      <CmsSidebar user={{ name: user.name, email: user.email, role: user.role, permissions: user.permissions }} />
       <main className={styles.content}>
         {children}
       </main>

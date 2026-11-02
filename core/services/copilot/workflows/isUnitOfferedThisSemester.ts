@@ -24,7 +24,8 @@ interface Output {
 
 export const isUnitOfferedThisSemesterWorkflow: Workflow<Input, Output> = {
   id: 'is_unit_offered_this_semester',
-  description: 'Checks whether a specific unit is offered in a given semester. Use this when the user asks if a unit runs in a particular semester, or whether a student can take a unit in a specific term.',
+  description: 'Checks the timetable of ONE named unit: does it run in a given semester (1, 2, summer or winter, or this or next semester). Use this when the user asks if a unit is offered, available or running in a semester. Not about whether a student may enrol (use can_student_take_unit).',
+  keywords: ['offered', 'running', 'available this semester', 'next sem', 'does it run', 'runs in', 'is unit available'],
   params: [
     {
       name: 'unitCode',

@@ -1,3 +1,4 @@
+import { readBody, TEMPLATE_UNIT_EDIT_FIELDS } from "@/lib/requestBody";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import * as templateUnitRepository from "../../../../../../core/db/repositories/templateUnitRepository";
@@ -21,7 +22,9 @@ export async function PUT(
 ) {
     try {
         const { id: plannerId } = await params;
-        const body = await req.json();
+        const parsed = await readBody(req, TEMPLATE_UNIT_EDIT_FIELDS);
+        if (!parsed.ok) return parsed.response;
+        const body = parsed.data;
         const templateUnitId = String(body.template_unit_id || "");
         if (!templateUnitId) return NextResponse.json({ error: "template_unit_id is required" }, { status: 400 });
         const updated = await templateUnitRepository.updateTemplateUnitDetails(templateUnitId, plannerId, body);

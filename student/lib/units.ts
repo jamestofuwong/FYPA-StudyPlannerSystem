@@ -1,52 +1,62 @@
 import { prisma } from './prisma'
-import type { UnitListing, UnitDetail } from './types'
-
-// ⚠️  MISMATCH: CMS UnitForm only offers Jan/Mar/Aug/Oct/Nov as availability options,
-// but the DB supports all 12 months. Any month stored via direct DB access will
-// display correctly here, but the CMS cannot configure months outside these five.
-const MONTH_ABBR = [
-  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-]
+import { requisiteUnitCodes, toRequisiteGroups } from './requisites'
+import { termLabel } from './term-labels'
+import type { UnitDetail, UnitListing } from './types'
 
 export async function getUnits(): Promise<UnitListing[]> {
   const units = await prisma.unit.findMany({
-    orderBy: { code: 'asc' },
+    orderBy: { unit_code: 'asc' },
     include: {
-      availability: { orderBy: { month: 'asc' } },
-      requisites: {
-        include: { requisite_unit: { select: { code: true } } },
-        orderBy: { requisite_type: 'asc' },
+      offerings: { orderBy: { offered_in: 'asc' } },
+      requisite_groups: {
+        include: {
+          conditions: {
+            include: { unit: { select: { unit_code: true } } },
+            orderBy: { requisite_type: 'asc' },
+          },
+        },
       },
     },
   })
 
-  return units.map(u => ({
-    code: u.code,
-    name: u.name,
-    creditPoints: Number(u.credit_points),
-    yearLevel: u.year_level,
-    prerequisites: u.requisites
-      .filter(r => r.requisite_type === 'prerequisite')
-      .map(r => r.requisite_unit.code),
-    corequisites: u.requisites
-      .filter(r => r.requisite_type === 'corequisite')
-      .map(r => r.requisite_unit.code),
-    antirequisites: u.requisites
-      .filter(r => r.requisite_type === 'antirequisite')
-      .map(r => r.requisite_unit.code),
-    availability: u.availability.map(a => MONTH_ABBR[a.month - 1]),
-  }))
+  return units.map(u => {
+    const requisiteGroups = toRequisiteGroups(u.requisite_groups)
+    return {
+      code: u.unit_code,
+      name: u.unit_name,
+      creditPoints: Number(u.credit_points),
+      yearLevel: u.year_level,
+      requisiteGroups,
+      prerequisites: requisiteUnitCodes(requisiteGroups, 'prerequisite'),
+      corequisites: requisiteUnitCodes(requisiteGroups, 'corequisite'),
+      antirequisites: requisiteUnitCodes(requisiteGroups, 'antirequisite'),
+      availability: u.offerings.map(o => termLabel(o.offered_in)),
+    }
+  })
+}
+
+export async function getPlannerYearLevels(): Promise<number[]> {
+  const years = await prisma.templateUnit.findMany({
+    distinct: ['year_level'],
+    select: { year_level: true },
+    orderBy: { year_level: 'asc' },
+  })
+
+  return years.map(year => year.year_level)
 }
 
 export async function getUnit(code: string): Promise<UnitDetail | null> {
   const u = await prisma.unit.findUnique({
-    where: { code: code.toUpperCase() },
+    where: { unit_code: code.toUpperCase() },
     include: {
-      availability: { orderBy: { month: 'asc' } },
-      requisites: {
-        include: { requisite_unit: { select: { code: true } } },
-        orderBy: { requisite_type: 'asc' },
+      offerings: { orderBy: { offered_in: 'asc' } },
+      requisite_groups: {
+        include: {
+          conditions: {
+            include: { unit: { select: { unit_code: true } } },
+            orderBy: { requisite_type: 'asc' },
+          },
+        },
       },
       learning_outcomes: { orderBy: { ulo_number: 'asc' } },
       content_topics: { orderBy: { position: 'asc' } },
@@ -56,28 +66,25 @@ export async function getUnit(code: string): Promise<UnitDetail | null> {
 
   if (!u) return null
 
+  const requisiteGroups = toRequisiteGroups(u.requisite_groups)
   return {
-    code: u.code,
-    name: u.name,
+    code: u.unit_code,
+    name: u.unit_name,
     creditPoints: Number(u.credit_points),
     yearLevel: u.year_level,
     overview: u.overview ?? '',
-    prerequisites: u.requisites
-      .filter(r => r.requisite_type === 'prerequisite')
-      .map(r => r.requisite_unit.code),
-    corequisites: u.requisites
-      .filter(r => r.requisite_type === 'corequisite')
-      .map(r => r.requisite_unit.code),
-    antirequisites: u.requisites
-      .filter(r => r.requisite_type === 'antirequisite')
-      .map(r => r.requisite_unit.code),
-    availability: u.availability.map(a => MONTH_ABBR[a.month - 1]),
+    requisiteGroups,
+    prerequisites: requisiteUnitCodes(requisiteGroups, 'prerequisite'),
+    corequisites: requisiteUnitCodes(requisiteGroups, 'corequisite'),
+    antirequisites: requisiteUnitCodes(requisiteGroups, 'antirequisite'),
+    availability: u.offerings.map(o => termLabel(o.offered_in)),
     learningOutcomes: u.learning_outcomes.map(lo => lo.description),
     content: u.content_topics.map(t => t.topic),
     assessment: u.assessments.map(a => ({
-      title: a.title,
       type: a.type,
+      task: a.task,
       weight: a.weight,
+      weightingRaw: a.weighting_raw,
       ulos: a.ulos,
     })),
   }

@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const parsed = LoginSchema.safeParse(body)
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.errors[0]?.message ?? 'Invalid request' }, { status: 400 })
+      return NextResponse.json({ error: parsed.error.issues[0]?.message ?? 'Invalid request' }, { status: 400 })
     }
     const { email, password } = parsed.data
 
@@ -54,9 +54,10 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const user = await prisma.cmsUser.findUnique({ where: { email } })
+    const user = await prisma.cmsUser.findFirst({ where: { email: { equals: email, mode: 'insensitive' } } })
     const passwordValid = await safeVerifyPassword(password, user?.password_hash ?? null)
-    if (!user || !passwordValid) {
+    // A deactivated account gets the same answer as a wrong password, so the response does not reveal that it exists.
+    if (!user || !user.active || !passwordValid) {
       console.warn(`[CMS] login:failed email=${email} ip=${ip}`)
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 })
     }

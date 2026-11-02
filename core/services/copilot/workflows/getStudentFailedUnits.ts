@@ -26,7 +26,8 @@ const FAILING_GRADES = new Set(['F', 'F*', 'WF', 'WD', 'I']);
 
 export const getStudentFailedUnitsWorkflow: Workflow<Input, Output> = {
   id: 'get_student_failed_units',
-  description: 'Lists all units a student has failed or withdrawn from. Use this when the user asks about a student\'s failed subjects, poor grades, or units that need to be repeated.',
+  description: 'Lists the units that a student failed or withdrew from, which they must repeat or replace. Use this when the user asks about failed subjects, poor grades or what a student needs to repeat. Not for units already taken twice (use get_student_repeated_units).',
+  keywords: ['fail', 'failed', 'withdrawn', 'fell', 'poor grades', 'to repeat', 'not passed', 'low marks'],
   params: [
     {
       name: 'studentId',

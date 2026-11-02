@@ -1,7 +1,9 @@
-import type { ChatMessage, WorkflowContext } from '../../../../../core/services/copilot/types';
+import type { ChatMessage, CopilotLink, PlannerRef, WorkflowContext } from '../../../../../core/services/copilot/types';
 import { routeAndExtract } from '../../../../../core/services/copilot/copilotService';
 import { streamResponse } from '../../../../../core/services/copilot/responseFormatter';
 import { workflowRegistry, allWorkflows } from '../../../../../core/services/copilot/workflowRegistry';
+import { linksForWorkflow } from '../../../../../core/services/copilot/workflowLinks';
+import { requestDashboardHandoff } from '../../../../../core/services/copilot/handoff';
 import { ollamaStore } from '../../ollama/store';
 import { getStatus } from '../../../../../core/services/portal/portalSessionService';
 
@@ -10,6 +12,37 @@ export const dynamic = 'force-dynamic';
 
 const CANNOT_HANDLE =
   "Sorry, I'm not able to help with that. I can answer questions about the currently loaded student's major, graduation status, and completed units, check system status, and list available study planners.";
+
+const READ_ONLY =
+  "I can only look things up. I can't change grades, planners, units or any other data. Ask me what the data says and I'll check it.";
+
+/** What to ask the advisor for. Advisors know planner names, not planner ids. */
+const PARAM_QUESTIONS: Record<string, string> = {
+  studentId: "the student's ID number",
+  plannerId: 'which study planner (for example "Data Science 2025")',
+  plannerId1: 'the first study planner (for example "Data Science")',
+  plannerId2: 'the second study planner (for example "Cybersecurity")',
+  newPlannerId: 'which study planner the student would move to (for example "Cybersecurity")',
+  unitCode: 'the unit code (for example COS10009)',
+  semester: 'which semester (1, 2, summer or winter)',
+  intakeYear: 'which intake year (for example 2025)',
+  majorName: 'the name of the major',
+  prefix: 'the unit code prefix (for example COS)',
+};
+const askFor = (names: string[]) => names.map((n) => PARAM_QUESTIONS[n] ?? n).join(', and ');
+
+/** The study planners, in the form that the name resolver needs. Loaded only when a question needs a planner. */
+async function loadPlanners(): Promise<PlannerRef[]> {
+  const plannerRepository = await import('../../../../../core/db/repositories/plannerRepository');
+  const all = await plannerRepository.getAllPlanners();
+  return all.map((p) => ({
+    id: p.id,
+    majorName: p.major?.name ?? null,
+    courseName: p.course?.name ?? null,
+    intakeYear: p.intake_year,
+    intakeMonth: p.intake_month ?? null,
+  }));
+}
 
 function validateParams(
   workflow: ReturnType<typeof workflowRegistry.get>,
@@ -26,6 +59,24 @@ function workflowLabel(id: string): string {
     .split('_')
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(' ');
+}
+
+/**
+ * Buttons for an answer. A link about one student also starts preparing that
+ * student's dashboard data in the background, so the page opens already
+ * populated; the handoff id travels in the link's query.
+ */
+function buildLinks(workflowId: string, params: Record<string, unknown>, data: unknown): CopilotLink[] {
+  return linksForWorkflow(workflowId, params, data).map(({ student, ...link }) => {
+    if (!student) return link;
+    try {
+      const handoff = requestDashboardHandoff(student);
+      return { ...link, query: { ...link.query, handoff } };
+    } catch (err) {
+      console.warn('[Copilot] Could not start a dashboard handoff:', err);
+      return link;
+    }
+  });
 }
 
 export async function POST(req: Request) {
@@ -77,7 +128,7 @@ export async function POST(req: Request) {
         const routeStart = Date.now();
         let route;
         try {
-          route = await routeAndExtract(messages, allWorkflows);
+          route = await routeAndExtract(messages, allWorkflows, { loadPlanners });
         } catch (err) {
           clearTimeout(coldStartTimer);
           console.error('[Copilot] routeAndExtract failed:', err);
@@ -88,6 +139,12 @@ export async function POST(req: Request) {
         clearTimeout(coldStartTimer);
         emit({ type: 'routed', ms: Date.now() - routeStart });
 
+        if (route.refusal === 'read_only') {
+          emit({ type: 'reply', content: READ_ONLY });
+          controller.close();
+          return;
+        }
+
         if (!route.canHandle) {
           emit({ type: 'reply', content: CANNOT_HANDLE });
           controller.close();
@@ -95,7 +152,7 @@ export async function POST(req: Request) {
         }
 
         if (route.missingParams.length > 0) {
-          emit({ type: 'reply', content: `To do that, I need a bit more information. Could you provide: ${route.missingParams.join(', ')}?` });
+          emit({ type: 'reply', content: `To do that, I need a bit more information. Could you tell me ${askFor(route.missingParams)}?` });
           controller.close();
           return;
         }
@@ -109,10 +166,12 @@ export async function POST(req: Request) {
 
         const stillMissing = validateParams(workflow, route.params);
         if (stillMissing.length > 0) {
-          emit({ type: 'reply', content: `I need a bit more information to continue. Could you provide: ${stillMissing.join(', ')}?` });
+          emit({ type: 'reply', content: `I need a bit more information to continue. Could you tell me ${askFor(stillMissing)}?` });
           controller.close();
           return;
         }
+
+        for (const note of route.notes ?? []) emit({ type: 'status', message: note });
 
         // ── Portal session check ────────────────────────────────────────────
         // Workflows that include a studentId param require live portal data.
@@ -135,6 +194,10 @@ export async function POST(req: Request) {
           return;
         }
 
+        // Buttons come from the workflow that ran, so they are ready even if
+        // writing the reply fails below.
+        const links = buildLinks(route.workflowId!, route.params, result.data);
+
         // ── Phase 3: Stream Response ────────────────────────────────────────
         emit({ type: 'status', message: 'Generating response…' });
 
@@ -144,10 +207,16 @@ export async function POST(req: Request) {
             full += token;
             emit({ type: 'token', content: token });
           }
-          emit({ type: 'reply', content: full, workflowId: route.workflowId });
+          // Say which planner a name was taken to be, so a wrong guess is easy to see
+          for (const note of route.notes ?? []) {
+            const line = `\n\n_${note}_`;
+            full += line;
+            emit({ type: 'token', content: line });
+          }
+          emit({ type: 'reply', content: full, workflowId: route.workflowId, links });
         } catch (err) {
           console.error(`[Copilot] streamResponse failed for workflow "${route.workflowId}":`, err);
-          emit({ type: 'reply', content: `Here is what I found:\n\`\`\`\n${JSON.stringify(result.data, null, 2)}\n\`\`\``, workflowId: route.workflowId });
+          emit({ type: 'reply', content: `Here is what I found:\n\`\`\`\n${JSON.stringify(result.data, null, 2)}\n\`\`\``, workflowId: route.workflowId, links });
         }
         controller.close();
       } catch (err) {

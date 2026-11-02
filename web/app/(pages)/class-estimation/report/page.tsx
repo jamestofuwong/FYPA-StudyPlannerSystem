@@ -14,6 +14,9 @@ import Link from 'next/link';
 import { useScrollToTopOnMount } from '../../../../lib/scrollToTop';
 import styles from './page.module.css';
 import { DataTable } from '../components/DataTable';
+import { PageHeader, StateCard } from '../../../../components/common/MeadowBits';
+import { useDesign } from '../../../../styles/themeProvider';
+import { ArrowLeft, ChartColumn, Download } from 'lucide-react';
 
 type SavedRun = {
   id: string;
@@ -69,6 +72,7 @@ export default function ClassEstimationReportPage() {
   // was left scrolled to. See scrollToTop.ts.
   const rootRef = useRef<HTMLDivElement | null>(null);
   useScrollToTopOnMount(rootRef);
+  const isMeadow = useDesign() === 'meadow';
 
   const loadRun = useCallback(async (id: string) => {
     const res = await fetch(`/api/class-estimation/runs/${id}`).catch(() => null);
@@ -115,6 +119,26 @@ export default function ClassEstimationReportPage() {
   return (
     <div className={styles.panel} ref={rootRef}>
 
+      {isMeadow && (
+        <PageHeader
+          title="Class size estimate"
+          description={run
+            ? `How many students to expect in each unit in semester ${run.targetSemester} of ${run.targetYear}.`
+            : 'How many students to expect in each unit next semester.'}
+          actions={<Link href="/class-estimation" className={styles.backLink}><ArrowLeft aria-hidden="true" />Back to the estimator</Link>}
+        />
+      )}
+
+      {isMeadow && status === 'loading' && <StateCard busy title="Loading the latest estimate…" />}
+      {isMeadow && status === 'error' && <StateCard tone="error" title="Something went wrong">{error}</StateCard>}
+      {isMeadow && status === 'empty' && (
+        <StateCard icon={<ChartColumn />} title="No estimates saved yet">
+          <span>An estimate has to be produced and saved before it can be read here. Load the current students, run the estimate, then save it.</span>
+          <Link href="/class-estimation" className={styles.btnPrimary}>Open the estimator</Link>
+        </StateCard>
+      )}
+
+      {!isMeadow && (
       <div className={styles.header}>
         <div>
           <h1 className={styles.title}>Class Size Estimate</h1>
@@ -126,16 +150,17 @@ export default function ClassEstimationReportPage() {
         </div>
         <Link href="/class-estimation" className={styles.backLink}>← Estimator</Link>
       </div>
+      )}
 
-      {status === 'loading' && <div className={styles.card}>Loading…</div>}
+      {!isMeadow && status === 'loading' && <div className={styles.card}>Loading…</div>}
 
-      {status === 'error' && (
+      {!isMeadow && status === 'error' && (
         <div className={styles.card}>
           <div className={styles.errorBox}>{error}</div>
         </div>
       )}
 
-      {status === 'empty' && (
+      {!isMeadow && status === 'empty' && (
         <div className={styles.card}>
           <div className={styles.sectionTitle}>No estimates saved yet</div>
           <p className={styles.hintText}>
@@ -149,7 +174,7 @@ export default function ClassEstimationReportPage() {
       {status === 'ready' && run && (
         <>
           {/* Which estimate, and what it assumed. Kept above the figures so a number is never read alone. */}
-          <div className={styles.card}>
+          <div className={`${styles.card} ${styles.summaryCard}`}>
             <div className={styles.metaTop}>
               <div>
                 <div className={styles.sectionTitle}>
@@ -179,13 +204,14 @@ export default function ClassEstimationReportPage() {
                   </select>
                 )}
                 <a className={styles.btnPrimary} href={`/api/class-estimation/runs/${run.id}/export`}>
+                  {isMeadow && <Download aria-hidden="true" />}
                   Download Excel
                 </a>
               </div>
             </div>
 
             <div className={styles.figures}>
-              <div className={styles.figure}>
+              <div className={`${styles.figure} ${styles.figureMain}`}>
                 <span className={styles.figureValue}>{run.totalHeadcount.toLocaleString()}</span>
                 <span className={styles.figureLabel}>Enrolments expected</span>
               </div>
@@ -234,7 +260,7 @@ export default function ClassEstimationReportPage() {
           {/* The figures. One row per unit, largest first, no internal vocabulary. Paged, so a course with
               hundreds of units takes the same space as one with twenty. */}
           <div className={styles.card}>
-            <div className={styles.sectionTitle} style={{ marginBottom: 12 }}>Expected enrolment by unit</div>
+            <div className={styles.sectionTitle} style={{ marginBottom: isMeadow ? 16 : 12 }}>Expected enrolment by unit</div>
 
             <DataTable
               rows={run.units}

@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "fetch:unit-details": "tsx scripts/fetch-unit-details.ts",
     "db:generate": "prisma generate",
     "postinstall": "prisma generate",
     "db:migrate": "prisma migrate dev",
@@ -19,10 +20,12 @@
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",
     "bcryptjs": "^2.4.3",
+    "cheerio": "^1.2.0",
     "jose": "^5.9.6",
     "next": "16.1.6",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "server-only": "^0.0.1",
     "zod": "^4.6.5"
   },
   "devDependencies": {
@@ -31,6 +34,7 @@
     "@types/node": "25.4.0",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
+    "domhandler": "^6.0.1",
     "dotenv-cli": "^11.0.0",
     "eslint": "9.39.4",
     "eslint-config-next": "16.1.6",

@@ -3,18 +3,18 @@ import { revalidatePath } from 'next/cache'
 import { revalidateStudentCache, STUDENT_CACHE } from '@/lib/catalog'
 import { prisma } from '@/lib/prisma'
 import { HodListSchema } from '@/lib/cms/schemas'
-import { getSession } from '@/lib/cms/session'
+import { requireAccess } from '@/lib/cms/access'
 
 export async function saveHods(
   hods: { id?: string; faculty: string; department: string; name: string; email: string; position: number }[]
 ) {
   const parsed = HodListSchema.safeParse(hods)
   if (!parsed.success) {
-    throw new Error(parsed.error.errors[0]?.message ?? 'Invalid head of department data')
+    throw new Error(parsed.error.issues[0]?.message ?? 'Invalid head of department data')
   }
   const data = parsed.data
 
-  const session = await getSession()
+  const session = await requireAccess('hod', 'edit')
   await prisma.headOfDepartment.deleteMany()
   await prisma.headOfDepartment.createMany({
     data: data.map(h => ({

@@ -1,12 +1,12 @@
 /** @jest-environment jsdom */
 // @ts-nocheck
-import React from 'react';
+import React, { useEffect } from 'react';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import DashboardPage from '@/app/(pages)/dashboard/page';
 import { PortalAuthProvider, usePortalAuth } from '@/components/providers/PortalAuthContext';
 import { ScraperProvider } from '@/components/providers/ScraperContext';
 import { ToastProvider } from '@/components/providers/ToastProvider';
-import { StudentSessionProvider } from '@/components/providers/StudentSessionContext';
+import { StudentSessionProvider, useStudentSession } from '@/components/providers/StudentSessionContext';
 import PathwayPage from '@/app/(pages)/pathway/page';
 
 process.on('unhandledRejection', (reason) => {
@@ -47,17 +47,48 @@ const storageMock = {
 };
 Object.defineProperty(window, 'sessionStorage', { value: storageMock });
 
-describe('Dashboard Ultimate Coverage Booster', () => {
+// The dashboard reads the portal state from /api/scraper/status: logged in, and a student list that has loaded.
+const STATUS_LOGGED_IN = (extra = {}) => ({
+  ok: true,
+  json: () => Promise.resolve({ sessionStatus: 'logged-in', studentCount: 5, status: 'idle', ...extra }),
+});
+
+const ok = (body) => Promise.resolve({ ok: true, json: () => Promise.resolve(body) });
+
+// What the dashboard asks the portal routes when an advisor searches for a student: the suggestions, the enrolments and
+// the degree audit. `fallback` answers everything else (matching, planners, import and so on).
+const portalApi = (student, fallback = () => ok({})) => (url, options) => {
+  const u = String(url);
+  if (u.includes('/api/scraper/status')) return Promise.resolve(STATUS_LOGGED_IN());
+  if (u.includes('/api/scraper/portal-students/search')) {
+    return ok({ results: [{ student_id: new URL(u, 'http://x').searchParams.get('q'), name: student.studentName, db_id: 7 }] });
+  }
+  if (u.includes('/api/scraper/portal-enrollments')) return ok({ enrollments: [{ EnrollId: 11, EnrollmentDesc: 'Bachelor of Computer Science' }] });
+  if (u.includes('/api/scraper/portal-fetch')) return ok({ ok: true, student });
+  return fallback(u, options);
+};
+
+// The search box is enabled once the status poll says that the portal is logged in and its student list has loaded.
+const searchFor = async (id) => {
+  const input = await screen.findByPlaceholderText(/Student ID or name/i);
+  await waitFor(() => expect(input).not.toBeDisabled());
+  fireEvent.change(input, { target: { value: id } });
+  fireEvent.click(screen.getByText('Search'));
+};
+
+describe('Dashboard', () => {
   let intervalSpy: jest.SpyInstance;
   beforeEach(() => {
     jest.useFakeTimers();
     intervalSpy = jest.spyOn(global, 'setInterval');
     
-    global.fetch = jest.fn().mockImplementation(() => 
-      Promise.resolve({
-        ok: false,
-        json: () => Promise.resolve({ status: 'idle' })
-      })
+    global.fetch = jest.fn().mockImplementation((url) => 
+      String(url).includes('/api/scraper/status')
+        ? Promise.resolve(STATUS_LOGGED_IN())
+        : Promise.resolve({
+            ok: false,
+            json: () => Promise.resolve({ status: 'idle' })
+          })
     );
   });
 
@@ -72,47 +103,24 @@ describe('Dashboard Ultimate Coverage Booster', () => {
   });
 
   test('triggers search and transitions to results (UIT-04)', async () => {
-    let scraperStatus = 'idle';
-
-    (global.fetch as jest.Mock).mockImplementation((url) => {
-      if (url.includes('/api/scraper/start')) {
-        scraperStatus = 'done'; 
-        return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true }) });
-      }
-      if (url.includes('/api/scraper/status')) {
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve({ 
-              status: scraperStatus, // Return 'idle' first, then 'done' after search
-              result: scraperStatus === 'done' ? { studentName: 'Test Student', courseList: [], enrollmentDate: '01/02/2024' } : null
-          }),
-        });
-      }
-      // Endpoints for Matching & Data
-      if (url.includes('/api/match')) {
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve({ 
-              success: true, 
-              data: { rankedPlanners: [{ plannerID: '1', matchPct: 85 }], primaryMajor: { matchPct: 85 } } 
-          }),
-        });
-      }
-      if (url.includes('/api/planners')) {
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve({ 
+    (global.fetch as jest.Mock).mockImplementation(portalApi(
+      { studentName: 'Test Student', courseList: [], enrollmentDate: '01/02/2024' },
+      (url) => {
+        if (url.includes('/api/match')) {
+          return ok({ success: true, data: { rankedPlanners: [{ plannerID: '1', matchPct: 85 }], primaryMajor: { matchPct: 85 } } });
+        }
+        if (url.includes('/api/planners')) {
+          return ok({
             id: '1',
             course: { name: 'Computer Science' },
             major: { name: 'AI' },
-            units: [{ year_level: 1, semester: 1, category: 'core', unit: { unit_code: 'COS10009', unit_name: 'Test' } }] 
-          }),
-        });
-      }
-      return Promise.reject(new Error(`Unknown API: ${url}`));
-    });
+            units: [{ year_level: 1, semester: 1, category: 'core', unit: { unit_code: 'COS10009', unit_name: 'Test' } }],
+          });
+        }
+        return Promise.reject(new Error(`Unknown API: ${url}`));
+      },
+    ));
 
-    // RENDER
     render(
       <ToastProvider>
         <PortalAuthProvider>
@@ -123,16 +131,14 @@ describe('Dashboard Ultimate Coverage Booster', () => {
       </ToastProvider>
     );
 
-    // VERIFY LANDING SCREEN after render
-    expect(screen.getByText(/Enter a Student ID to begin/i)).toBeInTheDocument();
+    // LANDING SCREEN once the portal status is known
+    expect(await screen.findByText(/Enter a Student ID to begin/i)).toBeInTheDocument();
 
-    const input = screen.getByPlaceholderText(/Student ID or name/i);
-    fireEvent.change(input, { target: { value: 'BA-CS-2024-0001' } });
-    fireEvent.click(screen.getByText('Search'));
+    await searchFor('BA-CS-2024-0001');
 
     // WAIT FOR RESULTS -prove transition
     await waitFor(() => {
-      expect(screen.getByText('Test Student')).toBeInTheDocument();
+      expect(screen.getAllByText('Test Student').length).toBeGreaterThan(0);
     }, { timeout: 3000 });
 
     fireEvent.click(screen.getByRole('tab', { name: 'Unit Plan' }));
@@ -145,55 +151,42 @@ describe('Dashboard Ultimate Coverage Booster', () => {
     // TEST CLEAR BUTTON
     const clearBtn = screen.getByText(/Clear/i);
     fireEvent.click(clearBtn);
-    
+
     //VERIFY RETURN TO LANDING SCREEN
-    expect(screen.getByText(/Enter a Student ID to begin/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Enter a Student ID to begin/i)).toBeInTheDocument();
   });
 
-  test('Dashboard Extension: Enrollment Switching and Custom Pathway (Lines 1381-1510)', async () => {
-    // Setup a dedicated fetch mock for this lifecycle
-    let status = 'idle';
-    (global.fetch as jest.Mock).mockImplementation((url) => {
-      if (url.includes('/api/scraper/start')) {
-        status = 'done';
-        return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true }) });
-      }
-      if (url.includes('/api/scraper/status')) {
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve({ 
-            status: status, 
-            result: status === 'done' ? { studentName: 'Test', courseList: [], enrollmentDate: '01/01/2024' } : null 
-          })
-        });
-      }
-      if (url.includes('/api/match')) {
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve({ 
-            success: true, 
-            data: { rankedPlanners: [{ plannerID: '1', matchPct: 85 }], primaryMajor: { matchPct: 85 } } 
-          })
-        });
-      }
-      if (url.includes('/api/planners')) {
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve({ 
+  test('Dashboard Extension: Enrollment Switching and Custom Pathway', async () => {
+    (global.fetch as jest.Mock).mockImplementation(portalApi(
+      { studentName: 'Test', courseList: [], enrollmentDate: '01/01/2024' },
+      (url) => {
+        if (url.includes('/api/match')) {
+          return ok({ success: true, data: { rankedPlanners: [{ plannerID: '1', matchPct: 85 }], primaryMajor: { matchPct: 85 } } });
+        }
+        if (url.includes('/api/planners')) {
+          return ok({
             id: '1',
             units: [{ year_level: 1, semester: 1, category: 'core', unit: { unit_code: 'COS1', unit_name: 'U1' } }],
             minors: [{ id: 'm1', name: 'AI Minor', units: [{ unit: { unit_code: 'AI1' } }] }]
-          })
-        });
-      }
-      if (url.includes('/api/custom-planner')) {
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve({ success: true, data: { semesters: [{ year: 1, semester: 2, units: [] }], unschedulableUnits: [] } })
-        });
-      }
-      return Promise.reject(new Error(`Unknown API in Extension: ${url}`));
-    });
+          });
+        }
+        if (url.includes('/api/custom-planner')) {
+          return ok({
+            success: true,
+            data: { semesters: [{ year: 1, semester: 2, units: [] }], unschedulableUnits: [] },
+            // the minors that the server says can be added to this plan
+            availableMinors: [{
+              minorId: 'm1',
+              minorName: 'AI Minor',
+              neededCount: 1,
+              units: [{ code: 'AI1', name: 'AI One' }],
+              canFitInRemainingBudget: true,
+            }],
+          });
+        }
+        return Promise.reject(new Error(`Unknown API in Extension: ${url}`));
+      },
+    ));
 
     render(
       <ToastProvider><PortalAuthProvider><ScraperProvider>
@@ -202,15 +195,12 @@ describe('Dashboard Ultimate Coverage Booster', () => {
     );
 
     //Perform Search
-    const input = screen.getByPlaceholderText(/Student ID or name/i);
-    fireEvent.change(input, { target: { value: 'BA-CS-2024-0001' } });
-    fireEvent.click(screen.getByText('Search'));
+    await searchFor('BA-CS-2024-0001');
 
     await waitFor(() => expect(screen.getByText(/Ranked Planners/i)).toBeInTheDocument(), { timeout: 3000 });
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Extended Plan' }));
-
-    // TEST CUSTOM PATHWAY GENERATION (Targets lines 1381-1510)
+    // The custom pathway is on the Student Pathway page, which shares the loaded student
+    // Generate a custom pathway
     const generateBtn = screen.getByText(/Generate Custom Pathway/i);
 
     await act(async () => {
@@ -219,9 +209,7 @@ describe('Dashboard Ultimate Coverage Booster', () => {
 
     await screen.findByText(/Extended Study Plan/i, {}, { timeout: 5000 });
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Minors' }));
-
-    // TEST MINOR INJECTION (Targets logic around line 1450)
+    // Add a minor to the plan
     const includeMinorBtn = screen.getByText(/\+ Include in Custom Plan/i);
     await act(async () => {
       fireEvent.click(includeMinorBtn);
@@ -231,7 +219,7 @@ describe('Dashboard Ultimate Coverage Booster', () => {
     expect(screen.getByText(/✕ Remove from Plan/i)).toBeInTheDocument();
   });
 
-  test('Dashboard Coverage: Graduation Eligibility Logic (Lines 1445-1510)', async () => {
+  test('Dashboard: graduation eligibility', async () => {
     // Generate 24 units to reach exactly 300 CP (24 * 12.5)
     const mockUnits = Array.from({ length: 24 }, (_, i) => ({
       courseId: `UNIT-${i}`,
@@ -245,37 +233,19 @@ describe('Dashboard Ultimate Coverage Booster', () => {
       unit: { unit_code: u.courseId, unit_name: `Unit ${i}` }
     }));
 
-    (global.fetch as jest.Mock).mockImplementation((url) => {
-      if (url.includes('/api/scraper/status')) {
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve({ 
-            status: 'done', 
-            result: { studentName: 'Grad Student', courseList: mockUnits, enrollmentDate: '01/01/2024', creditsCompleted: 300, creditsRequired: 300 } 
-          })
-        });
-      }
-      if (url.includes('/api/planners')) {
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve({ id: '1', units: plannerUnits })
-        });
-      }
-      if (url.includes('/api/match')) {
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve({ 
-            success: true, 
-            data: { 
-                rankedPlanners: [{ plannerID: '1', matchPct: 100 }],
-                totalCredits: 300, 
-                unmatchedCore: []
-            } 
-          })
-        });
-      }
-      return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true }) });
-    });
+    (global.fetch as jest.Mock).mockImplementation(portalApi(
+      { studentName: 'Grad Student', courseList: mockUnits, enrollmentDate: '01/01/2024', creditsCompleted: 300, creditsRequired: 300 },
+      (url) => {
+        if (url.includes('/api/planners')) return ok({ id: '1', units: plannerUnits });
+        if (url.includes('/api/match')) {
+          return ok({
+            success: true,
+            data: { rankedPlanners: [{ plannerID: '1', matchPct: 100 }], totalCredits: 300, unmatchedCore: [] },
+          });
+        }
+        return ok({ success: true });
+      },
+    ));
 
     render(
       <ToastProvider><PortalAuthProvider><ScraperProvider>
@@ -283,8 +253,7 @@ describe('Dashboard Ultimate Coverage Booster', () => {
       </ScraperProvider></PortalAuthProvider></ToastProvider>
     );
 
-    fireEvent.change(screen.getByPlaceholderText(/Student ID/i), { target: { value: 'GRAD-OK' } });
-    fireEvent.click(screen.getByText('Search'));
+    await searchFor('GRAD-OK');
 
     await waitFor(() => expect(screen.getByRole('tab', { name: 'Graduation' })).toBeInTheDocument(), { timeout: 4000 });
     fireEvent.click(screen.getByRole('tab', { name: 'Graduation' }));
@@ -294,7 +263,7 @@ describe('Dashboard Ultimate Coverage Booster', () => {
       expect(screen.getByText('ELIGIBLE')).toBeInTheDocument();
     }, { timeout: 4000 });
     
-    // Verify the green color is applied (Targets Line 1460)
+    // The eligible label is green
     const eligibleLabel = screen.getByText('ELIGIBLE');
     expect(eligibleLabel).toHaveStyle('color: var(--accent-green)');
   });
@@ -337,7 +306,7 @@ describe('Dashboard Ultimate Coverage Booster', () => {
     }, { timeout: 10000 });
   }, 30000);
 
-  test('Dashboard: handles import panel intake inputs (Line 360+)', async () => {
+  test('Dashboard: handles import panel intake inputs', async () => {
     render(<ToastProvider><PortalAuthProvider><ScraperProvider><StudentSessionProvider><DashboardPage /></StudentSessionProvider></ScraperProvider></PortalAuthProvider></ToastProvider>);
     
     fireEvent.click(screen.getByRole('button', { name: /^Import$/i }));
@@ -427,8 +396,10 @@ describe('Dashboard Ultimate Coverage Booster', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/Ranked Planners/i)).toBeInTheDocument();
-      expect(screen.getByText(/COS10009/i)).toBeInTheDocument();
     }, { timeout: 5000 });
+    // the unit is on the planner, so it is listed on the Unit Plan tab
+    fireEvent.click(screen.getByRole('tab', { name: 'Unit Plan' }));
+    expect((await screen.findAllByText(/COS10009/i)).length).toBeGreaterThan(0);
   });
 
   test('Dashboard paste import parses transcript rows and submits normalized progress', async () => {
@@ -505,22 +476,12 @@ describe('Dashboard Ultimate Coverage Booster', () => {
     }, { timeout: 5000 });
   });
 
-  test('Dashboard: restores session from sessionStorage on mount', async () => {
-    const mockSession = JSON.stringify({
+  // REQ-SEC-101: student data lives in memory only. A student that an old build left in sessionStorage must not come back.
+  test('Dashboard: does not restore a student from sessionStorage, and does not write one there', async () => {
+    storageMock.getItem.mockReturnValue(JSON.stringify({
       studentId: 'RESTORED-ID',
-      data: { 
-        student: { studentName: 'Old Session', courseList: [] },
-        // ADD THIS: The UI crashes without this matching object
-        match: { 
-          totalCredits: 150, 
-          unmatchedCore: [],
-          rankedPlanners: [{ plannerID: 'p1', matchPct: 90 }] 
-        },
-        planners: [{ id: 'p1', units: [] }]
-      }
-    });
-    
-    storageMock.getItem.mockReturnValue(mockSession);
+      data: { student: { studentName: 'Old Session', courseList: [] }, match: { totalCredits: 150, unmatchedCore: [], rankedPlanners: [] }, planners: [] },
+    }));
 
     await act(async () => {
       render(
@@ -533,42 +494,50 @@ describe('Dashboard Ultimate Coverage Booster', () => {
         </ToastProvider>
       );
     });
-    
-    const input = await screen.findByDisplayValue('RESTORED-ID');
-    expect(input).toBeInTheDocument();
-    expect(screen.getByText('Old Session')).toBeInTheDocument();
-    
+
+    expect(await screen.findByText(/Enter a Student ID to begin/i)).toBeInTheDocument();
+    expect(screen.queryByDisplayValue('RESTORED-ID')).toBeNull();
+    expect(screen.queryByText('Old Session')).toBeNull();
+    expect(storageMock.setItem).not.toHaveBeenCalled();
+
     storageMock.getItem.mockReturnValue(null);
   });
 
-  test('Dashboard: Handles manual planner fetch failure (Line 1357)', async () => {
-    const mockSession = JSON.stringify({
-      studentId: 'STU-001',
-      data: {
-        student: { studentName: 'Test Student', courseList: [], enrollmentOptions: [], selectedEnrollment: '' },
-        match: {
-          totalCredits: 150,
-          unmatchedCore: [],
-          rankedPlanners: [{ plannerID: 'p1', majorName: 'Test Major', matchPct: 80 }],
-        },
-        planners: [{
-          id: 'p1',
-          course: { name: 'Bachelor of CS' },
-          major: { name: 'Test Major' },
-          intake_year: 2022,
-          intake_month: 2,
-          units: [],
-          minors: [],
-        }],
-        completedCodes: [],
-        intakeYear: 2022,
-        studentId: 'STU-001',
-        enrollmentMode: 'latest',
-        mpuCourseList: [],
-      },
-    });
-
-    storageMock.getItem.mockReturnValue(mockSession);
+  test('Dashboard: Handles manual planner fetch failure', async () => {
+    // A student that is already loaded (in memory, as it is after a search)
+    function Seed() {
+      const session = useStudentSession();
+      useEffect(() => {
+        session.setStudentLoaded(true);
+        session.setScrapedStudent({
+          studentId: 'STU-001',
+          student: { studentName: 'Test Student', courseList: [], enrollmentOptions: [], selectedEnrollment: '' },
+        });
+        session.setDashboardData({
+          match: {
+            totalCredits: 150,
+            unmatchedCore: [],
+            rankedPlanners: [{ plannerID: 'p1', majorName: 'Test Major', matchPct: 80 }],
+          },
+          planners: [{
+            id: 'p1',
+            course: { name: 'Bachelor of CS' },
+            major: { name: 'Test Major' },
+            intake_year: 2022,
+            intake_month: 2,
+            units: [],
+            minors: [],
+          }],
+          completedCodes: [],
+          intakeYear: 2022,
+          studentId: 'STU-001',
+          enrollmentMode: 'latest',
+          mpuCourseList: [],
+        });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, []);
+      return null;
+    }
 
     (global.fetch as jest.Mock).mockImplementation((url: string) => {
       if (url.includes('/api/scraper/status'))
@@ -597,14 +566,14 @@ describe('Dashboard Ultimate Coverage Booster', () => {
         <ToastProvider>
           <PortalAuthProvider>
             <ScraperProvider>
-              <StudentSessionProvider><DashboardPage /></StudentSessionProvider>
+              <StudentSessionProvider><Seed /><DashboardPage /></StudentSessionProvider>
             </ScraperProvider>
           </PortalAuthProvider>
         </ToastProvider>
       );
     });
 
-    // Session restore puts us in dashboard view immediately
+    // A loaded student puts us in the dashboard view
     await waitFor(() =>
       expect(screen.getByText(/Match against a different planner/i)).toBeInTheDocument(),
       { timeout: 3000 }
@@ -620,37 +589,29 @@ describe('Dashboard Ultimate Coverage Booster', () => {
 
     const alert = await screen.findByRole('alert', {}, { timeout: 5000 });
     expect(alert).toHaveTextContent(/Failed to fetch planner/i);
-
-    storageMock.getItem.mockReturnValue(null);
   }, 25000);
 
   test('Dashboard Graduation: Ineligible due to missing core units', async () => {
     // Student has completed nothing — planner has a core unit → INELIGIBLE
-    (global.fetch as jest.Mock).mockImplementation((url: string, opts?: any) => {
-      if (url.includes('/api/scraper/start'))
-        return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true }) });
-      if (url.includes('/api/scraper/status'))
-        return Promise.resolve({ ok: true, json: () => Promise.resolve({
-          status: 'done',
-          result: { studentName: 'Test Student', courseList: [], enrollmentDate: '01/02/2024' },
-        })});
-      if (url.includes('/api/match'))
-        return Promise.resolve({ ok: true, json: () => Promise.resolve({
-          success: true,
-          data: { rankedPlanners: [{ plannerID: '1', matchPct: 80 }], primaryMajor: { matchPct: 80 } },
-        })});
-      if (url.includes('/api/planners'))
-        return Promise.resolve({ ok: true, json: () => Promise.resolve({
-          id: '1',
-          units: [{ year_level: 1, semester: 1, category: 'core', unit: { unit_code: 'CORE1', unit_name: 'Core Unit' } }],
-        })});
-      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
-    });
+    (global.fetch as jest.Mock).mockImplementation(portalApi(
+      { studentName: 'Test Student', courseList: [], enrollmentDate: '01/02/2024' },
+      (url: string) => {
+        if (url.includes('/api/match')) {
+          return ok({ success: true, data: { rankedPlanners: [{ plannerID: '1', matchPct: 80 }], primaryMajor: { matchPct: 80 } } });
+        }
+        if (url.includes('/api/planners')) {
+          return ok({
+            id: '1',
+            units: [{ year_level: 1, semester: 1, category: 'core', unit: { unit_code: 'CORE1', unit_name: 'Core Unit' } }],
+          });
+        }
+        return ok({});
+      },
+    ));
 
     render(<ToastProvider><PortalAuthProvider><ScraperProvider><StudentSessionProvider><DashboardPage /></StudentSessionProvider></ScraperProvider></PortalAuthProvider></ToastProvider>);
 
-    fireEvent.change(screen.getByPlaceholderText(/Student ID or name/i), { target: { value: 'TEST-001' } });
-    fireEvent.click(screen.getByText('Search'));
+    await searchFor('TEST-001');
 
     await waitFor(() => expect(screen.getByRole('tab', { name: 'Graduation' })).toBeInTheDocument(), { timeout: 5000 });
     fireEvent.click(screen.getByRole('tab', { name: 'Graduation' }));
@@ -660,43 +621,37 @@ describe('Dashboard Ultimate Coverage Booster', () => {
 
   test('Dashboard Graduation: Ineligible due to low credits (< 300 CP)', async () => {
     // Portal creditsCompleted is 12.5 CP < 300 → INELIGIBLE, shows credits
-    (global.fetch as jest.Mock).mockImplementation((url: string, opts?: any) => {
-      if (url.includes('/api/scraper/start'))
-        return Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true }) });
-      if (url.includes('/api/scraper/status'))
-        return Promise.resolve({ ok: true, json: () => Promise.resolve({
-          status: 'done',
-          result: {
-            studentName: 'Test Student',
-            courseList: [{ courseId: 'CORE1', status: 'Complete' }],
-            enrollmentDate: '01/02/2024',
-            creditsCompleted: 12.5,
-            creditsRequired: 300,
-          },
-        })});
-      if (url.includes('/api/match'))
-        return Promise.resolve({ ok: true, json: () => Promise.resolve({
-          success: true,
-          data: { rankedPlanners: [{ plannerID: '1', matchPct: 80 }], primaryMajor: { matchPct: 80 } },
-        })});
-      if (url.includes('/api/planners'))
-        return Promise.resolve({ ok: true, json: () => Promise.resolve({
-          id: '1',
-          // 24 core units = 300 CP required; only CORE1 is complete = 12.5 CP
-          units: Array.from({ length: 24 }, (_, i) => ({
-            year_level: Math.floor(i / 4) + 1,
-            semester: (i % 2) + 1,
-            category: 'core',
-            unit: { unit_code: `CORE${i + 1}`, unit_name: `Core Unit ${i + 1}` },
-          })),
-        })});
-      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
-    });
+    (global.fetch as jest.Mock).mockImplementation(portalApi(
+      {
+        studentName: 'Test Student',
+        courseList: [{ courseId: 'CORE1', status: 'Complete' }],
+        enrollmentDate: '01/02/2024',
+        creditsCompleted: 12.5,
+        creditsRequired: 300,
+      },
+      (url: string) => {
+        if (url.includes('/api/match')) {
+          return ok({ success: true, data: { rankedPlanners: [{ plannerID: '1', matchPct: 80 }], primaryMajor: { matchPct: 80 } } });
+        }
+        if (url.includes('/api/planners')) {
+          return ok({
+            id: '1',
+            // 24 core units = 300 CP required; only CORE1 is complete = 12.5 CP
+            units: Array.from({ length: 24 }, (_, i) => ({
+              year_level: Math.floor(i / 4) + 1,
+              semester: (i % 2) + 1,
+              category: 'core',
+              unit: { unit_code: `CORE${i + 1}`, unit_name: `Core Unit ${i + 1}` },
+            })),
+          });
+        }
+        return ok({});
+      },
+    ));
 
     render(<ToastProvider><PortalAuthProvider><ScraperProvider><StudentSessionProvider><DashboardPage /></StudentSessionProvider></ScraperProvider></PortalAuthProvider></ToastProvider>);
 
-    fireEvent.change(screen.getByPlaceholderText(/Student ID or name/i), { target: { value: 'TEST-002' } });
-    fireEvent.click(screen.getByText('Search'));
+    await searchFor('TEST-002');
 
     await waitFor(() => expect(screen.getByRole('tab', { name: 'Graduation' })).toBeInTheDocument(), { timeout: 5000 });
     fireEvent.click(screen.getByRole('tab', { name: 'Graduation' }));

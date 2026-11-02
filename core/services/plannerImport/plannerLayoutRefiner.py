@@ -5,6 +5,7 @@ import pdfplumber
 from collections import Counter, defaultdict
 from plannerStructureAssembler import iter_units
 from plannerPdfEvidence import (
+    UNIT_MARKER_RE,
     _colour_dist,
     _extract_line_headers,
     _normalise_rgb,
@@ -23,7 +24,7 @@ from plannerExtractionQuality import validate_planner
 # Geometry-based refinements reconnect extracted text with planner rows, headers, and columns.
 # Candidates are accepted only when their structural quality is no worse than current data.
 
-CODE_RE = re.compile(r"^[A-Z]{3}\d{3,5}[*#\u2020]*$", re.IGNORECASE)
+CODE_RE = re.compile(rf"^[A-Z]{{3}}\d{{3,5}}(?:{UNIT_MARKER_RE})?$", re.IGNORECASE)
 TRAILING_CONNECTOR_RE = re.compile(r"(?:\b(?:and|or)\b|[&,/])\s*$", re.IGNORECASE)
 PREREQ_BOUNDARY_NOISE_RE = re.compile(
     r"\b(?:Semester\s+\d+|Pre-?requisites?|Program Planner|Course Information|"
@@ -33,7 +34,7 @@ PREREQ_BOUNDARY_NOISE_RE = re.compile(
 
 # Normalize a unit-code anchor for layout matching.
 def _normalise_code(text):
-    return re.sub(r"[*#\u2020]+$", "", str(text or "").strip().upper())
+    return re.sub(rf"{UNIT_MARKER_RE}$", "", str(text or "").strip().upper())
 
 # Group words using a tolerance derived from the page's median glyph height.
 def _lines(words):
@@ -171,7 +172,7 @@ def _category_from_label(text):
         return "wil"
     if re.search(r"\b(?:Major|Discipline)\s+Units?\b", text, re.IGNORECASE):
         return "major_core"
-    if re.search(r"\b(?:Elective|Component)\s+Units?\b", text, re.IGNORECASE):
+    if re.search(r"\b(?:Recommended\s+)?(?:Elective|Component)\s+Units?\b", text, re.IGNORECASE):
         return "elective"
     if re.search(r"\bCore\s+Units?\b", text, re.IGNORECASE):
         return "core"
@@ -616,7 +617,7 @@ def apply_requirement_association(base_data, pdf_path):
 # ============================================================
 # STEP 4: Recover year and semester context
 # ============================================================
-CODE_RE = re.compile(r"^[A-Z]{3}\d{3,5}[*#\u2020]*$", re.IGNORECASE)
+CODE_RE = re.compile(rf"^[A-Z]{{3}}\d{{3,5}}(?:{UNIT_MARKER_RE})?$", re.IGNORECASE)
 YEAR_RE = re.compile(r"^Year\s+(One|Two|Three|Four|Five|\d+)\b", re.IGNORECASE)
 SEMESTER_RE = re.compile(r"^Semester\s+(\d+)\b", re.IGNORECASE)
 TERM_RE = re.compile(r"^(Summer|Winter)\s+Term\b", re.IGNORECASE)

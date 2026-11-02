@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=Inter:wght@300;400;500;600;700&family=Figtree:wght@400;500;600;700&family=Bricolage+Grotesque:opsz,wght@12..96,600..800&display=swap');
 
 *,
 *::before,
@@ -18,7 +18,7 @@ body {
   font-family: var(--font-sans);
   background: var(--main-bg);
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--text-body, 13px);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
@@ -33,10 +33,10 @@ body {
 }
 ::-webkit-scrollbar-thumb {
   background: var(--scrollbar-thumb);
-  border-radius: 4px;
+  border-radius: var(--radius-md, 4px);
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #555;
+  background: var(--scrollbar-thumb-hover, #555);
 }
 
 /* ===== UTILITY ===== */

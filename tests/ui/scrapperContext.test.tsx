@@ -85,7 +85,7 @@ const ScraperTestTool = () => {
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
-describe('ScraperContext Deep Coverage', () => {
+describe('ScraperContext', () => {
   beforeEach(() => {
     jest.useRealTimers();
     (window as any).__scraperTestAdapter = fakeAdapter;

@@ -20,6 +20,7 @@ from plannerStructureAssembler import (
     normalise_prereq_text,
 )
 from plannerExtractionPipeline import apply_extraction_pipeline
+from plannerExtractionQuality import NAME_NOISE_RE
 
 # ============================================================
 # STEP 1: Prepare application helpers
@@ -45,6 +46,8 @@ def infer_template_duration_semesters(data):
     max_semester = None
     categories = data.get("categories", {}) if isinstance(data, dict) else {}
     elective_groups = categories.get("elective_groups", {}) if isinstance(categories, dict) else {}
+    if not isinstance(elective_groups, dict):
+        elective_groups = {}
     minor_units = []
     for group in categories.get("minor_groups", []) if isinstance(categories.get("minor_groups"), list) else []:
         if isinstance(group, dict):
@@ -156,17 +159,268 @@ def unit_count_snapshot(data):
 def validate_and_normalise(data, silent=False):
     return data
 
-# Report missing runtime fields without using gold data.
-def collect_validation_issues(data):
-    issues = []
-    ci = data.get("course_information", {})
-    for key in ("course", "major", "intake", "intake_year"):
-        if not ci.get(key): issues.append(f"Missing course_information.{key}")
-    categories = data.get("categories", {})
-    if not categories.get("core_units"): issues.append("core_units is empty")
-    if not categories.get("major_units"): issues.append("major_units is empty")
-    if not isinstance(categories.get("elective_groups"), dict): issues.append("elective_groups is missing or invalid")
-    return issues
+# Return category/unit pairs from groups that can contain scheduled units.
+def _iter_validation_units(data):
+    categories = data.get("categories", {}) if isinstance(data, dict) else {}
+    electives = categories.get("elective_groups", {}) if isinstance(categories, dict) else {}
+    groups = (
+        ("core", categories.get("core_units", [])),
+        ("major", categories.get("major_units", [])),
+        ("mpu", categories.get("mpu_group", [])),
+        ("prescribed_elective", electives.get("prescribed_elective", []) if isinstance(electives, dict) else []),
+        ("elective", electives.get("elective", []) if isinstance(electives, dict) else []),
+        ("wil", categories.get("wil_group", [])),
+    )
+    for category, units in groups:
+        for unit in units if isinstance(units, list) else []:
+            if isinstance(unit, dict):
+                yield category, unit
+
+
+# Count unique scheduled placements, including distinct empty elective slots.
+def _scheduled_main_semester_units(data):
+    categories = data.get("categories", {}) if isinstance(data, dict) else {}
+    electives = categories.get("elective_groups", {}) if isinstance(categories, dict) else {}
+    groups = (
+        categories.get("core_units", []),
+        categories.get("major_units", []),
+        categories.get("mpu_group", []),
+        electives.get("prescribed_elective", []) if isinstance(electives, dict) else [],
+        electives.get("elective", []) if isinstance(electives, dict) else [],
+        categories.get("wil_group", []),
+    )
+    units_by_semester = {}
+    for group_index, group in enumerate(groups):
+        for unit_index, unit in enumerate(group if isinstance(group, list) else []):
+            if not isinstance(unit, dict):
+                continue
+            year = coerce_int(unit.get("year_level"))
+            semester = coerce_int(unit.get("semester"))
+            raw_code = str(unit.get("unit_code") or unit.get("code") or "").strip().upper()
+            code = re.sub(r"[^A-Z0-9]", "", raw_code)
+            if year is None or semester not in (1, 2):
+                continue
+            if raw_code in {"-", "ELECTIVE"} and str(unit.get("unit_name") or "").strip():
+                identity = f"slot:{group_index}:{unit_index}"
+            elif code:
+                identity = f"code:{code}"
+            else:
+                continue
+            units_by_semester.setdefault((year, semester), set()).add(identity)
+    return units_by_semester
+
+
+# Count placed units by requirement category, excluding unplaced elective options.
+def _scheduled_requirement_counts(data):
+    counts = {"core": set(), "major": set(), "elective": set(), "wil": set()}
+    for category, unit in _iter_validation_units(data):
+        year = coerce_int(unit.get("year_level"))
+        semester = coerce_int(unit.get("semester"))
+        if year is None or year < 1 or semester is None or semester < 1:
+            continue
+        requirement_category = "elective" if category in {"elective", "prescribed_elective"} else category
+        if requirement_category not in counts:
+            continue
+        raw_code = str(unit.get("unit_code") or unit.get("code") or "").strip().upper()
+        code = re.sub(r"[^A-Z0-9]", "", raw_code)
+        if requirement_category == "elective" and raw_code in {"-", "ELECTIVE"} and str(unit.get("unit_name") or "").strip():
+            identity = f"slot:{category}:{len(counts[requirement_category])}"
+        elif code:
+            identity = f"code:{code}"
+        else:
+            continue
+        counts[requirement_category].add(identity)
+    return {category: len(units) for category, units in counts.items()}
+
+
+# Use explicit duration or the last scheduled year, not unplaced elective options.
+def _validation_duration_semesters(data):
+    course_info = data.get("course_information", {}) if isinstance(data, dict) else {}
+    explicit_duration = coerce_int(course_info.get("duration_semesters")) if isinstance(course_info, dict) else None
+    if explicit_duration and explicit_duration > 0:
+        return explicit_duration
+    years = [
+        year for _, unit in _iter_validation_units(data)
+        if (year := coerce_int(unit.get("year_level"))) is not None
+        and year > 0 and coerce_int(unit.get("semester")) in (1, 2)
+    ]
+    return max(years) * 2 if years else 0
+
+
+# Build a report finding using the shape already used by extraction-quality validation.
+def _validation_finding(code, issue_type, category, severity, reason, message, **context):
+    return {
+        "code": code,
+        "type": issue_type,
+        "category": category,
+        "severity": severity,
+        "reason": reason,
+        "message": message,
+        **{key: value for key, value in context.items() if value is not None},
+    }
+
+
+# Report structural gaps only when the planner evidence supports them.
+def collect_validation_findings(data, robustness_report=None):
+    findings = []
+    course_info = data.get("course_information", {}) if isinstance(data, dict) else {}
+    course_info = course_info if isinstance(course_info, dict) else {}
+    categories = data.get("categories", {}) if isinstance(data, dict) else {}
+    categories = categories if isinstance(categories, dict) else {}
+
+    for key, label in (("course", "course"), ("intake", "intake"), ("intake_year", "intake year")):
+        value = course_info.get(key)
+        if value is None or not str(value).strip():
+            findings.append(_validation_finding(
+                "V01", "missing_metadata", "structural", "high",
+                f"course_information.{key} is required for a planner template",
+                f"{label.capitalize()} information is missing.", field=key,
+            ))
+
+    major_units = categories.get("major_units", [])
+    has_major_units = isinstance(major_units, list) and any(
+        isinstance(unit, dict) and (unit.get("unit_code") or unit.get("unit_name"))
+        for unit in major_units
+    )
+    requirements = course_info.get("requirements", {})
+    requirements = requirements if isinstance(requirements, dict) else {}
+    major_requirement = requirements.get("major", {})
+    major_requirement = major_requirement if isinstance(major_requirement, dict) else {}
+    major_count = coerce_int(major_requirement.get("count"))
+    major_cp = coerce_requirement_cp(major_requirement.get("cp"))
+    major_expected = bool(str(course_info.get("major") or "").strip()) or has_major_units or bool(
+        (major_count is not None and major_count > 0) or (major_cp is not None and major_cp > 0)
+    )
+
+    if major_expected and not str(course_info.get("major") or "").strip():
+        findings.append(_validation_finding(
+            "V02", "missing_major_metadata", "structural", "medium",
+            "planner evidence indicates that a major is expected",
+            "Major information is missing even though the planner indicates a major.",
+            field="major",
+        ))
+    if major_expected and not has_major_units:
+        findings.append(_validation_finding(
+            "V03", "missing_major_units", "structural", "medium",
+            "planner evidence indicates that major units should be present",
+            "Major units are missing even though the planner indicates a major.",
+            field="major_units",
+        ))
+
+    if not isinstance(categories.get("elective_groups"), dict):
+        findings.append(_validation_finding(
+            "V04", "invalid_elective_groups", "structural", "medium",
+            "elective_groups must contain planner elective data",
+            "Elective group information is missing.", field="elective_groups",
+        ))
+
+    actual_counts = _scheduled_requirement_counts(data)
+    requirement_deficits = []
+    for key, category in (("core", "core"), ("major", "major"), ("elective", "elective"), ("wil", "wil")):
+        requirement = requirements.get(key)
+        requirement = requirement if isinstance(requirement, dict) else {}
+        expected = coerce_int(requirement.get("count"))
+        if expected is None or expected <= 0 or expected <= actual_counts[category]:
+            continue
+        requirement_deficits.append(category)
+        findings.append(_validation_finding(
+            "V05", "requirement_count_deficit", "structural", "medium",
+            f"the {category} requirement count exceeds the extracted scheduled units",
+            f"{category.capitalize()} requirement expects {expected} units, but only {actual_counts[category]} scheduled units were extracted.",
+            section=category, expected=expected, actual=actual_counts[category], deficit=expected - actual_counts[category],
+        ))
+
+    scheduled_units = _scheduled_main_semester_units(data)
+    duration_semesters = _validation_duration_semesters(data)
+    diagnostics = (robustness_report or {}).get("final_validation", {})
+    diagnostic_issues = diagnostics.get("issues", []) if isinstance(diagnostics, dict) else []
+    has_placement_diagnostics = any(
+        issue.get("type") in {"missing_year", "missing_semester", "invalid_year", "invalid_semester"}
+        for issue in diagnostic_issues if isinstance(issue, dict)
+    )
+    for semester_index in range(1, duration_semesters + 1):
+        year = (semester_index - 1) // 2 + 1
+        semester = (semester_index - 1) % 2 + 1
+        unit_count = len(scheduled_units.get((year, semester), set()))
+        if unit_count == 0:
+            findings.append(_validation_finding(
+                "V06", "empty_expected_semester", "structural", "medium",
+                "no scheduled placements were detected in an expected main semester",
+                f"Year {year} Semester {semester} has no scheduled units; this may indicate missing planner information.",
+                year=year, semester=semester,
+            ))
+        elif unit_count < 4 and (requirement_deficits or has_placement_diagnostics):
+            findings.append(_validation_finding(
+                "V07", "sparse_semester_with_evidence", "structural", "medium",
+                "a sparse semester coincides with requirement or placement evidence of incomplete extraction",
+                f"Year {year} Semester {semester} has only {unit_count} scheduled units alongside other evidence of incomplete extraction.",
+                year=year, semester=semester, actual=unit_count,
+            ))
+
+    for category, unit in _iter_validation_units(data):
+        name = re.sub(r"\s+", " ", str(unit.get("unit_name") or "")).strip()
+        code = str(unit.get("unit_code") or "").strip().upper()
+        if not name:
+            continue
+        if _has_unbalanced_brackets(name):
+            findings.append(_validation_finding(
+                "T01", "unbalanced_unit_title_brackets", "text_quality", "low",
+                "unit title contains unmatched round or square brackets",
+                f"{code + ': ' if code else ''}unit title contains unmatched brackets.",
+                section=category, unit_code=code or None,
+            ))
+        title_number = re.search(r"(\d{2,})\s*$", name)
+        prerequisite = re.sub(r"\s+", " ", str(unit.get("prerequisite") or "")).strip()
+        requisite_cp = re.match(r"^(\d{2,})\s*(?:credit\s*points?|cp\b)", prerequisite, re.IGNORECASE)
+        if title_number and requisite_cp and title_number.group(1) == requisite_cp.group(1):
+            findings.append(_validation_finding(
+                "T02", "possible_credit_point_text_in_title", "text_quality", "low",
+                "the title ending matches a credit-point prerequisite value",
+                f"{code + ': ' if code else ''}unit title may include credit-point prerequisite text.",
+                section=category, unit_code=code or None,
+            ))
+        if NAME_NOISE_RE.search(name):
+            findings.append(_validation_finding(
+                "T03", "possible_planner_text_in_title", "text_quality", "low",
+                "the existing generic unit-title noise rule matched unrelated planner text",
+                f"{code + ': ' if code else ''}unit title may contain unrelated planner text.",
+                section=category, unit_code=code or None,
+            ))
+
+    unique = []
+    seen = set()
+    for finding in findings:
+        identity = (
+            finding["code"], finding.get("unit_code"), finding.get("year"),
+            finding.get("semester"), finding["message"],
+        )
+        if identity not in seen:
+            seen.add(identity)
+            unique.append(finding)
+    return unique
+
+
+# Keep the old string list as a structural-only compatibility view.
+def collect_validation_issues(data, robustness_report=None):
+    return [
+        finding["message"]
+        for finding in collect_validation_findings(data, robustness_report)
+        if finding["category"] == "structural"
+    ]
+
+
+# Detect unbalanced round and square brackets without changing the extracted title.
+def _has_unbalanced_brackets(text):
+    pairs = {"(": ")", "[": "]"}
+    closing = {value: key for key, value in pairs.items()}
+    stack = []
+    for character in text:
+        if character in pairs:
+            stack.append(character)
+        elif character in closing:
+            if not stack or stack.pop() != closing[character]:
+                return True
+    return bool(stack)
 
 # Normalize a user-facing issue string.
 def _normalise_text(value):
@@ -220,13 +474,21 @@ def format_validation_issues_for_user(issues):
             formatted.append(readable)
     return formatted
 
-# Determines processing outcome for the import report.
-# This returns an import outcome from deterministic validation issues.
-def determine_processing_outcome(categories, validation_issues):
-    if validation_issues:
+# Determines processing outcome from structural findings and text warnings.
+def determine_processing_outcome(categories, findings):
+    findings = findings or []
+    if findings and isinstance(findings[0], str):
+        findings = [{"category": "structural", "message": message} for message in findings]
+    structural = [finding for finding in findings if finding.get("category") == "structural"]
+    if structural:
         return {
             "status": "manual_review_required",
-            "reason": "; ".join(validation_issues),
+            "reason": "; ".join(finding["message"] for finding in structural),
+        }
+    if findings:
+        return {
+            "status": "review_recommended",
+            "reason": "; ".join(finding["message"] for finding in findings),
         }
     return {
         "status": "deterministic_ok",
@@ -256,19 +518,21 @@ def process_planner_pdf(pdf_path):
 
     structured = normalise_planner_output(structured, base_name)
     structured = validate_and_normalise(structured, silent=True)
-    validation_issues = collect_validation_issues(structured)
+    findings = collect_validation_findings(structured, robustness_report)
+    validation_issues = [
+        finding["message"] for finding in findings if finding["category"] == "structural"
+    ]
     db_payload = build_planner_template_db_payload(structured)
-    # Keep raw issues for scoring, but expose readable messages to the UI.
-    report_validation_issues = format_validation_issues_for_user(validation_issues)
     outcome = determine_processing_outcome(
         structured.get("categories", {}),
-        validation_issues=report_validation_issues,
+        findings=findings,
     )
 
     report = {
         "file_name": base_name,
         "pdf_path": pdf_path,
-        "validation_issues": report_validation_issues,
+        "validation_issues": validation_issues,
+        "findings": findings,
         "outcome": outcome,
         "unit_counts": unit_count_snapshot(structured),
         "db_payload": db_payload,

@@ -2,6 +2,7 @@ import {
   addSemester,
   addUnit,
   moveUnit,
+  removeSemester,
   removeUnit,
   replaceUnit,
 } from '@core/shared/scheduling/planEdits';
@@ -271,6 +272,77 @@ describe('plan edits', () => {
 
     test('an empty plan starts at year 1 semester 1', () => {
       expect(shape(addSemester([]))).toEqual([['1-1', []]]);
+    });
+  });
+
+  describe('removeSemester', () => {
+    test('drops exactly that bucket, other semesters unchanged', () => {
+      const input = [bucket(2024, 1, 'A', 'B'), bucket(2024, 2, 'C'), bucket(2025, 1, 'D')];
+      const before = snapshot(input);
+      const result = removeSemester(input, 2024, 2);
+
+      expect(shape(result)).toEqual([['2024-1', ['A', 'B']], ['2025-1', ['D']]]);
+      expect(result).not.toBe(input);
+      expect(input).toEqual(before);
+    });
+
+    test('deleting a semester with units removes the whole bucket, units and all — the pool is the page\'s concern, not this function\'s', () => {
+      const input = plan();
+      const result = removeSemester(input, 2024, 1);
+
+      expect(shape(result)).toEqual([['2024-2', ['C']]]);
+      // 'A' and 'B' are simply gone from the semesters array; nothing here
+      // re-homes them anywhere (see the page-side wiring for that).
+      expect(result.flatMap((s) => s.units.map((u) => u.code))).toEqual(['C']);
+    });
+
+    test('a { year, semester } that does not exist leaves the plan as it was', () => {
+      const input = plan();
+      const result = removeSemester(input, 2030, 1);
+
+      expect(result).toEqual(input);
+      expect(result).not.toBe(input);
+    });
+
+    test('other semesters\' year/semester and unit lists are left untouched', () => {
+      const input = [bucket(2024, 1, 'A'), bucket(2024, 2, 'B', 'C'), bucket(2025, 1, 'D')];
+      const result = removeSemester(input, 2024, 1);
+
+      expect(result[0]).toEqual({ year: 2024, semester: 2, units: [{ code: 'B', name: 'Unit B', category: 'core' }, { code: 'C', name: 'Unit C', category: 'core' }] });
+      expect(result[1]).toEqual({ year: 2025, semester: 1, units: [{ code: 'D', name: 'Unit D', category: 'core' }] });
+    });
+
+    test('does not mutate the input', () => {
+      const input = plan();
+      const before = snapshot(input);
+      removeSemester(input, 2024, 1);
+      expect(input).toEqual(before);
+    });
+
+    test('drops recommended/outsidePlanner units the same way removeUnit would — neither does anything special with the flags', () => {
+      const withFlags: CustomSemesterBucket[] = [
+        { year: 2024, semester: 1, units: [
+          { code: 'A', name: 'Unit A', category: 'core' },
+          { code: 'REC', name: 'Recommended Unit', category: 'elective', recommended: true },
+          { code: 'OUT', name: 'Outside Unit', category: 'elective', outsidePlanner: true },
+        ] },
+        { year: 2024, semester: 2, units: [{ code: 'B', name: 'Unit B', category: 'core' }] },
+      ];
+
+      const viaRemoveSemester = removeSemester(withFlags, 2024, 1);
+      const viaIndividualRemovals = removeUnit(removeUnit(removeUnit(withFlags, 'A'), 'REC'), 'OUT');
+
+      const remainingCodes = (arr: CustomSemesterBucket[]) => arr.flatMap((s) => s.units.map((u) => u.code));
+      // Same units survive in semester 2024-2 either way, flags and all
+      expect(viaRemoveSemester.flatMap((s) => s.units)).toEqual(
+        viaIndividualRemovals.flatMap((s) => s.units),
+      );
+      // Neither A, REC nor OUT is anywhere in the plan under either approach:
+      // both simply drop the unit object wholesale, flags included; the only
+      // difference is removeSemester also removes the now-empty bucket, which
+      // removeUnit deliberately leaves in place (see removeUnit's own test).
+      expect(remainingCodes(viaRemoveSemester)).toEqual(['B']);
+      expect(remainingCodes(viaIndividualRemovals)).toEqual(['B']);
     });
   });
 

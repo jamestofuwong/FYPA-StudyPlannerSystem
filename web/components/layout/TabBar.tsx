@@ -3,6 +3,8 @@
 import { useRef } from 'react';
 import styles from './TabBar.module.css';
 import type { PanelId } from '../../lib/navigation';
+import { PANEL_ICONS } from '../../lib/panelIcons';
+import { useDesign } from '../../styles/themeProvider';
 import { useEffect, useState } from 'react';
 
 interface TabMeta {
@@ -18,7 +20,6 @@ const TAB_META: Record<PanelId, TabMeta> = {
     scraping: { id: 'scraping', icon: '🕷️', label: 'Data Scraping' },
     planners: { id: 'planners', icon: '✅', label: 'Study Planners' },
     units: { id: 'units', icon: '📝', label: 'Units' },
-    'cloud-sync': { id: 'cloud-sync', icon: '☁️', label: 'Cloud Sync' },
     settings: { id: 'settings', icon: '⚙️', label: 'Settings' },
     'user-guide': { id: 'user-guide', icon: '📖', label: 'User Guide' },
     copilot: { id: 'copilot', icon: '🤖', label: 'AI Copilot' },
@@ -41,6 +42,7 @@ export default function TabBar({
     onReorderTabs,
 }: TabBarProps) {
     const dragSrc = useRef<PanelId | null>(null);
+    const design = useDesign();
 
     function handleDragStart(panel: PanelId) {
         dragSrc.current = panel;
@@ -71,6 +73,7 @@ export default function TabBar({
         <div className={styles.tabBar} role="tablist">
             {openTabs.map((id) => {
                 const tab = TAB_META[id];
+                const MeadowIcon = PANEL_ICONS[id];
                 return (
                     <button
                         key={id}
@@ -83,7 +86,9 @@ export default function TabBar({
                         onDragOver={handleDragOver}
                         onDrop={() => handleDrop(id)}
                     >
-                        <span className={styles.tabIcon}>{tab.icon}</span>
+                        {design === 'meadow'
+                            ? <MeadowIcon className={styles.tabIconSvg} aria-hidden="true" />
+                            : <span className={styles.tabIcon}>{tab.icon}</span>}
                         <span className={styles.tabLabel}>{tab.label}</span>
                         <span
                             className={styles.tabClose}

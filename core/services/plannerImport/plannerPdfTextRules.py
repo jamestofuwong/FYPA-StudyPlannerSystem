@@ -345,7 +345,7 @@ def _recover_split_title_before_cp(row_text, code, current_name, current_prereq)
         return current_name
 
     match = re.match(
-        rf'^{re.escape(code)}[*#]?\s+(?P<prefix>.+?)\s+(?P<prcode>[A-Z]{{3}}\d{{3,5}})\s+(?P<mid>.+?)\s+(?P<cp>\d+(?:\.\d+)?\s*(?:c(?:redit\s+points?|p|ps)))\b',
+        rf'^{re.escape(code)}(?:{UNIT_MARKER_RE})?\s+(?P<prefix>.+?)\s+(?P<prcode>[A-Z]{{3}}\d{{3,5}})\s+(?P<mid>.+?)\s+(?P<cp>\d+(?:\.\d+)?\s*(?:c(?:redit\s+points?|p|ps)))\b',
         row_text,
         re.IGNORECASE,
     )
@@ -468,7 +468,7 @@ def _repair_code_style_prereq_from_row(code, current_prereq, combined_row):
     combined = _normalise_table_text(combined_row)
     if not combined:
         return current_prereq
-    marker_split = re.split(rf'\s{UNIT_MARKER_RE}\s*[A-Z]{{3}}\d{{3,5}}\b', combined, maxsplit=1, flags=re.IGNORECASE)
+    marker_split = re.split(rf'\s(?!&){UNIT_MARKER_RE}\s*[A-Z]{{3}}\d{{3,5}}\b', combined, maxsplit=1, flags=re.IGNORECASE)
     if marker_split:
         combined = marker_split[0].strip()
     codes = [c.rstrip('@#') for c in re.findall(r'\b[A-Z]{3}\d{3,5}@?#?\b', combined)]

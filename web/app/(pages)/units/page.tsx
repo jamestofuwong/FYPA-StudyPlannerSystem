@@ -4,6 +4,10 @@ import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import styles from './page.module.css';
 import UnitOfferingsModal from './UnitOfferingsModal';
+import { fs } from '../../../styles/tokens';
+import { PageHeader } from '../../../components/common/MeadowBits';
+import { useDesign } from '../../../styles/themeProvider';
+import { CalendarRange, Layers, Pencil, Plus, Search } from 'lucide-react';
 
 
 // ==================================================================================================================
@@ -47,7 +51,15 @@ export default function UnitsPage() {
     // ==================================================================================================================
     const [units, setUnits] = useState<UnitData[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    // A copilot button can open this page with ?q= to show just the unit(s) it answered about.
     const [searchQuery, setSearchQuery] = useState('');
+    // Meadow: page header, search toolbar with prefix jump links, groups as cards.
+    const isMeadow = useDesign() === 'meadow';
+
+    useEffect(() => {
+        const q = new URLSearchParams(window.location.search).get('q');
+        if (q) setSearchQuery(q);
+    }, []);
 
     // Add / Edit Modal State
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -198,6 +210,53 @@ export default function UnitsPage() {
     // ==================================================================================================================
     return (
         <div className={styles.layout}>
+            {isMeadow ? (
+                <div className={styles.mTop}>
+                    <PageHeader
+                        title="Unit catalogue"
+                        description="Every unit the planners can use. Check prerequisites and when each unit runs, and keep offerings up to date."
+                        meta={(
+                            <>
+                                <span className={styles.mMetaChip}>{units.length} units</span>
+                                <span className={styles.mMetaChip}>{units.filter((u) => !u.offerings?.length).length} without offering times</span>
+                            </>
+                        )}
+                        actions={(
+                            <>
+                                <Link href="/planners" className={styles.mQuietLink}><Layers aria-hidden="true" />View Planners</Link>
+                                <button className={styles.btnSecondary} onClick={() => setIsOfferingsModalOpen(true)}>
+                                    <CalendarRange aria-hidden="true" className={styles.mBtnIcon} />Unit Offerings
+                                </button>
+                                <button className={styles.btnPrimary} onClick={handleOpenAdd}>
+                                    <Plus aria-hidden="true" className={styles.mBtnIcon} />Add Unit
+                                </button>
+                            </>
+                        )}
+                    />
+                    <div className={styles.mToolbar}>
+                        <label className={styles.mSearch}>
+                            <Search aria-hidden="true" />
+                            <input
+                                type="text"
+                                placeholder="Search by unit code or title"
+                                aria-label="Filter units"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                            />
+                        </label>
+                        {Object.keys(groupedUnits).length > 1 && (
+                            <nav className={styles.mJump} aria-label="Jump to unit group">
+                                {Object.entries(groupedUnits).map(([prefix, list]) => (
+                                    <a key={prefix} href={`#unit-group-${prefix}`} className={styles.mJumpChip}>
+                                        {prefix}<span>{list.length}</span>
+                                    </a>
+                                ))}
+                            </nav>
+                        )}
+                    </div>
+                </div>
+            ) : (
+            <>
             {/* Top Bar with Search & Navigation */}
             <div className={styles.topBar}>
                 <div className={styles.searchGroup}>
@@ -222,10 +281,12 @@ export default function UnitsPage() {
                     </Link>
                 </div>
             </div>
+            </>
+            )}
 
             {/* Main Content Area */}
             <div className={styles.contentArea}>
-                <div className={styles.sectionTitle}>Master Units Catalogue</div>
+                {!isMeadow && <div className={styles.sectionTitle}>Master Units Catalogue</div>}
 
                 {isLoading ? (
                     <div className={styles.termEmpty}>Loading units catalogue...</div>
@@ -235,7 +296,7 @@ export default function UnitsPage() {
                     </div>
                 ) : (
                     Object.entries(groupedUnits).map(([prefix, unitList]) => (
-                        <div key={prefix} className={styles.termGroup}>
+                        <div key={prefix} id={`unit-group-${prefix}`} className={styles.termGroup}>
                             {/* Group Header (e.g. "COS UNITS — 24 UNITS") */}
                             <div className={styles.termHeading}>
                                 <span className={styles.termLabel}>{prefix} Units</span>
@@ -273,8 +334,8 @@ export default function UnitsPage() {
                                                 </span>
                                             </td>
                                             <td style={{ textAlign: 'center' }}>
-                                                <button className={styles.editBtn} onClick={() => handleOpenEdit(unit)}>
-                                                Edit
+                                                <button className={styles.editBtn} onClick={() => handleOpenEdit(unit)} aria-label={`Edit ${unit.unit_code}`}>
+                                                {isMeadow && <Pencil aria-hidden="true" className={styles.mEditIcon} />}Edit
                                                 </button>
                                             </td>
                                             </tr>
@@ -335,7 +396,7 @@ export default function UnitsPage() {
                                     value={formPrereq}
                                     onChange={(e) => setFormPrereq(e.target.value)}
                                 />
-                                <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                                <span style={{ fontSize: fs(10), color: 'var(--text-muted)' }}>
                                     Use '&' for AND, '/' for OR (e.g. COS10009 / COS10022). Credit points: 50cp
                                 </span>
                                 </div>

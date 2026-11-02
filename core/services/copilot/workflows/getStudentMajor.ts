@@ -2,6 +2,7 @@ import type { Workflow, WorkflowContext, WorkflowResult } from '../types';
 import { searchStudents, fetchEnrollments, fetchDegreeAudit } from '../../portal/portalSessionService';
 import { selectEnrollment } from './enrollmentSelector';
 import { runMatchingPipeline } from '../../matching/matchingService';
+import { parseSecondMajorThreshold } from '../../matching/secondMajorThreshold';
 import type { PlannerTemplate, UnitMasterEntry, CourseType } from '../../../shared/types/matching';
 
 const CATEGORY_PRIORITY: Record<string, number> = {
@@ -41,7 +42,8 @@ interface Output {
 
 export const getStudentMajorWorkflow: Workflow<Input, Output> = {
   id: 'get_student_major',
-  description: 'Detects the major (program of study) for a student by fetching their degree audit from the portal and running the matching algorithm. Use this when the user asks what major a student is in, what program they are enrolled in, or what their detected major is.',
+  description: 'Detects the major (program of study) that a student is in now, from their degree audit. Use this when the user asks what major, program or course a student is enrolled in or what their detected major is. Not for the list of past programs (use get_student_enrollment_history).',
+  keywords: ['enrolled in', 'which major', 'what program', 'what course', 'specialisation', 'stream'],
   params: [
     {
       name: 'studentId',
@@ -86,9 +88,7 @@ export const getStudentMajorWorkflow: Workflow<Input, Output> = {
 
       const scraped = await fetchDegreeAudit(student.db_id, enrollment.EnrollId, params.studentId);
 
-      const secondMajorThreshold = thresholdRow
-        ? Math.min(1, Math.max(0, parseFloat(thresholdRow.value)))
-        : 0.70;
+      const secondMajorThreshold = parseSecondMajorThreshold(thresholdRow?.value);
 
       // Build unit master table
       const masterMap = new Map<string, { category: string; priority: number }>();

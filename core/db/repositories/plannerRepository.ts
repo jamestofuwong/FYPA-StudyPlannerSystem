@@ -1,5 +1,5 @@
 import { prisma } from "../client";
-import type { PlannerImportPlanner, PlannerImportUnit } from "../../shared/types/plannerImport";
+import type { PlannerImportPlanner } from "../../shared/types/plannerImport";
 import { parseRequisiteString } from "../utils/parse-requisite";
 
 function normaliseImportedUnitCode(value: unknown): string | null {
@@ -716,116 +716,6 @@ export async function savePlannerFromImport(planner: PlannerImportPlanner) {
     }
     return newPlanner;
   });
-}
-
-// ---------------------------------------------------------------------------
-// Export a stored PlannerTemplate back to PlannerImportPlanner format
-// so the local app can pull planners from the cloud and save them locally.
-// ---------------------------------------------------------------------------
-
-export async function exportPlannerAsImport(templateId: string): Promise<PlannerImportPlanner | null> {
-  const template = await getPlannerById(templateId);
-  if (!template) return null;
-
-  const t = template; // capture non-null reference for use in nested callbacks
-
-  // Helper to extract numeric arroy from unit.offerings
-  const mapOfferings = (unit: any): number[] => {
-    if (!unit?.offerings || !Array.isArray(unit.offerings)) return [];
-    return unit.offerings.map((o: any) => o.offered_in).sort((a: number, b: number) => a - b);
-  };
-
-  const byCategory = (cat: string) =>
-    t.units.filter((tu: any) => tu.category === cat).map((tu: any): PlannerImportUnit => ({
-      unit_code: tu.unit?.unit_code ?? '-',
-      unit_name: tu.unit?.unit_name ?? 'Unknown Unit',
-      year_level: tu.year_level,
-      semester: tu.semester,
-      category: tu.category,
-      prerequisite: null,
-      offered_in: mapOfferings(tu.unit),
-      requisites: tu.unit?.requisite_groups?.map((g: any) => ({
-        conditions: g.conditions.map((c: any) => ({
-          type: c.type,
-          unit: c.unit ? { unit_code: c.unit.unit_code } : null,
-          credit_points: c.credit_points != null ? Number(c.credit_points) : null,
-          external_requisite: c.external_requisite ?? null,
-          requisite_type: c.requisite_type ?? null,
-        })),
-      })) ?? null,
-    }));
-
-  // Elective pool units live in ElectiveGroup, not TemplateUnit
-  const poolUnits: PlannerImportUnit[] = t.elective_groups.flatMap((eg: any) =>
-    eg.units.map((egu: any) => ({
-      unit_code: egu.unit?.unit_code ?? '-',
-      unit_name: egu.unit?.unit_name ?? 'Unknown Unit',
-      year_level: null,
-      semester: null,
-      category: 'elective',
-      prerequisite: null,
-      offered_in: mapOfferings(egu.unit),
-      requisites: egu.unit?.requisite_groups?.map((g: any) => ({
-        conditions: g.conditions.map((c: any) => ({
-          type: c.type,
-          unit: c.unit ? { unit_code: c.unit.unit_code } : null,
-          credit_points: c.credit_points != null ? Number(c.credit_points) : null,
-          external_requisite: c.external_requisite ?? null,
-          requisite_type: c.requisite_type ?? null,
-        })),
-      })) ?? null,
-    }))
-  );
-
-  return {
-    file_name: `${t.course.name} - ${t.major?.name ?? 'General'} ${t.intake_year}.pdf`,
-    course_information: {
-      course: t.course.name,
-      major: t.major?.name ?? 'General Program',
-      intake: intakeMonthToString(t.intake_month),
-      intake_year: t.intake_year,
-      course_type: t.course_type,
-      duration_semesters: t.duration_semesters,
-      requirements: {
-        core:     { count: t.core_count,     cp: t.core_cp },
-        major:    { count: t.major_count,    cp: t.major_cp },
-        elective: { count: t.elective_count, cp: t.elective_cp },
-        wil:      { count: t.wil_count,      cp: t.wil_cp },
-      },
-    },
-    categories: {
-      core_units:  byCategory('core'),
-      major_units: byCategory('major_core'),
-      mpu_group:   byCategory('mpu'),
-      wil_group:   byCategory('wil'),
-      elective_groups: {
-        prescribed_elective: byCategory('prescribed_elective'),
-        elective: [...byCategory('elective'), ...poolUnits],
-      },
-      minor_groups: t.minors.map((minor: any) => ({
-        minor_name: minor.name,
-        units: minor.units.map((mu: any) => ({
-          unit_code: mu.unit.unit_code,
-          unit_name: mu.unit.unit_name,
-          year_level: null,
-          semester: null,
-          category: null,
-          prerequisite: null,
-          offered_in: mapOfferings(mu.unit),
-        })),
-      })),
-    },
-  };
-}
-
-function intakeMonthToString(month: number | null): string {
-  if (!month) return '';
-  const names: Record<number, string> = {
-    1: 'January', 2: 'February', 3: 'March',    4: 'April',
-    5: 'May',     6: 'June',     7: 'July',      8: 'August',
-    9: 'September', 10: 'October', 11: 'November', 12: 'December',
-  };
-  return names[month] ?? '';
 }
 
 // ===================================================================================================

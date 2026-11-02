@@ -432,17 +432,18 @@ describe('swapping a real elective', () => {
     expect(codesIn(card(1, 2))).toEqual(['ADV', 'E1', 'CAND1', 'ELECTIVE', 'PRE1', 'MAJ1', 'DM1', 'MIN1', 'WIL1']);
   });
 
-  test('from the catalogue shows OUTSIDE PLANNER, and its requisites are checked', async () => {
+  test('a catalogue unit whose prerequisite is not done by that semester is disabled and says what it needs', async () => {
     render(<Harness />);
     await generate();
 
     // E0 shares semester one with INTRO, so a unit that needs INTRO is not ready there
     const picker = await openSwap('E0');
-    fireEvent.click(await within(picker).findByText('SWE30009'));
+    const option = (await within(picker).findByText('SWE30009')).closest('button') as HTMLElement;
 
-    expect(within(rowOf('SWE30009')).getByText('OUTSIDE PLANNER')).toBeTruthy();
-    expect(within(rowOf('SWE30009')).queryByText('RECOMMENDED')).toBeNull();
-    expect(await screen.findByText(/SWE30009 needs INTRO/i)).toBeTruthy();
+    expect(option).toBeDisabled();
+    expect(within(option).getByText(/Needs INTRO/i)).toBeTruthy();
+    fireEvent.click(option);
+    expect(screen.queryByLabelText('Swap SWE30009')).toBeNull();     // nothing was swapped in
   });
 
   test('a catalogue unit swapped in a semester after its prerequisite is not flagged', async () => {
