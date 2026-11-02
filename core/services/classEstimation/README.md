@@ -16,7 +16,7 @@ Helps a Head of Department see how many students will take each unit next semest
 | `courseDetector.ts` | Works out which course an imported batch belongs to. Each student votes for the course whose planners hold most of their units. |
 | `plannerCandidateResolver.ts`, `plannerCache.ts` | Turn a matching run into the candidate units that a student has not taken. Core and major-core units come from the matching result. Elective pools come from the database. `plannerCache` fetches each planner once per run. |
 | `eligibilityEngine.ts`, `eligibilityFilter.ts` | Can this student take unit X in a future term? Reuses `canTake` from the scheduler. |
-| `unitRanker.ts` | Ranks core and major-core units by their planner slot and keeps the earliest owed ones (a load cap). Elective units are not ranked. |
+| `unitRanker.ts` | Ranks core and major-core units and keeps the top ones up to the load cap: first what the planner puts in the student's slot for the target semester (counted from their intake), then failed units to retake, then any other owed unit, earliest slot first. Elective units are not ranked. |
 | `electiveSplitter.ts` | Phase 6. Shares elective picks as fractions, because a pool of 12 does not tell which units a student picks. |
 | `studentGrouping.ts` | Batching. Groups students that the estimator cannot tell apart. It is an optimisation only: grouped and ungrouped runs must give identical figures, and a test asserts it. The grouping key must cover every field that the pipeline reads. |
 | `estimationPreview.ts` | A diagnostic run that shows what each step did for each student. |

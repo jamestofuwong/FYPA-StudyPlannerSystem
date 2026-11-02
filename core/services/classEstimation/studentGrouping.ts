@@ -15,6 +15,7 @@
 //   rawInput                 handed whole to runMatchingPipeline, so every field of it counts
 //   totalCreditsEarned       credit-point requisites such as "150cp before the capstone"
 //   concededPassUnitCodes    a Conceded Pass earns credit but cannot satisfy a requisite
+//   unitStates (must_retake) failed units are ranked after the planner's own units for the semester
 // Everything else on a record is display only, name, studentId, the raw portal payload, the mapping
 // warnings, so two students differing only in those are genuinely the same case to the estimator.
 //
@@ -33,6 +34,11 @@ export interface StudentGroup {
   representative: EstimationRecord;
   /** Every member, in the order they arrived, so an aggregate figure can be traced back to students. */
   members: EstimationRecord[];
+}
+
+/** Units the student failed and still has to retake. The ranker puts them after what the planner schedules. */
+export function failedUnitCodes(record: EstimationRecord): string[] {
+  return [...record.unitStates].filter(([, state]) => state === 'must_retake').map(([code]) => code);
 }
 
 function canonicalCodes(codes: readonly string[]): string {
@@ -61,6 +67,8 @@ export function groupingKeyFor(record: EstimationRecord): string {
     record.totalCreditsEarned.toFixed(2),
     canonicalCodes(rawInput.completedUnitCodes),
     canonicalCodes(record.concededPassUnitCodes),
+    // Failed units change the ranking order, so two students differing only in what they failed are not alike.
+    canonicalCodes(failedUnitCodes(record)),
   ].join('|');
 }
 
