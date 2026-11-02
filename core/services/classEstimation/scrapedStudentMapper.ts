@@ -69,12 +69,18 @@ export function mapScrapedStudentToRawInput(
   let intakeYear: number;
   let intakeSemester: 1 | 2;
   if (firstTerm) {
+    // The month decides the intake, not the S1/S2 suffix, which can count from the student's own intake:
+    // 2024_SEP_S1 is an Aug/Sept 2024 start and must land on an Aug/Sept 2024 planner, as must 2024_SEP_S2.
+    // A short term only reaches here when the transcript has nothing else, and its month is still the guide.
     intakeYear = firstTerm.year;
-    // A short term only reaches here when the transcript has nothing else, in which case the month it
-    // starts in is still the best available guide.
-    intakeSemester = firstTerm.kind === 'semester'
-      ? (firstTerm.term === 2 ? 2 : 1)
-      : deriveSemesterFromMonth(firstTerm.month);
+    intakeSemester = deriveSemesterFromMonth(firstTerm.month);
+    if (firstTerm.period === 'S2' && intakeSemester === 1) {
+      // Feb/Mar is never calendar S2, so this is an Aug/Sept student's own second semester: they started the
+      // September before, and their first semester is not on the transcript.
+      intakeYear -= 1;
+      intakeSemester = 2;
+      warnings.push('intake read as the previous September: the first term on the transcript is a Feb/Mar term labelled S2, so the first semester is missing from it');
+    }
   } else {
     const enrollment = parseEnrollmentYearMonth(scraped.enrollmentDate);
     if (enrollment) {
