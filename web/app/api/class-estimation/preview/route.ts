@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { getEstimationRecords } from '../../../../../core/services/classEstimation/estimationStore';
 import { runEstimationPreview } from '../../../../../core/services/classEstimation/estimationPreview';
 import { DEFAULT_CLASS_ESTIMATION_CONFIG } from '../../../../../core/shared/types/classEstimation';
-import { describeAcademicNow } from '../../../../../core/services/classEstimation/academicCalendar';
+import { describeAcademicNow, formatTerm } from '../../../../../core/services/classEstimation/academicCalendar';
 import {
   resolveRetentionRate,
   parseStoredRetentionRate,
@@ -98,7 +98,7 @@ export async function GET(req: NextRequest) {
       target: {
         year: termParam ? null : academicNow.next.year,
         semester: term,
-        label: termParam ? `Semester ${term}` : academicNow.label,
+        label: termParam ? formatTerm({ year: new Date().getFullYear(), semester: term }) : academicNow.label,
         reason: termParam ? 'Overridden by the term query parameter' : academicNow.reason,
         overridden: Boolean(termParam),
       },

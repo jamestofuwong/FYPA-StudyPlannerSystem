@@ -10,6 +10,8 @@ import {
   describeAcademicNow,
   nextTargetTerm,
   formatTerm,
+  formatIntake,
+  cohortNote,
 } from '@core/services/classEstimation/academicCalendar';
 
 // Local noon, so a timezone offset can never push a date into the neighbouring day and month.
@@ -39,8 +41,17 @@ describe('describeAcademicNow', () => {
     const result = describeAcademicNow(on(2026, 9, 26));
 
     expect(result.next).toEqual({ year: 2027, semester: 1 });
-    expect(result.label).toBe('Semester 1, 2027');
-    expect(result.reason).toMatch(/semester 1 of next year/i);
+    expect(result.label).toBe('Feb/Mar 2027');
+    expect(result.reason).toMatch(/Feb\/Mar of next year/i);
+  });
+
+  // An Aug/Sept intake calls Aug/Sept its own Semester 1, so the page names terms by month and says which
+  // semester each intake is in rather than showing one calendar semester number.
+  test('labels say which semester each intake is in', () => {
+    expect(formatTerm({ year: 2026, semester: 2 })).toBe('Aug/Sept 2026');
+    expect(cohortNote(1)).toBe('Semester 1 for Feb/Mar intakes, Semester 2 for Aug/Sept intakes');
+    expect(cohortNote(2)).toBe('Semester 1 for Aug/Sept intakes, Semester 2 for Feb/Mar intakes');
+    expect(formatIntake(2024, 2)).toBe('Aug/Sept 2024 intake');
   });
 
   test('every date yields a next semester and a reason for it', () => {
