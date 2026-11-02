@@ -15,7 +15,7 @@ Builds a semester-by-semester plan for the units a student still needs. The advi
 - Only semesters 1 and 2 are scheduled. A unit offered only in summer or winter is reported and never placed in an ordinary semester.
 - Prerequisites, corequisites, credit-point requisites, Project A before Project B, and the work placement in a break.
 - A Conceded Pass counts as taken and earns credit, but cannot satisfy a prerequisite or corequisite. The scheduler plans such a unit again when a later unit needs it.
-- The start semester comes from the calendar term codes on the transcript (`resolveNextStudyTerm`).
+- The start semester comes from the calendar term codes on the transcript (`resolveNextStudyTerm`). The month in a code decides the calendar term, not the S1/S2 suffix, which can count from the student's own intake: `2024_SEP_S1` is Aug/Sept 2024, so the next term is Feb/Mar 2025.
 - With `plannedSlot` on units, a second plan follows the planner order. It is accepted only when it finishes no later than the fastest plan. Recommended electives take the latest open slots.
 - Semester numbers in a planner are 1 or 2. Calendar terms are 1 (Feb or Mar), 2 (Aug or Sep), 3 and 4 (breaks). Convert with `calendarTermFor`. Never convert by hand.
 
