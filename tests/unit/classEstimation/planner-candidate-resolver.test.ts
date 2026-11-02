@@ -151,6 +151,28 @@ describe('resolveCandidateUnits', () => {
     ]);
   });
 
+  // A required unit is owed once. Listed twice, or also in an elective pool, it would seat the same student twice.
+  test('a student is a candidate for a required unit once, whatever lists it appears in', async () => {
+    getPlannerById.mockResolvedValue({
+      units: [],
+      elective_groups: [{ units: [{ unit: { unit_code: 'COS20007' } }, { unit: { unit_code: 'COS30045' } }] }],
+    } as never);
+
+    const result = await resolveCandidateUnits(
+      matchResult({ breakdown: breakdown({
+        core: { matched: 0, required: 1, missingUnits: ['COS20007'] },
+        majorCore: { matched: 0, required: 1, missingUnits: ['COS20007'] },
+        prescribed: { matched: 0, required: 1, missingSlots: 1 },
+      }) }),
+      [],
+    );
+
+    expect(result?.candidates).toEqual([
+      { code: 'COS20007', category: 'core' },
+      { code: 'COS30045', category: 'prescribed', poolSlotsRemaining: 1 },
+    ]);
+  });
+
   test('resolves the free elective pool from slotted TemplateUnit rows with category elective', async () => {
     getPlannerById.mockResolvedValue({
       units: [
