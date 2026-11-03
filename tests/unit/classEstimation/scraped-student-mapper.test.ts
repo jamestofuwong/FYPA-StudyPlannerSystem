@@ -54,6 +54,29 @@ describe('mapScrapedStudentToRawInput', () => {
     expect(warnings.some((w) => w.includes('enrollmentDate'))).toBe(false);
   });
 
+  // Some transcripts number an Aug/Sept intake's semesters from the intake, so its first term reads S1. The month
+  // still decides: these are Aug/Sept starts and must be matched to that year's Aug/Sept planners.
+  test.each([
+    ['2024_SEP_S1', 2024, 2],
+    ['2024_SEP_S2', 2024, 2],
+    ['2024_FEB_S1', 2024, 1],
+  ])('%s is read as intake year %i, semester %i', (term, year, semester) => {
+    const row = { courseId: 'COS10009', courseTitle: 'X', level: '1', credits: 12.5, creditsEarned: 12.5, status: 'Complete', grade: 'HD', term };
+    const { rawInput, warnings } = mapScrapedStudentToRawInput(scrapedStudent({ courseList: [row] }), 'S1');
+    expect(rawInput.intakeYear).toBe(year);
+    expect(rawInput.intakeSemester).toBe(semester);
+    expect(warnings.some((w) => w.startsWith('intake read as'))).toBe(false);
+  });
+
+  // Feb/Mar is never calendar S2, so an S2 there is an Aug/Sept student's own second semester with the first missing.
+  test('a first term of FEB_S2 is read as the previous Aug/Sept intake, with a warning', () => {
+    const row = { courseId: 'COS20007', courseTitle: 'X', level: '1', credits: 12.5, creditsEarned: 12.5, status: 'Complete', grade: 'HD', term: '2025_FEB_S2' };
+    const { rawInput, warnings } = mapScrapedStudentToRawInput(scrapedStudent({ courseList: [row] }), 'S1');
+    expect(rawInput.intakeYear).toBe(2024);
+    expect(rawInput.intakeSemester).toBe(2);
+    expect(warnings.some((w) => w.startsWith('intake read as the previous September'))).toBe(true);
+  });
+
   // The portal's date is DD/MM/YYYY (dashboard/page.tsx parses it the same way). new Date() rejects that format when the day is above 12
   // and silently swaps day and month otherwise, so 1 Sep 2023 used to come out as January, semester 1.
   test.each([

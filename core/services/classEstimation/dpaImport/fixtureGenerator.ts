@@ -66,6 +66,11 @@ export interface GenerateOptions {
    * first semester are never deferred, so the earliest term on the transcript still reflects their intake.
    */
   deferRate?: number;
+  /**
+   * The calendar term in progress, as [year, semester]. When set, each student's progress follows from their
+   * intake (an Aug/Sept 2024 student is in their fifth semester at Aug/Sept 2026) instead of being random.
+   */
+  asOf?: [number, 1 | 2];
 }
 
 export interface GeneratedStudent {
@@ -102,14 +107,18 @@ function rng(seed: number): () => number {
   };
 }
 
-/** The term code for the nth semester of study after an intake, e.g. (2024, 1, 0) gives "2024_MAR_S1". */
+/**
+ * The term code for the nth semester of study after an intake, e.g. (2024, 1, 0) gives "2024_MAR_S1".
+ * The month is the calendar term; the S1/S2 suffix is the student's own semester, as in real exports, so an
+ * Aug/Sept intake runs 2024_SEP_S1, 2025_MAR_S2, 2025_SEP_S1 ...
+ */
 export function termCodeFor(intakeYear: number, intakeSemester: 1 | 2, offset: number): string {
-  // Semesters alternate 1, 2, 1, 2 ..., rolling the year over after semester 2.
+  // Calendar semesters alternate 1, 2, 1, 2 ..., rolling the year over after semester 2.
   const startIndex = intakeSemester === 1 ? 0 : 1;
   const absolute = startIndex + offset;
   const year = intakeYear + Math.floor(absolute / 2);
-  const semester: 1 | 2 = absolute % 2 === 0 ? 1 : 2;
-  return `${year}_${MONTH_FOR_SEMESTER[semester]}_S${semester}`;
+  const calendarSemester: 1 | 2 = absolute % 2 === 0 ? 1 : 2;
+  return `${year}_${MONTH_FOR_SEMESTER[calendarSemester]}_S${offset % 2 === 0 ? 1 : 2}`;
 }
 
 function unitsInPlannerOrder(planner: FixturePlanner): FixtureUnit[] {
@@ -151,6 +160,7 @@ export function generateStudents(options: GenerateOptions): GeneratedStudent[] {
     concededPassRate = 0.04,
     scheduledRate = 0.3,
     deferRate = 0.12,
+    asOf,
   } = options;
 
   if (planners.length === 0) throw new Error('generateStudents needs at least one planner');
@@ -173,7 +183,14 @@ export function generateStudents(options: GenerateOptions): GeneratedStudent[] {
     // Spread progress across the cohort so year 1 and final-year students both appear. At least one
     // semester elapsed, never more than the planner covers.
     const maxSemesters = Math.max(...ordered.map((u) => (u.yearLevel - 1) * 2 + u.semester));
-    const semestersElapsed = 1 + Math.floor(random() * maxSemesters);
+    let semestersElapsed = 1 + Math.floor(random() * maxSemesters);
+    if (asOf) {
+      const sinceIntake = asOf[0] * 2 + asOf[1] - (intakeYear * 2 + intakeSemester) + 1;
+      if (sinceIntake < 1) {
+        throw new Error(`${planner.majorName}: intake ${intakeYear} S${intakeSemester} starts after asOf ${asOf[0]} S${asOf[1]}`);
+      }
+      semestersElapsed = Math.min(sinceIntake, maxSemesters);
+    }
 
     const rows: GeneratedStudent['rows'] = [];
     const bookNextSemester = random() < scheduledRate;

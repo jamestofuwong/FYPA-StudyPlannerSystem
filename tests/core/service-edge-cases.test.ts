@@ -69,12 +69,18 @@ describe('plannerFilter – filterPlanners', () => {
       .toThrow('preferIntakeYear=true');
   });
 
-  test('falls back to most recent year when preferIntakeYear=false', () => {
+  test('falls back to most recent year of the same intake semester when preferIntakeYear=false', () => {
     const planners = [basePlanner(2022, 1), basePlanner(2023, 1), basePlanner(2023, 2)];
     const result = filterPlanners(planners, 2025, 1, baseConfig);
-    // Should return year 2023 planners (most recent)
-    expect(result.every((p) => p.intakeYear === 2023)).toBe(true);
-    expect(result).toHaveLength(2);
+    // Year 2023, and only its Feb/Mar planner: the Aug/Sept one has every slot in the other calendar semester
+    expect(result.every((p) => p.intakeYear === 2023 && p.intakeSemester === 1)).toBe(true);
+    expect(result).toHaveLength(1);
+  });
+
+  test('a missing intake semester falls back to that semester in another year before the other semester', () => {
+    const planners = [basePlanner(2024, 1), basePlanner(2023, 2, 'sept23')];
+    const result = filterPlanners(planners, 2024, 2, baseConfig);
+    expect(result.map((p) => p.plannerID)).toEqual(['sept23']);
   });
 
   test('returns exact Level 2 match when year and semester both match', () => {

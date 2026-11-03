@@ -178,7 +178,7 @@ describe('resolveNewIntakeUnits', () => {
 
     expect(result.codes).toEqual(['RECENT']);
     expect(result.basedOnIntakeYear).toBe(2026);
-    expect(result.warnings.some((w) => /No planner is loaded for the 2027 semester 1 intake/.test(w))).toBe(true);
+    expect(result.warnings.some((w) => /No planner is loaded for the Feb\/Mar 2027 intake/.test(w))).toBe(true);
     expect(result.warnings.some((w) => /curriculum change/i.test(w))).toBe(true);
   });
 

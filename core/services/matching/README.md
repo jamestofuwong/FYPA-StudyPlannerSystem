@@ -12,7 +12,7 @@ Finds the major of a student by comparing the units that they passed with every 
 | Step | File | Job |
 |---|---|---|
 | Config | `configValidator.ts` | Rejects a bad config (the five weights must add up to 1). |
-| Filter (phase 1) | `plannerFilter.ts` | Three levels: intake year, then intake semester, then scoring. Throws `PlannerFilterError` when no planner applies. |
+| Filter (phase 1) | `plannerFilter.ts` | Three levels: intake year, then intake semester, then scoring. When no planner has the student's intake year, it falls back to the most recent year with the same intake semester (Feb/Mar or Aug/Sept), and uses the other semester only if none exists. Throws `PlannerFilterError` when no planner applies. |
 | Normalise | `unitNormalizer.ts` | Cleans unit codes. |
 | Profile | `profileBuilder.ts` | Builds the student profile and checks requisites. |
 | Score (phase 3) | `scoringEngine.ts` | One score record per planner. |

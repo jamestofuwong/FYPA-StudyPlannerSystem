@@ -31,3 +31,4 @@
 - `20261008120000_add_estimation_run_course`
 - `20261021000000_fix_second_major_threshold`
 - `20261026000000_fix_seed_data_and_strict_loader`
+- `20261102120000_add_estimation_run_free_electives`

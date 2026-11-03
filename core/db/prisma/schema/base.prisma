@@ -303,6 +303,8 @@ model EstimationRunUnit {
   from_named_picks Decimal @db.Decimal(10, 4)
   /// Fractional shares from students spread across an elective pool holding the unit.
   from_electives   Decimal @db.Decimal(10, 4)
+  /// The part of from_electives that came from free electives. Null on runs saved before it was recorded.
+  from_free_electives Decimal? @db.Decimal(10, 4)
   /// Students from the manual new-intake figure, which is not discounted by retention.
   from_new_intake  Decimal @db.Decimal(10, 4)
   /// The final fractional projection, kept alongside the rounded figure so the rounding stays inspectable.

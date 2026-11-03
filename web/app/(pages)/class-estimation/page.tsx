@@ -10,7 +10,7 @@ import { Step, Tabs, Figure } from './components/Layout';
 import { DEFAULT_CLASS_ESTIMATION_CONFIG } from '../../../../core/shared/types/classEstimation';
 import { NEW_INTAKE_KEY, parseNewIntakeTotal } from '../../../../core/services/classEstimation/newIntakeSetting';
 import type { EstimationPreview } from '../../../../core/services/classEstimation/estimationPreview';
-import { describeAcademicNow } from '../../../../core/services/classEstimation/academicCalendar';
+import { describeAcademicNow, cohortNote, formatIntake } from '../../../../core/services/classEstimation/academicCalendar';
 import {
   parseStoredRetentionRate,
   parseTypedRetentionPercent,
@@ -87,6 +87,7 @@ type SavedRunDetail = SavedRun & {
     unitName?: string;
     fromNamedPicks: number;
     fromElectives: number;
+    fromFreeElectives: number;
     fromNewIntake: number;
     projected: number;
     headcount: number;
@@ -117,6 +118,11 @@ const PHASE_LABEL: Record<string, string> = {
   enrollments: 'Fetching enrollments…',
   audit:       'Fetching degree audit…',
 };
+
+/** Core, major core and prescribed elective seats: everything a student must take, as opposed to a free elective. */
+const neededSeats = (unit: { fromNamedPicks: number; fromElectives: number; fromFreeElectives: number }) =>
+  unit.fromNamedPicks + unit.fromElectives - unit.fromFreeElectives;
+const seats = (n: number) => (n > 0.05 ? (Number.isInteger(n) ? String(n) : n.toFixed(1)) : '–');
 
 /** Where the HoD's retention figure is kept, allowlisted in web/app/api/config/route.ts. */
 const RETENTION_KEY = 'class_estimation_retention_rate';
@@ -909,6 +915,7 @@ export default function ClassEstimationPage() {
           <span className={styles.targetLabel}>Estimating for</span>
           <span className={styles.targetValue}>{preview?.target?.label ?? academicNow.label}</span>
           <span className={styles.targetReason}>{preview?.target?.reason ?? academicNow.reason}</span>
+          <span className={styles.targetReason}>{cohortNote(preview?.target?.semester ?? academicNow.next.semester)}</span>
         </div>
 
         <div className={styles.actionRow}>
@@ -922,9 +929,9 @@ export default function ClassEstimationPage() {
           <div className={styles.rangeField}>
             <label
               className={styles.rangeLabel}
-              title="Students starting the course next semester. They are not in the portal yet, so the number is entered here. It goes in full onto the Year 1, Semester 1 units of the course the loaded students belong to, which is worked out from their units. Credit-transfer students are placed by hand."
+              title={`Students starting the course in ${preview?.target?.label ?? academicNow.label}, which is the ${(preview?.target?.semester ?? academicNow.next.semester) === 1 ? 'Feb/Mar' : 'Aug/Sept'} intake. They are not in the portal yet, so the number is entered here. It goes in full onto the Year 1, Semester 1 units of that intake's planners, for the course the loaded students belong to. ${(preview?.target?.semester ?? academicNow.next.semester) === 1 ? 'Aug/Sept' : 'Feb/Mar'} starters begin in the other semester and are entered when that semester is estimated. Credit-transfer students are placed by hand.`}
             >
-              New first-year students
+              New {(preview?.target?.semester ?? academicNow.next.semester) === 1 ? 'Feb/Mar' : 'Aug/Sept'} intake students
             </label>
             <input
               className={styles.rangeInput}
@@ -1010,8 +1017,8 @@ export default function ClassEstimationPage() {
                   initialSort={{ key: 'headcount', direction: 'desc' }}
                   columns={[
                     { key: 'code', label: 'Unit', width: 'minmax(220px, 2.2fr)', render: (unit) => <UnitName code={unit.code} names={s.unitNames} />, sortValue: (unit) => unit.code },
-                    { key: 'named', label: 'Required', hint: 'Students whose planner says they still owe this unit', width: '90px', align: 'right', render: (unit) => unit.fromNamedPicks || '–', sortValue: (unit) => unit.fromNamedPicks },
-                    { key: 'elective', label: 'Elective', hint: 'Shares of students who could choose this as an elective', width: '90px', align: 'right', render: (unit) => (unit.fromElectives > 0 ? unit.fromElectives.toFixed(1) : '–'), sortValue: (unit) => unit.fromElectives },
+                    { key: 'needed', label: 'Needed to graduate', hint: 'Seats to keep for students who must take this unit: core and major core they still owe, plus prescribed elective shares. Before the returning rate.', width: '110px', align: 'right', render: (unit) => seats(neededSeats(unit)), sortValue: (unit) => neededSeats(unit) },
+                    { key: 'optional', label: 'Optional', hint: 'Shares of students who could take this as a free elective, so could be asked to switch if the class is full. Before the returning rate.', width: '90px', align: 'right', render: (unit) => seats(unit.fromFreeElectives), sortValue: (unit) => unit.fromFreeElectives },
                     { key: 'new', label: 'New', hint: 'New first-year students, entered by hand', width: '70px', align: 'right', render: (unit) => unit.fromNewIntake || '–', sortValue: (unit) => unit.fromNewIntake },
                     {
                       key: 'headcount', label: 'Headcount', width: '150px', align: 'right', sortValue: (unit) => unit.projected,
@@ -1140,7 +1147,7 @@ export default function ClassEstimationPage() {
                   initialSort={{ key: 'students', direction: 'desc' }}
                   columns={[
                     { key: 'major', label: 'Major', width: 'minmax(160px, 1fr)', render: (p) => p.majorName, sortValue: (p) => p.majorName },
-                    { key: 'intake', label: 'Intake', width: '110px', render: (p) => `${p.intakeYear} S${p.intakeSemester}`, sortValue: (p) => p.intakeYear * 10 + p.intakeSemester },
+                    { key: 'intake', label: 'Intake', width: '150px', render: (p) => formatIntake(p.intakeYear, p.intakeSemester), sortValue: (p) => p.intakeYear * 10 + p.intakeSemester },
                     { key: 'students', label: 'Students', width: '90px', align: 'right', render: (p) => p.students, sortValue: (p) => p.students },
                   ]}
                 />
@@ -1266,7 +1273,7 @@ function StudentDetail({ student, loadCap }: { student: StudentResult; loadCap: 
       <div>
         <strong>Estimated from: </strong>
         {student.planner
-          ? `the ${student.planner.majorName} planner for the ${student.planner.intakeYear} semester ${student.planner.intakeSemester} intake, a ${student.planner.matchPct.toFixed(0)}% match with their transcript.`
+          ? `the ${student.planner.majorName} planner for the ${formatIntake(student.planner.intakeYear, student.planner.intakeSemester)}, a ${student.planner.matchPct.toFixed(0)}% match with their transcript.`
           : student.basis === 'commonCore'
             ? 'the units every major shares. They are early enough in the course that their major cannot be told apart yet, so only units certain for any major are counted.'
             : `nothing. No planner fitted their transcript (${student.matchStatus ?? 'no match'}).`}

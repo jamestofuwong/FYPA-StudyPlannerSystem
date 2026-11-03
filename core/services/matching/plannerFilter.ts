@@ -42,7 +42,7 @@ export function filterPlanners(
   );
 
   if (level1.length === 0) {
-    return handleNoYearMatch(allPlanners, studentIntakeYear, config);
+    return handleNoYearMatch(allPlanners, studentIntakeYear, studentIntakeSemester, config);
   }
 
   // Level 2 – intake semester (within Level 1)
@@ -51,6 +51,18 @@ export function filterPlanners(
   );
 
   if (level2.length === 0) {
+    // The intake semester outweighs the year: an Aug/Sept student on a Feb/Mar planner has every slot in the wrong
+    // calendar semester. So the most recent year that has their intake semester is tried before the other semester.
+    const sameSemester = allPlanners.filter((p) => p.intakeSemester === studentIntakeSemester);
+    if (sameSemester.length > 0 && !config.preferIntakeYear) {
+      const year = Math.max(...sameSemester.map((p) => p.intakeYear));
+      console.warn(
+        `[PlannerFilter] No planners for intakeYear=${studentIntakeYear}, intakeSemester=${studentIntakeSemester}. ` +
+        `Falling back to the same intake semester in year ${year}.`
+      );
+      return sameSemester.filter((p) => p.intakeYear === year);
+    }
+
     // Fallback: relax to Level 1 results
     console.warn(
       `[PlannerFilter] No planners found for intakeYear=${studentIntakeYear}, ` +
@@ -71,6 +83,7 @@ export function filterPlanners(
 function handleNoYearMatch(
   allPlanners: PlannerTemplate[],
   studentIntakeYear: number,
+  studentIntakeSemester: 1 | 2,
   config: AlgorithmConfig
 ): PlannerTemplate[] {
   if (config.preferIntakeYear) {
@@ -80,8 +93,10 @@ function handleNoYearMatch(
     );
   }
 
-  // preferIntakeYear=false - use the most recent available planner(s)
-  const sorted = [...allPlanners].sort((a, b) => b.intakeYear - a.intakeYear);
+  // preferIntakeYear=false - use the most recent planner(s) of the student's intake semester, or of any semester
+  // when none has it, so an Aug/Sept student is not put on a Feb/Mar planner while an Aug/Sept one exists.
+  const sameSemester = allPlanners.filter((p) => p.intakeSemester === studentIntakeSemester);
+  const sorted = [...(sameSemester.length > 0 ? sameSemester : allPlanners)].sort((a, b) => b.intakeYear - a.intakeYear);
   const mostRecentYear = sorted[0].intakeYear;
   const mostRecent = sorted.filter((p) => p.intakeYear === mostRecentYear);
 

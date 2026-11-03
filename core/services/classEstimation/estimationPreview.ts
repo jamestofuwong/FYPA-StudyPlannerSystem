@@ -19,9 +19,9 @@ import {
   isOutsideRecommendedTerm,
 } from './eligibilityEngine';
 import { filterEligibleUnits } from './eligibilityFilter';
-import { rankAndCapUnits } from './unitRanker';
+import { plannerSlotFor, rankAndCapUnits } from './unitRanker';
 import { buildElectivePopularity, splitElectivePicks } from './electiveSplitter';
-import { groupIdenticalStudents, groupingKeyFor, summariseGrouping, type GroupingStats } from './studentGrouping';
+import { failedUnitCodes, groupIdenticalStudents, groupingKeyFor, summariseGrouping, type GroupingStats } from './studentGrouping';
 import { aggregate, totalsFor, type AggregatedUnit, type AggregationTotals } from './aggregationService';
 import { resolveNewIntakeByCourse } from './newIntakeResolver';
 import { detectBatchCourse, type CourseDetection } from './courseDetector';
@@ -216,6 +216,7 @@ function unitNamesFrom(planners: Awaited<ReturnType<typeof plannerRepository.get
 function contributionsByUnit(students: StudentPreview[]) {
   const named = new Map<string, number>();
   const elective = new Map<string, number>();
+  const free = new Map<string, number>();
 
   for (const student of students) {
     for (const unit of student.picked) {
@@ -223,6 +224,9 @@ function contributionsByUnit(students: StudentPreview[]) {
     }
     for (const expectation of student.electives) {
       elective.set(expectation.code, (elective.get(expectation.code) ?? 0) + expectation.expectedSeats);
+      if (expectation.category === 'freeElective') {
+        free.set(expectation.code, (free.get(expectation.code) ?? 0) + expectation.expectedSeats);
+      }
     }
   }
 
@@ -230,6 +234,7 @@ function contributionsByUnit(students: StudentPreview[]) {
     code,
     fromNamedPicks: named.get(code) ?? 0,
     fromElectives: elective.get(code) ?? 0,
+    fromFreeElectives: free.get(code) ?? 0,
   }));
 }
 
@@ -403,7 +408,7 @@ async function previewStudent(
   record: EstimationRecord,
   planners: ReturnType<typeof buildPlannerTemplatesForMatching>,
   unitMasterTable: Awaited<ReturnType<typeof buildUnitMasterTable>>,
-  { targetTerm, loadCap }: PreviewOptions,
+  { targetTerm, targetYear, loadCap }: PreviewOptions,
   electivePopularity: Map<string, number>,
 ): Promise<StudentPreview> {
   const { rawInput } = record;
@@ -495,7 +500,13 @@ async function previewStudent(
       })
       .map((c) => c.code);
 
-    const ranked = await rankAndCapUnits(eligible, resolution.plannerId, loadCap);
+    const ranked = await rankAndCapUnits(eligible, resolution.plannerId, loadCap, {
+      nextSlot: plannerSlotFor(
+        { year: rawInput.intakeYear, semester: rawInput.intakeSemester },
+        { year: targetYear, semester: targetTerm },
+      ),
+      failed: new Set(failedUnitCodes(record)),
+    });
     base.picked = ranked.picked.map((u) => ({
       code: u.code, category: u.category, yearLevel: u.yearLevel, semester: u.semester,
     }));
