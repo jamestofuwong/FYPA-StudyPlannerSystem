@@ -104,7 +104,7 @@ describe('Planners API', () => {
 
     const response = await POST(req);
 
-    expect(response.status).toBe(500);
+    expect(response.status).toBe(400);
     expect(createPlanner).not.toHaveBeenCalled();
     await expect(response.json()).resolves.toMatchObject({
       error: expect.any(String),

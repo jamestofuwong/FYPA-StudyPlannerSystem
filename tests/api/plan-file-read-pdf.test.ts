@@ -16,7 +16,7 @@ const mockedReadPdfKeywords = jest.mocked(readPdfKeywords);
 const PDF_HEADER = Buffer.from('%PDF-1.4\n');
 
 function requestWithBody(body: Uint8Array | Buffer): NextRequest {
-  return new NextRequest('http://localhost/api/plan-file/read-pdf', { method: 'POST', body });
+  return new NextRequest('http://localhost/api/plan-file/read-pdf', { method: 'POST', body: body as BodyInit });
 }
 
 beforeEach(() => {

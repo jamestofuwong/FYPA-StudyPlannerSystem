@@ -17,6 +17,8 @@ interface PlannerRow {
 
 interface Props {
   planners: PlannerRow[]
+  /** False for a view-only account: no delete. */
+  canEdit?: boolean
   deletePlanner: (id: string) => Promise<void>
 }
 
@@ -37,7 +39,7 @@ function getPageItems(current: number, total: number): PageItem[] {
 
 const PAGE_SIZES = [10, 20, 50]
 
-export default function PlannersList({ planners, deletePlanner }: Props) {
+export default function PlannersList({ planners, deletePlanner, canEdit = true }: Props) {
   const [query, setQuery] = useState('')
   const [activeCourse, setActiveCourse] = useState<string | null>(null)
   const [activeMajor, setActiveMajor] = useState<string | null>(null)
@@ -196,8 +198,8 @@ export default function PlannersList({ planners, deletePlanner }: Props) {
                     <td className={styles.td}>{planner.durationSemesters === null ? 'No information' : `${Math.ceil(planner.durationSemesters / 2)} years`}</td>
                     <td className={styles.td}>
                       <div className={styles.rowActions}>
-                        <Link href={`/cms/planners/${planner.id}`} className={styles.btnSecondary}>Edit</Link>
-                        <button type="button" className={styles.btnDanger} onClick={() => { setDeleteTarget(planner); setDeleteError(false) }}>Delete</button>
+                        <Link href={`/cms/planners/${planner.id}`} className={styles.btnSecondary}>{canEdit ? 'Edit' : 'View'}</Link>
+                        {canEdit && <button type="button" className={styles.btnDanger} onClick={() => { setDeleteTarget(planner); setDeleteError(false) }}>Delete</button>}
                       </div>
                     </td>
                   </tr>

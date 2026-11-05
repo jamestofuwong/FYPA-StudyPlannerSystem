@@ -31,7 +31,8 @@ interface Output {
 
 export const getStudentUnitsWorkflow: Workflow<Input, Output> = {
   id: 'get_student_units',
-  description: 'Lists all units (subjects) taken by a student, including grades and credit hours. Fetches live data from the student portal. Use this when the user asks what units a student has taken, their grades, or their course history.',
+  description: 'Lists EVERY unit a student has taken, with grade and credit points, from the live portal. Use this when the user wants the transcript, all grades, all subjects taken or the full unit history. Not for one unit (use get_student_grade_for_unit) and not only the failed ones (use get_student_failed_units).',
+  keywords: ['transcript', 'all grades', 'history', 'completed units', 'results', 'record of units', 'what has taken'],
   params: [
     {
       name: 'studentId',

@@ -5,11 +5,12 @@ import Link from 'next/link';
 import {
   BookOpen, Bot, ShieldCheck, Search, Cpu, ListChecks,
   Compass, AppWindow, Activity, ListOrdered, Lightbulb,
-  ArrowRight, ChartColumn, FileSpreadsheet, FileUp, Globe, GraduationCap, Layers, PanelLeft, Palette, Sparkles,
+  ArrowRight, ChartColumn, Play, FileSpreadsheet, FileUp, Globe, GraduationCap, Layers, PanelLeft, Palette, Sparkles,
 } from 'lucide-react';
 import styles from './page.module.css';
 import { PageHeader } from '../../../components/common/MeadowBits';
 import { useDesign } from '../../../styles/themeProvider';
+import { useTour } from '../../../components/tour/TourProvider';
 import {
   CopilotAnswer, ExcelSample, Fix, GraduationChecks, MatchBar, Note, PlanSteps, Shot, StartFlow, TermsDiagram,
 } from './GuideParts';
@@ -20,6 +21,7 @@ const JOBS = [
   {
     icon: GraduationCap,
     title: 'Advise a student',
+    tour: 'advise-student',
     steps: [
       'Log in to the portal from the card at the bottom of the sidebar. A browser window opens for the university sign-in. Leave it alone until it closes by itself.',
       'On Major Detection, type the student’s ID and press Search.',
@@ -32,6 +34,7 @@ const JOBS = [
   {
     icon: FileSpreadsheet,
     title: 'Check a transcript without the portal',
+    tour: 'transcript-import',
     steps: [
       'On Major Detection, press Import.',
       'Choose Upload Excel, Add Units or Paste Table.',
@@ -43,6 +46,7 @@ const JOBS = [
   {
     icon: FileUp,
     title: 'Add a study planner',
+    tour: 'add-planner',
     steps: [
       'Open Study Planners and press Import.',
       'Choose the official study planner PDF.',
@@ -55,6 +59,7 @@ const JOBS = [
   {
     icon: ChartColumn,
     title: 'Estimate class sizes',
+    tour: 'class-estimation',
     steps: [
       'On Class Estimation, read the current students’ transcripts from the portal or from DPA files.',
       'Run the estimate for next semester.',
@@ -66,6 +71,7 @@ const JOBS = [
   {
     icon: Layers,
     title: 'Look after course data',
+    tour: 'course-data',
     steps: [
       'Study Planners lists every planner by course, year and major. Open one to see its units, or choose Edit Planner to change them.',
       'Units holds the unit catalogue. Add a unit, or correct its prerequisites and the semesters it runs in.',
@@ -76,6 +82,7 @@ const JOBS = [
   {
     icon: Sparkles,
     title: 'Ask the AI copilot',
+    tour: 'copilot',
     steps: [
       'The AI runs on this computer and the app starts it when it opens.',
       'The first time, download its model from the copilot page (about 2 GB).',
@@ -150,6 +157,7 @@ function SectionTitle({ icon: Icon, classic, children }: { icon: React.ElementTy
 }
 
 function Guide({ classic }: { classic: boolean }) {
+  const { start, done: tourDone } = useTour();
   return (
     <div className={classic ? `${styles.container} ${styles.classicGuide}` : styles.mPanel}>
       {classic ? (
@@ -197,8 +205,12 @@ function Guide({ classic }: { classic: boolean }) {
           {/* ───────── Common jobs ───────── */}
           <section id="guide-jobs" className={styles.mSection}>
             <SectionTitle icon={ListChecks} classic={classic}>Common jobs</SectionTitle>
+            <p className={styles.mText}>
+              Press <strong>Walk me through it</strong> on a job and the app shows you the steps on the real screen. It
+              highlights each button and tells you what to do. You can stop at any time, and start again whenever you like.
+            </p>
             <div className={styles.mJobGrid}>
-              {JOBS.map(({ icon: Icon, title, steps, result, link }) => (
+              {JOBS.map(({ icon: Icon, title, tour, steps, result, link }) => (
                 <article key={title} className={styles.mJob}>
                   <div className={styles.mJobHead}>
                     <span className={styles.mJobIcon} aria-hidden="true"><Icon /></span>
@@ -208,9 +220,21 @@ function Guide({ classic }: { classic: boolean }) {
                     {steps.map((step) => <li key={step}>{step}</li>)}
                   </ol>
                   <p className={styles.mResult}><strong>You will see:</strong> {result}</p>
-                  <Link href={link.href} className={styles.mJobLink}>
-                    {link.label} <ArrowRight aria-hidden="true" />
-                  </Link>
+                  <div className={styles.mJobActions}>
+                    <button
+                      type="button"
+                      className={styles.mJobTour}
+                      onClick={() => start(tour)}
+                      data-testid={`walkthrough-${tour}`}
+                      aria-label={`${tourDone.includes(tour) ? 'Do the walkthrough again' : 'Walk me through it'}: ${title}`}
+                    >
+                      <Play aria-hidden="true" />
+                      {tourDone.includes(tour) ? 'Do the walkthrough again' : 'Walk me through it'}
+                    </button>
+                    <Link href={link.href} className={styles.mJobLink}>
+                      {link.label} <ArrowRight aria-hidden="true" />
+                    </Link>
+                  </div>
                 </article>
               ))}
             </div>

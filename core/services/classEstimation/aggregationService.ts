@@ -29,6 +29,8 @@ export interface ContinuingContribution {
   fromNamedPicks: number;
   /** Fractions of students spread across an elective pool containing this unit. */
   fromElectives: number;
+  /** The part of fromElectives from free electives: optional seats, unlike prescribed ones, which count to graduate. */
+  fromFreeElectives?: number;
 }
 
 export interface AggregationInput {
@@ -58,6 +60,8 @@ export interface AggregatedUnit {
   code: string;
   fromNamedPicks: number;
   fromElectives: number;
+  /** The free-elective part of fromElectives. Everything else in the continuing figure is needed to graduate. */
+  fromFreeElectives: number;
   /** Students from the manual new-intake figure, which every new student takes, so it is a whole number. */
   fromNewIntake: number;
   /** The continuing cohort's total before the retention rate. */
@@ -80,12 +84,12 @@ export function aggregate(input: AggregationInput): AggregatedUnit[] {
   const groups = input.newIntakeGroups
     ?? [{ count: newIntakeCount, codes: newIntakeUnits, shares: newIntakeShares }];
 
-  const byCode = new Map<string, { fromNamedPicks: number; fromElectives: number; fromNewIntake: number }>();
+  const byCode = new Map<string, { fromNamedPicks: number; fromElectives: number; fromFreeElectives: number; fromNewIntake: number }>();
 
   const entryFor = (code: string) => {
     const existing = byCode.get(code);
     if (existing) return existing;
-    const fresh = { fromNamedPicks: 0, fromElectives: 0, fromNewIntake: 0 };
+    const fresh = { fromNamedPicks: 0, fromElectives: 0, fromFreeElectives: 0, fromNewIntake: 0 };
     byCode.set(code, fresh);
     return fresh;
   };
@@ -94,6 +98,7 @@ export function aggregate(input: AggregationInput): AggregatedUnit[] {
     const entry = entryFor(contribution.code);
     entry.fromNamedPicks += contribution.fromNamedPicks;
     entry.fromElectives += contribution.fromElectives;
+    entry.fromFreeElectives += contribution.fromFreeElectives ?? 0;
   }
 
   // A negative figure would quietly subtract students, and new intake is typed by hand.
@@ -116,6 +121,7 @@ export function aggregate(input: AggregationInput): AggregatedUnit[] {
         code,
         fromNamedPicks: entry.fromNamedPicks,
         fromElectives: entry.fromElectives,
+        fromFreeElectives: entry.fromFreeElectives,
         fromNewIntake: entry.fromNewIntake,
         continuingBeforeRetention,
         continuingProjected,

@@ -3,7 +3,7 @@ import { revalidatePath } from 'next/cache'
 import { revalidateStudentCache, STUDENT_CACHE } from '@/lib/catalog'
 import { prisma } from '@/lib/prisma'
 import { HodListSchema } from '@/lib/cms/schemas'
-import { getSession } from '@/lib/cms/session'
+import { requireAccess } from '@/lib/cms/access'
 
 export async function saveHods(
   hods: { id?: string; faculty: string; department: string; name: string; email: string; position: number }[]
@@ -14,7 +14,7 @@ export async function saveHods(
   }
   const data = parsed.data
 
-  const session = await getSession()
+  const session = await requireAccess('hod', 'edit')
   await prisma.headOfDepartment.deleteMany()
   await prisma.headOfDepartment.createMany({
     data: data.map(h => ({

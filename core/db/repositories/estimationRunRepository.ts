@@ -23,6 +23,8 @@ export interface EstimationRunUnitRecord {
   unitName?: string;
   fromNamedPicks: number;
   fromElectives: number;
+  /** The free-elective part of fromElectives. Undefined on runs saved before it was recorded. */
+  fromFreeElectives?: number;
   fromNewIntake: number;
   projected: number;
   headcount: number;
@@ -104,6 +106,7 @@ export async function saveEstimationRun(input: EstimationRunInput): Promise<stri
           unit_code: unit.unitCode,
           from_named_picks: unit.fromNamedPicks,
           from_electives: unit.fromElectives,
+          from_free_electives: unit.fromFreeElectives ?? null,
           from_new_intake: unit.fromNewIntake,
           projected: unit.projected,
           headcount: unit.headcount,
@@ -167,6 +170,7 @@ export async function getEstimationRun(id: string): Promise<EstimationRunDetail 
     unitName: nameOf.get(unit.unit_code) ?? '',
     fromNamedPicks: toNumber(unit.from_named_picks),
     fromElectives: toNumber(unit.from_electives),
+    fromFreeElectives: unit.from_free_electives === null ? undefined : toNumber(unit.from_free_electives),
     fromNewIntake: toNumber(unit.from_new_intake),
     projected: toNumber(unit.projected),
     headcount: unit.headcount,

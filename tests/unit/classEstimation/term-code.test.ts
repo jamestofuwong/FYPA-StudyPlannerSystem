@@ -15,13 +15,15 @@ import {
 describe('parseTermCode', () => {
   // Term numbers match the unit_offerings convention: 1 = Sem 1, 2 = Sem 2, 3 = Summer, 4 = Winter.
   test.each([
-    ['2024_FEB_S1', 2024, 2, 1, 'semester'],
-    ['2024_SEP_S2', 2024, 9, 2, 'semester'],
-    ['2025_MAR_S1', 2025, 3, 1, 'semester'],
-    ['2026_JUN_WT', 2026, 6, 4, 'winter'],
-    ['2025_DEC_ST', 2025, 12, 3, 'summer'],
-  ])('%s reads as year %i, month %i, term %i, kind %s', (raw, year, month, term, kind) => {
-    expect(parseTermCode(raw)).toEqual({ year, month, term, kind, raw });
+    ['2024_FEB_S1', 2024, 2, 1, 'semester', 'S1'],
+    ['2024_SEP_S2', 2024, 9, 2, 'semester', 'S2'],
+    // An Aug/Sept intake's own Semester 1. Still calendar semester 2: the month decides, not the suffix.
+    ['2024_SEP_S1', 2024, 9, 2, 'semester', 'S1'],
+    ['2025_MAR_S1', 2025, 3, 1, 'semester', 'S1'],
+    ['2026_JUN_WT', 2026, 6, 4, 'winter', 'WT'],
+    ['2025_DEC_ST', 2025, 12, 3, 'summer', 'ST'],
+  ])('%s reads as year %i, month %i, term %i, kind %s', (raw, year, month, term, kind, period) => {
+    expect(parseTermCode(raw)).toEqual({ year, month, term, kind, period, raw });
   });
 
   test('is case and separator insensitive', () => {

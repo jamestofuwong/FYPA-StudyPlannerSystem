@@ -1255,7 +1255,7 @@ BEGIN
 
         'COS40005', 'core', '3', '1',
         -- E3
-        'COS30049 ', 'major_core', '3', '1',
+        'COS30049', 'major_core', '3', '1',
         
         'COS40006', 'core', '3', '2',
         'SWE30003', 'major_core', '3', '2'

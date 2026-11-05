@@ -1,0 +1,71 @@
+name: Tests
+
+# Runs on every pull request and on pushes to main. Deployment is separate (deploy-student.yml).
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static:
+    name: Typecheck and lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm --prefix student ci
+      - run: npm run typecheck:student
+      # The documents for people and AI agents must match the code (generated lists, paths, import rules).
+      - run: npm run docs:check
+      - run: npm run lint
+
+  unit:
+    name: Unit, component and API tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm test -- --ci
+
+  integration:
+    name: Integration tests (real PostgreSQL)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm --prefix student ci
+      - run: npm run test:integration -- --ci
+      - run: npm run test:student -- --ci
+      - run: npm run test:student:integration -- --ci
+
+  e2e:
+    name: End-to-end tests (browser)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm --prefix student ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+        env: { CI: 'true' }
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7

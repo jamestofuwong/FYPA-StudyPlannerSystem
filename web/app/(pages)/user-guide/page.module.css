@@ -768,3 +768,26 @@
 .classicGuide .mGlossary > div { padding: 7px 0; }
 .classicGuide .mGlossary dt { font-size: 12px; }
 .classicGuide .mGlossary dd { font-size: 12px; line-height: 1.45; }
+
+/* The walkthrough button on a job card */
+.mJobActions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+.mJobTour {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 999px;
+  background: var(--active-highlight);
+  color: #fff;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.mJobTour:hover { filter: brightness(1.08); }
+.mJobTour:focus-visible { outline: 2px solid var(--active-highlight); outline-offset: 2px; }
+.mJobTour svg { width: 14px; height: 14px; }
+.classicGuide .mJobTour { border-radius: 0; min-height: 28px; padding: 0 10px; font-size: 0.78rem; font-family: var(--font-mono); }
+.classicGuide .mJobTour svg { width: 12px; height: 12px; }

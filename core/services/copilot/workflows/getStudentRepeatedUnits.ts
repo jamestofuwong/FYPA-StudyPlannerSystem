@@ -24,7 +24,8 @@ interface Output {
 
 export const getStudentRepeatedUnitsWorkflow: Workflow<Input, Output> = {
   id: 'get_student_repeated_units',
-  description: 'Finds units a student has taken more than once (retakes or repeated attempts). Use this when the user asks about a student\'s repeated units, retakes, or how many times they have attempted a subject.',
+  description: 'Finds units that a student has ALREADY taken more than once (retakes and repeated attempts). Use this when the user asks which units a student repeated or retook, or how many attempts they made. Not for units that still need a repeat (use get_student_failed_units).',
+  keywords: ['repeat', 'repeated', 'retake', 'retaken', 'attempted again', 'resit', 'twice', 'more than once', 'second attempt'],
   params: [
     {
       name: 'studentId',

@@ -68,12 +68,13 @@ export default function ElectivePicker({
     const unmetPrereqReason = getUnmetPrereqReason?.(unit) ?? null;
     const isSelectable = isOffered && !unmetPrereqReason;
 
-    // Display offering status or unmet prerequisite reason
+    // Show why a unit is disabled (not offered, or a prerequisite is unmet). A unit with no placeable semester is
+    // still selectable, but it says where it runs ("only runs in winter") or that its offering is unknown.
     const statusHint = !isOffered
       ? hint
       : unmetPrereqReason
       ? unmetPrereqReason
-      : null;
+      : hint || null;
 
     return (
       <li key={unit.code}>

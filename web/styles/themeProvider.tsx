@@ -7,8 +7,8 @@ import {
   type MeadowAccent, type MeadowShade,
 } from "./meadowHue";
 
-type ThemeMode = "light" | "dark" | "portal";
-export type ThemePreference = "system" | "light" | "dark" | "portal";
+type ThemeMode = "light" | "dark";
+export type ThemePreference = "system" | "light" | "dark";
 export type { DesignMode };
 
 interface ThemeContextType {
@@ -211,9 +211,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
       const saved = localStorage.getItem(STORAGE_KEY) as ThemePreference | null;
       const pref: ThemePreference =
-        saved === "light" || saved === "dark" || saved === "system" || saved === "portal"
+        saved === "light" || saved === "dark" || saved === "system"
           ? saved
-          : "system";
+          : "system";                   // an unknown value (for example the removed "portal" mode) becomes "system"
 
       preferenceRef.current = pref;
       setPreferenceState(pref);

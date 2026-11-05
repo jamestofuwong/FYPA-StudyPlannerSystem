@@ -1,8 +1,11 @@
 import { notFound } from 'next/navigation'
 import { prisma } from '@/lib/prisma'
+import { requirePageAccess } from '@/lib/cms/access'
+import ReadOnly from '../../ReadOnly'
 import PlannerForm from '../PlannerForm'
 
 export default async function EditPlannerPage({ params }: { params: Promise<{ id: string }> }) {
+  const { canEdit } = await requirePageAccess('planners')
   const { id } = await params
 
   const [planner, courses, allUnits] = await Promise.all([
@@ -81,11 +84,13 @@ export default async function EditPlannerPage({ params }: { params: Promise<{ id
   const unitOptions = allUnits.map(unit => ({ id: unit.id, code: unit.unit_code, name: unit.unit_name }))
 
   return (
+    <ReadOnly readOnly={!canEdit}>
     <div style={{ padding: 32 }}>
       <h1 style={{ fontSize: 28, fontWeight: 700, color: '#111827', marginBottom: 32 }}>
         Edit Planner
       </h1>
       <PlannerForm planner={plannerForForm} courses={courses} allUnits={unitOptions} />
     </div>
+  </ReadOnly>
   )
 }

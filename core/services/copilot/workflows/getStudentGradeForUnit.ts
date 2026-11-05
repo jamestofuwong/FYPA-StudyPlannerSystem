@@ -21,7 +21,8 @@ interface Output {
 
 export const getStudentGradeForUnitWorkflow: Workflow<Input, Output> = {
   id: 'get_student_grade_for_unit',
-  description: 'Looks up what grade a student received in a specific unit, or whether they have taken it at all. Use this when the user asks what grade a student got in a unit, or whether a student has taken a particular subject.',
+  description: 'Looks up the grade that a student got in ONE named unit, or whether they took it at all. Use this when the user asks what grade, mark or result a student has for a specific unit code. Not for pass or fail only (use did_student_pass_unit) and not for all units (use get_student_units).',
+  keywords: ['grade', 'mark', 'how did do in', 'result', 'score', 'what did get'],
   params: [
     {
       name: 'studentId',

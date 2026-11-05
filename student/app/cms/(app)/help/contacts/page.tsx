@@ -1,14 +1,18 @@
 import { prisma } from '@/lib/prisma'
+import { requirePageAccess } from '@/lib/cms/access'
+import ReadOnly from '../../ReadOnly'
 import { saveGeneralEnquiries, saveItHelpDesk } from './contacts-actions'
 import styles from './page.module.css'
 
 export default async function ContactsPage() {
+  const { canEdit } = await requirePageAccess('contacts')
   const [enquiries, itDesk] = await Promise.all([
     prisma.generalEnquiries.findFirst(),
     prisma.itHelpDesk.findFirst(),
   ])
 
   return (
+    <ReadOnly readOnly={!canEdit}>
     <div className={styles.page}>
       <h1 className={styles.heading}>Contact Information</h1>
       <p className={styles.subheading}>Manage General Enquiries and IT Help Desk contact details.</p>
@@ -144,5 +148,6 @@ export default async function ContactsPage() {
         </form>
       </div>
     </div>
+    </ReadOnly>
   )
 }

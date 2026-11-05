@@ -1,7 +1,9 @@
 import { prisma } from '@/lib/prisma'
+import { requirePageAccess } from '@/lib/cms/access'
 import UnitForm from '../UnitForm'
 
 export default async function NewUnitPage() {
+  await requirePageAccess('units', 'edit')
   const allUnits = await prisma.unit.findMany({
     orderBy: { unit_code: 'asc' },
     select: { id: true, unit_code: true, unit_name: true },

@@ -25,14 +25,30 @@ export interface AcademicNow {
   current: AcademicTerm | null;
   /** The semester an estimate should be built for. Always populated. */
   next: AcademicTerm;
-  /** Human-readable form of next, e.g. "Semester 1, 2027". */
+  /** Human-readable form of next, e.g. "Feb/Mar 2027". */
   label: string;
   /** Why that semester is next, so the UI can explain itself instead of showing a bare number. */
   reason: string;
 }
 
+/**
+ * Named by its months, not "Semester 1": an Aug/Sept intake calls Aug/Sept its own Semester 1, so a calendar
+ * semester number reads wrong to half the cohort.
+ */
 export function formatTerm(term: AcademicTerm): string {
-  return `Semester ${term.semester}, ${term.year}`;
+  return `${term.semester === 1 ? 'Feb/Mar' : 'Aug/Sept'} ${term.year}`;
+}
+
+/** The intake a planner or student started in, e.g. "Aug/Sept 2024 intake". Takes the calendar intake semester. */
+export function formatIntake(year: number, intakeSemester: 1 | 2): string {
+  return `${intakeSemester === 1 ? 'Feb/Mar' : 'Aug/Sept'} ${year} intake`;
+}
+
+/** Which semester of their own planner each intake is in during a calendar semester. */
+export function cohortNote(semester: 1 | 2): string {
+  return semester === 1
+    ? 'Semester 1 for Feb/Mar intakes, Semester 2 for Aug/Sept intakes'
+    : 'Semester 1 for Aug/Sept intakes, Semester 2 for Feb/Mar intakes';
 }
 
 /**
@@ -50,7 +66,7 @@ export function describeAcademicNow(now: Date = new Date()): AcademicNow {
       current: null,
       next: { year, semester: 1 },
       label: formatTerm({ year, semester: 1 }),
-      reason: 'Semester 1 has not started yet this year',
+      reason: 'Feb/Mar has not started yet this year',
     };
   }
 
@@ -63,8 +79,8 @@ export function describeAcademicNow(now: Date = new Date()): AcademicNow {
       next: { year, semester: 2 },
       label: formatTerm({ year, semester: 2 }),
       reason: current
-        ? 'Semester 1 is running, so semester 2 is next'
-        : 'Semester 1 has ended and semester 2 has not started',
+        ? 'Feb/Mar is running, so Aug/Sept is next'
+        : 'Feb/Mar has ended and Aug/Sept has not started',
     };
   }
 
@@ -76,8 +92,8 @@ export function describeAcademicNow(now: Date = new Date()): AcademicNow {
     next: { year: year + 1, semester: 1 },
     label: formatTerm({ year: year + 1, semester: 1 }),
     reason: current
-      ? 'Semester 2 is running, so semester 1 of next year is next'
-      : 'Semester 2 has ended, so semester 1 of next year is next',
+      ? 'Aug/Sept is running, so Feb/Mar of next year is next'
+      : 'Aug/Sept has ended, so Feb/Mar of next year is next',
   };
 }
 

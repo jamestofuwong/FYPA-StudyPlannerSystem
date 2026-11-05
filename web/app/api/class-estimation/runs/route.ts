@@ -101,6 +101,7 @@ export async function POST(req: NextRequest) {
         unitCode: unit.code,
         fromNamedPicks: unit.fromNamedPicks,
         fromElectives: unit.fromElectives,
+        fromFreeElectives: unit.fromFreeElectives,
         fromNewIntake: unit.fromNewIntake,
         projected: unit.projected,
         headcount: unit.headcount,

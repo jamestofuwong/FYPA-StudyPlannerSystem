@@ -1521,6 +1521,8 @@ export default function PathwayPage() {
                   .map((w) => normaliseCode(w.unitCode))
               );
 
+              const placedUnitCodes = new Set(semesters.flatMap((s) => s.units.map((u) => normaliseCode(u.code))));
+
               const overCapacity = new Map<string, Extract<PlanWarning, { kind: 'over_capacity' }>>();
               const byUnit = new Map<string, string[]>();
               const messages: string[] = [];
@@ -1548,7 +1550,9 @@ export default function PathwayPage() {
                   continue; // Skip this warning completely
                 }
 
-                if (w.kind === 'short_term_only') {
+                // A summer/winter-only unit that is not in a semester is handled by the break milestones. One that an
+                // advisor put into a semester by hand has no term to run in, so that warning stays.
+                if (w.kind === 'short_term_only' && !placedUnitCodes.has(normaliseCode(w.unitCode))) {
                   continue;
                 }
 
@@ -2603,8 +2607,8 @@ export default function PathwayPage() {
                       // Suppress no_offering_data or requisite warnings for unselected 'ELECTIVE' placeholder slots
                       if ('unitCode' in w && normaliseCode(w.unitCode) === 'ELECTIVE') return null;
 
-                      // Suppress short_term_only warnings since break milestones handle them
-                      if (w.kind === 'short_term_only') return null;
+                      // Break milestones handle a summer/winter-only unit that is not in a semester
+                      if (w.kind === 'short_term_only' && !placedUnitCodes.has(normaliseCode(w.unitCode))) return null;
 
                       // Suppress WIL shortfall if break milestones provide the required credit points
                       const totalWilMilestoneCp = breakMilestones.reduce((sum: number, bm: any) => sum + (bm.creditPoints ?? 0), 0);

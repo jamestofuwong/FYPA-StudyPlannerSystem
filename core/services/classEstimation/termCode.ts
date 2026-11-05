@@ -17,9 +17,15 @@ export interface ParsedTerm {
   year: number;
   /** Calendar month the period starts in, 1-12, from the month name in the code. */
   month: number;
-  /** 1 = Semester 1, 2 = Semester 2, 3 = Summer, 4 = Winter. */
+  /**
+   * 1 = Semester 1, 2 = Semester 2, 3 = Summer, 4 = Winter, in calendar terms (Feb/Mar = 1, Aug/Sept = 2).
+   * A semester's number comes from the month, not the suffix: an Aug/Sept intake's own first semester can be
+   * written 2024_SEP_S1, and it still runs in calendar semester 2.
+   */
   term: number;
   kind: TermKind;
+  /** The period exactly as written (S1, S2, ST, WT). For a semester it may count from the student's intake. */
+  period: string;
   /** The code as written, kept so warnings and diagnostics can quote the original. */
   raw: string;
 }
@@ -56,7 +62,8 @@ export function parseTermCode(raw: string | null | undefined): ParsedTerm | null
   const period = PERIODS[periodCode];
   if (month === undefined || period === undefined) return null;
 
-  return { year: Number(yearText), month, term: period.term, kind: period.kind, raw: text };
+  const term = period.kind === 'semester' ? (month >= 7 ? 2 : 1) : period.term;
+  return { year: Number(yearText), month, term, kind: period.kind, period: periodCode, raw: text };
 }
 
 /** Chronological order: year first, then the month the period starts in. */

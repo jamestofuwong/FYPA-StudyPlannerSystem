@@ -1,3 +1,4 @@
+import { readBody, MAJOR_FIELDS } from "@/lib/requestBody";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import * as majorRepository from "@core/db/repositories/majorRepository";
@@ -24,7 +25,9 @@ export async function PUT(
 ) {
   const { id } = await params;
   try {
-    const body = await req.json();
+    const parsed = await readBody(req, MAJOR_FIELDS, { partial: true });
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.data;
     const updatedMajor = await majorRepository.updateMajor(id, body);
     return NextResponse.json(updatedMajor, { status: 200 });
   } catch {

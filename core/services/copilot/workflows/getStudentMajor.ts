@@ -42,7 +42,8 @@ interface Output {
 
 export const getStudentMajorWorkflow: Workflow<Input, Output> = {
   id: 'get_student_major',
-  description: 'Detects the major (program of study) for a student by fetching their degree audit from the portal and running the matching algorithm. Use this when the user asks what major a student is in, what program they are enrolled in, or what their detected major is.',
+  description: 'Detects the major (program of study) that a student is in now, from their degree audit. Use this when the user asks what major, program or course a student is enrolled in or what their detected major is. Not for the list of past programs (use get_student_enrollment_history).',
+  keywords: ['enrolled in', 'which major', 'what program', 'what course', 'specialisation', 'stream'],
   params: [
     {
       name: 'studentId',

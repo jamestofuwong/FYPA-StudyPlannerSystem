@@ -60,19 +60,25 @@ export async function resolveCandidateUnits(
   // planners sit in more than one category, COS20007 and COS10003 among them, so this is not a corner case.
   // Filtering against the raw completed set here is category-blind and cannot be fooled that way.
   // The underlying scoring bug is not fixed here, it also depresses matchPct and belongs to /api/match.
-  for (const code of payload.primaryMajor.breakdown.core.missingUnits ?? []) {
-    if (completed.has(code.trim().toUpperCase())) continue;
-    candidates.push({ code, category: 'core' });
-  }
-  for (const code of payload.primaryMajor.breakdown.majorCore.missingUnits ?? []) {
-    if (completed.has(code.trim().toUpperCase())) continue;
-    candidates.push({ code, category: 'majorCore' });
+  // A required unit is owed once per student. A code listed as both core and major core, or also sitting in an
+  // elective pool, would otherwise put the same student in that class twice. The first, stricter category wins.
+  const named = new Set<string>();
+  for (const [list, category] of [
+    [payload.primaryMajor.breakdown.core.missingUnits, 'core'],
+    [payload.primaryMajor.breakdown.majorCore.missingUnits, 'majorCore'],
+  ] as const) {
+    for (const code of list ?? []) {
+      const key = code.trim().toUpperCase();
+      if (completed.has(key) || named.has(key)) continue;
+      named.add(key);
+      candidates.push({ code, category });
+    }
   }
 
   const prescribedSlots = payload.primaryMajor.breakdown.prescribed.missingSlots ?? 0;
   if (prescribedSlots > 0) {
     for (const code of new Set(getPrescribedPoolCodes(planner))) {
-      if (completed.has(code)) continue;
+      if (completed.has(code) || named.has(code)) continue;
       candidates.push({ code, category: 'prescribed', poolSlotsRemaining: prescribedSlots });
     }
   }
@@ -80,7 +86,7 @@ export async function resolveCandidateUnits(
   const freeElectiveSlots = payload.primaryMajor.breakdown.freeElective.missingSlots ?? 0;
   if (freeElectiveSlots > 0) {
     for (const code of new Set(getFreeElectivePoolCodes(planner))) {
-      if (completed.has(code)) continue;
+      if (completed.has(code) || named.has(code)) continue;
       candidates.push({ code, category: 'freeElective', poolSlotsRemaining: freeElectiveSlots });
     }
   }

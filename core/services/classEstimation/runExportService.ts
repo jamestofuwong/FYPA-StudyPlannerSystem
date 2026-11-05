@@ -12,7 +12,8 @@
 // ============================================================
 
 import * as XLSX from 'xlsx-js-style';
-import type { EstimationRunDetail } from '../../db/repositories/estimationRunRepository';
+import type { EstimationRunDetail, EstimationRunUnitRecord } from '../../db/repositories/estimationRunRepository';
+import { formatTerm } from './academicCalendar';
 
 const hex = (h: string) => ({ rgb: h });
 const thin = () => ({ style: 'thin' as const, color: hex('CCCCCC') });
@@ -51,8 +52,11 @@ function applyRow(sheet: XLSX.WorkSheet, row: number, columns: number, cellStyle
 }
 
 function semesterLabel(run: EstimationRunDetail): string {
-  return `Semester ${run.targetSemester}, ${run.targetYear}`;
+  return formatTerm({ year: run.targetYear, semester: run.targetSemester as 1 | 2 });
 }
+
+/** Seats as the page shows them: one decimal, blank when there are none. */
+const seats = (n: number) => (n > 0.05 ? Number(n.toFixed(1)) : '');
 
 /**
  * The figures, one row per unit, largest first.
@@ -62,17 +66,20 @@ function semesterLabel(run: EstimationRunDetail): string {
  * breakdown tells them apart.
  */
 function buildProjectionSheet(run: EstimationRunDetail): XLSX.WorkSheet {
+  // Same split as the page. A run saved before free electives were recorded cannot be split, so all its
+  // elective shares count as needed and Optional says so.
+  const optional = (unit: EstimationRunUnitRecord) => unit.fromFreeElectives ?? 0;
   const rows: unknown[][] = [
     [`Projected enrolment, ${run.course ? `${run.course}, ` : ''}${semesterLabel(run)}`, '', '', '', '', ''],
-    ['Unit', 'Unit name', 'Required', 'Elective', 'New students', 'Projected headcount'],
+    ['Unit', 'Unit name', 'Needed to graduate', 'Optional', 'New', 'Headcount'],
   ];
 
   for (const unit of run.units) {
     rows.push([
       unit.unitCode,
       unit.unitName ?? '',
-      unit.fromNamedPicks || '',
-      unit.fromElectives > 0 ? Number(unit.fromElectives.toFixed(2)) : '',
+      seats(unit.fromNamedPicks + unit.fromElectives - optional(unit)),
+      unit.fromFreeElectives === undefined ? 'Not recorded' : seats(optional(unit)),
       unit.fromNewIntake || '',
       unit.headcount,
     ]);
@@ -81,13 +88,13 @@ function buildProjectionSheet(run: EstimationRunDetail): XLSX.WorkSheet {
   rows.push([]);
   rows.push(['Total', '', '', '', '', run.units.reduce((sum, unit) => sum + unit.headcount, 0)]);
   rows.push([]);
-  rows.push(['Required counts students whose planner says they still owe the unit.']);
-  rows.push(['Elective counts shares of a student spread across the options they could pick, so it is fractional.']);
-  rows.push(['New students is the expected intake, which is not discounted because it is already what you expect to arrive.']);
+  rows.push(['Needed to graduate counts seats for students who must take the unit: core and major core they still owe, plus prescribed elective shares. Before the returning rate.']);
+  rows.push(['Optional counts shares of students who could take it as a free elective, so could be asked to switch if the class is full. Before the returning rate.']);
+  rows.push(['New is the expected intake, which is not discounted because it is already what you expect to arrive.']);
   rows.push(['Each unit is rounded on its own, so the column may not add up to the total exactly.']);
 
   const sheet = XLSX.utils.aoa_to_sheet(rows);
-  sheet['!cols'] = [{ wch: 14 }, { wch: 42 }, { wch: 11 }, { wch: 11 }, { wch: 14 }, { wch: 20 }];
+  sheet['!cols'] = [{ wch: 14 }, { wch: 42 }, { wch: 20 }, { wch: 13 }, { wch: 8 }, { wch: 12 }];
   sheet['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 5 } }];
 
   applyRow(sheet, 0, 6, S.title);

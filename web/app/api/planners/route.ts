@@ -1,3 +1,4 @@
+import { readBody, PLANNER_CREATE_FIELDS } from "@/lib/requestBody";
 import { NextResponse } from "next/server";
 import { extractPlannerFromPdf } from "../../../../core/services/plannerImport/plannerImportService";
 
@@ -41,7 +42,9 @@ export async function POST(req: Request) {
       return NextResponse.json(result, { status: 200 });
     }
 
-    const body = await req.json();
+    const parsed = await readBody(req, PLANNER_CREATE_FIELDS);
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.data;
     const plannerRepository = await import("../../../../core/db/repositories/plannerRepository");
     const newPlanner = await plannerRepository.createPlanner(body);
     return NextResponse.json(newPlanner, { status: 201 });

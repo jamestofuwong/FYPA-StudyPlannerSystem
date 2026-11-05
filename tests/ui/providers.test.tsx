@@ -15,8 +15,8 @@ const ToastTrigger = () => {
   );
 };
 
-describe('ToastProvider Logic Coverage', () => {
-  test('should trigger every toast type branch (Line coverage boost)', () => {
+describe('ToastProvider', () => {
+  test('shows a toast for each type', () => {
     render(<ToastProvider><ToastTrigger /></ToastProvider>);
 
     fireEvent.click(screen.getByText('S'));
@@ -29,7 +29,7 @@ describe('ToastProvider Logic Coverage', () => {
     expect(screen.getByText('Info Msg')).toBeInTheDocument();
   });
 
-  test('ToastProvider: automatic dismissal logic (Line 28)', async () => {
+  test('ToastProvider: dismisses a toast after its timeout', async () => {
     jest.useFakeTimers();
     
     render(<ToastProvider><ToastTrigger /></ToastProvider>);
@@ -48,7 +48,7 @@ describe('ToastProvider Logic Coverage', () => {
   });
 });
 
-describe('ToastProvider Development Logs (Lines 31-38)', () => {
+describe('ToastProvider development logging', () => {
   test('logs to console by forcing development logic', () => {
     const originalEnv = process.env.NODE_ENV;
     process.env.NODE_ENV = 'development';

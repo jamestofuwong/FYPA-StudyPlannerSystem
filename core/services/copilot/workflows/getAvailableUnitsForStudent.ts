@@ -25,7 +25,8 @@ const PASSING_GRADES = new Set([
 
 export const getAvailableUnitsForStudentWorkflow: Workflow<Input, Output> = {
   id: 'get_available_units_for_student',
-  description: 'Lists all units in the database that a student is currently eligible to take, i.e. units they have not completed yet and whose prerequisites they have already passed. Use this when the user asks what units a student can enrol in now, or what options are available to them.',
+  description: 'Lists ALL units that a student can enrol in now: not yet completed, with prerequisites passed. Use this when the user asks what a student can take, what options they have or which units are open to them. Not for one named unit (use can_student_take_unit) and not about the timetable of a unit.',
+  keywords: ['what can take', 'options', 'open to', 'eligible units', 'available units', 'choices next semester', 'which units can enrol'],
   params: [
     {
       name: 'studentId',

@@ -53,7 +53,8 @@ async function matchedPlanner(studentId: string, scraped: { course: string; enro
 
 export const checkGraduationStatusWorkflow: Workflow<Input, Output> = {
   id: 'check_graduation_status',
-  description: 'Checks whether a student can graduate: compares their passed units with their matched study planner (core, major, prescribed electives, work placement, electives), their credits, Conceded Passes and failed units. Says what is still needed. Fetches live data from the student portal.',
+  description: 'Checks whether a student is eligible to graduate: passed units against their matched planner (core, major, electives, work placement), credits, Conceded Passes and failed units, and says what is still needed. Use this when the user asks if a student can graduate or has met all degree requirements.',
+  keywords: ['graduate', 'graduation', 'eligible to graduate', 'degree requirements', 'met requirements', 'complete degree', 'finish degree', 'clear to graduate', 'done with everything'],
   params: [
     {
       name: 'studentId',

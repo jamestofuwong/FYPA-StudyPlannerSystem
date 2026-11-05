@@ -9,6 +9,11 @@
  *   --out=<dir>       output directory (default tests/fixtures/dpa)
  *   --single          also write one file per student, the shape the portal exports
  *   --majors=a,b      only use planners whose major name contains one of these (case insensitive)
+ *   --intakes=2024S2,2025S2   only use planners for these intakes (S1 = Feb/Mar, S2 = Aug/Sept)
+ *   --as-of=2026S2    the calendar term in progress; each student's progress then follows from their intake
+ *
+ * Aug/Sept 2026 cohort of Aug/Sept intakes from 2024:
+ *   npm run fixtures:dpa -- --intakes=2024S2,2025S2,2026S2 --as-of=2026S2 --count=300
  *
  * Planners come from the system's own planner database, so mock students follow the majors actually
  * loaded rather than one hand-written stand-in. That means the local Postgres has to be running: it is
@@ -43,6 +48,17 @@ const outDir = path.resolve(process.cwd(), flag('out', path.join('tests', 'fixtu
 const alsoSingle = args.includes('--single');
 const majorFilter = flag('majors', '').split(',').map((m) => m.trim().toLowerCase()).filter(Boolean);
 
+/** "2024S2" -> [2024, 2]. */
+function parseYearSemester(value: string): [number, 1 | 2] {
+  const match = /^(\d{4})S([12])$/i.exec(value.trim());
+  if (!match) throw new Error(`expected a term like 2024S2, got "${value}"`);
+  return [Number(match[1]), Number(match[2]) as 1 | 2];
+}
+
+const intakeFilter = flag('intakes', '').split(',').filter((v) => v.trim()).map(parseYearSemester);
+const asOfFlag = flag('as-of', '');
+const asOf = asOfFlag ? parseYearSemester(asOfFlag) : undefined;
+
 /**
  * core/db has no per-unit credit field, so the known exceptions are supplied here. Everything else falls
  * back to the standard 12.5. Taken from a real DPA export.
@@ -76,9 +92,14 @@ async function main(): Promise<void> {
     fixtures = fixtures.filter((p) => majorFilter.some((m) => p.majorName.toLowerCase().includes(m)));
   }
 
+  if (intakeFilter.length > 0) {
+    fixtures = fixtures.filter((p) =>
+      intakeFilter.some(([year, semester]) => p.intakeYear === year && p.intakeSemester === semester));
+  }
+
   if (fixtures.length === 0) {
     console.error('[fixtures] no usable planners found.');
-    console.error('[fixtures] import or sync planners first, or relax --majors.');
+    console.error('[fixtures] import or sync planners first, or relax --majors / --intakes.');
     console.error(`[fixtures] read ${dbPlanners.length} planner(s) from the database.`);
     process.exit(1);
   }
@@ -88,7 +109,7 @@ async function main(): Promise<void> {
     console.log(`[fixtures]   ${planner.majorName} (${planner.units.length} units)`);
   }
 
-  const students = generateStudents({ planners: fixtures, count, seed });
+  const students = generateStudents({ planners: fixtures, count, seed, asOf });
 
   // Fail loudly rather than writing a cohort whose students are interchangeable, which would make every
   // cohort-level signal look like it works while returning the same answer for everyone.
@@ -96,7 +117,8 @@ async function main(): Promise<void> {
 
   fs.mkdirSync(outDir, { recursive: true });
 
-  const cohortPath = path.join(outDir, `cohort-${count}-seed${seed}.xlsx`);
+  const asOfTag = asOf ? `-asof${asOf[0]}S${asOf[1]}` : '';
+  const cohortPath = path.join(outDir, `cohort-${count}-seed${seed}${asOfTag}.xlsx`);
   writeSheet(toMultiStudentRows(students), cohortPath);
   console.log(`[fixtures] wrote ${cohortPath} (${students.length} students, one sheet)`);
 

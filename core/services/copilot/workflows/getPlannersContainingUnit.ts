@@ -22,7 +22,8 @@ interface Output {
 
 export const getPlannersContainingUnitWorkflow: Workflow<Input, Output> = {
   id: 'get_planners_containing_unit',
-  description: 'Finds all study planners that include a specific unit, and what category it appears as in each planner (core, major core, elective, etc.). Use this when the user asks which programs require a unit, or which majors include a unit.',
+  description: 'Finds ALL planners that include ONE named unit, and the category that the unit has in each (core, major core, elective). Use this when the user asks which programs or majors require, include or use a unit. Not for one named planner (use get_unit_category_in_planner).',
+  keywords: ['which planners contain', 'which majors include', 'which programs require', 'used in', 'part of which', 'appears in', 'where is unit used'],
   params: [
     {
       name: 'unitCode',

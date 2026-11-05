@@ -52,14 +52,14 @@ function workbook(rows: unknown[][]): Buffer {
 }
 
 describe('termCodeFor', () => {
-  // Semesters alternate and roll the year over after semester 2.
+  // The month is the calendar term; the suffix is the student's own semester, as in real exports.
   test.each([
     [2024, 1 as const, 0, '2024_MAR_S1'],
     [2024, 1 as const, 1, '2024_SEP_S2'],
     [2024, 1 as const, 2, '2025_MAR_S1'],
-    [2024, 2 as const, 0, '2024_SEP_S2'],
-    [2024, 2 as const, 1, '2025_MAR_S1'],
-    [2024, 2 as const, 3, '2026_MAR_S1'],
+    [2024, 2 as const, 0, '2024_SEP_S1'],
+    [2024, 2 as const, 1, '2025_MAR_S2'],
+    [2024, 2 as const, 3, '2026_MAR_S2'],
   ])('intake %i sem %i, offset %i gives %s', (year, semester, offset, expected) => {
     expect(termCodeFor(year, semester, offset)).toBe(expected);
   });
@@ -456,6 +456,30 @@ describe('a generated student follows the planner for their own intake', () => {
     expect(onNew.length).toBeGreaterThan(0);
     for (const student of onOld) expect(student.intake).toEqual({ year: 2022, semester: 1 });
     for (const student of onNew) expect(student.intake).toEqual({ year: 2025, semester: 2 });
+  });
+
+  test('asOf sets progress from the intake instead of at random', () => {
+    const sept = (year: number) => ({
+      ...planner(year, 9, `U${year}`),
+      units: Array.from({ length: 8 }, (_, i) => ({
+        code: `U${year}_${i}`, title: 'Unit', yearLevel: Math.floor(i / 2) + 1, semester: ((i % 2) + 1) as 1 | 2,
+      })),
+    });
+    const students = generateStudents({
+      planners: [sept(2024), sept(2025), sept(2026)],
+      count: 30,
+      seed: 7,
+      asOf: [2026, 2],
+    });
+    const elapsedFor = (year: number) => new Set(students.filter((s) => s.intake.year === year).map((s) => s.semestersElapsed));
+    expect(elapsedFor(2024)).toEqual(new Set([5]));
+    expect(elapsedFor(2025)).toEqual(new Set([3]));
+    expect(elapsedFor(2026)).toEqual(new Set([1]));
+    // Nothing is in progress after the as-of term, and an Aug/Sept intake starts on SEP_S1.
+    for (const student of students) {
+      for (const row of student.rows.filter((r) => r[4] === 'Current')) expect(row[6]).toBe('2026_SEP_S' + (student.semestersElapsed % 2 === 1 ? 1 : 2));
+    }
+    expect(() => generateStudents({ planners: [sept(2026)], count: 1, asOf: [2026, 1] })).toThrow(/starts after asOf/);
   });
 
   test('a planner without an intake still falls back to the intakes list', () => {

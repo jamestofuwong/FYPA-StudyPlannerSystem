@@ -1,3 +1,4 @@
+import { readBody, UNIT_FIELDS } from "@/lib/requestBody";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import * as unitRepository from "../../../../../core/db/repositories/unitRepository";
@@ -24,7 +25,9 @@ export async function PUT(
 ) {
   const { id } = await params;
   try {
-    const body = await req.json();
+    const parsed = await readBody(req, UNIT_FIELDS, { partial: true });
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.data;
     const updatedUnit = await unitRepository.updateUnit(id, body);
     return NextResponse.json(updatedUnit, { status: 200 });
   } catch {

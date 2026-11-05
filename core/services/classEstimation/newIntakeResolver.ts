@@ -25,6 +25,7 @@
 
 import * as plannerRepository from '../../db/repositories/plannerRepository';
 import { intakeSemesterFromMonth } from '../matching/plannerTemplateBuilder';
+import { formatIntake } from './academicCalendar';
 
 export interface NewIntakeUnits {
   /** Units any of the course's majors puts in Year 1, Semester 1, sorted. */
@@ -75,14 +76,14 @@ function pickPlanners(
   const semester = chosen[0].semester;
 
   warnings.push(
-    `No planner is loaded for the ${targetYear} semester ${targetTerm} intake, so new-student units were read `
-    + `from the ${latestYear} semester ${semester} intake instead. A curriculum change since then would make `
+    `No planner is loaded for the ${formatIntake(targetYear, targetTerm)}, so new-student units were read `
+    + `from the ${formatIntake(latestYear, semester)} instead. A curriculum change since then would make `
     + `this wrong.`,
   );
   if (sameSemester.length === 0) {
     warnings.push(
-      `No planner is loaded for any semester ${targetTerm} intake either, so the units come from a semester `
-      + `${semester} intake, whose first semester may differ.`,
+      `No planner is loaded for any ${targetTerm === 1 ? 'Feb/Mar' : 'Aug/Sept'} intake either, so the units come `
+      + `from a ${semester === 1 ? 'Feb/Mar' : 'Aug/Sept'} intake, whose first semester may differ.`,
     );
   }
 
@@ -183,7 +184,7 @@ function firstSemesterOf(
   const partial = Object.entries(shares).filter(([, share]) => share < 1).map(([code]) => code).sort();
   if (counts.size === 0) {
     warnings.push(
-      `${course}: the ${picked.year} semester ${picked.semester} planners have no Year 1, Semester 1 units, so `
+      `${course}: the ${formatIntake(picked.year, picked.semester)} planners have no Year 1, Semester 1 units, so `
       + 'its new students have nowhere to go and are not counted.',
     );
   } else if (partial.length > 0) {
