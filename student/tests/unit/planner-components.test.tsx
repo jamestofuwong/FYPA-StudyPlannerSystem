@@ -3,11 +3,13 @@ import React from 'react';
 import { render, screen, within, fireEvent, cleanup } from '@testing-library/react';
 import PlannerCard from '@student/components/PlannerCard/PlannerCard';
 import PlannerGrid from '@student/components/PlannerGrid/PlannerGrid';
+import SemesterTable from '@student/components/SemesterTable/SemesterTable';
 import type { PlannerSummary } from '@student/lib/types';
 
 // The real link shows a loading overlay after a click, which needs the Next.js router. A plain link is enough here.
 jest.mock('@student/components/common/PendingNavigation', () => ({
   PendingLink: ({ href, children, className, ariaLabel }: any) => <a href={href} className={className} aria-label={ariaLabel}>{children}</a>,
+  usePendingNavigation: () => ({ push: jest.fn(), activePendingHref: null }),
 }));
 
 const planner = (over: Partial<PlannerSummary> = {}): PlannerSummary => ({
@@ -121,5 +123,19 @@ describe('PlannerGrid', () => {
     sessionStorage.setItem('study-planner-filters', '{not json');
     render(<PlannerGrid planners={planners} />);
     expect(cards()).toHaveLength(3);
+  });
+});
+
+describe('SemesterTable heading', () => {
+  const block = { year: 1, semester: 2, label: 'Semester 2', units: [] };
+
+  test('names the year and the semester in one heading when a year label is given', () => {
+    render(<SemesterTable block={block} yearLabel="Year 1" periodLabel="Aug 2026" />);
+    expect(screen.getByRole('columnheader', { name: 'Year 1 Semester 2 - Aug 2026' })).toBeInTheDocument();
+  });
+
+  test('keeps the plain semester heading when no year label is given, as the Plan Builder does', () => {
+    render(<SemesterTable block={block} />);
+    expect(screen.getByRole('columnheader', { name: 'Semester 2' })).toBeInTheDocument();
   });
 });

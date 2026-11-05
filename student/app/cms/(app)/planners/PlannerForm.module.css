@@ -65,17 +65,6 @@
   margin-bottom: var(--space-8);
 }
 
-.yearHeading {
-  font-size: 11px;
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  margin-bottom: var(--space-3);
-  padding-bottom: var(--space-2);
-  border-bottom: 2px solid var(--color-border);
-}
-
 /* Semester cards */
 
 .semesterCard {
@@ -98,6 +87,14 @@
 .semesterLabel {
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
+}
+
+.semesterYearTag {
+  flex: 0 0 auto;
+  margin-right: var(--space-2);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  white-space: nowrap;
 }
 
 .semesterLabelInput {

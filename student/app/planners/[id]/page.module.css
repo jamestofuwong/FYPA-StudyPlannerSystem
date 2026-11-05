@@ -116,30 +116,6 @@
   align-items: start;
 }
 
-/* ── Year heading ───────────────────────────────────────────────────────── */
-.yearHeading {
-  font-size: var(--font-size-xl);
-  font-weight: var(--font-weight-bold);
-  color: var(--color-text-primary);
-  margin-bottom: var(--space-4);
-  margin-top: var(--space-10);
-  padding-bottom: var(--space-3);
-  position: relative;
-}
-
-.yearHeading:first-child { margin-top: 0; }
-
-.yearHeading::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  width: 40px;
-  height: 2px;
-  background: var(--color-accent);
-  border-radius: 1px;
-}
-
 /* ── Elective pool ──────────────────────────────────────────────────────── */
 .emptyState {
   padding: var(--space-8) 0;

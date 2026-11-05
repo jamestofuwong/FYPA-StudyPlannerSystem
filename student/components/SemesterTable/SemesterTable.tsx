@@ -8,6 +8,8 @@ import styles from './SemesterTable.module.css'
 
 interface Props {
   block: SemesterBlock
+  /** Puts the year in the heading, such as "Year 1 Semester 1", for a page that has no separate year heading. */
+  yearLabel?: string
   periodLabel?: string
   completedCodes?: Set<string>
 }
@@ -37,11 +39,12 @@ function majorAbbrev(name: string | null | undefined): string | null {
   return words.map(word => word[0]).join('').toUpperCase()
 }
 
-export default function SemesterTable({ block, periodLabel, completedCodes }: Props) {
+export default function SemesterTable({ block, yearLabel, periodLabel, completedCodes }: Props) {
   const navigation = usePendingNavigation('Loading unit details...')
+  const termText = yearLabel ? `${yearLabel} ${block.label}` : block.label
   const headerText = periodLabel
-    ? `${block.label} - ${periodLabel}`
-    : block.label
+    ? `${termText} - ${periodLabel}`
+    : termText
 
   function onUnitLinkClick(event: MouseEvent<HTMLAnchorElement>, href: string) {
     if (
