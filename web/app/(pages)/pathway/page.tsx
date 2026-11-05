@@ -6,6 +6,8 @@ import styles from './page.module.css';
 import { useToast } from '../../../components/providers/ToastProvider';
 import { useStudentSession } from '../../../components/providers/StudentSessionContext';
 import { panelToPath } from '../../../lib/navigation';
+import MpuToggle from '../../../components/common/MpuToggle';
+import UnitLink from '../../../components/common/UnitLink';
 import { Badge, InlineCode } from '../../../components/common/Primitives';
 import MinorProgressCard, { getMinorProgress } from '../../../components/common/MinorProgressCard';
 import {
@@ -572,6 +574,7 @@ export default function PathwayPage() {
     removedUnitSlots, setRemovedUnitSlots,
     customMpuList, setCustomMpuList,
     allDatabaseMpus, setAllDatabaseMpus,
+    showMpu,
   } = useStudentSession();
 
   // The single substitution point: every read below of
@@ -1249,6 +1252,8 @@ export default function PathwayPage() {
       </div>
         </>
       )}
+
+      <MpuToggle hiddenNote="MPU units are hidden. The plan and the exports still include them." />
 
       {restoredSession && (
         <div className={styles.mpuEmptyAlert} style={{ marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
@@ -2192,7 +2197,9 @@ export default function PathwayPage() {
                 {readyToGraduate ? (
                   <div className={styles.mpuEmptyAlert}>
                     {remainingMpus.length > 0
-                      ? '✓ No further core units required. Complete the remaining MPU units below to finish this degree.'
+                      ? (showMpu
+                        ? '✓ No further core units required. Complete the remaining MPU units below to finish this degree.'
+                        : '✓ No further core units required. MPU units are hidden: show them to see what is left.')
                       : '✓ This student has completed all requirements for this planner.'}
                   </div>
                 ) : semesters.length === 0 ? (
@@ -2247,7 +2254,7 @@ export default function PathwayPage() {
                             </div>
                           </div>
                           <div className={styles.breakMilestoneBody}>
-                            <InlineCode>{primaryMilestone.unitCode}</InlineCode>
+                            <UnitLink code={primaryMilestone.unitCode}><InlineCode>{primaryMilestone.unitCode}</InlineCode></UnitLink>
                             <span className={styles.breakMilestoneName}>{primaryMilestone.unitName}</span>
                             <span className={styles.breakMilestoneTag}>
                               {primaryMilestone.unitCode?.toUpperCase().includes('OPTIONAL') ? (
@@ -2382,9 +2389,11 @@ export default function PathwayPage() {
                               return (
                               <tr key={`${u.code}-${uIdx}`} className={unitMessages.length > 0 ? styles.rowFlagged : undefined}>
                                 <td>
-                                  <InlineCode red={u.category === 'core' || u.category === 'major_core'}>
-                                    {u.code}
-                                  </InlineCode>
+                                  <UnitLink code={u.code}>
+                                    <InlineCode red={u.category === 'core' || u.category === 'major_core'}>
+                                      {u.code}
+                                    </InlineCode>
+                                  </UnitLink>
                                 </td>
                                 <td style={{ whiteSpace: 'normal' }}>
                                   {u.name}
@@ -2737,7 +2746,7 @@ export default function PathwayPage() {
                 </div>
 
                 {/* Remaining MPU units */}
-                <div className={styles.planMpu}>
+                <div className={styles.planMpu} style={showMpu ? undefined : { display: 'none' }}>
                 {(() => {
                   const defaultRemainingMpus = getRemainingMpuUnits(activePlanner, dashboardData, takenCodes);
                   const activeMpus = customMpuList ?? defaultRemainingMpus;

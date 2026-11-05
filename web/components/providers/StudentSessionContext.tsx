@@ -11,6 +11,7 @@ import type {
   SchedulableUnit,
 } from '../../../core/services/scheduling/customPlannerScheduler';
 import type { CategoryRequirement } from '../../../core/shared/scheduling/planValidator';
+import { readShowMpu, saveShowMpu } from '../../lib/mpu';
 
 type LoadedStudent = { student: ScrapedStudent; studentId: string };
 type DataSource = 'scrape' | 'import_xlsx' | 'import_manual' | 'import_paste';
@@ -135,6 +136,10 @@ export type StudentSessionState = {
   allDatabaseMpus: { code: string; name: string }[];
   setAllDatabaseMpus: React.Dispatch<React.SetStateAction<{ code: string; name: string }[]>>;
 
+  /** Whether MPU units are drawn on Major Detection and Student Pathway. A display choice that outlives the student. */
+  showMpu: boolean;
+  setShowMpu: (show: boolean) => void;
+
   restoredSession: RestoredSession | null;
   setRestoredSession: Dispatch<SetStateAction<RestoredSession | null>>;
 
@@ -180,6 +185,10 @@ export function StudentSessionProvider({ children }: { children: ReactNode }) {
   const [customMpuList, setCustomMpuList] = useState<{ code: string; name: string }[] | null>(null);
   const [allDatabaseMpus, setAllDatabaseMpus] = useState<{ code: string; name: string }[]>([]);
   const [restoredSession, setRestoredSession] = useState<RestoredSession | null>(null);
+  // Starts as shown on the server and the first client render, then picks up the saved choice, so the two agree.
+  const [showMpu, setShowMpuState] = useState(true);
+  useEffect(() => { setShowMpuState(readShowMpu()); }, []);
+  const setShowMpu = (show: boolean) => { setShowMpuState(show); saveShowMpu(show); };
   const [handoffArrival, setHandoffArrival] = useState<HandoffArrival | null>(null);
 
 
@@ -238,6 +247,7 @@ export function StudentSessionProvider({ children }: { children: ReactNode }) {
         removedUnitSlots, setRemovedUnitSlots,
         customMpuList, setCustomMpuList,
         allDatabaseMpus, setAllDatabaseMpus,
+        showMpu, setShowMpu,
         restoredSession, setRestoredSession,
         handoffArrival, setHandoffArrival,
       }}

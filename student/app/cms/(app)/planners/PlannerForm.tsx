@@ -613,14 +613,13 @@ export default function PlannerForm({ courses, allUnits, planner }: Props) {
           .sort((a, b) => a - b)
           .map(year => (
             <div key={year} className={styles.yearGroup}>
-              <h3 className={styles.yearHeading}>Year {year}</h3>
-
               {semesters
                 .filter(s => s.year_number === year)
                 .map(sem => {
                   return (
                     <div key={sem.key} className={styles.semesterCard}>
                       <div className={styles.semesterHeader}>
+                        <span className={styles.semesterYearTag}>Year {year}</span>
                         <input
                           className={styles.semesterLabelInput}
                           value={sem.label}

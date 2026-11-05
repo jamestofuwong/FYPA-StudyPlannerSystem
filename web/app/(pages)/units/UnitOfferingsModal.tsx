@@ -4,6 +4,7 @@ import { useState, useMemo, useRef, useEffect } from 'react';
 import styles from './page.module.css';
 import SyncOfferingsPreviewModal from './SyncOfferingsPreviewModal';
 import { fs } from '../../../styles/tokens';
+import UnitLink from '../../../components/common/UnitLink';
 
 type UnitWithOfferings = {
     id?: string;
@@ -415,7 +416,7 @@ export default function UnitOfferingsModal({
                                                         {list.map((unit) => (
                                                         <tr key={unit.unit_code}>
                                                             <td>
-                                                            <code className={styles.code}>{unit.unit_code}</code>
+                                                            <UnitLink code={unit.unit_code}><code className={styles.code}>{unit.unit_code}</code></UnitLink>
                                                             </td>
                                                             <td className={styles.unitNameText}>{unit.unit_name}</td>
                                                             <td>
@@ -487,7 +488,7 @@ export default function UnitOfferingsModal({
                                                     {unclassifiedUnits.map((unit) => (
                                                         <tr key={unit.unit_code}>
                                                             <td>
-                                                                <code className={styles.code}>{unit.unit_code}</code>
+                                                                <UnitLink code={unit.unit_code}><code className={styles.code}>{unit.unit_code}</code></UnitLink>
                                                             </td>
                                                             <td className={styles.unitNameText}>{unit.unit_name}</td>
                                                             <td style={{ textAlign: 'center' }}>

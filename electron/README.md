@@ -11,6 +11,7 @@ Two files. They are compiled by tsup (`npm run build:electron`) into `dist/elect
 - registers the IPC handlers (`ipcMain.handle`) and the updater events;
 - writes the log to `userData/logs/main.log`;
 - stops all services on `before-quit` (force exit after 5 s, 15 s on Windows).
+- opens a unit's official page in the computer's browser: the window refuses every new window, and passes a link to `shell.openExternal` only when `isOfficialUnitUrl` (`core/shared/unitLinks.ts`) accepts it.
 
 ## preload.ts
 

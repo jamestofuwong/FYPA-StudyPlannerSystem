@@ -104,6 +104,8 @@ const TIPS = [
   'In a study planner, the category badges (Core, Major Core, Elective, MPU) show the mix of units a student needs to graduate.',
   'After loading a student, ask the copilot about them: it checks the same rules as the Graduation tab.',
   'Switch the planner under Ranked Planners to see how the same student fits another major. The Graduation tab and the pathway follow the planner you pick.',
+  'Press a unit code on the Study Planners, Major Detection, Student Pathway, Units or Class Estimation pages to open that unit’s official page on the university website, in your browser. MPU units have no page of their own, so they are not links.',
+  'Turn off Show MPU units, above the tabs, to focus on the main units. The match and the exports stay the same.',
   'Class Estimation remembers the returning-students percentage, so it only needs changing when the outlook does.',
 ];
 
@@ -316,6 +318,11 @@ function Guide({ classic }: { classic: boolean }) {
               <li><strong>Unit Plan</strong> is the planner semester by semester, with the student’s result against each unit. Units the student has taken that are not on the planner are listed separately under <em>Units Outside Planner</em>.</li>
               <li><strong>Student Pathway</strong> opens the pathway for this student and planner.</li>
             </ul>
+            <p className={styles.mText}>
+              The <strong>Show MPU units</strong> switch above the tabs hides the general-studies units, so you can focus on
+              the main units. It hides them here and in the Student Pathway page. The match, the Graduation tab and the
+              exports do not change. The app remembers your choice.
+            </p>
             <Shot id="unitPlan" />
             <p className={styles.mText}>
               <strong>Export</strong> saves the major match, the unit plan and the study planner as a document. <strong>Clear</strong> removes the student.

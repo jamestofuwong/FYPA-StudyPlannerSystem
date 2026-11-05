@@ -11,7 +11,6 @@ interface Props {
   params: Promise<{ id: string }>
 }
 
-const YEAR_WORDS = ['One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight']
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 function semesterPeriod(
@@ -93,13 +92,11 @@ export default async function PlannerDetailPage({ params }: Props) {
               <>
                 {[...byYear.entries()].map(([year, blocks]) => (
                   <div key={year}>
-                    <h2 className={styles.yearHeading}>
-                      Year {YEAR_WORDS[year - 1] ?? year}
-                    </h2>
                     {blocks.map(block => (
                       <SemesterTable
                         key={`${block.year}-${block.semester}`}
                         block={block}
+                        yearLabel={`Year ${year}`}
                         periodLabel={semesterPeriod(
                           planner.intakeYear,
                           planner.intakeMonth,

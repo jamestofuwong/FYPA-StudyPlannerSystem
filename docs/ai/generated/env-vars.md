@@ -13,11 +13,11 @@ Names only. A value never appears in this repository. Read [config-and-secrets.m
 | `CI` | `playwright.config.ts` |
 | `CLASS_ESTIMATION_SOURCE` | `core/services/classEstimation/sources/resolvePortalSource.ts` |
 | `CMS_JWT_SECRET` | `student/jest.config.js`, `student/jest.integration.config.js`, `student/lib/cms/auth.ts`, `student/proxy.ts` |
-| `CMS_SEED_EMAIL` | `student/prisma/seed.ts` |
+| `CMS_SEED_EMAIL` | `student/prisma/seed.ts`, `student/scripts/reset-content.ts` |
 | `CMS_SEED_NAME` | `student/prisma/seed.ts` |
 | `CMS_SEED_PASSWORD` | `student/prisma/seed.ts` |
-| `DATABASE_URL` | `electron/main.ts`, `student/jest.config.js`, `student/jest.integration.config.js`, `student/lib/prisma.ts` and 2 more |
-| `DATABASE_URL_UNPOOLED` | `student/lib/prisma.ts`, `student/prisma/seed.ts` |
+| `DATABASE_URL` | `electron/main.ts`, `student/jest.config.js`, `student/jest.integration.config.js`, `student/lib/prisma.ts` and 3 more |
+| `DATABASE_URL_UNPOOLED` | `student/lib/prisma.ts`, `student/prisma/seed.ts`, `student/scripts/reset-content.ts` |
 | `DB_HOST` | `runtime/postgres/db.ts` |
 | `DB_NAME` | `runtime/postgres/db.ts` |
 | `DB_PASSWORD` | `runtime/postgres/db.ts` |

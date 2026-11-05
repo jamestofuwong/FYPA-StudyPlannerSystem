@@ -6,6 +6,9 @@ import styles from './page.module.css';
 import { useToast } from '../../../components/providers/ToastProvider';
 import { useStudentSession } from '../../../components/providers/StudentSessionContext';
 import { panelToPath } from '../../../lib/navigation';
+import { isMpuUnit } from '../../../lib/mpu';
+import MpuToggle from '../../../components/common/MpuToggle';
+import UnitLink from '../../../components/common/UnitLink';
 import { calendarTermFor } from '../../../../core/services/scheduling/customPlannerScheduler';
 import { auditGraduation } from '../../../../core/services/graduation/graduationAudit';
 import { deriveSemesterFromMonth } from '../../../../core/services/classEstimation/scrapedStudentMapper';
@@ -60,6 +63,7 @@ export default function DashboardPage() {
     setIsPlanEdited,
     setRestoredSession,
     handoffArrival, setHandoffArrival,
+    showMpu,
   } = useStudentSession();
   const router = useRouter();
   // Meadow re-lays the page out around the advising workflow; classic is unchanged.
@@ -269,6 +273,7 @@ export default function DashboardPage() {
 
     return planner.units
       .filter((u: any) => u.year_level === yearLevel && u.semester === semester && u.unit !== null)
+      .filter((u: any) => showMpu || !isMpuUnit({ category: u.category, code: u.unit?.unit_code }))
       .map((u: any) => {
         // REQ-FUN-404: extract prerequisites from requisite_groups included in planner fetch
         const prerequisites: Array<{ code: string; name: string; met: boolean }> =
@@ -1241,7 +1246,7 @@ export default function DashboardPage() {
                   <tbody>
                     {courseList.map((c: any, i: number) => (
                       <tr key={c.courseId ?? i}>
-                        <td><InlineCode>{c.courseId}</InlineCode></td>
+                        <td><UnitLink code={c.courseId}><InlineCode>{c.courseId}</InlineCode></UnitLink></td>
                         <td>{c.courseTitle}</td>
                         <td>{c.level ?? '—'}</td>
                         <td>{c.credits}</td>
@@ -1447,6 +1452,7 @@ export default function DashboardPage() {
           </div>
 
           <div className={styles.resultsMain}>
+          <MpuToggle hiddenNote="MPU units are hidden. The match and the graduation result do not change." />
           <div id="dash-result-tabs" className={styles.resultTabBar} role="tablist" aria-label="Match result views">
             <button
               type="button"
@@ -1512,6 +1518,7 @@ export default function DashboardPage() {
             const notTaken = (activePlanner?.units ?? [])
               .filter((u: any) =>
                 u.unit !== null &&
+                (showMpu || !isMpuUnit({ category: u.category, code: u.unit?.unit_code })) &&
                 !doneCodes.has(normaliseUnitCode(u.unit.unit_code)) &&
                 !doingCodes.has(normaliseUnitCode(u.unit.unit_code))
               )
@@ -1541,13 +1548,13 @@ export default function DashboardPage() {
                     <div className={styles.statLabel}>Not Yet Taken</div>
                     <div className={styles.insightValueRow}>
                       <span className={styles.statValue}>{notTaken.length}</span>
-                      <span className={styles.statSub}>unit{notTaken.length !== 1 ? 's' : ''} remaining</span>
+                      <span className={styles.statSub}>unit{notTaken.length !== 1 ? 's' : ''} remaining{showMpu ? '' : ' (MPU hidden)'}</span>
                     </div>
                   </div>
                   <div className={styles.insightPills}>
                     <span className={`${styles.pill} ${styles.pillRed}`}>Core {coreCount}</span>
                     <span className={`${styles.pill} ${styles.pillMuted}`}>Elective {electiveCount}</span>
-                    <span className={`${styles.pill} ${styles.pillBlue}`}>MPU {mpuCount}</span>
+                    {showMpu && <span className={`${styles.pill} ${styles.pillBlue}`}>MPU {mpuCount}</span>}
                     <span className={`${styles.pill} ${styles.suAlt}`}>WIL {wilCount}</span>
                   </div>
                 </div>
@@ -1557,7 +1564,7 @@ export default function DashboardPage() {
                   <div className={styles.insightList}>
                     {notTaken.map((u: any) => (
                       <div key={u.code} className={styles.insightRow}>
-                        <InlineCode red={u.category === 'core' || u.category === 'major_core'}>{u.code}</InlineCode>
+                        <UnitLink code={u.code}><InlineCode red={u.category === 'core' || u.category === 'major_core'}>{u.code}</InlineCode></UnitLink>
                         <span className={styles.insightRowName}>{u.name}</span>
                         <span className={styles.insightRowMeta}>{termLabel(u.offering)}</span>
                       </div>
@@ -1575,6 +1582,7 @@ export default function DashboardPage() {
               const seen = new Set<string>();
               const currentlyEnrolled = [...courseList, ...mpuCourseList].filter((c) => {
                 if (c.status !== 'Current' || seen.has(c.courseId)) return false;
+                if (!showMpu && isMpuUnit(c)) return false;
                 seen.add(c.courseId);
                 return true;
               });
@@ -1599,7 +1607,7 @@ export default function DashboardPage() {
                     <div className={styles.insightList}>
                       {currentlyEnrolled.map((c: any) => (
                         <div key={c.courseId} className={styles.insightRow}>
-                          <InlineCode>{c.courseId}</InlineCode>
+                          <UnitLink code={c.courseId}><InlineCode>{c.courseId}</InlineCode></UnitLink>
                           <span className={styles.insightRowName}>{c.courseTitle}</span>
                         </div>
                       ))}
@@ -1724,7 +1732,7 @@ export default function DashboardPage() {
                         <div className={styles.insightList}>
                           {coreMissing.map((u: any) => (
                             <div key={u.code} className={styles.insightRow}>
-                              <InlineCode red={true}>{u.code}</InlineCode>
+                              <UnitLink code={u.code}><InlineCode red={true}>{u.code}</InlineCode></UnitLink>
                               <span className={styles.insightRowName}>{u.name || '—'}</span>
                               {u.semester != null && (
                                 <span className={styles.insightRowMeta}>Sem {u.semester}</span>
@@ -1748,7 +1756,7 @@ export default function DashboardPage() {
                         <div className={styles.insightList}>
                           {prescribedMissing.map((u: any) => (
                             <div key={u.code} className={styles.insightRow}>
-                              <InlineCode red={false}>{u.code}</InlineCode>
+                              <UnitLink code={u.code}><InlineCode red={false}>{u.code}</InlineCode></UnitLink>
                               <span className={styles.insightRowName}>{u.name || '—'}</span>
                               {u.semester != null && (
                                 <span className={styles.insightRowMeta}>Sem {u.semester}</span>
@@ -1796,7 +1804,7 @@ export default function DashboardPage() {
               ...(dashboardData?.mpuCourseList ?? []),
             ];
             const outsidePlanner = allStudentUnits.filter(
-              (u) => u.courseId && !plannerCodes.has(u.courseId.trim().toUpperCase())
+              (u) => u.courseId && !plannerCodes.has(u.courseId.trim().toUpperCase()) && (showMpu || !isMpuUnit(u))
             );
             if (outsidePlanner.length === 0) return null;
             return (
@@ -1842,7 +1850,8 @@ export default function DashboardPage() {
           {/* Dynamic Year-Semester Tables */}
           {(() => {
             const activePlanner = selectedPlannerIdx === -1 ? manualPlanner : dashboardData.planners?.[selectedPlannerIdx];
-            const plannerUnits = activePlanner?.units ?? [];
+            const plannerUnits = (activePlanner?.units ?? [])
+              .filter((u: any) => showMpu || !isMpuUnit({ category: u.category, code: u.unit?.unit_code }));
             return [...new Set<string>(
               plannerUnits.map((u: any) => `${u.year_level}-${u.semester}`)
             )].sort();
@@ -1912,7 +1921,7 @@ export default function DashboardPage() {
                             {};
                           return (
                           <tr key={u.code} style={rowStyle}>
-                            <td><InlineCode>{u.code}</InlineCode></td>
+                            <td><UnitLink code={u.code}><InlineCode>{u.code}</InlineCode></UnitLink></td>
                             <td>{u.name}</td>
                             <td style={isFailed ? { color: 'var(--accent-red)', fontWeight: 600 } : undefined}>{u.grade}</td>
                             <td>{u.term}</td>

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import styles from './page.module.css';
 import { fs } from '../../../styles/tokens';
+import UnitLink from '../../../components/common/UnitLink';
 
 type InferredDiffItem = {
   unit_id: string;
@@ -159,7 +160,7 @@ export default function SyncOfferingsPreviewModal({
                 <tbody>
                   {displayedDiffs.map((d) => (
                     <tr key={d.unit_code}>
-                      <td><code className={styles.code}>{d.unit_code}</code></td>
+                      <td><UnitLink code={d.unit_code}><code className={styles.code}>{d.unit_code}</code></UnitLink></td>
                       <td className={styles.unitNameText}>{d.unit_name}</td>
                       <td>
                         <span className={styles.itemMeta}>{formatTerms(d.current_offerings)}</span>
