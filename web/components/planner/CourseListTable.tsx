@@ -1,4 +1,5 @@
 import styles from './Planner.module.css';
+import UnitLink from '../common/UnitLink';
 import { useMemo } from 'react';
 import type { PlannerImportUnit } from '@core/shared/types/plannerImport';
 
@@ -171,20 +172,16 @@ export default function CourseListTable({
         {/* ============================================================================================================== */}
         {/* Section 1: Year & Semester Tables */}
         {/* ============================================================================================================== */}
-        {yearGroups.map(({ year, label, semesters, isEmpty: yearEmpty }, yearIndex) => {
+        {yearGroups.map(({ year, label, semesters }, yearIndex) => {
             const existingSems = new Set(semesters.map(s => s.semester));
             const missingSems = semesterOrder.filter(s => !existingSems.has(s));
+            // One heading per term that carries the year, such as "Year 1 Semester 1", instead of a year heading
+            // with a separate heading for each semester under it.
+            const termHeading = (semesterText: string) => `${label} ${semesterText}`;
             
             return (
             <div key={year} className={styles.termGroup}>
 
-                {/* Year Header */}
-                <div className={styles.termHeading}>
-                    <span className={yearEmpty ? styles.termLabelEmpty : styles.termLabel}>{label}</span>
-                    {yearEmpty && <span className={`${styles.badge} ${styles.badgeOrange}`}>No units</span>}
-                    <div className={styles.termDivider} />
-                </div>
-                
                 {/* Semester Tables */}
                 {semesters.map(({ semester, label: semLabel, list, isEmpty }, semIndex) => {
                     // Find missing semesters that should appear BEFORE this one
@@ -200,7 +197,7 @@ export default function CourseListTable({
                         {semIndex === 0 && missingBefore.map(ms => (
                             <div key={`missing-${ms}`} style={{ marginBottom: 12 }}>
                                 <div className={styles.termHeading}>
-                                    <span className={styles.termLabelEmpty}>{getSemesterLabel(ms)}</span>
+                                    <span className={styles.termLabelEmpty}>{termHeading(getSemesterLabel(ms))}</span>
                                     <span className={`${styles.badge} ${styles.badgeOrange}`}>No units</span>
                                     <div className={styles.termDivider} />
                                 </div>
@@ -221,7 +218,7 @@ export default function CourseListTable({
 
                         <div style={{ marginBottom: isEmpty ? 12 : 20 }}>
                             <div className={styles.termHeading}>
-                                <span className={isEmpty ? styles.termLabelEmpty : styles.termLabel}>{semLabel}</span>
+                                <span className={isEmpty ? styles.termLabelEmpty : styles.termLabel}>{termHeading(semLabel)}</span>
                                 {isEmpty && <span className={`${styles.badge} ${styles.badgeOrange}`}>No units</span>}
                                 <div className={styles.termDivider} />
                             </div>
@@ -272,7 +269,7 @@ export default function CourseListTable({
                                                             />
                                                         ) : (
                                                             unit.unit_code !== '-' ? (
-                                                                <code className={styles.code}>{unit.unit_code}</code>
+                                                                <UnitLink code={unit.unit_code}><code className={styles.code}>{unit.unit_code}</code></UnitLink>
                                                             ) : (
                                                                 <span className={styles.textMuted}>-</span>
                                                             )
@@ -392,7 +389,7 @@ export default function CourseListTable({
                 }).map(ms => (
                     <div key={`missing-end-${ms}`} style={{ marginBottom: 12 }}>
                         <div className={styles.termHeading}>
-                            <span className={styles.termLabelEmpty}>{getSemesterLabel(ms)}</span>
+                            <span className={styles.termLabelEmpty}>{termHeading(getSemesterLabel(ms))}</span>
                             <span className={`${styles.badge} ${styles.badgeOrange}`}>No units</span>
                             <div className={styles.termDivider} />
                         </div>
@@ -485,7 +482,7 @@ export default function CourseListTable({
                                                     className={styles.editInput} 
                                                 />
                                             ) : (
-                                                <code className={styles.code}>{unit.unit_code}</code>
+                                                <UnitLink code={unit.unit_code}><code className={styles.code}>{unit.unit_code}</code></UnitLink>
                                             )}
                                         </td>
 
@@ -631,7 +628,7 @@ export default function CourseListTable({
                                                 className={styles.editInput} 
                                             />
                                         ) : (
-                                            <code className={styles.code}>{unit.unit_code}</code>
+                                            <UnitLink code={unit.unit_code}><code className={styles.code}>{unit.unit_code}</code></UnitLink>
                                         )}
                                     </td>
 

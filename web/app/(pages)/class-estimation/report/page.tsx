@@ -15,6 +15,7 @@ import { useScrollToTopOnMount } from '../../../../lib/scrollToTop';
 import styles from './page.module.css';
 import { DataTable } from '../components/DataTable';
 import { PageHeader, StateCard } from '../../../../components/common/MeadowBits';
+import UnitLink from '../../../../components/common/UnitLink';
 import { useDesign } from '../../../../styles/themeProvider';
 import { ArrowLeft, ChartColumn, Download } from 'lucide-react';
 
@@ -274,7 +275,7 @@ export default function ClassEstimationReportPage() {
                   key: 'unit', label: 'Unit', width: 'minmax(240px, 1.6fr)',
                   render: (unit) => (
                     <span title={unit.unitName ? `${unit.unitCode} ${unit.unitName}` : unit.unitCode}>
-                      <span className={styles.code}>{unit.unitCode}</span>
+                      <UnitLink code={unit.unitCode}><span className={styles.code}>{unit.unitCode}</span></UnitLink>
                       {unit.unitName && <span className={styles.unitName}> {unit.unitName}</span>}
                     </span>
                   ),

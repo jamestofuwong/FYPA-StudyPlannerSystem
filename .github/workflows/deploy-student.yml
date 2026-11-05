@@ -48,9 +48,17 @@ jobs:
       app: ${{ steps.filter.outputs.app }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # the commit this push replaced must be available to compare with
       - uses: dorny/paths-filter@v3
         id: filter
         with:
+          # On a push, compare with the commit the branch pointed to before the push. Without `base`, the filter
+          # compares any branch other than main with main, so after main is merged into production nothing is left
+          # that differs, both outputs are false, and the migrate and deploy jobs are skipped.
+          # A new branch has no earlier commit (all zeros), and a manual run has no push at all: the filter then
+          # keeps its default.
+          base: ${{ github.event_name == 'push' && github.event.before != '0000000000000000000000000000000000000000' && github.event.before || '' }}
           filters: |
             db:
               - 'student/prisma/schema.prisma'

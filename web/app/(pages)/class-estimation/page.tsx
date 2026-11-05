@@ -19,6 +19,7 @@ import {
 import { fs } from '../../../styles/tokens';
 import { useDesign } from '../../../styles/themeProvider';
 import { PageHeader } from '../../../components/common/MeadowBits';
+import UnitLink from '../../../components/common/UnitLink';
 import { ArrowRight, Check, FileSpreadsheet, FileUp, Globe } from 'lucide-react';
 
 /** What /api/class-estimation/preview returns: the preview itself plus the semester it was run for. */
@@ -1094,7 +1095,9 @@ export default function ClassEstimationPage() {
                   columns={[
                     { key: 'student', label: 'Student', width: 'minmax(150px, 1.3fr)', render: (st) => studentLabel(st), sortValue: (st) => st.studentId },
                     { key: 'basis', label: 'Estimated from', width: 'minmax(150px, 1.2fr)', render: (st) => describeBasis(st), sortValue: (st) => st.planner?.majorName ?? st.basis ?? '' },
-                    { key: 'picked', label: 'Predicted units', width: 'minmax(180px, 1.6fr)', render: (st) => (st.picked.length ? st.picked.map((u) => u.code).join(', ') : <span className={styles.muted}>none</span>), sortValue: (st) => st.picked.length },
+                    { key: 'picked', label: 'Predicted units', width: 'minmax(180px, 1.6fr)', render: (st) => (st.picked.length
+                      ? st.picked.map((u, i) => <span key={u.code}>{i > 0 && ', '}<UnitLink code={u.code}>{u.code}</UnitLink></span>)
+                      : <span className={styles.muted}>none</span>), sortValue: (st) => st.picked.length },
                     { key: 'electives', label: 'Elective options', width: '120px', align: 'right', render: (st) => (st.electives.length || <span className={styles.muted}>–</span>), sortValue: (st) => st.electives.length },
                   ]}
                   renderExpanded={(st) => <StudentDetail student={st} loadCap={DEFAULT_LOAD_CAP} />}
@@ -1230,7 +1233,7 @@ function UnitName({ code, names }: { code: string; names?: Record<string, string
   const name = names?.[code];
   return (
     <span title={name ? `${code} ${name}` : code}>
-      <span className={styles.mono}>{code}</span>
+      <UnitLink code={code}><span className={styles.mono}>{code}</span></UnitLink>
       {name && <span className={styles.unitName}> {name}</span>}
     </span>
   );

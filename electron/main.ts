@@ -1,4 +1,4 @@
-import { app, BrowserWindow, nativeTheme, ipcMain, session } from "electron";
+import { app, BrowserWindow, nativeTheme, ipcMain, session, shell } from "electron";
 import {
   createServer,
   type IncomingMessage,
@@ -11,6 +11,7 @@ import path from "path";
 import { autoUpdater } from "electron-updater";
 import { startDatabase, stopDatabase, getDatabaseUrl, runSeedsIfFirstRun } from '../runtime/postgres/db';
 import { startOllama, stopOllama } from '../runtime/ollama/ollama';
+import { isOfficialUnitUrl } from '../core/shared/unitLinks';
 import { fork } from "child_process";
 import { PrismaClient } from "@local/prisma-client";
 
@@ -238,6 +239,19 @@ async function createMainWindow() {
 
   win.once("ready-to-show", () => {
     win.show();
+  });
+
+  // A unit code in the app links to the unit's official page. That page opens in the computer's browser, never in
+  // this window, and nothing else may leave the app this way.
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (isOfficialUnitUrl(url)) void shell.openExternal(url);
+    return { action: "deny" };
+  });
+  win.webContents.on("will-navigate", (event, url) => {
+    if (isOfficialUnitUrl(url)) {
+      event.preventDefault();
+      void shell.openExternal(url);
+    }
   });
 
   if (devServerUrl) {

@@ -6,6 +6,7 @@ import styles from './page.module.css';
 import UnitOfferingsModal from './UnitOfferingsModal';
 import { fs } from '../../../styles/tokens';
 import { PageHeader } from '../../../components/common/MeadowBits';
+import UnitLink from '../../../components/common/UnitLink';
 import { useDesign } from '../../../styles/themeProvider';
 import { CalendarRange, Layers, Pencil, Plus, Search } from 'lucide-react';
 
@@ -320,7 +321,7 @@ export default function UnitsPage() {
                                         {unitList.map((unit) => (
                                         <tr key={unit.unit_code}>
                                             <td>
-                                                <code className={styles.code}>{unit.unit_code}</code>
+                                                <UnitLink code={unit.unit_code}><code className={styles.code}>{unit.unit_code}</code></UnitLink>
                                             </td>
                                             <td className={styles.unitNameText}>{unit.unit_name}</td>
                                             <td>
