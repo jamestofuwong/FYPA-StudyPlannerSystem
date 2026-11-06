@@ -1,4 +1,4 @@
-import { parseResultsSheet } from '../../../web/lib/resultsSheet';
+import { parseResultsSheet } from '../../../core/shared/resultsSheet';
 
 const HEADER = ['Course', 'Course Title', 'Credits', 'Earned', 'Status', 'Grade', 'Term'];
 

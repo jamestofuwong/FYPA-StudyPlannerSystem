@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useRef, useEffect, useMemo } from 'react'
+import { useState, useRef, useEffect, useMemo, type ChangeEvent } from 'react'
 import { generatePlan } from '@student/lib/plan-builder'
+import { readTranscriptFile } from '@student/lib/transcript-file'
 import type { GenerationResult } from '@student/lib/plan-builder'
 import type { PlannerCourseOption } from '@student/lib/planners'
 import type { SemesterBlock, UnitListing } from '@student/lib/types'
@@ -344,6 +345,10 @@ export default function PlanBuilderClient({
   const [completedSemesters, setCompletedSemesters] = useState<CompletedSemester[]>([
     { id: 'sem-1', unitCodes: [] },
   ])
+  // The result of the last import from a results spreadsheet
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [isImporting, setIsImporting] = useState(false)
+  const [importNotice, setImportNotice] = useState<{ kind: 'ok' | 'error'; headline: string; details: string[] } | null>(null)
   // Which semester's inline search is open
   const [activeAddSem, setActiveAddSem] = useState<string | null>(null)
   const [addQuery, setAddQuery]         = useState('')
@@ -423,6 +428,68 @@ export default function PlanBuilderClient({
   function handleSecondMajorChange(majorId: string) {
     setSelectedSecondMajorId(majorId)
     clearGeneratedPlan()
+  }
+
+  // ── Import from a results spreadsheet ──
+  // The file is read in this browser and goes nowhere else. Only the unit codes are kept, grouped by term.
+  async function handleImportFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    event.target.value = ''   // so that the same file can be chosen again
+    if (!file) return
+
+    setIsImporting(true)
+    setImportNotice(null)
+    const read = await readTranscriptFile(file)
+    setIsImporting(false)
+    if (!read.ok) {
+      setImportNotice({ kind: 'error', headline: 'The file was not imported.', details: [read.error] })
+      return
+    }
+
+    // Keep the units that this website knows, written the way the catalogue writes them
+    const catalogue = new Map(units.map(unit => [unit.code.trim().toUpperCase(), unit.code]))
+    const notInCatalogue: string[] = []
+    const semesters = read.transcript.semesters.map(semester => ({
+      unitCodes: semester.unitCodes.flatMap(code => {
+        const known = catalogue.get(code)
+        if (known) return [known]
+        notInCatalogue.push(code)
+        return []
+      }),
+    }))
+    const imported = semesters.reduce((total, semester) => total + semester.unitCodes.length, 0)
+    if (imported === 0) {
+      setImportNotice({
+        kind: 'error',
+        headline: 'The file was not imported.',
+        details: [read.transcript.passed.length + read.transcript.inProgress.length === 0
+          ? 'The file has no unit that you passed or are taking now.'
+          : 'None of the units in the file are in this website\u2019s unit list.'],
+      })
+      return
+    }
+
+    const hasUnits = completedSemesters.some(semester => semester.unitCodes.length > 0)
+    if (hasUnits && !window.confirm('Replace the units that you entered with the units from the file?')) return
+
+    clearGeneratedPlan()
+    semCounter.current = semesters.length
+    setCompletedSemesters(semesters.map((semester, index) => ({ id: `sem-${index + 1}`, unitCodes: semester.unitCodes })))
+    closeAddUnit()
+
+    const { transcript } = read
+    const details: string[] = []
+    if (transcript.firstTerm) details.push(`The file starts in ${transcript.firstTerm}. Check that the intake above matches.`)
+    if (transcript.inProgress.length > 0) details.push(`Units you are taking now are counted as done: ${transcript.inProgress.join(', ')}.`)
+    if (transcript.failed.length > 0) details.push(`Failed units are not counted, so the plan includes them again: ${transcript.failed.join(', ')}.`)
+    if (notInCatalogue.length > 0) details.push(`Not in this website\u2019s unit list, so left out: ${notInCatalogue.join(', ')}.`)
+    if (transcript.withoutTerm.length > 0) details.push(`No term was found for ${transcript.withoutTerm.join(', ')}, so they are in Semester 1.`)
+    details.push('Check the units below, then select Generate Study Plan.')
+    setImportNotice({
+      kind: 'ok',
+      headline: `Imported ${imported} unit${imported !== 1 ? 's' : ''} in ${semesters.length} semester${semesters.length !== 1 ? 's' : ''}.`,
+      details,
+    })
   }
 
   // ── Semester management ──
@@ -730,6 +797,41 @@ export default function PlanBuilderClient({
               Add the units you have already passed, organised by semester.
               These will be marked as completed in your generated plan.
             </p>
+          </div>
+        </div>
+
+        <div className={styles.importBox}>
+          <div className={styles.importRow}>
+            <button
+              type="button"
+              className={styles.importBtn}
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isImporting}
+            >
+              {isImporting ? 'Reading the file...' : 'Import from Excel'}
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              className={styles.importInput}
+              onChange={handleImportFile}
+              aria-label="Choose your results file (.xlsx)"
+              data-testid="transcript-file"
+              tabIndex={-1}
+            />
+            <span className={styles.importHint}>
+              Have your results as an Excel file? Import it instead of adding each unit. The file is read on this device.
+              It is not uploaded or stored, and your grades are not kept.
+            </span>
+          </div>
+          <div role="status" aria-live="polite">
+            {importNotice && (
+              <div className={importNotice.kind === 'ok' ? styles.importOk : styles.importError} data-testid="import-notice">
+                <strong>{importNotice.headline}</strong>
+                {importNotice.details.map(text => <p key={text}>{text}</p>)}
+              </div>
+            )}
           </div>
         </div>
 

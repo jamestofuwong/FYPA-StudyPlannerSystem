@@ -48,6 +48,35 @@
   color: var(--color-text-secondary);
 }
 
+/* ── Import from a results spreadsheet ── */
+.importBox { margin-bottom: var(--space-4); }
+.importRow { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-3); }
+.importBtn {
+  padding: 8px var(--space-4);
+  background: #fff;
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-md);
+  color: var(--color-accent);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+}
+.importBtn:hover:not(:disabled), .importBtn:focus-visible { background: var(--color-accent); color: #fff; }
+.importBtn:disabled { opacity: 0.6; cursor: wait; }
+.importInput { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.importHint { flex: 1 1 260px; font-size: var(--font-size-sm); color: var(--color-text-secondary); }
+.importOk, .importError {
+  margin-top: var(--space-3);
+  padding: 12px var(--space-4);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+}
+.importOk { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; }
+.importError { background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; }
+.importOk p, .importError p { margin: var(--space-1) 0 0; }
+
 /* ── Config grid ── */
 .configGrid {
   display: grid;

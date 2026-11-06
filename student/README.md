@@ -34,6 +34,7 @@ A normal Next.js 16 (App Router) site for students (public pages and a plan buil
 ## Rules
 
 - Every page renders per request (`await connection()` in `app/layout.tsx`), because the Content-Security-Policy uses a nonce for each request (`proxy.ts` sets it on the request and the response). A static page has no nonce, its scripts are blocked, and nothing responds to clicks. Test it with `npm run test:e2e` (`e2e/student`, on a production build).
+- The Plan Builder can import completed units from an Excel results file (`lib/transcript-file.ts`). The file is read in the browser with `read-excel-file`, loaded only when a student uses the import. It is never uploaded. The column reader (`core/shared/resultsSheet.ts`) is the one the advisor app uses, and `core/shared/transcriptImport.ts` turns the units into semesters. Only unit codes and terms are kept.
 - Save in the CMS, then call `revalidateStudentCache(tag)` so public pages show the new data. The cached reads in `lib/catalog.ts` also expire after 10 minutes (`CACHE_SECONDS`), so a change made outside the CMS (a seed, a restore) shows on its own. Give every new cached read that time limit (a test checks it), and raise the `-vN` part of its key when old cached data must be ignored.
 - Schema changes need a migration in `student/prisma/migrations`. The deploy workflow migrates before it deploys.
 - Production needs different `CMS_JWT_SECRET` and database values from staging. Never commit `.env` files.

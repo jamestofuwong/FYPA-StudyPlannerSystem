@@ -438,7 +438,7 @@
     </div>
   </div>
 
-  <div class="module-header">M3. Plan builder <span class="badge">Session A · 4 cases</span></div>
+  <div class="module-header">M3. Plan builder <span class="badge">Session A · 5 cases</span></div>
   <div class="module-body">
     <div class="tc" data-priority="Must">
       <div class="tc-header"><div class="tc-meta">
@@ -464,7 +464,7 @@
         <span class="req-tag tag-must">Must</span> <span class="req-tag">S3</span>
       </div></div>
       <div class="tc-steps"><strong>Steps</strong>1. Under Units Completed, select &quot;+ Add unit&quot; in Semester 1 and add the five completed units of Student X, one at a time. After each one, open the search list again.<br>2. Select Generate Study Plan.<br>3. Change the intake year.</div>
-      <div class="tc-expected"><strong>Expected:</strong> A unit that was added is not offered in the search list again, so it cannot be added twice. The page says &quot;5 units marked as completed&quot;. The summary shows Completed 5 units, and Remaining is 5 fewer than the number from SC-07. The five units show as completed in the plan. The change of the intake year removes the old plan, so the screen never shows a plan that does not match the choices.</div>
+      <div class="tc-expected"><strong>Expected:</strong> A unit that was added is not offered in the search list again, so it cannot be added twice. The page says &quot;5 units marked as completed&quot;. The summary shows Completed 5 units, and Remaining is lower than the number from SC-07 (for the planner of the data pack, 25 instead of 29, because the elective unit fills an elective slot). The five units show as completed in the plan. The change of the intake year removes the old plan, so the screen never shows a plan that does not match the choices.</div>
       <div class="result-row"><span class="result-label">Result:</span>
         <label class="radio-opt pass"><input type="radio" name="sc-08" value="pass" /> Pass</label>
         <label class="radio-opt fail"><input type="radio" name="sc-08" value="fail" /> Fail</label>
@@ -477,11 +477,11 @@
     <div class="tc" data-priority="Must">
       <div class="tc-header"><div class="tc-meta">
         <div class="tc-id">SC-09</div>
-        <div class="tc-name">The plan follows the rules</div>
+        <div class="tc-name">Import the completed units from an Excel file</div>
         <span class="req-tag tag-must">Must</span> <span class="req-tag">S3</span>
       </div></div>
-      <div class="tc-steps"><strong>Steps</strong>1. Generate the plan of SC-08 again. Check that each unit comes after its prerequisites.<br>2. Check that no semester has more units than the planner has for a normal semester.<br>3. Read the notices above the plan.</div>
-      <div class="tc-expected"><strong>Expected:</strong> No unit comes before its prerequisite and no semester is over the normal load. A unit that runs only in summer or winter is not put in a normal semester, and a notice names it (for the planner of the data pack, MPU3212 and ICT20016).</div>
+      <div class="tc-steps"><strong>Steps</strong>1. In the Plan Builder, choose the course, the major and the intake of Student X. Select Import from Excel and choose the results file of the data pack.<br>2. Read the message, and the three semester tables under Units Completed.<br>3. Select Generate Study Plan. Then choose a file that is not an Excel file (for example a PDF).</div>
+      <div class="tc-expected"><strong>Expected:</strong> The page says &quot;Imported 15 units in 3 semesters&quot;, and that the file starts in 2026_MAR_S1. Semester 1, 2 and 3 hold five units each, the ones of the file in the order of its terms. The summary then shows Completed 15 units, and Remaining is 19 for the planner of the data pack (29 with no units). The file is read on the device: the page does not upload it. The PDF is refused with a message that the file must be an Excel .xlsx file, and the units already on the page stay.</div>
       <div class="result-row"><span class="result-label">Result:</span>
         <label class="radio-opt pass"><input type="radio" name="sc-09" value="pass" /> Pass</label>
         <label class="radio-opt fail"><input type="radio" name="sc-09" value="fail" /> Fail</label>
@@ -494,11 +494,11 @@
     <div class="tc" data-priority="Must">
       <div class="tc-header"><div class="tc-meta">
         <div class="tc-id">SC-10</div>
-        <div class="tc-name">What the student enters is not stored</div>
-        <span class="req-tag tag-must">Must</span> <span class="req-tag">S5</span>
+        <div class="tc-name">The plan follows the rules</div>
+        <span class="req-tag tag-must">Must</span> <span class="req-tag">S3</span>
       </div></div>
-      <div class="tc-steps"><strong>Steps</strong>1. Add completed units and generate a plan. Refresh the page.<br>2. Open the website in a private window, or another browser.<br>3. Close the tab and open the website again.<br>4. (Facilitator) After the session, list the tables of the staging database.</div>
-      <div class="tc-expected"><strong>Expected:</strong> After a refresh in the same tab the entries are still there, because the tab keeps them. In the other window and after the tab is closed, the builder is empty. The database has no table for students, transcripts or plans of students. It holds only planners, units, help content and CMS accounts.</div>
+      <div class="tc-steps"><strong>Steps</strong>1. Generate the plan of SC-08 again. Check that each unit comes after its prerequisites.<br>2. Check that no semester has more units than the planner has for a normal semester.<br>3. Read the notices above the plan.</div>
+      <div class="tc-expected"><strong>Expected:</strong> No unit comes before its prerequisite and no semester is over the normal load. A unit that runs only in summer or winter is not put in a normal semester, and a notice names it (for the planner of the data pack, MPU3212 and ICT20016).</div>
       <div class="result-row"><span class="result-label">Result:</span>
         <label class="radio-opt pass"><input type="radio" name="sc-10" value="pass" /> Pass</label>
         <label class="radio-opt fail"><input type="radio" name="sc-10" value="fail" /> Fail</label>
@@ -508,18 +508,14 @@
       <span class="notes-label">Notes: what you saw, what was confusing</span>
       <textarea name="notes-sc-10" placeholder="Write what happened. Do not write student IDs, names or grades."></textarea>
     </div>
-  </div>
-
-  <div class="module-header">M4. Help page <span class="badge">Session A · 1 cases</span></div>
-  <div class="module-body">
     <div class="tc" data-priority="Must">
       <div class="tc-header"><div class="tc-meta">
         <div class="tc-id">SC-11</div>
-        <div class="tc-name">Find help, and the right Head of Department</div>
-        <span class="req-tag tag-must">Must</span> <span class="req-tag">S4</span>
+        <div class="tc-name">What the student enters is not stored</div>
+        <span class="req-tag tag-must">Must</span> <span class="req-tag">S5</span>
       </div></div>
-      <div class="tc-steps"><strong>Steps</strong>1. Open Help. Select three questions, one after the other. Read the contact details.<br>2. Select the Heads of Department card. Find the head of the tester's own department.<br>3. Select the link back to Help.</div>
-      <div class="tc-expected"><strong>Expected:</strong> Each question opens its answer, and selecting it again closes it. The contact block shows the venue, the hours and the phone and email addresses. The Heads of Department page lists the heads by faculty and department, with the name, the position and an email address that opens a new email. The link back shows the Help page.</div>
+      <div class="tc-steps"><strong>Steps</strong>1. Add completed units, or import the results file, and generate a plan. Refresh the page.<br>2. Open the website in a private window, or another browser.<br>3. Close the tab and open the website again.<br>4. (Facilitator) After the session, list the tables of the staging database.</div>
+      <div class="tc-expected"><strong>Expected:</strong> After a refresh in the same tab the entries are still there, because the tab keeps them. In the other window and after the tab is closed, the builder is empty. The database has no table for students, transcripts or plans of students. It holds only planners, units, help content and CMS accounts.</div>
       <div class="result-row"><span class="result-label">Result:</span>
         <label class="radio-opt pass"><input type="radio" name="sc-11" value="pass" /> Pass</label>
         <label class="radio-opt fail"><input type="radio" name="sc-11" value="fail" /> Fail</label>
@@ -528,6 +524,27 @@
       </div>
       <span class="notes-label">Notes: what you saw, what was confusing</span>
       <textarea name="notes-sc-11" placeholder="Write what happened. Do not write student IDs, names or grades."></textarea>
+    </div>
+  </div>
+
+  <div class="module-header">M4. Help page <span class="badge">Session A · 1 cases</span></div>
+  <div class="module-body">
+    <div class="tc" data-priority="Must">
+      <div class="tc-header"><div class="tc-meta">
+        <div class="tc-id">SC-12</div>
+        <div class="tc-name">Find help, and the right Head of Department</div>
+        <span class="req-tag tag-must">Must</span> <span class="req-tag">S4</span>
+      </div></div>
+      <div class="tc-steps"><strong>Steps</strong>1. Open Help. Select three questions, one after the other. Read the contact details.<br>2. Select the Heads of Department card. Find the head of the tester's own department.<br>3. Select the link back to Help.</div>
+      <div class="tc-expected"><strong>Expected:</strong> Each question opens its answer, and selecting it again closes it. The contact block shows the venue, the hours and the phone and email addresses. The Heads of Department page lists the heads by faculty and department, with the name, the position and an email address that opens a new email. The link back shows the Help page.</div>
+      <div class="result-row"><span class="result-label">Result:</span>
+        <label class="radio-opt pass"><input type="radio" name="sc-12" value="pass" /> Pass</label>
+        <label class="radio-opt fail"><input type="radio" name="sc-12" value="fail" /> Fail</label>
+        <label class="radio-opt block"><input type="radio" name="sc-12" value="blocked" /> Blocked</label>
+        <label class="radio-opt na"><input type="radio" name="sc-12" value="na" /> N/A</label>
+      </div>
+      <span class="notes-label">Notes: what you saw, what was confusing</span>
+      <textarea name="notes-sc-12" placeholder="Write what happened. Do not write student IDs, names or grades."></textarea>
     </div>
   </div>
 

@@ -53,18 +53,21 @@ const modules = [
         expected: 'Before a major is chosen, the page says to select a course and a major. After Generate, a plan shows for every semester of the course, with the units and their prerequisites. The summary shows the intake, the course, the major, Completed 0 and the number Remaining. A note tells the student to check with an advisor.' },
       { id: 'SC-08', title: 'Add the completed units', req: ['S3'], priority: 'Must',
         steps: ['Under Units Completed, select "+ Add unit" in Semester 1 and add the five completed units of Student X, one at a time. After each one, open the search list again.', 'Select Generate Study Plan.', 'Change the intake year.'],
-        expected: 'A unit that was added is not offered in the search list again, so it cannot be added twice. The page says "5 units marked as completed". The summary shows Completed 5 units, and Remaining is 5 fewer than the number from SC-07. The five units show as completed in the plan. The change of the intake year removes the old plan, so the screen never shows a plan that does not match the choices.' },
-      { id: 'SC-09', title: 'The plan follows the rules', req: ['S3'], priority: 'Must',
+        expected: 'A unit that was added is not offered in the search list again, so it cannot be added twice. The page says "5 units marked as completed". The summary shows Completed 5 units, and Remaining is lower than the number from SC-07 (for the planner of the data pack, 25 instead of 29, because the elective unit fills an elective slot). The five units show as completed in the plan. The change of the intake year removes the old plan, so the screen never shows a plan that does not match the choices.' },
+      { id: 'SC-09', title: 'Import the completed units from an Excel file', req: ['S3'], priority: 'Must',
+        steps: ['In the Plan Builder, choose the course, the major and the intake of Student X. Select Import from Excel and choose the results file of the data pack.', 'Read the message, and the three semester tables under Units Completed.', 'Select Generate Study Plan. Then choose a file that is not an Excel file (for example a PDF).'],
+        expected: 'The page says "Imported 15 units in 3 semesters", and that the file starts in 2026_MAR_S1. Semester 1, 2 and 3 hold five units each, the ones of the file in the order of its terms. The summary then shows Completed 15 units, and Remaining is 19 for the planner of the data pack (29 with no units). The file is read on the device: the page does not upload it. The PDF is refused with a message that the file must be an Excel .xlsx file, and the units already on the page stay.' },
+      { id: 'SC-10', title: 'The plan follows the rules', req: ['S3'], priority: 'Must',
         steps: ['Generate the plan of SC-08 again. Check that each unit comes after its prerequisites.', 'Check that no semester has more units than the planner has for a normal semester.', 'Read the notices above the plan.'],
         expected: 'No unit comes before its prerequisite and no semester is over the normal load. A unit that runs only in summer or winter is not put in a normal semester, and a notice names it (for the planner of the data pack, MPU3212 and ICT20016).' },
-      { id: 'SC-10', title: 'What the student enters is not stored', req: ['S5'], priority: 'Must',
-        steps: ['Add completed units and generate a plan. Refresh the page.', 'Open the website in a private window, or another browser.', 'Close the tab and open the website again.', '(Facilitator) After the session, list the tables of the staging database.'],
+      { id: 'SC-11', title: 'What the student enters is not stored', req: ['S5'], priority: 'Must',
+        steps: ['Add completed units, or import the results file, and generate a plan. Refresh the page.', 'Open the website in a private window, or another browser.', 'Close the tab and open the website again.', '(Facilitator) After the session, list the tables of the staging database.'],
         expected: 'After a refresh in the same tab the entries are still there, because the tab keeps them. In the other window and after the tab is closed, the builder is empty. The database has no table for students, transcripts or plans of students. It holds only planners, units, help content and CMS accounts.' },
     ],
   },
   {
     id: 'M4', session: 'A', name: 'Help page', cases: [
-      { id: 'SC-11', title: 'Find help, and the right Head of Department', req: ['S4'], priority: 'Must',
+      { id: 'SC-12', title: 'Find help, and the right Head of Department', req: ['S4'], priority: 'Must',
         steps: ['Open Help. Select three questions, one after the other. Read the contact details.', 'Select the Heads of Department card. Find the head of the tester\'s own department.', 'Select the link back to Help.'],
         expected: 'Each question opens its answer, and selecting it again closes it. The contact block shows the venue, the hours and the phone and email addresses. The Heads of Department page lists the heads by faculty and department, with the name, the position and an email address that opens a new email. The link back shows the Help page.' },
     ],
@@ -73,10 +76,11 @@ const modules = [
 
 const dataPack = [
   { item: 'Staging student website', use: 'The address of the staging copy (never the production site). The tests only read the website. They change no content.' },
-  { item: 'Planner of the data pack', use: 'Bachelor of Computer Science, Data Science, March 2026 intake. It has the units used in SC-02, SC-07 and SC-08.' },
+  { item: 'Planner of the data pack', use: 'Bachelor of Computer Science, Data Science, March 2026 intake. It has the units used in SC-02, SC-07, SC-08 and SC-09.' },
   { item: 'Student X', use: 'A made-up student of that planner. Completed in Semester 1: COS10009, COS10026, COS10025, COS10003 and MPU3272. No real student record is used.' },
   { item: 'Units of the data pack', use: 'COS10009 has full details and an official page. MPU3212 is an MPU unit, so it has no official button. SWE40001 has no details. For SC-06 also make up a code that does not exist, such as XYZ99999.' },
-  { item: 'Browsers', use: 'Two browsers, or one browser and a private window, for SC-10.' },
+  { item: 'Results file of Student X', use: 'The Excel file student-A.xlsx of the UAT student files: a made-up student of this planner with 15 completed units in 3 semesters (2026 March to 2027 March), used in SC-09. Also a file that is not Excel, such as a PDF, to try as a wrong file.' },
+  { item: 'Browsers', use: 'Two browsers, or one browser and a private window, for SC-11.' },
 ];
 
 const sessionNames = {

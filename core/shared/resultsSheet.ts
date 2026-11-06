@@ -1,4 +1,4 @@
-import type { ScrapedCourseListItem } from '../../core/shared/types/student';
+import type { ScrapedCourseListItem } from './types/student';
 
 // ---------------------------------------------------------------------------
 // Reads the course list out of an uploaded results spreadsheet by column name,
