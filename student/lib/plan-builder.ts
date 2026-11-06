@@ -12,6 +12,11 @@ export interface PlanBuilderConfig {
   secondMajorId?: string
   intakeYear: number
   intakeMonth: number
+  /**
+   * Whether the MPU units that the student still owes are planned. True when left out. A student who did not
+   * add any MPU unit chooses it before the plan is made.
+   */
+  includeMpu?: boolean
 }
 
 export interface CompletedSemesterInput {

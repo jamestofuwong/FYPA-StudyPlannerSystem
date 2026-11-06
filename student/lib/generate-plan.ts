@@ -209,17 +209,18 @@ export async function generatePlanOnServer({
     startYear: start.year,
     startSemester: start.semester,
     intakeSemester,
-    // This app has no separate MPU section, so a required MPU unit has to be in the plan
-    scheduleMpu: true,
+    // This app has no separate MPU section, so a required MPU unit has to be in the plan, unless the student chose
+    // to leave the MPU units out
+    scheduleMpu: config.includeMpu !== false,
   }
   const planStart = startPlanForPlanner(planInput)
 
   const warnings: string[] = []
 
-  // A second major takes the place of elective slots rather than extending the
-  // plan, and only fits when it needs no more units than there are free slots.
-  // That is the rule the advisor applies before it offers a double major.
+  // A second major takes the place of free elective slots first. What does not fit in them is planned after the
+  // planner's own years, so the plan gets longer. The student can take as many extra years as the units need.
   let swapped: SchedulableUnit[] = []
+  let additional: SchedulableUnit[] = []
   if (config.secondMajorId) {
     const secondMajorTemplate = await prisma.plannerTemplate.findFirst({
       where: {
@@ -257,17 +258,30 @@ export async function generatePlanOnServer({
 
       if (missing.length === 0) {
         warnings.push(`${majorName} needs no units beyond your primary major, so it adds nothing to this plan.`)
-      } else if (missing.length > planStart.freeElectiveSlots) {
-        warnings.push(
-          `${majorName} needs ${missing.length} more unit${missing.length === 1 ? '' : 's'}, but only ${planStart.freeElectiveSlots} elective slot${planStart.freeElectiveSlots === 1 ? ' is' : 's are'} free. The generated plan uses your primary major only.`,
-        )
       } else {
-        swapped = missing
+        const inSlots = Math.min(missing.length, planStart.freeElectiveSlots)
+        swapped = missing.slice(0, inSlots)
+        additional = missing.slice(inSlots)
+        const units = `${missing.length} more unit${missing.length === 1 ? '' : 's'}`
+        if (additional.length === 0) {
+          warnings.push(`${majorName} needs ${units}. They fill your free elective slots, so the plan is not longer.`)
+        } else {
+          const where = inSlots === 0
+            ? 'No elective slot is free, so they are'
+            : `${inSlots} fill${inSlots === 1 ? 's' : ''} your free elective slots and ${additional.length} ${additional.length === 1 ? 'is' : 'are'}`
+          warnings.push(`${majorName} needs ${units}. ${where} planned as extra units after the units of your planner, so the plan can be longer than the planner.`)
+        }
       }
     }
   }
 
-  const finished = finishPlanForPlanner(planInput, planStart, swapped)
+  // A plain elective is not compulsory: units that the student took in its place mean it is not planned
+  if (planStart.droppedElectives.length > 0) {
+    const names = planStart.droppedElectives.join(', ')
+    warnings.push(`Not planned, because the units you passed already fill your electives: ${names}. A unit that is only marked as an elective can be replaced by any other unit.`)
+  }
+
+  const finished = finishPlanForPlanner(planInput, planStart, swapped, additional)
   const result = finished.result
 
   // Say why a unit was left out, in the words the advisor's page uses

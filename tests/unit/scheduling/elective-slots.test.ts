@@ -1,8 +1,4 @@
-import {
-  blockedByRequisites,
-  countElectiveSlotsNeeded,
-  recommendElectives,
-} from '@core/shared/scheduling/electiveSlots';
+import { blockedByRequisites, countElectiveSlotsNeeded, recommendElectives, surplusNamedElectives } from '@core/shared/scheduling/electiveSlots';
 import type {
   CustomPlanResult,
   PlanWarning,
@@ -436,5 +432,98 @@ describe('a blocked prescribed elective is still reported', () => {
         blockedUnitCodes: blocked,
       }),
     ).toBe(7);
+  });
+});
+
+
+describe('surplusNamedElectives', () => {
+  // The planner names three plain electives, A, B and C, and needs three electives in all
+  const pool = [
+    { code: 'EL_A', category: 'elective' },
+    { code: 'EL_B', category: 'elective' },
+    { code: 'EL_C', category: 'elective' },
+  ];
+  const plannedSlots = { EL_A: 1, EL_B: 3, EL_C: 5 };
+  const base = {
+    electiveCount: 3,
+    plannerUnits: [
+      { category: 'core', unitCode: 'CORE1' },
+      { category: 'elective', unitCode: 'EL_A' },
+      { category: 'elective', unitCode: 'EL_B' },
+      { category: 'elective', unitCode: 'EL_C' },
+    ],
+    electiveGroupCodes: [] as string[],
+    completedUnitCodes: [] as string[],
+    pool,
+    plannedSlots,
+  };
+
+  test('drops nothing while the student still owes every elective', () => {
+    expect(surplusNamedElectives(base)).toEqual([]);
+  });
+
+  test('a unit the student took in place of a named elective takes the place of the earliest one', () => {
+    expect(surplusNamedElectives({ ...base, completedUnitCodes: ['SOMETHING_ELSE'] })).toEqual(['EL_A']);
+  });
+
+  test('more units taken than the planner needs means no named elective is planned', () => {
+    expect(surplusNamedElectives({ ...base, completedUnitCodes: ['X1', 'X2', 'X3'] }).sort()).toEqual(['EL_A', 'EL_B', 'EL_C']);
+  });
+
+  test('passing one of the named electives itself drops nothing: it is not in the pool and it counts once', () => {
+    expect(surplusNamedElectives({ ...base, pool: pool.filter((u) => u.code !== 'EL_B'), completedUnitCodes: ['EL_B'] })).toEqual([]);
+  });
+
+  test('matches the completed unit on code case and spacing', () => {
+    expect(surplusNamedElectives({ ...base, completedUnitCodes: [' something_else '] })).toEqual(['EL_A']);
+  });
+
+  test('MPU units and core units never fill an elective', () => {
+    expect(surplusNamedElectives({ ...base, completedUnitCodes: ['MPU3212', 'CORE1'] })).toEqual([]);
+  });
+
+  test('a prescribed elective is compulsory: it stays, and it uses one of the places', () => {
+    const withPrescribed = { ...base, electiveCount: 3, pool: [{ code: 'PRES1', category: 'prescribed_elective' }, ...pool.slice(0, 2)], completedUnitCodes: ['X1'] };
+    // 3 required, 1 done, 1 prescribed: 1 left for the two plain ones, so the earliest goes
+    expect(surplusNamedElectives(withPrescribed)).toEqual(['EL_A']);
+  });
+
+  test('a plain elective that a requisite blocks is left alone', () => {
+    expect(surplusNamedElectives({ ...base, completedUnitCodes: ['X1'], blockedUnitCodes: ['EL_A'] })).toEqual([]);
+  });
+
+  test('a named elective that another unit needs as a prerequisite goes last', () => {
+    expect(surplusNamedElectives({ ...base, completedUnitCodes: ['X1'], requiredByOthers: ['EL_A'] })).toEqual(['EL_B']);
+  });
+
+  describe('when the planner also has empty elective slots', () => {
+    // five electives are needed: A, B and C are named, and two slots are left open
+    const roomy = { ...base, electiveCount: 5, plannerUnits: [...base.plannerUnits, { category: 'elective', unitCode: null }, { category: 'elective', unitCode: null }] };
+
+    test('a unit taken in place of a named elective still takes its place, although the empty slots could absorb it', () => {
+      expect(surplusNamedElectives({ ...roomy, completedUnitCodes: ['SOMETHING_ELSE'] })).toEqual(['EL_A']);
+    });
+
+    test('each such unit takes the place of the next earliest named elective', () => {
+      expect(surplusNamedElectives({ ...roomy, completedUnitCodes: ['X1', 'X2'] })).toEqual(['EL_A', 'EL_B']);
+      expect(surplusNamedElectives({ ...roomy, completedUnitCodes: ['X1', 'X2', 'X3', 'X4'] }).sort()).toEqual(['EL_A', 'EL_B', 'EL_C']);
+    });
+
+    test('a named elective that the student passed itself replaces nothing', () => {
+      expect(surplusNamedElectives({ ...roomy, pool: pool.filter((u) => u.code !== 'EL_B'), completedUnitCodes: ['EL_B'] })).toEqual([]);
+    });
+
+    test('a unit from the elective group counts as a replacement, as any unit does', () => {
+      expect(surplusNamedElectives({ ...roomy, electiveGroupCodes: ['GROUP1'], completedUnitCodes: ['GROUP1'] })).toEqual(['EL_A']);
+    });
+
+    test('a named elective that a requisite blocks is replaced first, so the planned ones stay', () => {
+      expect(surplusNamedElectives({ ...roomy, completedUnitCodes: ['X1'], blockedUnitCodes: ['EL_A'] })).toEqual([]);
+      expect(surplusNamedElectives({ ...roomy, completedUnitCodes: ['X1', 'X2'], blockedUnitCodes: ['EL_A'] })).toEqual(['EL_B']);
+    });
+  });
+
+  test('without a recorded requirement nothing is dropped', () => {
+    expect(surplusNamedElectives({ ...base, electiveCount: null, completedUnitCodes: ['X1', 'X2', 'X3'] })).toEqual([]);
   });
 });

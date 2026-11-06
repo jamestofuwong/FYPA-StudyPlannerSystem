@@ -27,6 +27,9 @@ export async function POST(req: Request) {
       { status: 400 },
     )
   }
+  if (config.includeMpu !== undefined && typeof config.includeMpu !== 'boolean') {
+    return NextResponse.json({ error: 'config.includeMpu must be true or false' }, { status: 400 })
+  }
   if (
     !Number.isInteger(config.intakeMonth) ||
     config.intakeMonth < 1 ||

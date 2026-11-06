@@ -28,10 +28,111 @@ export interface ElectiveSlotsNeededInput {
   pool: { code: string; category: string }[];
   /** Pooled codes the scheduler proved it can never place. See blockedByRequisites. */
   blockedUnitCodes?: string[];
+  /** Codes that other pooled units need as a prerequisite. See surplusNamedElectives. */
+  requiredByOthers?: string[];
 }
 
 // To ignore non-academic training modules
 const NON_ACADEMIC_MODULES = new Set(['AIMFECS', 'AIM-FECS', 'AIMSFS', 'AIM-SFS']);
+
+// A 25 CP unit fills two slots, a standard 12.5 CP unit one
+function slotWeightOf(unitCode: string): number {
+  const code = normaliseCode(unitCode);
+  if (code.includes('ICT20016') && code.includes('OPTIONAL')) return 2;
+  return 1;
+}
+
+/**
+ * How many elective slots the completed units fill. Any completed unit that is not core, major core, an MPU unit or
+ * a non-academic training module counts as an elective: a student may take any unit in an elective slot.
+ */
+function completedElectiveSlotCount(
+  completedUnitCodes: string[],
+  plannerUnits: { category: string; unitCode: string | null }[],
+): number {
+  const compulsoryCodes = new Set(
+    plannerUnits
+      .filter((row) => row.unitCode !== null && (row.category === 'core' || row.category === 'major_core'))
+      .map((row) => normaliseCode(row.unitCode!)),
+  );
+  const counted = new Set<string>();
+  for (const raw of completedUnitCodes ?? []) {
+    const code = normaliseCode(raw);
+    if (code.startsWith('MPU') || compulsoryCodes.has(code) || NON_ACADEMIC_MODULES.has(code)) continue;
+    counted.add(code);
+  }
+  let slots = 0;
+  for (const code of counted) slots += slotWeightOf(code);
+  return slots;
+}
+
+/**
+ * Plain electives that the planner names but the student no longer owes.
+ *
+ * A plain elective (not a prescribed one) is not compulsory: the student may take any unit in its place. So a unit that
+ * the student passed and that is not one of the planner's own electives takes the place of a named one. If the planner
+ * says elective A is in this semester and the student took some other unit instead, A is not planned. Which named
+ * electives go: the earliest on the planner, because the student's own choices came first in time. A named elective
+ * that a requisite blocks goes first of all, since it could not be planned anyway.
+ *
+ * The passed units can also fill more of the requirement than the planner has named electives for. The extra named
+ * ones are then dropped too, so the plan never asks for more electives than the planner needs.
+ *
+ * Prescribed electives are compulsory and stay. A plain elective that another pooled unit needs as a prerequisite is
+ * dropped last. Nothing is dropped when no requirement was recorded.
+ *
+ * Returns the codes to take out of the pool.
+ */
+export function surplusNamedElectives(input: ElectiveSlotsNeededInput & { plannedSlots?: Record<string, number | undefined> }): string[] {
+  if (input.electiveCount == null) return [];
+
+  const blocked = new Set((input.blockedUnitCodes ?? []).map(normaliseCode));
+  const completedSlots = completedElectiveSlotCount(input.completedUnitCodes, input.plannerUnits);
+
+  const prescribedSlots = input.pool
+    .filter((unit) => unit.category === 'prescribed_elective')
+    .reduce((sum, unit) => sum + slotWeightOf(unit.code), 0);
+
+  const plainAll = input.pool.filter((unit) => unit.category === 'elective');
+  const plain = plainAll.filter((unit) => !blocked.has(normaliseCode(unit.code)));
+  const plainSlots = plain.reduce((sum, unit) => sum + slotWeightOf(unit.code), 0);
+  const blockedSlots = plainAll.reduce((sum, unit) => sum + slotWeightOf(unit.code), 0) - plainSlots;
+
+  // Completed units that are not the planner's own electives: they stand in for named plain electives
+  const ownElectives = new Set(
+    input.plannerUnits
+      .filter((row) => row.unitCode !== null && (row.category === 'elective' || row.category === 'prescribed_elective'))
+      .map((row) => normaliseCode(row.unitCode!)),
+  );
+  const replacementSlots = completedElectiveSlotCount(
+    (input.completedUnitCodes ?? []).filter((code) => !ownElectives.has(normaliseCode(code))),
+    input.plannerUnits,
+  );
+  const replaced = Math.min(plainSlots, Math.max(0, replacementSlots - blockedSlots));
+
+  const stillOwed = Math.max(0, input.electiveCount - completedSlots - prescribedSlots);
+  const surplus = Math.max(0, plainSlots - stillOwed);
+
+  let toDrop = Math.max(replaced, surplus);
+  if (toDrop <= 0) return [];
+
+  const needed = new Set((input.requiredByOthers ?? []).map(normaliseCode));
+  const slotOf = (code: string) => input.plannedSlots?.[normaliseCode(code)] ?? Number.MAX_SAFE_INTEGER;
+  // earliest planned first, but units that others need as prerequisites are the last to go
+  const order = [...plain].sort(
+    (a, b) =>
+      Number(needed.has(normaliseCode(a.code))) - Number(needed.has(normaliseCode(b.code))) ||
+      slotOf(a.code) - slotOf(b.code),
+  );
+
+  const drop: string[] = [];
+  for (const unit of order) {
+    if (toDrop <= 0) break;
+    drop.push(unit.code);
+    toDrop -= slotWeightOf(unit.code);
+  }
+  return drop;
+}
 
 /**
  * How many elective slots still have to be filled.
@@ -42,49 +143,16 @@ const NON_ACADEMIC_MODULES = new Set(['AIMFECS', 'AIM-FECS', 'AIMSFS', 'AIM-SFS'
 export function countElectiveSlotsNeeded(input: ElectiveSlotsNeededInput): number {
   const isElective = (category: string) => ELECTIVE_CATEGORIES.includes(category);
 
-  // Helper to determine slot weight: 25 CP = 2 slots, standard 12.5 CP = 1 slot
-  function getSlotWeight(unitCode: string, unitDataMap?: Map<string, { creditPoints?: number }>): number {
-    const code = normaliseCode(unitCode);
-    if (code.includes('ICT20016') && code.includes('OPTIONAL')) return 2;
-    const cp = unitDataMap?.get(code)?.creditPoints;
-    if (cp && cp >= 25) return Math.round(cp / 12.5);
-    return 1;
-  }
-
-
   if (input.electiveCount == null) {
     return input.plannerUnits.filter((row) => row.unitCode === null && isElective(row.category))
       .length;
   }
 
-  const completed = new Set((input.completedUnitCodes ?? []).map(normaliseCode));
   const blocked = new Set((input.blockedUnitCodes ?? []).map(normaliseCode));
 
-  // Taking an elective from one of the planner's groups is the normal way to do
-  // it, so a passed unit counts whether the planner named it or only offered it
-  // as a candidate. A set, because a unit can be both.
-  // Identify all core / major core codes defined on this planner
-  const compulsoryCodes = new Set(
-    input.plannerUnits
-      .filter((row) => row.unitCode !== null && (row.category === 'core' || row.category === 'major_core'))
-      .map((row) => normaliseCode(row.unitCode!))
-  );
-
-  // Any completed unit that is NOT core/major_core and NOT mpu counts as an elective
-  const completedElectives = new Set<string>();
-  for (const code of completed) {
-    // Ignore MPU, compulsory units and non-academic training modules
-    if (code.startsWith('MPU') || compulsoryCodes.has(code) || NON_ACADEMIC_MODULES.has(code)) {
-      continue;
-    }
-    completedElectives.add(code);
-  }
-
-  // Calculate how many elective SLOTS were fulfilled by completed units (25 CP = 2 slots)
-  let completedElectiveSlots = 0;
-  for (const code of completedElectives) {
-    completedElectiveSlots += getSlotWeight(code);
-  }
+  // Taking an elective from one of the planner's groups is the normal way to do it, so a passed unit counts whether the
+  // planner named it or only offered it as a candidate. Any unit counts: see completedElectiveSlotCount.
+  const completedElectiveSlots = completedElectiveSlotCount(input.completedUnitCodes, input.plannerUnits);
 
   // Calculate how many elective SLOTS are already occupied in the pool
   const pooledElectives = input.pool
@@ -93,7 +161,7 @@ export function countElectiveSlotsNeeded(input: ElectiveSlotsNeededInput): numbe
         isElective(unit.category) &&
         !(unit.category === 'elective' && blocked.has(normaliseCode(unit.code))),
     )
-    .reduce((sum, unit) => sum + getSlotWeight(unit.code), 0);
+    .reduce((sum, unit) => sum + slotWeightOf(unit.code), 0);
 
   // Return remaining slots needed (bounded at 0)
   return Math.max(0, input.electiveCount - completedElectiveSlots - pooledElectives);

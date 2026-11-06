@@ -12,16 +12,16 @@ Students ask advisors the same basic questions again and again: which planner fi
 |---|---|---|---|---|
 | S1 | Browse the study planners by course, major and intake year, and read the full plan, semester by semester. | Team proposal, client agreed (R11 of the main UAT plan) | Must | SC-01, SC-02 |
 | S2 | Look up a unit: its details, its requisites and when it runs, and open its official page on the university website. | Team proposal, client agreed (R11 of the main UAT plan) | Must | SC-03, SC-04, SC-05, SC-06 |
-| S3 | Build a personal study plan from a planner and the units already completed, and the plan follows the unit rules. | Team proposal, client agreed (R11 of the main UAT plan) | Must | SC-07, SC-08, SC-09, SC-10 |
-| S4 | Find help without an advisor: the frequently asked questions, the contact details and the Heads of Department. | Team proposal, client agreed (R11 of the main UAT plan) | Must | SC-12 |
-| S5 | What a student enters stays private: the website does not store it. | Team proposal, client agreed (R11 of the main UAT plan) | Must | SC-11 |
+| S3 | Build a personal study plan from a planner and the units already completed, and the plan follows the unit rules. | Team proposal, client agreed (R11 of the main UAT plan) | Must | SC-07, SC-08, SC-09, SC-10, SC-11, SC-12, SC-13 |
+| S4 | Find help without an advisor: the frequently asked questions, the contact details and the Heads of Department. | Team proposal, client agreed (R11 of the main UAT plan) | Must | SC-15 |
+| S5 | What a student enters stays private: the website does not store it. | Team proposal, client agreed (R11 of the main UAT plan) | Must | SC-14 |
 
 **Must** = a job that the website must do, or a rule that keeps data safe. Every test here is a Must test, and all must pass.
 
 ## 3. How it runs
 
 - **Who:** at least 3 students from different years, one team member who runs the session, one who takes notes.
-- **How long:** 12 tests (all Must) in one session of about 1.2 hours.
+- **How long:** 15 tests (all Must) in one session of about 1.4 hours.
 - **Where:** the staging copy of the website, never the production site. A student uses their own phone or computer.
 - **Method:** the facilitator reads each task. The tester does it and marks Pass, Fail, Blocked or N/A, with a note. The facilitator does not show how. Do not fix anything during the session.
 - **Acceptance rule:** the client accepts the website when **all tests pass and no Critical or Major defect is open**.
@@ -37,7 +37,8 @@ Students ask advisors the same basic questions again and again: which planner fi
 | Student X | A made-up student of that planner. Completed in Semester 1: COS10009, COS10026, COS10025, COS10003 and MPU3272. No real student record is used. |
 | Units of the data pack | COS10009 has full details and an official page. MPU3212 is an MPU unit, so it has no official button. SWE40001 has no details. For SC-06 also make up a code that does not exist, such as XYZ99999. |
 | Results file of Student X | The Excel file student-A.xlsx of the UAT student files: a made-up student of this planner with 15 completed units in 3 semesters (2026 March to 2027 March), used in SC-09. Also a file that is not Excel, such as a PDF, to try as a wrong file. |
-| Browsers | Two browsers, or one browser and a private window, for SC-11. |
+| A unit instead of an elective | COS20001 (User-Centred Design) is on no elective list of the planner. It is the unit that replaces an elective in SC-13. |
+| Browsers | Two browsers, or one browser and a private window, for SC-14. |
 
 ## 5. Tests
 
@@ -116,9 +117,10 @@ Students ask advisors the same basic questions again and again: which planner fi
 
 1. Open Plan Builder. Read the hint beside the Generate button.
 2. Choose the course, the major and the intake of Student X (data pack), and select Generate Study Plan.
-3. Write down the number beside Remaining in the summary.
+3. A box asks about MPU units. Read it, then select "Include the MPU units".
+4. Write down the number beside Remaining in the summary.
 
-**Expected:** Before a major is chosen, the page says to select a course and a major. After Generate, a plan shows for every semester of the course, with the units and their prerequisites. The summary shows the intake, the course, the major, Completed 0 and the number Remaining. A note tells the student to check with an advisor.
+**Expected:** Before a major is chosen, the page says to select a course and a major. After Generate, a box says "You did not add any MPU units" and explains that, if none is added, the system takes it that no MPU unit was completed. Nothing is planned until a button is chosen. After "Include the MPU units", a plan shows for every semester of the course, with the units and their prerequisites. The summary shows the intake, the course, the major, Completed 0 and the number Remaining. A note tells the student to check with an advisor.
 
 **Result (Pass / Fail / Blocked / N/A):** &nbsp;&nbsp; **Notes:**
 
@@ -130,7 +132,7 @@ Students ask advisors the same basic questions again and again: which planner fi
 2. Select Generate Study Plan.
 3. Change the intake year.
 
-**Expected:** A unit that was added is not offered in the search list again, so it cannot be added twice. The page says "5 units marked as completed". The summary shows Completed 5 units, and Remaining is lower than the number from SC-07 (for the planner of the data pack, 25 instead of 29, because the elective unit fills an elective slot). The five units show as completed in the plan. The change of the intake year removes the old plan, so the screen never shows a plan that does not match the choices.
+**Expected:** A unit that was added is not offered in the search list again, so it cannot be added twice. No question about MPU units is asked, because one of the five units (MPU3272) is an MPU unit. The page says "5 units marked as completed". The summary shows Completed 5 units, and Remaining is lower than the number from SC-07 (for the planner of the data pack, 25 instead of 29, because the elective unit fills an elective slot). The five units show as completed in the plan. The change of the intake year removes the old plan, so the screen never shows a plan that does not match the choices.
 
 **Result (Pass / Fail / Blocked / N/A):** &nbsp;&nbsp; **Notes:**
 
@@ -142,7 +144,7 @@ Students ask advisors the same basic questions again and again: which planner fi
 2. Read the message, and the three semester tables under Units Completed.
 3. Select Generate Study Plan. Then choose a file that is not an Excel file (for example a PDF).
 
-**Expected:** The page says "Imported 15 units in 3 semesters", and that the file starts in 2026_MAR_S1. Semester 1, 2 and 3 hold five units each, the ones of the file in the order of its terms. The summary then shows Completed 15 units, and Remaining is 19 for the planner of the data pack (29 with no units). The file is read on the device: the page does not upload it. The PDF is refused with a message that the file must be an Excel .xlsx file, and the units already on the page stay.
+**Expected:** The page says "Imported 15 units in 3 semesters", and that the file starts in 2026_MAR_S1. Semester 1, 2 and 3 hold five units each, the ones of the file in the order of its terms. The summary then shows Completed 15 units, and Remaining is 17 for the planner of the data pack (29 with no units). No question about MPU units is asked, because the file has MPU units. A notice says that some electives of the planner are not planned, because the units of the file already fill the electives. The file is read on the device: the page does not upload it. The PDF is refused with a message that the file must be an Excel .xlsx file, and the units already on the page stay.
 
 **Result (Pass / Fail / Blocked / N/A):** &nbsp;&nbsp; **Notes:**
 
@@ -158,7 +160,43 @@ Students ask advisors the same basic questions again and again: which planner fi
 
 **Result (Pass / Fail / Blocked / N/A):** &nbsp;&nbsp; **Notes:**
 
-### SC-11: What the student enters is not stored
+### SC-11: Leave the MPU units out of the plan
+
+**Requirement:** S3 | **Priority:** Must
+
+1. In the Plan Builder, choose the course, the major and the intake of Student X, add no unit, and select Generate Study Plan.
+2. In the box about MPU units, select "Leave the MPU units out". Look for MPU units in the plan and read the notices.
+3. Select Generate Study Plan again and choose "Include the MPU units".
+
+**Expected:** The plan has no MPU unit, and the page says "MPU units are not in this plan, as you chose". Remaining is 21 for the planner of the data pack (29 with the MPU units). The notices no longer name MPU3212 (only ICT20016 is named). After the second Generate with "Include", the MPU units are in the plan again and the note is gone. "Cancel and add MPU units" closes the box and plans nothing.
+
+**Result (Pass / Fail / Blocked / N/A):** &nbsp;&nbsp; **Notes:**
+
+### SC-12: A second major adds its units after the planner's units
+
+**Requirement:** S3 | **Priority:** Must
+
+1. In the Plan Builder, choose the course, the major (Data Science) and the intake of Student X. Choose Cybersecurity as the second major.
+2. Select Generate Study Plan and choose "Include the MPU units".
+3. Read the notices and look for the units of the second major.
+
+**Expected:** A notice says that Cybersecurity needs 4 more units, that 1 fills a free elective slot and 3 are planned as extra units after the units of the planner, and that the plan can be longer than the planner. The four units are in the plan and are marked as units of the second major. No notice says that the second major was left out.
+
+**Result (Pass / Fail / Blocked / N/A):** &nbsp;&nbsp; **Notes:**
+
+### SC-13: A unit taken in place of an elective
+
+**Requirement:** S3 | **Priority:** Must
+
+1. In the Plan Builder, choose the course, the major and the intake of Student X. In Semester 1 add COS10009 and COS20001 (COS20001 is not an elective of this planner).
+2. Select Generate Study Plan and choose "Include the MPU units".
+3. Read the first notice and look for the elective that it names.
+
+**Expected:** A notice says "Not planned, because the units you passed already fill your electives", and names an elective of the planner (STA10003 for the planner of the data pack). That elective is not in the plan, because a unit that is only marked as an elective can be replaced by any other unit. The electives that the planner marks as prescribed (with a star) are still planned.
+
+**Result (Pass / Fail / Blocked / N/A):** &nbsp;&nbsp; **Notes:**
+
+### SC-14: What the student enters is not stored
 
 **Requirement:** S5 | **Priority:** Must
 
@@ -171,7 +209,7 @@ Students ask advisors the same basic questions again and again: which planner fi
 
 **Result (Pass / Fail / Blocked / N/A):** &nbsp;&nbsp; **Notes:**
 
-### SC-12: Find help, and the right Head of Department
+### SC-15: Find help, and the right Head of Department
 
 **Requirement:** S4 | **Priority:** Must
 
@@ -191,7 +229,7 @@ Fill in the form `docs/UAT-student-form.html`. It has the tests, the defect log,
 |---|---|---|---|---|
 | | | | | |
 
-Must passed: _ of 12. Agreed passed: _ of 0. Open Critical or Major defects: _. Acceptance rule met: Yes / No.
+Must passed: _ of 15. Agreed passed: _ of 0. Open Critical or Major defects: _. Acceptance rule met: Yes / No.
 
 | Name | Role | Date | Signature |
 |---|---|---|---|
