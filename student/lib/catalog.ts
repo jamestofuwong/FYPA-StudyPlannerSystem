@@ -35,30 +35,41 @@ async function readHelp(): Promise<StudentHelp> {
   return { faqs, generalEnquiries, itHelpDesk, hods }
 }
 
-export const getCachedPlanners = unstable_cache(getPlanners, ['student-planners-v4'], {
+// The cached reads also expire by themselves. A CMS save refreshes them at once, but a change made outside the CMS (a seed,
+// a restore, a manual edit) would otherwise stay hidden for good, and an empty result cached before a seed does too.
+const CACHE_SECONDS = 600
+
+export const getCachedPlanners = unstable_cache(getPlanners, ['student-planners-v5'], {
   tags: [STUDENT_CACHE.planners],
+  revalidate: CACHE_SECONDS,
 })
 
-export const getCachedPlanner = unstable_cache(getPlannerById, ['student-planner-v4'], {
+export const getCachedPlanner = unstable_cache(getPlannerById, ['student-planner-v5'], {
   tags: [STUDENT_CACHE.planners],
+  revalidate: CACHE_SECONDS,
 })
 
-export const getCachedPlannerOptions = unstable_cache(getPlannerOptions, ['student-planner-options-v4'], {
+export const getCachedPlannerOptions = unstable_cache(getPlannerOptions, ['student-planner-options-v5'], {
   tags: [STUDENT_CACHE.planners],
+  revalidate: CACHE_SECONDS,
 })
 
-export const getCachedUnits = unstable_cache(getUnits, ['student-units-v4'], {
+export const getCachedUnits = unstable_cache(getUnits, ['student-units-v5'], {
   tags: [STUDENT_CACHE.units],
+  revalidate: CACHE_SECONDS,
 })
 
-export const getCachedPlannerYearLevels = unstable_cache(getPlannerYearLevels, ['student-planner-year-levels-v4'], {
+export const getCachedPlannerYearLevels = unstable_cache(getPlannerYearLevels, ['student-planner-year-levels-v5'], {
   tags: [STUDENT_CACHE.planners],
+  revalidate: CACHE_SECONDS,
 })
 
-export const getCachedUnit = unstable_cache(getUnit, ['student-unit-v4'], {
+export const getCachedUnit = unstable_cache(getUnit, ['student-unit-v5'], {
   tags: [STUDENT_CACHE.units],
+  revalidate: CACHE_SECONDS,
 })
 
-export const getCachedHelp = unstable_cache(readHelp, ['student-help-v4'], {
+export const getCachedHelp = unstable_cache(readHelp, ['student-help-v5'], {
   tags: [STUDENT_CACHE.help],
+  revalidate: CACHE_SECONDS,
 })
