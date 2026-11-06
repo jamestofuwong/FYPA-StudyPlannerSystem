@@ -438,7 +438,7 @@
     </div>
   </div>
 
-  <div class="module-header">M3. Plan builder <span class="badge">Session A · 5 cases</span></div>
+  <div class="module-header">M3. Plan builder <span class="badge">Session A · 8 cases</span></div>
   <div class="module-body">
     <div class="tc" data-priority="Must">
       <div class="tc-header"><div class="tc-meta">
@@ -446,8 +446,8 @@
         <div class="tc-name">Build a plan from the start</div>
         <span class="req-tag tag-must">Must</span> <span class="req-tag">S3</span>
       </div></div>
-      <div class="tc-steps"><strong>Steps</strong>1. Open Plan Builder. Read the hint beside the Generate button.<br>2. Choose the course, the major and the intake of Student X (data pack), and select Generate Study Plan.<br>3. Write down the number beside Remaining in the summary.</div>
-      <div class="tc-expected"><strong>Expected:</strong> Before a major is chosen, the page says to select a course and a major. After Generate, a plan shows for every semester of the course, with the units and their prerequisites. The summary shows the intake, the course, the major, Completed 0 and the number Remaining. A note tells the student to check with an advisor.</div>
+      <div class="tc-steps"><strong>Steps</strong>1. Open Plan Builder. Read the hint beside the Generate button.<br>2. Choose the course, the major and the intake of Student X (data pack), and select Generate Study Plan.<br>3. A box asks about MPU units. Read it, then select &quot;Include the MPU units&quot;.<br>4. Write down the number beside Remaining in the summary.</div>
+      <div class="tc-expected"><strong>Expected:</strong> Before a major is chosen, the page says to select a course and a major. After Generate, a box says &quot;You did not add any MPU units&quot; and explains that, if none is added, the system takes it that no MPU unit was completed. Nothing is planned until a button is chosen. After &quot;Include the MPU units&quot;, a plan shows for every semester of the course, with the units and their prerequisites. The summary shows the intake, the course, the major, Completed 0 and the number Remaining. A note tells the student to check with an advisor.</div>
       <div class="result-row"><span class="result-label">Result:</span>
         <label class="radio-opt pass"><input type="radio" name="sc-07" value="pass" /> Pass</label>
         <label class="radio-opt fail"><input type="radio" name="sc-07" value="fail" /> Fail</label>
@@ -464,7 +464,7 @@
         <span class="req-tag tag-must">Must</span> <span class="req-tag">S3</span>
       </div></div>
       <div class="tc-steps"><strong>Steps</strong>1. Under Units Completed, select &quot;+ Add unit&quot; in Semester 1 and add the five completed units of Student X, one at a time. After each one, open the search list again.<br>2. Select Generate Study Plan.<br>3. Change the intake year.</div>
-      <div class="tc-expected"><strong>Expected:</strong> A unit that was added is not offered in the search list again, so it cannot be added twice. The page says &quot;5 units marked as completed&quot;. The summary shows Completed 5 units, and Remaining is lower than the number from SC-07 (for the planner of the data pack, 25 instead of 29, because the elective unit fills an elective slot). The five units show as completed in the plan. The change of the intake year removes the old plan, so the screen never shows a plan that does not match the choices.</div>
+      <div class="tc-expected"><strong>Expected:</strong> A unit that was added is not offered in the search list again, so it cannot be added twice. No question about MPU units is asked, because one of the five units (MPU3272) is an MPU unit. The page says &quot;5 units marked as completed&quot;. The summary shows Completed 5 units, and Remaining is lower than the number from SC-07 (for the planner of the data pack, 25 instead of 29, because the elective unit fills an elective slot). The five units show as completed in the plan. The change of the intake year removes the old plan, so the screen never shows a plan that does not match the choices.</div>
       <div class="result-row"><span class="result-label">Result:</span>
         <label class="radio-opt pass"><input type="radio" name="sc-08" value="pass" /> Pass</label>
         <label class="radio-opt fail"><input type="radio" name="sc-08" value="fail" /> Fail</label>
@@ -481,7 +481,7 @@
         <span class="req-tag tag-must">Must</span> <span class="req-tag">S3</span>
       </div></div>
       <div class="tc-steps"><strong>Steps</strong>1. In the Plan Builder, choose the course, the major and the intake of Student X. Select Import from Excel and choose the results file of the data pack.<br>2. Read the message, and the three semester tables under Units Completed.<br>3. Select Generate Study Plan. Then choose a file that is not an Excel file (for example a PDF).</div>
-      <div class="tc-expected"><strong>Expected:</strong> The page says &quot;Imported 15 units in 3 semesters&quot;, and that the file starts in 2026_MAR_S1. Semester 1, 2 and 3 hold five units each, the ones of the file in the order of its terms. The summary then shows Completed 15 units, and Remaining is 19 for the planner of the data pack (29 with no units). The file is read on the device: the page does not upload it. The PDF is refused with a message that the file must be an Excel .xlsx file, and the units already on the page stay.</div>
+      <div class="tc-expected"><strong>Expected:</strong> The page says &quot;Imported 15 units in 3 semesters&quot;, and that the file starts in 2026_MAR_S1. Semester 1, 2 and 3 hold five units each, the ones of the file in the order of its terms. The summary then shows Completed 15 units, and Remaining is 17 for the planner of the data pack (29 with no units). No question about MPU units is asked, because the file has MPU units. A notice says that some electives of the planner are not planned, because the units of the file already fill the electives. The file is read on the device: the page does not upload it. The PDF is refused with a message that the file must be an Excel .xlsx file, and the units already on the page stay.</div>
       <div class="result-row"><span class="result-label">Result:</span>
         <label class="radio-opt pass"><input type="radio" name="sc-09" value="pass" /> Pass</label>
         <label class="radio-opt fail"><input type="radio" name="sc-09" value="fail" /> Fail</label>
@@ -511,11 +511,11 @@
     <div class="tc" data-priority="Must">
       <div class="tc-header"><div class="tc-meta">
         <div class="tc-id">SC-11</div>
-        <div class="tc-name">What the student enters is not stored</div>
-        <span class="req-tag tag-must">Must</span> <span class="req-tag">S5</span>
+        <div class="tc-name">Leave the MPU units out of the plan</div>
+        <span class="req-tag tag-must">Must</span> <span class="req-tag">S3</span>
       </div></div>
-      <div class="tc-steps"><strong>Steps</strong>1. Add completed units, or import the results file, and generate a plan. Refresh the page.<br>2. Open the website in a private window, or another browser.<br>3. Close the tab and open the website again.<br>4. (Facilitator) After the session, list the tables of the staging database.</div>
-      <div class="tc-expected"><strong>Expected:</strong> After a refresh in the same tab the entries are still there, because the tab keeps them. In the other window and after the tab is closed, the builder is empty. The database has no table for students, transcripts or plans of students. It holds only planners, units, help content and CMS accounts.</div>
+      <div class="tc-steps"><strong>Steps</strong>1. In the Plan Builder, choose the course, the major and the intake of Student X, add no unit, and select Generate Study Plan.<br>2. In the box about MPU units, select &quot;Leave the MPU units out&quot;. Look for MPU units in the plan and read the notices.<br>3. Select Generate Study Plan again and choose &quot;Include the MPU units&quot;.</div>
+      <div class="tc-expected"><strong>Expected:</strong> The plan has no MPU unit, and the page says &quot;MPU units are not in this plan, as you chose&quot;. Remaining is 21 for the planner of the data pack (29 with the MPU units). The notices no longer name MPU3212 (only ICT20016 is named). After the second Generate with &quot;Include&quot;, the MPU units are in the plan again and the note is gone. &quot;Cancel and add MPU units&quot; closes the box and plans nothing.</div>
       <div class="result-row"><span class="result-label">Result:</span>
         <label class="radio-opt pass"><input type="radio" name="sc-11" value="pass" /> Pass</label>
         <label class="radio-opt fail"><input type="radio" name="sc-11" value="fail" /> Fail</label>
@@ -525,18 +525,14 @@
       <span class="notes-label">Notes: what you saw, what was confusing</span>
       <textarea name="notes-sc-11" placeholder="Write what happened. Do not write student IDs, names or grades."></textarea>
     </div>
-  </div>
-
-  <div class="module-header">M4. Help page <span class="badge">Session A · 1 cases</span></div>
-  <div class="module-body">
     <div class="tc" data-priority="Must">
       <div class="tc-header"><div class="tc-meta">
         <div class="tc-id">SC-12</div>
-        <div class="tc-name">Find help, and the right Head of Department</div>
-        <span class="req-tag tag-must">Must</span> <span class="req-tag">S4</span>
+        <div class="tc-name">A second major adds its units after the planner's units</div>
+        <span class="req-tag tag-must">Must</span> <span class="req-tag">S3</span>
       </div></div>
-      <div class="tc-steps"><strong>Steps</strong>1. Open Help. Select three questions, one after the other. Read the contact details.<br>2. Select the Heads of Department card. Find the head of the tester's own department.<br>3. Select the link back to Help.</div>
-      <div class="tc-expected"><strong>Expected:</strong> Each question opens its answer, and selecting it again closes it. The contact block shows the venue, the hours and the phone and email addresses. The Heads of Department page lists the heads by faculty and department, with the name, the position and an email address that opens a new email. The link back shows the Help page.</div>
+      <div class="tc-steps"><strong>Steps</strong>1. In the Plan Builder, choose the course, the major (Data Science) and the intake of Student X. Choose Cybersecurity as the second major.<br>2. Select Generate Study Plan and choose &quot;Include the MPU units&quot;.<br>3. Read the notices and look for the units of the second major.</div>
+      <div class="tc-expected"><strong>Expected:</strong> A notice says that Cybersecurity needs 4 more units, that 1 fills a free elective slot and 3 are planned as extra units after the units of the planner, and that the plan can be longer than the planner. The four units are in the plan and are marked as units of the second major. No notice says that the second major was left out.</div>
       <div class="result-row"><span class="result-label">Result:</span>
         <label class="radio-opt pass"><input type="radio" name="sc-12" value="pass" /> Pass</label>
         <label class="radio-opt fail"><input type="radio" name="sc-12" value="fail" /> Fail</label>
@@ -545,6 +541,61 @@
       </div>
       <span class="notes-label">Notes: what you saw, what was confusing</span>
       <textarea name="notes-sc-12" placeholder="Write what happened. Do not write student IDs, names or grades."></textarea>
+    </div>
+    <div class="tc" data-priority="Must">
+      <div class="tc-header"><div class="tc-meta">
+        <div class="tc-id">SC-13</div>
+        <div class="tc-name">A unit taken in place of an elective</div>
+        <span class="req-tag tag-must">Must</span> <span class="req-tag">S3</span>
+      </div></div>
+      <div class="tc-steps"><strong>Steps</strong>1. In the Plan Builder, choose the course, the major and the intake of Student X. In Semester 1 add COS10009 and COS20001 (COS20001 is not an elective of this planner).<br>2. Select Generate Study Plan and choose &quot;Include the MPU units&quot;.<br>3. Read the first notice and look for the elective that it names.</div>
+      <div class="tc-expected"><strong>Expected:</strong> A notice says &quot;Not planned, because the units you passed already fill your electives&quot;, and names an elective of the planner (STA10003 for the planner of the data pack). That elective is not in the plan, because a unit that is only marked as an elective can be replaced by any other unit. The electives that the planner marks as prescribed (with a star) are still planned.</div>
+      <div class="result-row"><span class="result-label">Result:</span>
+        <label class="radio-opt pass"><input type="radio" name="sc-13" value="pass" /> Pass</label>
+        <label class="radio-opt fail"><input type="radio" name="sc-13" value="fail" /> Fail</label>
+        <label class="radio-opt block"><input type="radio" name="sc-13" value="blocked" /> Blocked</label>
+        <label class="radio-opt na"><input type="radio" name="sc-13" value="na" /> N/A</label>
+      </div>
+      <span class="notes-label">Notes: what you saw, what was confusing</span>
+      <textarea name="notes-sc-13" placeholder="Write what happened. Do not write student IDs, names or grades."></textarea>
+    </div>
+    <div class="tc" data-priority="Must">
+      <div class="tc-header"><div class="tc-meta">
+        <div class="tc-id">SC-14</div>
+        <div class="tc-name">What the student enters is not stored</div>
+        <span class="req-tag tag-must">Must</span> <span class="req-tag">S5</span>
+      </div></div>
+      <div class="tc-steps"><strong>Steps</strong>1. Add completed units, or import the results file, and generate a plan. Refresh the page.<br>2. Open the website in a private window, or another browser.<br>3. Close the tab and open the website again.<br>4. (Facilitator) After the session, list the tables of the staging database.</div>
+      <div class="tc-expected"><strong>Expected:</strong> After a refresh in the same tab the entries are still there, because the tab keeps them. In the other window and after the tab is closed, the builder is empty. The database has no table for students, transcripts or plans of students. It holds only planners, units, help content and CMS accounts.</div>
+      <div class="result-row"><span class="result-label">Result:</span>
+        <label class="radio-opt pass"><input type="radio" name="sc-14" value="pass" /> Pass</label>
+        <label class="radio-opt fail"><input type="radio" name="sc-14" value="fail" /> Fail</label>
+        <label class="radio-opt block"><input type="radio" name="sc-14" value="blocked" /> Blocked</label>
+        <label class="radio-opt na"><input type="radio" name="sc-14" value="na" /> N/A</label>
+      </div>
+      <span class="notes-label">Notes: what you saw, what was confusing</span>
+      <textarea name="notes-sc-14" placeholder="Write what happened. Do not write student IDs, names or grades."></textarea>
+    </div>
+  </div>
+
+  <div class="module-header">M4. Help page <span class="badge">Session A · 1 cases</span></div>
+  <div class="module-body">
+    <div class="tc" data-priority="Must">
+      <div class="tc-header"><div class="tc-meta">
+        <div class="tc-id">SC-15</div>
+        <div class="tc-name">Find help, and the right Head of Department</div>
+        <span class="req-tag tag-must">Must</span> <span class="req-tag">S4</span>
+      </div></div>
+      <div class="tc-steps"><strong>Steps</strong>1. Open Help. Select three questions, one after the other. Read the contact details.<br>2. Select the Heads of Department card. Find the head of the tester's own department.<br>3. Select the link back to Help.</div>
+      <div class="tc-expected"><strong>Expected:</strong> Each question opens its answer, and selecting it again closes it. The contact block shows the venue, the hours and the phone and email addresses. The Heads of Department page lists the heads by faculty and department, with the name, the position and an email address that opens a new email. The link back shows the Help page.</div>
+      <div class="result-row"><span class="result-label">Result:</span>
+        <label class="radio-opt pass"><input type="radio" name="sc-15" value="pass" /> Pass</label>
+        <label class="radio-opt fail"><input type="radio" name="sc-15" value="fail" /> Fail</label>
+        <label class="radio-opt block"><input type="radio" name="sc-15" value="blocked" /> Blocked</label>
+        <label class="radio-opt na"><input type="radio" name="sc-15" value="na" /> N/A</label>
+      </div>
+      <span class="notes-label">Notes: what you saw, what was confusing</span>
+      <textarea name="notes-sc-15" placeholder="Write what happened. Do not write student IDs, names or grades."></textarea>
     </div>
   </div>
 

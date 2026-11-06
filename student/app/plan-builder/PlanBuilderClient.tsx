@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useMemo, type ChangeEvent } from 'react'
 import { generatePlan } from '@student/lib/plan-builder'
 import { readTranscriptFile } from '@student/lib/transcript-file'
+import { isMpuUnit } from '@core/shared/mpuUnits'
 import type { GenerationResult } from '@student/lib/plan-builder'
 import type { PlannerCourseOption } from '@student/lib/planners'
 import type { SemesterBlock, UnitListing } from '@student/lib/types'
@@ -155,7 +156,7 @@ interface CompletedSemester {
 
 const DRAFT_KEY = 'plan-builder-draft'
 const RESULT_CACHE_KEY = 'plan-builder-result-cache'
-const RESULT_CACHE_VERSION = 6
+const RESULT_CACHE_VERSION = 7
 
 interface PlanBuilderDraft {
   selectedCourseId: string
@@ -164,6 +165,8 @@ interface PlanBuilderDraft {
   intakeYear: number
   intakeMonth: number
   completedSemesters: CompletedSemester[]
+  /** Whether the MPU units were planned, the last time that a plan was made. */
+  includeMpu?: boolean
 }
 
 interface CachedGenerationResult {
@@ -193,12 +196,14 @@ function resultCacheKey({
   intakeYear,
   intakeMonth,
   completedSemesters,
+  includeMpu,
 }: {
   plannerId: string
   secondMajorId?: string
   intakeYear: number
   intakeMonth: number
   completedSemesters: CompletedSemester[]
+  includeMpu: boolean
 }): string {
   return JSON.stringify({
     plannerId,
@@ -206,6 +211,7 @@ function resultCacheKey({
     intakeYear,
     intakeMonth,
     completedSemesters: normalizeCompletedSemesters(completedSemesters),
+    includeMpu,
   })
 }
 
@@ -282,6 +288,7 @@ function readDraft(): PlanBuilderDraft | null {
         intakeYear: typeof data.intakeYear === 'number' ? data.intakeYear : currentYear,
         intakeMonth: typeof data.intakeMonth === 'number' ? data.intakeMonth : 3,
         completedSemesters,
+        includeMpu: data.includeMpu !== false,
       }
     }
 
@@ -293,6 +300,7 @@ function readDraft(): PlanBuilderDraft | null {
       intakeYear: currentYear,
       intakeMonth: 3,
       completedSemesters,
+      includeMpu: true,
     }
   } catch {
     return null
@@ -349,6 +357,11 @@ export default function PlanBuilderClient({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isImporting, setIsImporting] = useState(false)
   const [importNotice, setImportNotice] = useState<{ kind: 'ok' | 'error'; headline: string; details: string[] } | null>(null)
+  // The MPU question, asked when the student added no MPU unit
+  const [includeMpu, setIncludeMpu] = useState(true)
+  const [mpuPromptOpen, setMpuPromptOpen] = useState(false)
+  const generateBtnRef = useRef<HTMLButtonElement>(null)
+  const mpuPrimaryRef = useRef<HTMLButtonElement>(null)
   // Which semester's inline search is open
   const [activeAddSem, setActiveAddSem] = useState<string | null>(null)
   const [addQuery, setAddQuery]         = useState('')
@@ -381,6 +394,7 @@ export default function PlanBuilderClient({
       setIntakeMonth(draft.intakeMonth)
       setCompletedSemesters(draft.completedSemesters)
       semCounter.current = nextSemCounter(draft.completedSemesters)
+      setIncludeMpu(draft.includeMpu !== false)
       if (plannerOk) {
         setResult(readCachedResult(resultCacheKey({
           plannerId: draft.selectedPlannerId,
@@ -388,6 +402,7 @@ export default function PlanBuilderClient({
           intakeYear: draft.intakeYear,
           intakeMonth: draft.intakeMonth,
           completedSemesters: draft.completedSemesters,
+          includeMpu: draft.includeMpu !== false,
         })))
       }
     }
@@ -403,8 +418,23 @@ export default function PlanBuilderClient({
       intakeYear,
       intakeMonth,
       completedSemesters,
+      includeMpu,
     })
-  }, [draftReady, selectedCourseId, selectedPlannerId, selectedSecondMajorId, intakeYear, intakeMonth, completedSemesters])
+  }, [draftReady, selectedCourseId, selectedPlannerId, selectedSecondMajorId, intakeYear, intakeMonth, completedSemesters, includeMpu])
+
+  // The MPU question takes the focus when it opens, and Escape closes it
+  useEffect(() => {
+    if (!mpuPromptOpen) return
+    mpuPrimaryRef.current?.focus()
+    function onKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setMpuPromptOpen(false)
+        generateBtnRef.current?.focus()
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [mpuPromptOpen])
 
   function clearGeneratedPlan() {
     setResult(null)
@@ -619,7 +649,29 @@ export default function PlanBuilderClient({
   }, [])
 
   // ── Generate ──
-  async function handleGenerate() {
+  // A student who added no MPU unit is asked whether the plan should include the MPU units. With no MPU unit added, the
+  // system takes it that the student completed none. A student who added some goes on without the question.
+  function handleGenerate() {
+    if (!canGenerate) return
+    const addedMpu = completedSemesters.some(semester => semester.unitCodes.some(code => isMpuUnit({ code })))
+    if (addedMpu) {
+      void runGenerate(true)
+      return
+    }
+    setMpuPromptOpen(true)
+  }
+
+  function chooseMpu(include: boolean) {
+    setMpuPromptOpen(false)
+    void runGenerate(include)
+  }
+
+  function cancelMpuPrompt() {
+    setMpuPromptOpen(false)
+    generateBtnRef.current?.focus()
+  }
+
+  async function runGenerate(withMpu: boolean) {
     if (!canGenerate) return
     const cacheKey = resultCacheKey({
       plannerId: selectedPlannerId,
@@ -627,9 +679,11 @@ export default function PlanBuilderClient({
       intakeYear,
       intakeMonth,
       completedSemesters,
+      includeMpu: withMpu,
     })
     const cachedResult = readCachedResult(cacheKey)
     if (cachedResult) {
+      setIncludeMpu(withMpu)
       setResult(cachedResult)
       setError(null)
       setTimeout(() => {
@@ -647,12 +701,15 @@ export default function PlanBuilderClient({
           secondMajorId: selectedSecondMajorId || undefined,
           intakeYear,
           intakeMonth,
+          includeMpu: withMpu,
         },
         completedSemesters: completedSemesters.map(semester => ({ unitCodes: semester.unitCodes })),
       })
       if (!res) {
         setError('No plan template found for the selected configuration. Try a different course or major.')
       } else {
+        // The choice is kept with the plan it made, so the note always matches the plan on the screen
+        setIncludeMpu(withMpu)
         setResult(res)
         if (!res.warnings || res.warnings.length === 0) {
           writeCachedResult(cacheKey, res)
@@ -954,6 +1011,7 @@ export default function PlanBuilderClient({
       <div className={styles.generateBar}>
         <div className={styles.generateLeft}>
           <button
+            ref={generateBtnRef}
             className={styles.generateBtn}
             onClick={handleGenerate}
             disabled={!canGenerate || isGenerating}
@@ -974,6 +1032,12 @@ export default function PlanBuilderClient({
       </div>
 
       {error && <div className={styles.errorBox} role="alert">{error}</div>}
+      {result && !includeMpu && (
+        <div className={styles.warningBox} role="status" data-testid="mpu-left-out">
+          MPU units are not in this plan, as you chose. Generate the plan again to plan them.
+        </div>
+      )}
+
       {result?.warnings?.map(warning => (
         <div key={warning} className={styles.warningBox} role="status">
           {warning}
@@ -1071,6 +1135,46 @@ export default function PlanBuilderClient({
             </aside>
           </div>
         </section>
+      )}
+
+      {mpuPromptOpen && (
+        <div className={styles.modalBackdrop} onClick={cancelMpuPrompt} data-testid="mpu-prompt-backdrop">
+          <div
+            className={styles.modal}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="mpu-prompt-title"
+            aria-describedby="mpu-prompt-text"
+            onClick={event => event.stopPropagation()}
+            onKeyDown={event => {
+              // keep the Tab key inside the box
+              if (event.key !== 'Tab') return
+              const buttons = Array.from(event.currentTarget.querySelectorAll('button'))
+              const first = buttons[0]
+              const last = buttons[buttons.length - 1]
+              if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
+              else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
+            }}
+          >
+            <h2 id="mpu-prompt-title" className={styles.modalTitle}>You did not add any MPU units</h2>
+            <p id="mpu-prompt-text" className={styles.modalText}>
+              MPU units are the general studies units of the university. If you add none, the system takes it that you have
+              not completed any MPU units.
+              Do you want the plan to include the MPU units for you to take, or leave them out?
+            </p>
+            <div className={styles.modalActions}>
+              <button ref={mpuPrimaryRef} type="button" className={styles.modalPrimary} onClick={() => chooseMpu(true)}>
+                Include the MPU units
+              </button>
+              <button type="button" className={styles.modalSecondary} onClick={() => chooseMpu(false)}>
+                Leave the MPU units out
+              </button>
+              <button type="button" className={styles.modalLink} onClick={cancelMpuPrompt}>
+                Cancel and add MPU units
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

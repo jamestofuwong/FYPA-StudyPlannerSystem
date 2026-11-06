@@ -26,6 +26,7 @@ import {
   blockedByRequisites,
   countElectiveSlotsNeeded,
   recommendElectives,
+  surplusNamedElectives,
 } from '../../shared/scheduling/electiveSlots';
 
 export interface PlannerPlanInput {
@@ -63,6 +64,11 @@ export interface PlannerPlanStart {
   probe: CustomPlanResult;
   /** Elective slots the student still owes, before a double major or minor takes any. */
   freeElectiveSlots: number;
+  /**
+   * Plain electives that the planner names but the student no longer owes, because other units they passed already fill
+   * the elective requirement. They are not in the pool.
+   */
+  droppedElectives: string[];
 }
 
 export interface PlannerPlanFinish {
@@ -97,6 +103,21 @@ function schedule(input: PlannerPlanInput, pool: SchedulableUnit[]): CustomPlanR
   );
 }
 
+/** Codes that some other unit in the list needs as a prerequisite (a corequisite is not counted, it can sit beside). */
+function prerequisiteCodesOf(units: SchedulableUnit[]): string[] {
+  const codes = new Set<string>();
+  for (const unit of units) {
+    for (const group of unit.requisiteGroups ?? []) {
+      for (const condition of group) {
+        if (condition.type === 'unit' && condition.unitCode && (condition.requisiteType ?? 'prerequisite') === 'prerequisite') {
+          codes.add(normaliseCode(condition.unitCode));
+        }
+      }
+    }
+  }
+  return [...codes];
+}
+
 export function startPlanForPlanner(input: PlannerPlanInput): PlannerPlanStart {
   const completedCodes = new Set(input.completedUnitCodes.map((code) => code.trim().toUpperCase()));
 
@@ -115,7 +136,7 @@ export function startPlanForPlanner(input: PlannerPlanInput): PlannerPlanStart {
   // answers that and is discarded; finishPlanForPlanner makes the plan returned.
   const probe = schedule(input, pool);
 
-  const freeElectiveSlots = countElectiveSlotsNeeded({
+  const slotInput = {
     electiveCount: input.electiveCount,
     plannerUnits: input.plannerUnits.map((row) => ({
       category: row.category,
@@ -123,11 +144,22 @@ export function startPlanForPlanner(input: PlannerPlanInput): PlannerPlanStart {
     })),
     electiveGroupCodes: input.electiveGroups.flat().map((unit) => unit.code),
     completedUnitCodes: [...completedCodes],
-    pool,
     blockedUnitCodes: blockedByRequisites(probe),
-  });
+  };
 
-  return { pool, completedCodes, probe, freeElectiveSlots };
+  // A plain elective is not compulsory. The student may have passed other units in its place, so what the planner
+  // names can be more than what is still owed: the surplus is not planned.
+  const requiredByOthers = prerequisiteCodesOf(pool);
+  const plannedSlots: Record<string, number | undefined> = {};
+  for (const unit of pool) plannedSlots[normaliseCode(unit.code)] = unit.plannedSlot;
+  const dropped = new Set(
+    surplusNamedElectives({ ...slotInput, pool, plannedSlots, requiredByOthers }).map(normaliseCode),
+  );
+  const kept = pool.filter((unit) => !dropped.has(normaliseCode(unit.code)));
+
+  const freeElectiveSlots = countElectiveSlotsNeeded({ ...slotInput, pool: kept });
+
+  return { pool: kept, completedCodes, probe, freeElectiveSlots, droppedElectives: pool.filter((u) => dropped.has(normaliseCode(u.code))).map((u) => u.code) };
 }
 
 export function finishPlanForPlanner(
@@ -138,6 +170,12 @@ export function finishPlanForPlanner(
    * already marked with their category. They stand in for elective slots.
    */
   swapped: SchedulableUnit[] = [],
+  /**
+   * Units that the student needs on top of the planner and that did not fit in a free elective slot, for example the
+   * rest of a second major. They take no slot. They are planned after the planner's own units, which can make the
+   * plan longer than the planner.
+   */
+  additional: SchedulableUnit[] = [],
 ): PlannerPlanFinish {
   const units = [...start.pool];
 
@@ -153,6 +191,13 @@ export function finishPlanForPlanner(
     if (slotsTaken >= start.freeElectiveSlots) break;
     if (!units.some((u) => normaliseCode(u.code) === code)) units.push(unit);
     slotsTaken++;
+  }
+
+  // Units that need no slot are added as they are, once each
+  for (const unit of additional) {
+    const code = normaliseCode(unit.code);
+    if (start.completedCodes.has(code) || units.some((u) => normaliseCode(u.code) === code)) continue;
+    units.push({ ...unit, recommended: true });
   }
 
   // Whatever the swapped units left free is filled from the planner's own groups
