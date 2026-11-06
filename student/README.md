@@ -34,8 +34,7 @@ A normal Next.js 16 (App Router) site for students (public pages and a plan buil
 ## Rules
 
 - Every page renders per request (`await connection()` in `app/layout.tsx`), because the Content-Security-Policy uses a nonce for each request (`proxy.ts` sets it on the request and the response). A static page has no nonce, its scripts are blocked, and nothing responds to clicks. Test it with `npm run test:e2e` (`e2e/student`, on a production build).
-- To empty the content and seed it again, use `npm run db:reset-content` (in `student/`). It reads `.env.production`, like `db:seed:prod`; add `-- --env-file <file>` to use another file. It is a dry run until you add `--confirm-host <host>`, with the host that the dry run printed. It empties units, planners, unit details and help content, and never the CMS accounts. A database that is not on this computer also needs `--i-have-a-backup`. `--seed` runs the seed afterwards. Never run it on the live site without a backup.
-- Save in the CMS, then call `revalidateStudentCache(tag)` so public pages show the new data.
+- Save in the CMS, then call `revalidateStudentCache(tag)` so public pages show the new data. The cached reads in `lib/catalog.ts` also expire after 10 minutes (`CACHE_SECONDS`), so a change made outside the CMS (a seed, a restore) shows on its own. Give every new cached read that time limit (a test checks it), and raise the `-vN` part of its key when old cached data must be ignored.
 - Schema changes need a migration in `student/prisma/migrations`. The deploy workflow migrates before it deploys.
 - Production needs different `CMS_JWT_SECRET` and database values from staging. Never commit `.env` files.
 - The student app has its own copy of React. Its Jest config maps `react` to `student/node_modules`. Do not run student tests with the root config.

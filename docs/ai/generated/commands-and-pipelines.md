@@ -52,7 +52,6 @@
 | `db:studio:prod` | `dotenv -e .env.production -- prisma studio` |
 | `db:seed` | `tsx --env-file .env prisma/seed.ts` |
 | `db:seed:prod` | `tsx --env-file .env.production prisma/seed.ts` |
-| `db:reset-content` | `tsx scripts/reset-content.ts --env-file .env.production` |
 
 ## GitHub Actions workflows
 

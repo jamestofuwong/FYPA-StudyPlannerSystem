@@ -61,4 +61,4 @@ Details are in [the copilot README](../../core/services/copilot/README.md). Shor
 
 ## User acceptance testing
 
-The plan and the form are in `docs/UAT.md` and `docs/UAT-form.html`. Both are generated from `docs/uat/uat-data.js` by `npm run docs:uat`. Edit the data file, not the two outputs. Every case points to a client requirement (R1 to R11), and the acceptance rule is: all Must cases pass and no Critical or Major defect is open.
+There are two plans. The desktop app: `docs/UAT.md` and `docs/UAT-form.html`, generated from `docs/uat/uat-data.js`. The student website (planners, units, plan builder and help; not the CMS): `docs/UAT-student.md` and `docs/UAT-student-form.html`, generated from `docs/uat/uat-student-data.js`. `npm run docs:uat` builds both (`node scripts/build-uat.js student` builds one). Edit the data file, not the outputs. `tests/unit/uat-data.test.ts` checks that each plan is consistent and that its outputs are built. Every case points to a client requirement (R1 to R11), and the acceptance rule is: all Must cases pass and no Critical or Major defect is open.
