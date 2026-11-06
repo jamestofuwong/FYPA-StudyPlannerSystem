@@ -12,16 +12,16 @@ Students ask advisors the same basic questions again and again: which planner fi
 |---|---|---|---|---|
 | S1 | Browse the study planners by course, major and intake year, and read the full plan, semester by semester. | Team proposal, client agreed (R11 of the main UAT plan) | Must | SC-01, SC-02 |
 | S2 | Look up a unit: its details, its requisites and when it runs, and open its official page on the university website. | Team proposal, client agreed (R11 of the main UAT plan) | Must | SC-03, SC-04, SC-05, SC-06 |
-| S3 | Build a personal study plan from a planner and the units already completed, and the plan follows the unit rules. | Team proposal, client agreed (R11 of the main UAT plan) | Must | SC-07, SC-08, SC-09 |
-| S4 | Find help without an advisor: the frequently asked questions, the contact details and the Heads of Department. | Team proposal, client agreed (R11 of the main UAT plan) | Must | SC-11 |
-| S5 | What a student enters stays private: the website does not store it. | Team proposal, client agreed (R11 of the main UAT plan) | Must | SC-10 |
+| S3 | Build a personal study plan from a planner and the units already completed, and the plan follows the unit rules. | Team proposal, client agreed (R11 of the main UAT plan) | Must | SC-07, SC-08, SC-09, SC-10 |
+| S4 | Find help without an advisor: the frequently asked questions, the contact details and the Heads of Department. | Team proposal, client agreed (R11 of the main UAT plan) | Must | SC-12 |
+| S5 | What a student enters stays private: the website does not store it. | Team proposal, client agreed (R11 of the main UAT plan) | Must | SC-11 |
 
 **Must** = a job that the website must do, or a rule that keeps data safe. Every test here is a Must test, and all must pass.
 
 ## 3. How it runs
 
 - **Who:** at least 3 students from different years, one team member who runs the session, one who takes notes.
-- **How long:** 11 tests (all Must) in one session of about 1.1 hours.
+- **How long:** 12 tests (all Must) in one session of about 1.2 hours.
 - **Where:** the staging copy of the website, never the production site. A student uses their own phone or computer.
 - **Method:** the facilitator reads each task. The tester does it and marks Pass, Fail, Blocked or N/A, with a note. The facilitator does not show how. Do not fix anything during the session.
 - **Acceptance rule:** the client accepts the website when **all tests pass and no Critical or Major defect is open**.
@@ -33,10 +33,11 @@ Students ask advisors the same basic questions again and again: which planner fi
 | Item | Use |
 |---|---|
 | Staging student website | The address of the staging copy (never the production site). The tests only read the website. They change no content. |
-| Planner of the data pack | Bachelor of Computer Science, Data Science, March 2026 intake. It has the units used in SC-02, SC-07 and SC-08. |
+| Planner of the data pack | Bachelor of Computer Science, Data Science, March 2026 intake. It has the units used in SC-02, SC-07, SC-08 and SC-09. |
 | Student X | A made-up student of that planner. Completed in Semester 1: COS10009, COS10026, COS10025, COS10003 and MPU3272. No real student record is used. |
 | Units of the data pack | COS10009 has full details and an official page. MPU3212 is an MPU unit, so it has no official button. SWE40001 has no details. For SC-06 also make up a code that does not exist, such as XYZ99999. |
-| Browsers | Two browsers, or one browser and a private window, for SC-10. |
+| Results file of Student X | The Excel file student-A.xlsx of the UAT student files: a made-up student of this planner with 15 completed units in 3 semesters (2026 March to 2027 March), used in SC-09. Also a file that is not Excel, such as a PDF, to try as a wrong file. |
+| Browsers | Two browsers, or one browser and a private window, for SC-11. |
 
 ## 5. Tests
 
@@ -129,11 +130,23 @@ Students ask advisors the same basic questions again and again: which planner fi
 2. Select Generate Study Plan.
 3. Change the intake year.
 
-**Expected:** A unit that was added is not offered in the search list again, so it cannot be added twice. The page says "5 units marked as completed". The summary shows Completed 5 units, and Remaining is 5 fewer than the number from SC-07. The five units show as completed in the plan. The change of the intake year removes the old plan, so the screen never shows a plan that does not match the choices.
+**Expected:** A unit that was added is not offered in the search list again, so it cannot be added twice. The page says "5 units marked as completed". The summary shows Completed 5 units, and Remaining is lower than the number from SC-07 (for the planner of the data pack, 25 instead of 29, because the elective unit fills an elective slot). The five units show as completed in the plan. The change of the intake year removes the old plan, so the screen never shows a plan that does not match the choices.
 
 **Result (Pass / Fail / Blocked / N/A):** &nbsp;&nbsp; **Notes:**
 
-### SC-09: The plan follows the rules
+### SC-09: Import the completed units from an Excel file
+
+**Requirement:** S3 | **Priority:** Must
+
+1. In the Plan Builder, choose the course, the major and the intake of Student X. Select Import from Excel and choose the results file of the data pack.
+2. Read the message, and the three semester tables under Units Completed.
+3. Select Generate Study Plan. Then choose a file that is not an Excel file (for example a PDF).
+
+**Expected:** The page says "Imported 15 units in 3 semesters", and that the file starts in 2026_MAR_S1. Semester 1, 2 and 3 hold five units each, the ones of the file in the order of its terms. The summary then shows Completed 15 units, and Remaining is 19 for the planner of the data pack (29 with no units). The file is read on the device: the page does not upload it. The PDF is refused with a message that the file must be an Excel .xlsx file, and the units already on the page stay.
+
+**Result (Pass / Fail / Blocked / N/A):** &nbsp;&nbsp; **Notes:**
+
+### SC-10: The plan follows the rules
 
 **Requirement:** S3 | **Priority:** Must
 
@@ -145,11 +158,11 @@ Students ask advisors the same basic questions again and again: which planner fi
 
 **Result (Pass / Fail / Blocked / N/A):** &nbsp;&nbsp; **Notes:**
 
-### SC-10: What the student enters is not stored
+### SC-11: What the student enters is not stored
 
 **Requirement:** S5 | **Priority:** Must
 
-1. Add completed units and generate a plan. Refresh the page.
+1. Add completed units, or import the results file, and generate a plan. Refresh the page.
 2. Open the website in a private window, or another browser.
 3. Close the tab and open the website again.
 4. (Facilitator) After the session, list the tables of the staging database.
@@ -158,7 +171,7 @@ Students ask advisors the same basic questions again and again: which planner fi
 
 **Result (Pass / Fail / Blocked / N/A):** &nbsp;&nbsp; **Notes:**
 
-### SC-11: Find help, and the right Head of Department
+### SC-12: Find help, and the right Head of Department
 
 **Requirement:** S4 | **Priority:** Must
 
@@ -178,7 +191,7 @@ Fill in the form `docs/UAT-student-form.html`. It has the tests, the defect log,
 |---|---|---|---|---|
 | | | | | |
 
-Must passed: _ of 11. Agreed passed: _ of 0. Open Critical or Major defects: _. Acceptance rule met: Yes / No.
+Must passed: _ of 12. Agreed passed: _ of 0. Open Critical or Major defects: _. Acceptance rule met: Yes / No.
 
 | Name | Role | Date | Signature |
 |---|---|---|---|

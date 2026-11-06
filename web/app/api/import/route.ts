@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import * as XLSX from 'xlsx-js-style';
 import { prisma } from '../../../../core/db/client';
 import { NOTICE_VERSION } from '../../../lib/privacyNoticeContent';
-import { parseResultsSheet } from '../../../lib/resultsSheet';
+import { parseResultsSheet } from '../../../../core/shared/resultsSheet';
 
 export async function POST(req: NextRequest) {
   // Server-side privacy gate — belt-and-suspenders behind the UI modal (REQ-PRI-101)

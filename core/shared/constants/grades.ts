@@ -116,6 +116,17 @@ export function resolveUnitOutcomes(
   return outcomes;
 }
 
+/** The planning state that one transcript row gives its unit, by the rules in the comment of resolveUnitStates. */
+export function unitStateOfRow(row: TranscriptRow | null | undefined): UnitState {
+  const outcome = classifyGrade(row?.grade);
+  const status = (row?.status ?? '').trim();
+  if (outcome === 'pass' || outcome === 'conceded_pass') return 'passed';
+  if (outcome === 'fail') return 'must_retake';
+  if (status === 'Current') return 'in_progress';
+  if (status === 'Complete') return 'passed';
+  return 'not_taken';
+}
+
 /**
  * Resolve the planning state of every unit in a transcript, combining the
  * grade code with the enrolment status:
@@ -142,15 +153,7 @@ export function resolveUnitStates(
     const code = normaliseUnitCode(row?.courseId);
     if (!code) continue;
 
-    const outcome = classifyGrade(row?.grade);
-    const status = (row?.status ?? '').trim();
-
-    let state: UnitState;
-    if (outcome === 'pass' || outcome === 'conceded_pass') state = 'passed';
-    else if (outcome === 'fail') state = 'must_retake';
-    else if (status === 'Current') state = 'in_progress';
-    else if (status === 'Complete') state = 'passed';
-    else state = 'not_taken';
+    const state = unitStateOfRow(row);
 
     const existing = states.get(code);
     if (existing === undefined || STATE_PRECEDENCE[state] > STATE_PRECEDENCE[existing]) {

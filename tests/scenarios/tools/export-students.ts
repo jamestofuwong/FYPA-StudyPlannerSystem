@@ -13,7 +13,7 @@ import * as XLSX from 'xlsx-js-style';
 import { loadScenarioData, closeScenarioDb } from '../support/db';
 import { Transcript, type Row } from '../support/transcript';
 import { buildScenarios } from '../scenarios';
-import { parseResultsSheet } from '../../../web/lib/resultsSheet';
+import { parseResultsSheet } from '../../../core/shared/resultsSheet';
 import { parseTermCode } from '../../../core/services/classEstimation/termCode';
 import { describeExpectation } from '../support/checks';
 
