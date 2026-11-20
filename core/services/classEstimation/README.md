@@ -14,7 +14,7 @@ Helps a Head of Department see how many students will take each unit next semest
 |---|---|
 | `estimationRecordBuilder.ts`, `scrapedStudentMapper.ts` | The one place where a transcript (from the portal or from a file) becomes an `EstimationRecord`. The source is recorded and never branched on, so the two paths cannot drift apart. The intake comes from the month of the earliest semester term (`termCode.ts`), not its S1/S2 suffix: `2024_SEP_S1` is an Aug/Sept 2024 intake. A `FEB_S2` first term is read as the previous Aug/Sept intake, with a warning. |
 | `courseDetector.ts` | Works out which course an imported batch belongs to. Each student votes for the course whose planners hold most of their units. |
-| `plannerCandidateResolver.ts`, `plannerCache.ts` | Turn a matching run into the candidate units that a student has not taken. Core and major-core units come from the matching result. Elective pools come from the database. `plannerCache` fetches each planner once per run. A student takes one seat per core or major-core unit: a unit listed in both categories counts once, and is left out of that student's elective pools. |
+| `plannerCandidateResolver.ts`, `plannerCache.ts` | Turn a matching run into the candidate units that a student has not taken. Core and major-core units come from the matching result. Elective pools come from the database. `plannerCache` fetches each planner once per run. A student takes one seat per core or major-core unit: a unit listed in both categories counts once, and is left out of that student's elective pools. Prescribed candidates come from every elective group of the planner, filled ones included, on purpose: preparing a seat too many is better than one too few. A unit in a prescribed pool is never also a free-elective candidate. Starred prescribed electives (`prescribed_elective` rows, which the matcher does not read) come from the planner itself: each unpassed one is a named seat, ranked like core. A failed planner read is not cached. |
 | `eligibilityEngine.ts`, `eligibilityFilter.ts` | Can this student take unit X in a future term? Reuses `canTake` from the scheduler. |
 | `unitRanker.ts` | Ranks core and major-core units and keeps the top ones up to the load cap: first what the planner puts in the student's slot for the target semester (counted from their intake), then failed units to retake, then any other owed unit, earliest slot first. Elective units are not ranked. Failed units are part of the grouping key. |
 | `electiveSplitter.ts` | Phase 6. Shares elective picks as fractions, because a pool of 12 does not tell which units a student picks. |
@@ -34,7 +34,12 @@ Helps a Head of Department see how many students will take each unit next semest
 - Round once, at the end. Every stage before it stays fractional.
 - The records of students are held in memory only (`estimationStore.ts`, a `globalThis` singleton, wiped by every new run). Only the aggregate run is saved (`estimationRunRepository`, tables `EstimationRun` and `EstimationRunUnit`). Never save per-student data.
 - Pass inputs to the eligibility engine as a named object. A positional change once shifted every argument silently.
+- WIL is assumed for every student (`defaultHasWIL: true`, it is compulsory) and never forecast itself. The matcher runs with `wilExemptionCount: 0`, because the planners already leave out the 2 electives WIL replaces.
 
 ## Tests
 
 `tests/unit/classEstimation` (one file per module), `tests/ui/class-estimation-memory.test.tsx`.
+
+## Known limitations
+
+The fixes made before handover, the future improvements and the limits outside the team's control (no official past enrolment data, no visa or graduation status, and others) are in [matching-and-estimation-fixes.md](../../../docs/matching-and-estimation-fixes.md).
