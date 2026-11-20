@@ -2,7 +2,9 @@ import type { Workflow, WorkflowContext, WorkflowResult } from '../types';
 import { searchStudents, fetchEnrollments, fetchDegreeAudit } from '../../portal/portalSessionService';
 import { runMatchingPipeline } from '../../matching/matchingService';
 import { selectEnrollment } from './enrollmentSelector';
-import type { PlannerTemplate, UnitMasterEntry, CourseType } from '../../../shared/types/matching';
+import type { CourseType } from '../../../shared/types/matching';
+import { buildPlannerTemplatesForMatching } from '../../matching/plannerTemplateBuilder';
+import { getCompletedUnitCodes } from '../../../shared/constants/grades';
 
 interface Input {
   studentId: string;
@@ -28,25 +30,6 @@ interface Output {
   plannerName: string;
   found: boolean;
   score: ScoreBreakdown | null;
-}
-
-const CATEGORY_PRIORITY: Record<string, number> = {
-  major_core: 5,
-  prescribed_elective: 4,
-  core: 3,
-  elective: 2,
-  wil: 1,
-};
-
-function toMatchingCategory(cat: string): UnitMasterEntry['category'] | null {
-  switch (cat) {
-    case 'core':                return 'core';
-    case 'major_core':          return 'majorCore';
-    case 'prescribed_elective': return 'prescribed';
-    case 'elective':            return 'freeElective';
-    case 'wil':                 return 'WIL';
-    default:                    return null;
-  }
 }
 
 export const getPlannerScoreBreakdownWorkflow: Workflow<Input, Output> = {
@@ -83,6 +66,7 @@ export const getPlannerScoreBreakdownWorkflow: Workflow<Input, Output> = {
     }
 
     const plannerRepository = await import('../../../db/repositories/plannerRepository');
+    const { buildUnitMasterTable } = await import('../../matching/unitMasterTableBuilder');
     const [dbPlanners, targetPlanner] = await Promise.all([
       plannerRepository.getAllPlannersWithUnits(),
       plannerRepository.getPlannerById(params.plannerId),
@@ -104,47 +88,12 @@ export const getPlannerScoreBreakdownWorkflow: Workflow<Input, Output> = {
 
       const scraped = await fetchDegreeAudit(student.db_id, enrollment.EnrollId, params.studentId);
 
-      // Build unit master table
-      const masterMap = new Map<string, { category: string; priority: number }>();
-      for (const p of dbPlanners) {
-        for (const tu of p.units) {
-          if (!tu.unit) continue;
-          const code = tu.unit.unit_code;
-          const priority = CATEGORY_PRIORITY[tu.category] ?? 0;
-          const existing = masterMap.get(code);
-          if (!existing || priority > existing.priority) {
-            masterMap.set(code, { category: tu.category, priority });
-          }
-        }
-      }
+      // The same builders as the dashboard and class estimation.
+      const formattedPlanners = buildPlannerTemplatesForMatching(dbPlanners);
+      const unitMasterTable = await buildUnitMasterTable(dbPlanners);
 
-      const unitMasterTable: UnitMasterEntry[] = [];
-      for (const [code, entry] of masterMap) {
-        const category = toMatchingCategory(entry.category);
-        if (!category) continue;
-        unitMasterTable.push({ code, name: '', category, creditHours: 12.5, subjectTags: [], requisites: [] });
-      }
-
-      // Format all planners for the matching pipeline
-      const formattedPlanners: PlannerTemplate[] = dbPlanners.map((p) => ({
-        plannerID: p.id,
-        majorName: p.major?.name ?? '',
-        intakeYear: p.intake_year,
-        intakeSemester: ((p.intake_month ?? 1) >= 7 ? 2 : 1) as 1 | 2,
-        courseType: (p.course_type as CourseType) || 'degree',
-        durationSemesters: p.duration_semesters || 8,
-        requiredCore: p.units.filter((u) => u.category === 'core' && u.unit).map((u) => u.unit!.unit_code),
-        requiredMajorCore: new Set(p.units.filter((u) => u.category === 'major_core' && u.unit).map((u) => u.unit!.unit_code)),
-        prescribedElectiveCategories: p.elective_groups.map((eg) => ({
-          categoryCode: eg.id,
-          pool: new Set(eg.units.map((egu) => egu.unit.unit_code)),
-          slots: 1,
-        })),
-        freeElectivePool: new Set(p.units.filter((u) => u.category === 'elective' && u.unit).map((u) => u.unit!.unit_code)),
-        freeElectiveSlotsRequired: p.units.filter((u) => u.category === 'elective').length,
-      }));
-
-      const completedUnitCodes = scraped.courseList.map((u) => u.courseId);
+      // Passed units only, as everywhere else: a failed or withdrawn row does not satisfy a requirement.
+      const completedUnitCodes = getCompletedUnitCodes(scraped.courseList);
       const intakeSemester = ((targetPlanner.intake_month ?? 1) >= 7 ? 2 : 1) as 1 | 2;
 
       const result = runMatchingPipeline({
