@@ -61,4 +61,14 @@ describe('plannerCache', () => {
     await Promise.all([first, second]);
     expect(getPlannerById).toHaveBeenCalledTimes(1);
   });
+
+  // Regression: a failed read stayed cached for the whole run, so one database hiccup failed every later
+  // student on that planner.
+  test('a failed read is not cached, so the next call tries the database again', async () => {
+    getPlannerById.mockRejectedValueOnce(new Error('connection reset')).mockResolvedValueOnce({ id: 'p1' } as never);
+
+    await expect(getCachedPlannerById('p1')).rejects.toThrow('connection reset');
+    await expect(getCachedPlannerById('p1')).resolves.toEqual({ id: 'p1' });
+    expect(getPlannerById).toHaveBeenCalledTimes(2);
+  });
 });
