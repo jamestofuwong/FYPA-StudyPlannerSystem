@@ -39,6 +39,25 @@ describe('rankAndCapUnits', () => {
     expect(result.picked.map((u) => u.code)).toEqual(['EARLIEST', 'MIDDLE', 'LATER']);
   });
 
+  // A starred prescribed elective carries no pool count: it is a named unit with a slot, ranked like core.
+  test('ranks a named prescribed unit by its slot and leaves pool units to the splitter', async () => {
+    getPlannerById.mockResolvedValue({
+      units: [
+        { year_level: 2, semester: 1, unit: { unit_code: 'CORE' } },
+        { year_level: 1, semester: 1, unit: { unit_code: 'STARRED' } },
+      ],
+    } as never);
+
+    const result = await rankAndCapUnits([
+      { code: 'CORE', category: 'core' },
+      { code: 'STARRED', category: 'prescribed' },
+      { code: 'POOL1', category: 'prescribed', poolSlotsRemaining: 1 },
+    ], 'p1', 10);
+
+    expect(result.picked.map((u) => u.code)).toEqual(['STARRED', 'CORE']);
+    expect(result.poolCandidates.map((u) => u.code)).toEqual(['POOL1']);
+  });
+
   // UAT TC-23: follow the planner, then failed units if there is room, then any other owed unit.
   test('ranks the planner\'s units for this semester first, then failed units, then other owed units', async () => {
     getPlannerById.mockResolvedValue({

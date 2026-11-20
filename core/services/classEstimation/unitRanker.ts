@@ -1,10 +1,10 @@
 // ============================================================
-// Ranks and caps a student's eligible candidate units for the semester being estimated. Core and major core
-// units have an ordering signal, their (year_level, semester) slot on the matched planner's TemplateUnit
-// rows, so the earliest-owed units are ranked first and only the top loadCap are kept, everything past the
-// cap is dropped for this run rather than carried forward. Prescribed and free elective units are pool-based
-// with no slot data at all (see plannerCandidateResolver.ts), so they're not ranked or capped here at all,
-// electiveSplitter.ts (Phase 4) handles distributing their remaining slots fractionally across the pool
+// Ranks and caps a student's eligible candidate units for the semester being estimated. Named units (core,
+// major core and starred prescribed electives) have an ordering signal, their (year_level, semester) slot on the
+// matched planner's TemplateUnit rows, so the earliest-owed units are ranked first and only the top loadCap are
+// kept, everything past the cap is dropped for this run rather than carried forward. Pool units (an elective
+// group or the free-elective list, marked by poolSlotsRemaining) have no slot, so they're not ranked or capped
+// here, electiveSplitter.ts (Phase 4) handles distributing their remaining slots fractionally across the pool
 // instead of picking specific units.
 // ============================================================
 
@@ -55,8 +55,10 @@ export async function rankAndCapUnits(
   loadCap: number,
   { nextSlot, failed = new Set() }: RankPriority = {},
 ): Promise<RankedCandidates> {
-  const rankable = eligible.filter((c) => c.category === 'core' || c.category === 'majorCore');
-  const poolCandidates = eligible.filter((c) => c.category === 'prescribed' || c.category === 'freeElective');
+  // Named units (core, major core, starred prescribed electives) have a slot and are ranked. Pool units carry a
+  // pool count instead and go to electiveSplitter.ts.
+  const rankable = eligible.filter((c) => c.poolSlotsRemaining === undefined);
+  const poolCandidates = eligible.filter((c) => c.poolSlotsRemaining !== undefined);
 
   const slotByCode = await buildSlotLookup(plannerId);
 
