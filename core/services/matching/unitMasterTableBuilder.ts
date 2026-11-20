@@ -55,35 +55,41 @@ type RawRequisiteGroup = {
   }>;
 };
 
-// Flattens a unit's requisite_groups (OR of AND) into the matching domain's flat
-// Requisite[]. This drops "credit_points" conditions, since Requisite has no
-// representation for them. That's fine here: this flat list only feeds the
-// retrospective checkRequisites() in profileBuilder.ts. The forward-looking
-// eligibility engine in classEstimation reads requisite_groups straight from
-// the DB instead, so credit-point requisites aren't lost for eligibility.
+// Flattens a unit's requisite_groups (OR of AND) into the matching domain's flat Requisite[]. A flat list can
+// only say "all of these", so it keeps the conditions found in EVERY group: those hold whichever alternative a
+// student took. A condition from only one alternative is left out, otherwise a student who met the rule through
+// another alternative would be flagged. "credit_points" conditions are dropped too, since Requisite has no
+// representation for them. This list only feeds the retrospective checkRequisites() in profileBuilder.ts. The
+// forward-looking eligibility engine in classEstimation reads requisite_groups straight from the DB, so it
+// keeps both the alternatives and the credit-point rules.
 function flattenRequisites(requisiteGroups: RawRequisiteGroup[]): Requisite[] {
-  const flat: Requisite[] = [];
-  for (const group of requisiteGroups ?? []) {
+  const perGroup = (requisiteGroups ?? []).map((group) => {
+    const flat = new Map<string, Requisite>();
     for (const condition of group.conditions ?? []) {
       if (condition.type !== 'unit') continue;
       const unitCode = condition.unit?.unit_code;
       if (!unitCode) continue;
       const type = toMatchingRequisiteType(condition.requisite_type);
       if (!type) continue;
-      flat.push({ type, unitCode });
+      flat.set(`${type}:${unitCode}`, { type, unitCode });
     }
-  }
-  return flat;
+    return flat;
+  });
+  if (perGroup.length === 0) return [];
+  return [...perGroup[0]].filter(([key]) => perGroup.every((group) => group.has(key))).map(([, req]) => req);
 }
 
 // Builds a real UnitMasterEntry[] for runMatchingPipeline(), covering every unit
 // that appears in at least one planner template. Category is resolved by the
 // same cross-planner CATEGORY_PRIORITY dedup the planner-template builder uses,
-// so both stay consistent with each other.
-export async function buildUnitMasterTable(): Promise<UnitMasterEntry[]> {
+// so both stay consistent with each other. A caller that has already loaded the planners passes them in, so
+// they are not read from the database a second time.
+export async function buildUnitMasterTable(
+  loadedPlanners?: Awaited<ReturnType<typeof plannerRepository.getAllPlannersWithUnits>>,
+): Promise<UnitMasterEntry[]> {
   const [allUnits, dbPlanners] = await Promise.all([
     unitRepository.getAllUnits(),
-    plannerRepository.getAllPlannersWithUnits(),
+    loadedPlanners ?? plannerRepository.getAllPlannersWithUnits(),
   ]);
 
   const categoryByCode = new Map<string, { category: string; priority: number }>();

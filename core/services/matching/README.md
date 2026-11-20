@@ -24,11 +24,13 @@ Finds the major of a student by comparing the units that they passed with every 
 ## Rules and invariants
 
 - Weights are in `DEFAULT_CONFIG` (`core/shared/types/matching.ts`): core 0.40, major core 0.30, prescribed electives 0.20, free electives 0.05, work placement 0.05. They must add up to 1. `validateConfig` rejects any other sum.
-- Planners are ranked by the major-core score. A second major needs a score at or above `secondMajorThreshold` (0.70).
+- Planners are ranked by the major-core score. The second major is the best-ranked planner of a different major name than the primary (never the primary planner itself, even under a manual override), and it needs a score at or above `secondMajorThreshold` (0.70).
 - No major is reported when the best major score is below `noMajorThreshold` (0.30). With `requireMajorEvidence`, no major is reported when no unit that the student took belongs to only one major. All majors share the core units, so a first-year transcript says nothing about the major (`majorEvidence.ts`).
 - `secondMajorThreshold` is stored as text in `system_config`. Older rows hold a percentage ("70"), the Settings page writes a fraction ("0.7"). `parseSecondMajorThreshold` reads both. Keep it.
 - A unit's category, when it is in several planners, resolves by priority in `dashboardMatch.ts` (major core wins). MPU units are excluded from scoring.
 - Do not add a database call inside `runMatchingPipeline`.
+- Build planners and units only with `buildPlannerTemplatesForMatching` and `buildUnitMasterTable`. The dashboard, class estimation and the copilot's major, score and graduation workflows use them. `get_student_prerequisite_violations` still has its own copy, pending its owner (see the known limitations document). Copies of this mapping drifted apart before, and the copilot gave different answers from the dashboard.
+- `buildUnitMasterTable` flattens requisites to the conditions shared by every "or" alternative, so `checkRequisites` never flags a student who met a rule through another alternative. It can miss a violation of an "or" rule.
 
 ## How to change it
 
@@ -41,3 +43,7 @@ The 50-student scenario suite (`tests/scenarios`, needs `SCENARIO_DB_URL`) check
 ## Tests
 
 `tests/unit/matching`, `tests/ui/matching`, `tests/performance/matching.perf.test.ts` (300 planners in under 5 s).
+
+## Known limitations
+
+The fixes made before handover, the future improvements and the limits outside the team's control are in [matching-and-estimation-fixes.md](../../../docs/matching-and-estimation-fixes.md).

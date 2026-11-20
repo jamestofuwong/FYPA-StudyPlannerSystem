@@ -4,7 +4,7 @@
 // ============================================================
 
 // ------------------------------------------------------------------
-// Course type - determines which planners are eligible for a student
+// Course type - carried through for display. plannerFilter.ts does not filter on it (see known limitations).
 // ------------------------------------------------------------------
 export type CourseType =
   | "degree"       // e.g. Bachelor of Computer Science (3 years)
@@ -89,7 +89,7 @@ export interface UnitMasterEntry {
 // ------------------------------------------------------------------
 export interface RawStudentInput {
   studentID: string;
-  courseType: CourseType;         // determines which planners are eligible for this student
+  courseType: CourseType;         // display only: plannerFilter.ts does not filter on it
   intakeYear: number;
   intakeSemester: 1 | 2;
   currentSemester: 1 | 2;         // used for unit offering availability checks
@@ -136,7 +136,7 @@ export interface PrescribedElectiveCategory {
 export interface PlannerTemplate {
   plannerID: string;
   majorName: string;
-  courseType: CourseType;         // must match student courseType to be eligible
+  courseType: CourseType;         // not used to filter planners, see RawStudentInput.courseType
   intakeYear: number;
   intakeSemester: 1 | 2;
   durationSemesters: number;      // e.g. 6 for 3-year degree

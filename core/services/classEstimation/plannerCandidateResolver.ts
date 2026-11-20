@@ -13,7 +13,7 @@
 // ============================================================
 
 import { getCachedPlannerById } from './plannerCache';
-import { getPrescribedPoolCodes, getFreeElectivePoolCodes } from '../matching/plannerTemplateBuilder';
+import { getPrescribedPoolCodes, getFreeElectivePoolCodes, getStarredElectiveCodes } from '../matching/plannerTemplateBuilder';
 import type { MatchingServiceResult } from '../matching/matchingService';
 import type { CandidateUnit } from '../../shared/types/classEstimation';
 
@@ -51,15 +51,8 @@ export async function resolveCandidateUnits(
   const completed = new Set(completedUnitCodes.map((code) => code.trim().toUpperCase()));
   const candidates: CandidateUnit[] = [];
 
-  // scoringEngine.ts does subtract completed units from these lists, but it subtracts profile.completedCore
-  // and profile.completedMajorCore, which are built by categorising each of the student's units with the ONE
-  // global category unitMasterTableBuilder.ts resolved for it across every planner (major_core beats
-  // prescribed_elective beats core). A unit that is core in the matched planner but major_core in some other
-  // planner therefore lands in completedMajorCore, never in completedCore, so the matched planner's
-  // missingCore still lists it even though the student has passed it. Nine of the 65 units in the loaded
-  // planners sit in more than one category, COS20007 and COS10003 among them, so this is not a corner case.
-  // Filtering against the raw completed set here is category-blind and cannot be fooled that way.
-  // The underlying scoring bug is not fixed here, it also depresses matchPct and belongs to /api/match.
+  // scoringEngine.ts already builds these lists from the student's whole completed set. The completed check
+  // below is kept as a guard, since it is category-blind and cheap.
   // A required unit is owed once per student. A code listed as both core and major core, or also sitting in an
   // elective pool, would otherwise put the same student in that class twice. The first, stricter category wins.
   const named = new Set<string>();
@@ -75,8 +68,19 @@ export async function resolveCandidateUnits(
     }
   }
 
+  // Starred prescribed electives, which the matcher does not read. Each unpassed one is a whole seat on that unit,
+  // in the semester the planner puts it. A student who picks another unit from the approved list is still counted
+  // here: that over-prepares the starred unit, on purpose, and keeps the student's number of seats right.
+  for (const code of new Set(getStarredElectiveCodes(planner))) {
+    if (completed.has(code) || named.has(code)) continue;
+    named.add(code);
+    candidates.push({ code, category: 'prescribed' });
+  }
+
   const prescribedSlots = payload.primaryMajor.breakdown.prescribed.missingSlots ?? 0;
   if (prescribedSlots > 0) {
+    // Every group of the planner, filled or not, on purpose: which elective a student picks is unknown, so the
+    // forecast leans towards preparing a seat too many rather than one too few.
     for (const code of new Set(getPrescribedPoolCodes(planner))) {
       if (completed.has(code) || named.has(code)) continue;
       candidates.push({ code, category: 'prescribed', poolSlotsRemaining: prescribedSlots });
@@ -85,8 +89,10 @@ export async function resolveCandidateUnits(
 
   const freeElectiveSlots = payload.primaryMajor.breakdown.freeElective.missingSlots ?? 0;
   if (freeElectiveSlots > 0) {
+    // Same rule as scoringEngine.ts: a unit in a prescribed pool never also counts as a free elective.
+    const prescribedPool = new Set(getPrescribedPoolCodes(planner));
     for (const code of new Set(getFreeElectivePoolCodes(planner))) {
-      if (completed.has(code) || named.has(code)) continue;
+      if (completed.has(code) || named.has(code) || prescribedPool.has(code)) continue;
       candidates.push({ code, category: 'freeElective', poolSlotsRemaining: freeElectiveSlots });
     }
   }
@@ -138,22 +144,29 @@ export async function resolveCommonCoreUnits(
   // both would leave a first-year with nothing predicted at all. The best-scoring planner decides the course:
   // a first-year transcript is far closer to its own course's planners than to another course's.
   const course = courseName(planner);
-  const sameCourse: typeof ranked = [];
+  const sameCourse: Array<{ record: (typeof ranked)[number]; starred: string[] }> = [];
   for (const record of ranked) {
     const candidate = await getCachedPlannerById(record.plannerID);
-    if (candidate && courseName(candidate) === course) sameCourse.push(record);
+    if (candidate && courseName(candidate) === course) {
+      sameCourse.push({ record, starred: getStarredElectiveCodes(candidate).map((code) => code.trim().toUpperCase()) });
+    }
   }
 
   // A unit is only proposed if EVERY candidate planner in that course still wants it from this student. One
-  // planner having already had it satisfied, or not requiring it at all, is enough to leave it out.
-  const owedByAll = sameCourse
-    .map((record) => new Set(record.missingCore.map((code) => code.trim().toUpperCase())))
-    .reduce((shared, next) => new Set([...shared].filter((code) => next.has(code))));
+  // planner having already had it satisfied, or not requiring it at all, is enough to leave it out. Starred
+  // prescribed electives count too: COS10003 is a starred Year 1 unit in every major.
+  const shared = (lists: string[][]) => lists
+    .map((list) => new Set(list.map((code) => code.trim().toUpperCase())))
+    .reduce((all, next) => new Set([...all].filter((code) => next.has(code))));
+  const coreByAll = shared(sameCourse.map(({ record }) => record.missingCore));
+  const starredByAll = shared(sameCourse.map(({ starred }) => starred));
 
-  const candidates: CandidateUnit[] = [...owedByAll]
-    .filter((code) => !completed.has(code))
-    .sort()
-    .map((code) => ({ code, category: 'core' as const }));
+  const owed = (codes: Set<string>, category: 'core' | 'prescribed'): CandidateUnit[] =>
+    [...codes].filter((code) => !completed.has(code)).sort().map((code) => ({ code, category }));
+  const candidates: CandidateUnit[] = [
+    ...owed(coreByAll, 'core'),
+    ...owed(new Set([...starredByAll].filter((code) => !coreByAll.has(code))), 'prescribed'),
+  ];
 
   return { plannerId, candidates, basis: 'commonCore' };
 }

@@ -17,6 +17,9 @@ export function getCachedPlannerById(plannerId: string): Promise<PlannerWithUnit
   if (!cached) {
     cached = plannerRepository.getPlannerById(plannerId);
     cache.set(plannerId, cached);
+    // A failed read is forgotten so the next student retries it, instead of the whole run failing on one blip.
+    const entry = cached;
+    entry.catch(() => { if (cache.get(plannerId) === entry) cache.delete(plannerId); });
   }
   return cached;
 }

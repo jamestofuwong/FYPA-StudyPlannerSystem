@@ -137,14 +137,14 @@ describe('runEstimationPreview', () => {
     expect(summary.pickedByUnit).toEqual([{ code: 'COS30008', students: 1 }, { code: 'COS30049', students: 1 }]);
   });
 
-  // With defaultHasWIL on (the shipped default), every student is treated as WIL-exempt, and the matching pipeline waives 2 of
-  // their free elective slots. Here that leaves 0 slots owed, so FREE1 is never even a candidate, which under-counts free
-  // electives for any student who really hasn't got WIL approval.
-  test('a WIL-exempt student has free elective slots waived, so no free elective candidate is produced', async () => {
+  // Regression: with defaultHasWIL on (the shipped default) the matcher waived 2 free electives a second time. The
+  // planners already leave out the 2 electives WIL replaces (the PDF: "WIL ... equivalent to 2 elective units"), so the
+  // listed free electives are what a student owes whether or not WIL is assumed.
+  test('assuming WIL does not waive any of the free electives the planner lists', async () => {
     const { students } = await runEstimationPreview([record('S1', scrapedStudent(), true)], { targetTerm: 2, targetYear: 2027, loadCap: 4, retentionRate: 1, newIntakeCount: 0 });
     const [s] = students;
-    expect(s.candidateCount).toBe(3);
-    expect([...s.picked, ...s.ineligible].some((u) => u.code === 'FREE1')).toBe(false);
+    expect(s.candidateCount).toBe(4);
+    expect(s.ineligible).toEqual(expect.arrayContaining([{ code: 'FREE1', category: 'freeElective', reason: 'requisites-unmet' }]));
   });
 
   test('a target term flips which units are offered, so eligibility changes with it', async () => {

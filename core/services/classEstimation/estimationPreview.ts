@@ -300,7 +300,7 @@ export async function runEstimationPreview(
   const course = detectBatchCourse(records, dbPlanners);
   const coursePlanners = course.course ? dbPlanners.filter((planner) => courseOf(planner) === course.course) : dbPlanners;
   const planners = buildPlannerTemplatesForMatching(coursePlanners);
-  const unitMasterTable = await buildUnitMasterTable();
+  const unitMasterTable = await buildUnitMasterTable(dbPlanners);
 
   // Elective weighting is cohort-wide, so it is counted once over every record before any student is run,
   // not recomputed per student.
@@ -442,7 +442,9 @@ async function previewStudent(
       student: rawInput,
       planners,
       unitMasterTable,
-      config: { preferIntakeYear: false },
+      // wilExemptionCount 0: WIL is assumed for every student (it is compulsory), and the planners already leave out
+      // the 2 electives it replaces, so the matcher must not waive 2 more of the free electives they list.
+      config: { preferIntakeYear: false, wilExemptionCount: 0 },
     });
     base.matchStatus = matchResult.payload.status;
 
@@ -510,7 +512,7 @@ async function previewStudent(
     base.picked = ranked.picked.map((u) => ({
       code: u.code, category: u.category, yearLevel: u.yearLevel, semester: u.semester,
     }));
-    base.droppedByLoadCap = eligible.filter((c) => c.category === 'core' || c.category === 'majorCore').length - ranked.picked.length;
+    base.droppedByLoadCap = eligible.filter((c) => c.poolSlotsRemaining === undefined).length - ranked.picked.length;
     base.poolCandidates = {
       prescribed: ranked.poolCandidates.filter((c) => c.category === 'prescribed').length,
       freeElective: ranked.poolCandidates.filter((c) => c.category === 'freeElective').length,

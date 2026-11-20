@@ -21,3 +21,30 @@ describe('MajorDetector tie-breakers and overrides', () => {
     warnSpy.mockRestore();
   });
 });
+
+// Regression: the second major was simply rank 2, so it could be the planner the primary major came from, or
+// another version of the same major.
+describe('MajorDetector second major', () => {
+  const config = { noMajorThreshold: 0.1, secondMajorThreshold: 0.5 } as any;
+  const rec = (plannerID: string, majorName: string, majorCoreScore: number, matchPct: number) =>
+    ({ plannerID, majorName, majorCoreScore, matchPct }) as any;
+
+  test('is never the planner a manual override made the primary major', () => {
+    const result = detectMajors([rec('a', 'Alpha', 1, 90), rec('b', 'Beta', 0.9, 85)], config, { manualOverride: 'b' } as any);
+    expect(result.primaryMajor?.plannerID).toBe('b');
+    expect(result.secondMajor?.plannerID).toBe('a');
+  });
+
+  test('skips other planner versions of the primary major', () => {
+    const result = detectMajors(
+      [rec('a1', 'Alpha', 1, 90), rec('a2', 'Alpha', 0.95, 88), rec('b', 'Beta', 0.9, 80)], config, {} as any,
+    );
+    expect(result.primaryMajor?.plannerID).toBe('a1');
+    expect(result.secondMajor?.plannerID).toBe('b');
+  });
+
+  test('is still held to the threshold', () => {
+    const result = detectMajors([rec('a1', 'Alpha', 1, 90), rec('a2', 'Alpha', 0.95, 88), rec('b', 'Beta', 0.9, 40)], config, {} as any);
+    expect(result.secondMajor).toBeNull();
+  });
+});

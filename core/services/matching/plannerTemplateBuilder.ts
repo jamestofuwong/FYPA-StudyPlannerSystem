@@ -56,6 +56,14 @@ export function getFreeElectivePoolCodes(planner: PlannerUnitsSource): string[] 
     .map((u) => u.unit!.unit_code);
 }
 
+// TemplateUnit rows with category 'prescribed_elective': the starred units the planner names in a slot. The matching
+// pipeline does not read them (see the note at the top); class estimation gives each unpassed one a seat.
+export function getStarredElectiveCodes(planner: PlannerUnitsSource): string[] {
+  return planner.units
+    .filter((u) => u.category === 'prescribed_elective' && u.unit)
+    .map((u) => u.unit!.unit_code);
+}
+
 export function buildPlannerTemplatesForMatching(dbPlanners: DbPlannerWithUnits[]): PlannerTemplate[] {
   return dbPlanners.map((p) => ({
     plannerID: p.id,

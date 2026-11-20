@@ -91,6 +91,43 @@ describe('buildUnitMasterTable', () => {
     expect(entry.requisites).toEqual([{ type: 'concurrent', unitCode: 'COS20005' }]);
   });
 
+  // Regression: the groups are alternatives ("A or B"), but every condition of every group was listed, so a
+  // student who took only A was flagged for missing B. Only a condition common to every group is required.
+  test('keeps only the requisites shared by every alternative group', async () => {
+    getAllUnits.mockResolvedValue([
+      {
+        id: 'u1', unit_code: 'COS30019', unit_name: 'AI', offerings: [], prerequisite: '',
+        requisites: [
+          { conditions: [
+            { type: 'unit', requisite_type: 'prerequisite', unit: { unit_code: 'COS10009' } },
+            { type: 'unit', requisite_type: 'antirequisite', unit: { unit_code: 'COS30099' } },
+          ] },
+          { conditions: [
+            { type: 'unit', requisite_type: 'prerequisite', unit: { unit_code: 'COS10010' } },
+            { type: 'unit', requisite_type: 'antirequisite', unit: { unit_code: 'COS30099' } },
+          ] },
+        ],
+      },
+    ] as never);
+    getAllPlannersWithUnits.mockResolvedValue([
+      { id: 'p1', units: [{ unit: { unit_code: 'COS30019' }, category: 'major_core' }] },
+    ] as never);
+
+    const [entry] = await buildUnitMasterTable();
+    expect(entry.requisites).toEqual([{ type: 'antirequisite', unitCode: 'COS30099' }]);
+  });
+
+  // Planners already loaded by the caller are used as they are, not read from the database again.
+  test('uses planners passed in instead of reading them again', async () => {
+    getAllUnits.mockResolvedValue([
+      { id: 'u1', unit_code: 'COS10009', unit_name: 'X', offerings: [], prerequisite: '', requisites: [] },
+    ] as never);
+
+    const table = await buildUnitMasterTable([{ id: 'p1', units: [{ unit: { unit_code: 'COS10009' }, category: 'core' }] }] as never);
+    expect(table.map((e) => e.code)).toEqual(['COS10009']);
+    expect(getAllPlannersWithUnits).not.toHaveBeenCalled();
+  });
+
   // A unit sitting in the global Unit catalogue but never attached to any planner has no category to resolve, so it can't be scored and should
   // be left out entirely rather than included with a guessed category.
   test('excludes units not placed in any planner', async () => {

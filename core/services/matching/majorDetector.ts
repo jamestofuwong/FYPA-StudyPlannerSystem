@@ -102,7 +102,6 @@ function assignMajors(
   }
 
   const rank1 = ranked[0];
-  const rank2 = ranked[1] ?? null;
 
   // No major detected: rank-1 matchPct is below noMajorThreshold
   if (rank1.matchPct / 100 < config.noMajorThreshold) {
@@ -125,22 +124,22 @@ function assignMajors(
     };
   }
 
-  // Second major: rank-2 exists and its matchPct meets secondMajorThreshold
-  const secondMajor =
-    rank2 && rank2.matchPct / 100 >= config.secondMajorThreshold
-      ? rank2
-      : null;
-
   // Manual override: show override name in display but preserve algorithm result
-  if (manualOverride) {
-  const overrideTarget = ranked.find((r) => r.plannerID === manualOverride);
-
-  if (!overrideTarget) {
+  const overrideTarget = manualOverride ? ranked.find((r) => r.plannerID === manualOverride) : undefined;
+  if (manualOverride && !overrideTarget) {
     console.warn(
       `[MajorDetector] Override plannerID="${manualOverride}" not found in ranked results. ` +
       `Falling back to algorithm result.`
     );
-  } else {
+  }
+  const primary = overrideTarget ?? rank1;
+
+  // Second major: the best-ranked planner of a different major that meets secondMajorThreshold. Plain rank 2
+  // could be the overridden primary itself, or another intake version of the primary's own major.
+  const next = ranked.find((r) => r.majorName !== primary.majorName);
+  const secondMajor = next && next.matchPct / 100 >= config.secondMajorThreshold ? next : null;
+
+  if (overrideTarget) {
     return {
       primaryMajor: overrideTarget,
       secondMajor,
@@ -150,7 +149,6 @@ function assignMajors(
       algorithmPrimary: rank1,
     };
   }
-}
 
   return {
     primaryMajor: rank1,

@@ -151,6 +151,69 @@ describe('resolveCandidateUnits', () => {
     ]);
   });
 
+  // Deliberate: owed slots are spread over every group, filled ones included. Which elective a student picks is
+  // unknown, and preparing a seat too many is better than one too few.
+  test('the prescribed pool spans every elective group, including ones the student has filled', async () => {
+    getPlannerById.mockResolvedValue({
+      units: [],
+      elective_groups: [
+        { id: 'gA', units: [{ unit: { unit_code: 'A1' } }, { unit: { unit_code: 'A2' } }] },
+        { id: 'gB', units: [{ unit: { unit_code: 'B1' } }, { unit: { unit_code: 'B2' } }] },
+      ],
+    } as never);
+
+    const result = await resolveCandidateUnits(
+      matchResult({ breakdown: breakdown({ prescribed: { matched: 1, required: 2, missingSlots: 1 } }) }),
+      ['A1'],
+    );
+
+    expect(result?.candidates.map((c) => c.code)).toEqual(['A2', 'B1', 'B2']);
+  });
+
+  // Regression: starred units (category prescribed_elective, with a slot) were read by nothing, so they never got a
+  // seat. Each unpassed one is now a whole seat on that unit, with no pool count, so the ranker treats it as named.
+  test('a starred prescribed elective the student has not passed is a named candidate', async () => {
+    getPlannerById.mockResolvedValue({
+      units: [
+        { category: 'prescribed_elective', unit: { unit_code: 'COS10003' } },
+        { category: 'prescribed_elective', unit: { unit_code: 'COS30019' } },
+      ],
+      elective_groups: [{ units: [{ unit: { unit_code: 'COS30019' } }, { unit: { unit_code: 'POOL1' } }] }],
+    } as never);
+
+    const result = await resolveCandidateUnits(
+      matchResult({ breakdown: breakdown({ prescribed: { matched: 0, required: 1, missingSlots: 1 } }) }),
+      ['COS10003'],
+    );
+
+    expect(result?.candidates).toEqual([
+      { code: 'COS30019', category: 'prescribed' },
+      { code: 'POOL1', category: 'prescribed', poolSlotsRemaining: 1 },
+    ]);
+  });
+
+  // Regression: a unit in both a prescribed pool and the free-elective pool was a candidate in both, so one
+  // student could be seated in it twice. scoringEngine.ts already counts such a unit as prescribed only.
+  test('a unit in a prescribed pool is never also a free-elective candidate', async () => {
+    getPlannerById.mockResolvedValue({
+      units: [{ category: 'elective', unit: { unit_code: 'SHARED' } }, { category: 'elective', unit: { unit_code: 'FREE1' } }],
+      elective_groups: [{ units: [{ unit: { unit_code: 'SHARED' } }] }],
+    } as never);
+
+    const result = await resolveCandidateUnits(
+      matchResult({ breakdown: breakdown({
+        prescribed: { matched: 0, required: 1, missingSlots: 1 },
+        freeElective: { matched: 0, required: 2, missingSlots: 2 },
+      }) }),
+      [],
+    );
+
+    expect(result?.candidates).toEqual([
+      { code: 'SHARED', category: 'prescribed', poolSlotsRemaining: 1 },
+      { code: 'FREE1', category: 'freeElective', poolSlotsRemaining: 2 },
+    ]);
+  });
+
   // A required unit is owed once. Listed twice, or also in an elective pool, it would seat the same student twice.
   test('a student is a candidate for a required unit once, whatever lists it appears in', async () => {
     getPlannerById.mockResolvedValue({
@@ -239,6 +302,26 @@ describe('resolveCommonCoreUnits', () => {
       },
     } as never;
   }
+
+  // A first-year has no detected major, and COS10003 is a starred Year 1 unit in every major. A starred unit every
+  // planner of the course shares is proposed like the shared core; one only some majors have is not.
+  test('proposes starred units every candidate planner shares, as named prescribed seats', async () => {
+    const units: Record<string, unknown[]> = {
+      p1: [{ category: 'prescribed_elective', unit: { unit_code: 'COS10003' } }, { category: 'prescribed_elective', unit: { unit_code: 'COS30019' } }],
+      p2: [{ category: 'prescribed_elective', unit: { unit_code: 'COS10003' } }],
+    };
+    getPlannerById.mockImplementation(async (id: string) => ({ units: units[id], elective_groups: [] }) as never);
+
+    const result = await resolveCommonCoreUnits(
+      noMajorResult([{ plannerID: 'p1', missingCore: ['CORE1'] }, { plannerID: 'p2', missingCore: ['CORE1'] }]),
+      [],
+    );
+
+    expect(result?.candidates).toEqual([
+      { code: 'CORE1', category: 'core' },
+      { code: 'COS10003', category: 'prescribed' },
+    ]);
+  });
 
   // Once other courses' planners are loaded, every planner for the intake is a candidate, Business included.
   // Business and Computer Science share no core units, so intersecting across both would leave a first-year
